@@ -1,0 +1,13 @@
+CI run 42642154629 - https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42642154629
+Commit e8db924, 2026-11-09. Conclusion: success
+  Repository rules and secret scan: success
+  Backend lint, types, tests: success
+  Frontend lint, types, unit and browser tests: success
+  Containers start, migrate, persist (TM-FND-02): success
+
+Key lines:
+  check_repo: 0 problem(s) in 5 checks; gitleaks: no leaks found
+  backend: 121 passed (REQUIRE_DB_TESTS=1, PostgreSQL 16 service); pip-audit: No known vulnerabilities found
+  frontend: 44 unit tests + build passed; browser test 1 passed
+  npm audit (--audit-level=high passed): the known moderate advisory GHSA-g3hv-75wg-m249 in development lint tooling
+  containers: all healthy; /health/ready database ok, redis ok; /api/v1/version through nginx passed the Redis-backed rate limiter; migration 0003 applied; data kept across restart

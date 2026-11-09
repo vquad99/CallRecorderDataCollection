@@ -47,7 +47,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
-| 3 Participants, tasks, workflow | IN PROGRESS | 3 | All Gate 3 conditions met locally (docs/evidence/phase3/); CI run and owner approval pending |
+| 3 Participants, tasks, workflow | IN PROGRESS | 3 | All Gate 3 conditions met (docs/evidence/phase3/ci_run.txt); waiting for owner approval |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
@@ -482,4 +482,6 @@ test in TEST_PLAN.md. It does not mean anything is built.
   rate limit returns 429); frontend 44 passed; browser test 1 passed.
 - Manual: real walk-through with project admin, moderator, transcriber and super admin
   (docs/evidence/phase3/walkthrough.txt, 5 screenshots).
-- Next single task: push, read CI, then Gate 3 review.
+- CI run 42642154629 (commit e8db924): all 4 jobs succeeded on the first run.
+- Gate 3: every condition met; waiting for owner approval.
+- Next single task (after approval): Phase 4 / G1 - storage adapter (Wasabi / SeaweedFS) and signed URLs.
