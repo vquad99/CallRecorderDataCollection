@@ -46,8 +46,8 @@ def _prefix(project: Project, task: Task, when: datetime) -> str:
 @dataclass(frozen=True)
 class StartInput:
     native_sample_rate: int
-    channel_count: int
-    channel_handling: str
+    channel_count: int  # channels the capture actually delivers; the original keeps all of them
+    device_channel_count: int | None  # what the browser reports for the microphone track
     echo_cancellation: bool | None
     noise_suppression: bool | None
     auto_gain_control: bool | None
@@ -91,6 +91,7 @@ def start(
         state="RECORDING",
         created_by=principal.user_id,
         started_at=datetime.now(UTC),
+        channel_handling=media.channel_handling(data.channel_count),
         **data.__dict__,
     )
     db.add(rec)
@@ -105,6 +106,8 @@ def start(
         after={
             "task": task.task_code,
             "rate": data.native_sample_rate,
+            "channels": data.channel_count,
+            "device_channels": data.device_channel_count,
             "echo_cancellation": data.echo_cancellation,
             "noise_suppression": data.noise_suppression,
             "auto_gain_control": data.auto_gain_control,
@@ -155,9 +158,11 @@ def put_chunk(
     claimed_sha256: str,
 ) -> RecordingChunk:
     rec, task = _owned_open(db, principal, recording_id, ("RECORDING",))
-    if not data or len(data) > settings.max_chunk_bytes or len(data) % 4:
+    frame_bytes = 4 * rec.channel_count  # one float32 sample per channel
+    if not data or len(data) > settings.max_chunk_bytes or len(data) % frame_bytes:
         raise AppError(
-            "Chunk must be whole float32 samples within the size limit",
+            f"Chunk must be whole frames ({rec.channel_count} float32 samples each) within the "
+            "size limit",
             code="INVALID_CHUNK",
             status_code=422,
         )
@@ -181,7 +186,7 @@ def put_chunk(
             code="CHUNK_CONFLICT",
             status_code=409,
         )
-    seconds = (rec.samples_received + len(data) // 4) / rec.native_sample_rate
+    seconds = (rec.frames_received + len(data) // frame_bytes) / rec.native_sample_rate
     if seconds > settings.max_recording_seconds:
         raise AppError(
             "Recording is longer than the allowed maximum", code="TOO_LONG", status_code=422
@@ -195,7 +200,7 @@ def put_chunk(
     )
     db.add(chunk)
     rec.chunks_received += 1
-    rec.samples_received += len(data) // 4
+    rec.frames_received += len(data) // frame_bytes
     db.commit()
     return chunk
 
@@ -367,7 +372,7 @@ def process(
                     for chunk in chunks:
                         if storage.append_to(chunk.storage_key, handle) != chunk.size_bytes:
                             raise RuntimeError(f"chunk {chunk.seq} size changed in storage")
-                media.write_float_wav(raw, original, rec.native_sample_rate)
+                media.write_float_wav(raw, original, rec.native_sample_rate, rec.channel_count)
                 base = _prefix(project, task, rec.started_at)
                 original_asset = _asset(
                     db,
@@ -378,6 +383,18 @@ def process(
                     original,
                     None,
                 )
+                expected = ("pcm_f32le", rec.native_sample_rate, rec.channel_count)
+                actual = (
+                    original_asset.codec,
+                    original_asset.sample_rate,
+                    original_asset.channels,
+                )
+                if actual != expected:
+                    raise RuntimeError(f"original file is {actual}, expected {expected}")
+                if original_asset.duration_ms != round(
+                    rec.frames_received * 1000 / rec.native_sample_rate
+                ):
+                    raise RuntimeError("original file length does not match the frames received")
                 storage.put_file(
                     original_asset.storage_key,
                     original,
@@ -395,7 +412,10 @@ def process(
                         seq=1,
                         tool="ccp chunk assembly",
                         tool_version="1",
-                        parameters=f"{len(chunks)} float32 chunks joined in order, WAV header",
+                        parameters=(
+                            f"{len(chunks)} float32 chunks joined in order, WAV header; "
+                            f"{rec.channel_count} channel(s) interleaved as captured"
+                        ),
                         input_sha256=None,
                         output_sha256=original_asset.sha256,
                     )
@@ -403,11 +423,14 @@ def process(
                 db.flush()
             else:
                 storage.get_to_file(original_asset.storage_key, original)
+                if media.sha256_file(original) != original_asset.sha256:
+                    raise RuntimeError("stored original no longer matches its checksum")
                 with original.open("rb") as src, raw.open("wb") as dst:
                     info = media.inspect_wav(original)
                     src.seek(info.data_offset)
                     dst.write(src.read(info.data_bytes))
-            media.resample_to_pcm16(raw, rec.native_sample_rate, derived)
+            channels = original_asset.channels
+            media.resample_to_pcm16(raw, rec.native_sample_rate, derived, channels)
             base = _prefix(project, task, rec.started_at)
             version = (
                 db.scalar(
@@ -446,7 +469,7 @@ def process(
                     seq=1,
                     tool="python-soxr",
                     tool_version=media.SOXR_VERSION,
-                    parameters=media.CONVERSION_PARAMETERS,
+                    parameters=media.conversion_parameters(channels),
                     input_sha256=original_asset.sha256,
                     output_sha256=derived_asset.sha256,
                 )

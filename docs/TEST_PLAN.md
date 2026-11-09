@@ -250,6 +250,7 @@ output saved to evidence.
 | TA-STOR-08 | Automated | 4 | Derived asset links to source; source bytes unchanged; metadata row exists. | STOR-008, FTF-011, AUDIO-012, AUDIO-015 |
 | TA-STOR-09 | Automated | 4 | Retention job deletes per policy and writes audit entries. | STOR-009, SEC-009 |
 | TA-STOR-10 | Automated | 4 | Storage interface contract suite passes for the S3 implementation. | STOR-012 |
+| TA-STOR-11 | Automated | 4 | A stored original is checked against its SHA-256 before re-use; a damaged copy is refused and the recording marked FAILED. | STOR-008, AUDIO-015 |
 | TM-STOR-01 | Manual | 4 | Cloud console confirms bucket private and encrypted. | STOR-001, STOR-013 |
 | TM-STOR-02 | Manual | 10 | Deleted asset handled per retention and backup policy; lifecycle rules active. | STOR-009, OPS-004 |
 
@@ -265,6 +266,8 @@ output saved to evidence.
 | TA-FTF-06 | Automated | 4 | Session metadata stored: device, browser, applied settings, native rate, start/stop, interruptions. | FTF-014 |
 | TA-FTF-07 | Automated | 4 | Unsupported browser gets a clear message instead of a broken recorder. | FTF-001 |
 | TA-FTF-08 | Automated | 4 | Recorder shows the project's audio rules before start. | FTF-006 |
+| TA-FTF-09 | Automated | 4 | Channel facts: device-reported, captured and handling stored separately and agreeing with the files; original keeps every channel byte for byte; derived file equals channel 1 alone; chunks hold whole frames; Start waits for the real channel count (unit, API and browser tests; ffprobe in CI). | FTF-012, FTF-014, AUDIO-015, AUDIO-021 |
+| TA-FTF-10 | Automated | 4 | The browser decodes the 16 kHz 16-bit mono delivery file and plays it to the end of its stated length; runs in Chromium and Microsoft Edge in CI. | FTF-005, FTF-015 |
 | TM-FTF-01 | Manual | 4 | Chrome and Edge: mic test, meter, test playback, timer; 60-second sample; original and derived checked with ffprobe. | FTF-004, FTF-005, FTF-008, FTF-015, AUDIO-014, AUDIO-016 |
 | TM-FTF-02 | Manual | 4 | Deny permission; clear error shown. | FTF-002 |
 | TM-FTF-03 | Manual | 4 | Refresh, close tab, cut network mid-recording; recovery message accurate; saved audio intact. | FTF-009, FTF-010 |

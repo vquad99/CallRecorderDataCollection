@@ -16,6 +16,7 @@ import { ChunkUploader } from "./uploader";
 
 const CHUNK_SECONDS = 5;
 const TEST_SECONDS = 5;
+const NO_AUDIO_SECONDS = 5;
 const CONSTRAINTS = {
   echoCancellation: false,
   noiseSuppression: false,
@@ -23,7 +24,19 @@ const CONSTRAINTS = {
   channelCount: 1,
 };
 
-type Phase = "idle" | "ready" | "testing" | "recording" | "finishing" | "processing" | "done";
+type Phase =
+  "idle" | "opening" | "ready" | "testing" | "recording" | "finishing" | "processing" | "done";
+
+type CaptureMessage =
+  { samples: Float32Array; channels: number } | { layoutChanged: { from: number; to: number } };
+
+/** Channel 1 of interleaved samples. */
+function firstChannel(samples: Float32Array, channels: number): Float32Array {
+  if (channels === 1) return samples;
+  const out = new Float32Array(samples.length / channels);
+  for (let i = 0; i < out.length; i++) out[i] = samples[i * channels] ?? 0;
+  return out;
+}
 
 function supported(): boolean {
   return (
@@ -106,6 +119,12 @@ function Result({ recording }: { recording: rec.Recording }) {
           ask an administrator.
         </p>
       ) : null}
+      <p>
+        Channels: the browser reported {recording.device_channel_count ?? "no count"} for the
+        microphone; {recording.channel_count} captured and kept in the original; delivery file made
+        from the{" "}
+        {recording.channel_handling === "mono" ? "single channel" : recording.channel_handling}.
+      </p>
       <table className="table">
         <thead>
           <tr>
@@ -173,7 +192,9 @@ export function RecorderPage() {
   const recordingId = useRef<string | null>(null);
   const testBuffer = useRef<Float32Array[]>([]);
   const phaseRef = useRef<Phase>("idle");
-  const channels = useRef(1);
+  // Channels the capture really delivers; unknown until the first block of audio arrives, and
+  // recording cannot start before then (the server and the stored file both depend on it).
+  const channels = useRef<number | null>(null);
 
   const setPhaseBoth = (p: Phase) => {
     phaseRef.current = p;
@@ -208,6 +229,8 @@ export function RecorderPage() {
   const openMicrophone = async (id: string) => {
     setError(null);
     teardown();
+    channels.current = null;
+    setPhaseBoth("opening");
     try {
       const media = await navigator.mediaDevices.getUserMedia({
         audio: { ...CONSTRAINTS, ...(id ? { deviceId: { exact: id } } : {}) },
@@ -226,15 +249,34 @@ export function RecorderPage() {
       mute.gain.value = 0;
       source.connect(node);
       node.connect(mute).connect(audio.destination);
-      node.port.onmessage = (event: MessageEvent<{ samples: Float32Array; channels: number }>) => {
+      node.port.onmessage = (event: MessageEvent<CaptureMessage>) => {
+        if ("layoutChanged" in event.data) {
+          const { from, to } = event.data.layoutChanged;
+          const message = `The microphone switched from ${from} to ${to} channel(s), so capture stopped.`;
+          if (phaseRef.current === "recording" && recordingId.current) {
+            setError(`${message} The audio saved so far is kept.`);
+            void rec
+              .markInterrupted(recordingId.current, "Microphone channel layout changed")
+              .then(() => existing.reload());
+          } else {
+            setError(`${message} Choose the microphone again.`);
+          }
+          teardown();
+          setPhaseBoth("idle");
+          return;
+        }
         const { samples } = event.data;
-        channels.current = event.data.channels;
+        if (channels.current === null) {
+          channels.current = event.data.channels;
+          if (phaseRef.current === "opening") setPhaseBoth("ready");
+        }
         let sum = 0;
         for (const s of samples) sum += s * s;
         const db = 10 * Math.log10(sum / samples.length + 1e-12);
         setLevel(Math.max(0, Math.min(1, (db + 60) / 60)));
         if (phaseRef.current === "recording") uploader.current?.push(samples);
-        if (phaseRef.current === "testing") testBuffer.current.push(samples);
+        if (phaseRef.current === "testing")
+          testBuffer.current.push(firstChannel(samples, event.data.channels));
       };
       const track = media.getAudioTracks()[0];
       if (track) {
@@ -248,7 +290,13 @@ export function RecorderPage() {
           }
         };
       }
-      setPhaseBoth("ready");
+      window.setTimeout(() => {
+        if (ctx.current === audio && channels.current === null) {
+          setError("No audio is arriving from the microphone. Check it, then choose it again.");
+          teardown();
+          setPhaseBoth("idle");
+        }
+      }, NO_AUDIO_SECONDS * 1000);
     } catch (err) {
       setError(micMessage(err));
       setPhaseBoth("idle");
@@ -280,14 +328,15 @@ export function RecorderPage() {
   const start = async () => {
     const audio = ctx.current;
     const track = stream.current?.getAudioTracks()[0];
-    if (!audio || !track) return;
+    const captured = channels.current;
+    if (!audio || !track || captured === null) return;
     setApiError(null);
     const settings = track.getSettings();
     try {
       const created = await rec.startRecording(taskId, {
         native_sample_rate: audio.sampleRate,
-        channel_count: settings.channelCount ?? channels.current,
-        channel_handling: channels.current > 1 ? `first channel of ${channels.current}` : "mono",
+        channel_count: captured,
+        device_channel_count: settings.channelCount ?? null,
         echo_cancellation:
           typeof settings.echoCancellation === "boolean" ? settings.echoCancellation : null,
         noise_suppression:
@@ -300,7 +349,8 @@ export function RecorderPage() {
       recordingId.current = created.id;
       uploader.current = new ChunkUploader(
         (seq, body, sha) => rec.putChunk(created.id, seq, body, sha),
-        Math.round(audio.sampleRate * CHUNK_SECONDS),
+        // Whole frames per chunk: every chunk holds the same seconds of every channel.
+        Math.round(audio.sampleRate * CHUNK_SECONDS) * captured,
         { onProgress: (sent, waiting) => setProgress({ sent, waiting }), onProblem: setProblem },
       );
       setElapsed(0);
@@ -389,7 +439,7 @@ export function RecorderPage() {
       {supported() &&
       !open &&
       t.status === "IN_PROGRESS" &&
-      (phase === "idle" || phase === "ready" || phase === "testing") ? (
+      (phase === "idle" || phase === "opening" || phase === "ready" || phase === "testing") ? (
         <div className="card stack">
           {phase === "idle" ? (
             <Button onClick={() => void openMicrophone(deviceId)}>Allow microphone</Button>
@@ -411,6 +461,7 @@ export function RecorderPage() {
               ]}
             />
           ) : null}
+          {phase === "opening" ? <p role="status">Opening the microphone…</p> : null}
           {phase !== "idle" ? (
             <div className="field">
               <label htmlFor="level" className="field__label">

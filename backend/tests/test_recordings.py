@@ -1,7 +1,7 @@
 """Face-to-face recording end to end against a fake S3 (test-only): start, chunk upload with retry
 and checksums, completion, processing into original + derived files, links, retention, usage.
 
-Requirements: FTF-007, FTF-009, FTF-010, FTF-011, FTF-012, FTF-013, FTF-014, STOR-002, STOR-003, STOR-004, STOR-005, STOR-006, STOR-007, STOR-008, STOR-009, STOR-010, STOR-011, STOR-012, AUDIO-015, AUDIO-017, AUDIO-019, GEN-004
+Requirements: FTF-005, FTF-007, FTF-009, FTF-010, FTF-011, FTF-012, FTF-013, FTF-014, STOR-002, STOR-003, STOR-004, STOR-005, STOR-006, STOR-007, STOR-008, STOR-009, STOR-010, STOR-011, STOR-012, AUDIO-015, AUDIO-017, AUDIO-019, GEN-004
 """
 
 import hashlib
@@ -110,10 +110,20 @@ def chunks(seconds_tone: int = 3, seconds_silence: int = 1) -> list[bytes]:
     return [audio[i : i + RATE].tobytes() for i in range(0, len(audio), RATE)]
 
 
+def stereo_chunks(seconds: int = 2) -> tuple[list[bytes], np.ndarray]:
+    """Two different tones: 440 Hz on channel 1, 1000 Hz on channel 2, interleaved per frame."""
+    t = np.arange(seconds * RATE) / RATE
+    frames = np.stack(
+        [0.5 * np.sin(2 * np.pi * 440 * t), 0.25 * np.sin(2 * np.pi * 1000 * t)], axis=1
+    ).astype("<f4")
+    flat = frames.reshape(-1)
+    return [flat[i : i + 2 * RATE].tobytes() for i in range(0, len(flat), 2 * RATE)], frames
+
+
 START = {
     "native_sample_rate": RATE,
     "channel_count": 1,
-    "channel_handling": "mono",
+    "device_channel_count": 1,
     "echo_cancellation": False,
     "noise_suppression": False,
     "auto_gain_control": False,
@@ -150,6 +160,7 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     assert rec.status_code == 201, rec.text
     rid = rec.json()["id"]
     assert rec.json()["echo_cancellation"] is False
+    assert rec.json()["channel_handling"] == "mono"
     parts = chunks()
     for seq, data in enumerate(parts):
         assert put(mod, rid, seq, data).status_code == 200
@@ -214,9 +225,80 @@ def _record(world: dict[str, Any], parts: list[bytes], complete: bool = True) ->
     return rid
 
 
+def test_two_channel_capture_keeps_both_channels_and_derives_from_the_first(
+    world: dict[str, Any], s3: Any
+) -> None:
+    """Microphone channels, captured channels and the delivered mono file are recorded separately,
+    and each claim is checked against the actual files (D-048)."""
+    mod: Api = world["mod"]
+    tid = world["task"]["id"]
+    parts, frames = stereo_chunks(2)
+    rec = mod.post(
+        f"/api/v1/tasks/{tid}/recordings",
+        json={**START, "channel_count": 2, "device_channel_count": 2},
+    ).json()
+    assert (rec["channel_count"], rec["device_channel_count"], rec["channel_handling"]) == (
+        2,
+        2,
+        "first channel of 2",
+    )
+    rid = rec["id"]
+    assert put(mod, rid, 0, parts[0][:12]).json()["error"]["code"] == "INVALID_CHUNK", "half frame"
+    assert put(mod, rid, 0, b"").json()["error"]["code"] == "INVALID_CHUNK", "empty"
+    for seq, data in enumerate(parts):
+        assert put(mod, rid, seq, data).status_code == 200
+    assert mod.get(f"/api/v1/recordings/{rid}").json()["saved_seconds"] == 2.0
+    mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": len(parts)})
+
+    detail = mod.get(f"/api/v1/recordings/{rid}").json()
+    assert detail["state"] == "READY", detail
+    assets = {a["kind"]: a for a in detail["assets"]}
+    original, derived = assets["BROWSER_ORIGINAL"], assets["FTF_DERIVED_PCM"]
+    assert (original["codec"], original["channels"], original["duration_ms"]) == (
+        "pcm_f32le",
+        2,
+        2000,
+    )
+    assert (derived["codec"], derived["sample_rate"], derived["channels"]) == (
+        "pcm_s16le",
+        16000,
+        1,
+    )
+    assert original["sha256"] != derived["sha256"]
+
+    db = world["db"]
+    db.expire_all()
+    keys = {a.kind: a.storage_key for a in db.scalars(select(AudioAsset)).all()}
+    original_body = s3.get_object(Bucket=BUCKET, Key=keys["BROWSER_ORIGINAL"])["Body"].read()
+    assert hashlib.sha256(original_body).hexdigest() == original["sha256"]
+    assert original_body.endswith(b"".join(parts)), "both channels kept byte for byte"
+    as_read, rate = soundfile.read(io.BytesIO(original_body), dtype="float32")
+    assert rate == RATE
+    assert as_read.shape == (2 * RATE, 2)
+    assert np.array_equal(as_read, frames), "an independent reader sees the same two channels"
+
+    delivered, rate = soundfile.read(
+        io.BytesIO(s3.get_object(Bucket=BUCKET, Key=keys["FTF_DERIVED_PCM"])["Body"].read())
+    )
+    assert rate == 16000
+    assert delivered.ndim == 1
+    spectrum = np.abs(np.fft.rfft(delivered))
+    freqs = np.fft.rfftfreq(len(delivered), 1 / 16000)
+    at = {f: spectrum[np.argmin(np.abs(freqs - f))] for f in (440, 1000)}
+    assert at[440] > 1000 * at[1000], "channel 1 only; channel 2 is not mixed in"
+    params = db.scalars(
+        select(AssetProcessingStep.parameters).where(AssetProcessingStep.tool == "python-soxr")
+    ).one()
+    assert params.startswith("channel 1 of 2 kept")
+
+
 def test_reprocessing_creates_a_new_identical_version(world: dict[str, Any]) -> None:
     rid = _record(world, chunks(2, 0))
     db = world["db"]
+    original_before = db.scalars(
+        select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")
+    ).one()
+    sha_before = original_before.sha256
     service.process(
         db, world["app"].state.settings, world["app"].state.storage, __import__("uuid").UUID(rid)
     )
@@ -225,6 +307,25 @@ def test_reprocessing_creates_a_new_identical_version(world: dict[str, Any]) -> 
     ).all()
     assert [d.version for d in derived] == [1, 2]
     assert derived[0].sha256 == derived[1].sha256
+    originals = db.scalars(select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")).all()
+    assert [o.sha256 for o in originals] == [sha_before], "the original is never rewritten"
+
+
+def test_reprocessing_refuses_a_damaged_stored_original(world: dict[str, Any], s3: Any) -> None:
+    rid = _record(world, chunks(1, 0))
+    db = world["db"]
+    original = db.scalars(select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")).one()
+    body = bytearray(s3.get_object(Bucket=BUCKET, Key=original.storage_key)["Body"].read())
+    body[-1] ^= 0xFF
+    s3.put_object(Bucket=BUCKET, Key=original.storage_key, Body=bytes(body))
+    with pytest.raises(RuntimeError, match="no longer matches its checksum"):
+        service.process(
+            db,
+            world["app"].state.settings,
+            world["app"].state.storage,
+            __import__("uuid").UUID(rid),
+        )
+    assert world["mod"].get(f"/api/v1/recordings/{rid}").json()["state"] == "FAILED"
 
 
 def test_missing_chunks_block_completion(world: dict[str, Any]) -> None:

@@ -53,6 +53,7 @@ class RecordingOut(BaseModel):
     state: str
     native_sample_rate: int
     channel_count: int
+    device_channel_count: int | None
     channel_handling: str
     echo_cancellation: bool | None
     noise_suppression: bool | None
@@ -76,7 +77,7 @@ def out(rec: Recording, assets: list[AudioAsset] | None = None) -> RecordingOut:
                 for k in RecordingOut.model_fields
                 if k not in ("saved_seconds", "assets")
             },
-            "saved_seconds": round(rec.samples_received / rec.native_sample_rate, 2),
+            "saved_seconds": round(rec.frames_received / rec.native_sample_rate, 2),
             "assets": [],
         }
     )
@@ -86,8 +87,10 @@ def out(rec: Recording, assets: list[AudioAsset] | None = None) -> RecordingOut:
 
 class StartBody(BaseModel):
     native_sample_rate: int = Field(ge=8000, le=192000)
+    # Channels the capture delivers (every one is kept in the original); the server derives
+    # channel_handling from it, so the record cannot disagree with the file (D-048).
     channel_count: int = Field(ge=1, le=8)
-    channel_handling: str = Field(min_length=1, max_length=100)
+    device_channel_count: int | None = Field(default=None, ge=1, le=32)
     echo_cancellation: bool | None
     noise_suppression: bool | None
     auto_gain_control: bool | None

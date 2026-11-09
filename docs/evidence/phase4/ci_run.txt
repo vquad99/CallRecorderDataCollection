@@ -1,0 +1,16 @@
+GitHub Actions run 42648499520 (commit bcaeae0, Phase 4) - FAILED
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42648499520
+
+Jobs:
+  failure: Frontend lint, types, unit and browser tests
+  success: Repository rules and secret scan
+  success: Backend lint, types, tests
+  skipped: Containers start, migrate, persist (TM-FND-02)
+
+Failure (frontend job, step 'Browser tests (TA-FND-15)'):
+  ✘  1 [chromium] › e2e/recorder.spec.ts:26:1 › records with the fake microphone and uploads raw chunks with checksums (10.0s)
+  Expected: "first channel of 2"
+  Received: "mono"
+  > 102 |   expect(started?.["channel_handling"]).toBe(count > 1 ? `first channel of ${count}` : "mono");
+
+Cause: Start was pressed before the capture's first audio block arrived, so the page sent channel_handling "mono" (its default) while the browser reported 2 channels. Fixed under Option A (DECISIONS.md D-048); re-run result below.

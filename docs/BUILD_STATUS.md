@@ -48,7 +48,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
 | 3 Participants, tasks, workflow | ACCEPTED | 3 | Approved by owner 2026-11-09 |
-| 4 Storage, face-to-face recording | IN PROGRESS | 4 | Gate 4 conditions met locally (docs/evidence/phase4/); CI run and owner approval pending |
+| 4 Storage, face-to-face recording | IN PROGRESS | 4 | CI run 42648499520 FAILED (recorder browser test, channel race); fixed under the owner's Option A (D-048), passes locally; new CI run and owner approval pending |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
 | 7 Audio QC, AI transcription | NOT STARTED | 7 | - |
@@ -236,7 +236,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FTF-002 | Microphone permission requested after a user action; denial gives a clear error. | 4 | [x] | [x] | [x] | [x] TA-FTF-01 | [x] TM-FTF-02 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-003 | Microphones enumerated after permission; moderator selects a device. | 4 | [x] | [x] | [x] | [x] TA-FTF-02 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-004 | Live input-level meter. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
-| FTF-005 | Short test recording and playback. | 4 | [ ] | [ ] | [x] | n/a | [ ] TM-FTF-01 | docs/evidence/phase4/e2e.txt | IN PROGRESS | Test playback not yet checked by ear (no speakers on the build machine) |
+| FTF-005 | Short test recording and playback. | 4 | [ ] | [ ] | [x] | [x] TA-FTF-10 | [ ] TM-FTF-01 | docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough_channels.txt | IN PROGRESS | Browser plays the delivery file to its end (automated); test playback not yet checked by ear (no speakers on the build machine) |
 | FTF-006 | Project audio rules shown before start. | 4 | [x] | [x] | [x] | [x] TA-FTF-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-007 | Start and stop controls; resume; pause only if technically safe. | 4 | [x] | [x] | [x] | [x] TA-FTF-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-008 | Recording duration and state displayed. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
@@ -246,7 +246,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [x] | [x] | [x] | [x] TA-FTF-04 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-013 | Derived PCM WAV generated and validated. | 4 | [x] | [x] | [x] | [x] TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-014 | Session metadata captured. | 4 | [x] | [x] | [x] | [x] TA-FTF-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
-| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt | IN PROGRESS | Chrome verified; Edge not available on the build machine |
+| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt; docs/evidence/phase4/walkthrough_channels.txt | IN PROGRESS | Chrome verified; Microsoft Edge (Linux) added to CI, result pending; Edge on Windows not tested |
 | AUDIO-001 | Telephony: one WAV per conversation. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | n/a | - | NOT STARTED | - |
 | AUDIO-002 | Telephony final file: stereo, 16 kHz, 16-bit signed PCM. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | [ ] TM-AUDIO-01 | - | NOT STARTED | - |
 | AUDIO-003 | Left channel = Participant A only; right channel = Participant B only. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AQC-08 | [ ] TM-TEL-02 | - | NOT STARTED | - |
@@ -261,13 +261,13 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AUDIO-012 | Separate tracks combined into stereo without altering content; provider originals preserved; every derived-file operation recorded. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-02, TA-STOR-08 | n/a | - | NOT STARTED | - |
 | AUDIO-013 | Actual provider codec and recording specification recorded; no 'uncompressed end-to-end' or native 16 kHz claim for a phone call without provider proof. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-05 | [ ] TM-TEL-04 | - | NOT STARTED | - |
 | AUDIO-014 | Face-to-face derived target: WAV, mono, 16 000 Hz, 16-bit signed PCM. | 4-7 | [x] | [x] | [ ] | [x] TA-FTF-05 | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
-| AUDIO-015 | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. | 4-7 | [x] | [x] | [ ] | [x] TA-STOR-08, TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-015 | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. | 4-7 | [x] | [x] | [ ] | [x] TA-STOR-08, TA-FTF-05, TA-STOR-11 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/phase4/walkthrough_channels.txt | VERIFIED | - |
 | AUDIO-016 | Microphone capture needs HTTPS, user permission and a supported browser; clear microphone test before recording. | 4-7 | [ ] | [ ] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | AUDIO-017 | Every final asset stores: extension and actual container, codec/sample format, sample rate, bit depth, channels, duration, size, peak, clipping count or %, silence %, RMS, hash, source recording ID, processing history. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | AUDIO-018 | QC analysis never modifies source audio. | 4-7 | [x] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | docs/evidence/phase4/make_check.txt | IN PROGRESS | Measurements read-only; full QC in Phase 7 |
 | AUDIO-019 | Deterministic, tested processing pipeline. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-07 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | AUDIO-020 | Actual original inspected before conversion; decoded without noise reduction or enhancement; resampled to 16 kHz with a documented high-quality resampler; converted to signed 16-bit; written as WAV; original never overwritten. | 4-7 | [x] | [x] | [ ] | [x] TA-FTF-05, TA-AUDIO-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
-| AUDIO-021 | Conversion to mono only when source channel handling is understood; exact downmix method documented. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-09 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-021 | Conversion to mono only when source channel handling is understood; exact downmix method documented. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-09, TA-FTF-09 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/walkthrough_channels.txt | VERIFIED | - |
 | AUDIO-022 | Processing tool, version, parameters and checksum stored for every derived file. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | AUDIO-023 | Independent inspection with ffprobe (-v error -show_streams -show_format) or equivalent. | 4-7 | [x] | [ ] | [ ] | n/a | [x] TM-AUDIO-01 | docs/evidence/phase4/wasabi_checks.txt | IN PROGRESS | libsndfile check done; ffprobe check runs in CI |
 | AUDIO-024 | Stereo join of separate tracks used only for genuinely separate, aligned tracks, tested on controlled fixtures first. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-02 | n/a | - | NOT STARTED | - |
@@ -506,4 +506,30 @@ test in TEST_PLAN.md. It does not mean anything is built.
   (docs/evidence/phase4/).
 - Open: Edge not tested (not on this machine); test playback not checked by ear; Wasabi encryption at
   rest not verified from documentation.
+- Next single task: push, read CI, then Gate 4 review.
+
+### Session 6 - 2026-11-09 - Phase 4 stabilisation (owner's test list, Option A)
+
+- CI run 42648499520 failed one browser test: when Start was pressed before the capture's first audio
+  block arrived, the page sent "mono" while the browser reported 2 channels
+  (docs/evidence/phase4/ci_run.txt). The capture also kept only channel 1 inside the browser, so the
+  stored "original" was not everything captured.
+- Fix (D-048): the original keeps every captured channel byte for byte; only the derived file takes
+  channel 1, with no mixing; `device_channel_count`, `channel_count` and the server-set
+  `channel_handling` are stored separately and checked against the built file; Start waits for the real
+  channel count; a channel-layout change stops capture and keeps what was saved; chunks must hold whole
+  frames; a stored original is checked against its SHA-256 before re-use (migration 0005).
+- Tests added: two-channel recording end to end (independent reader, spectrum shows channel 2 is not
+  mixed in), half-frame and empty chunks refused, damaged stored original refused, original never
+  rewritten on reprocessing, stereo WAV wrapper and channel-1 derivation byte-identical to converting
+  channel 1 alone, ffprobe of a 2-channel original and its derived file (CI); browser test checks the
+  channel facts, whole 5-second chunks and playback of the delivery file to its end; CI now also runs the
+  browser tests in Microsoft Edge.
+- Results: backend 138 passed + 1 NOT RUN locally (ffprobe; runs in CI); frontend 50 passed; browser
+  tests 2 passed in Chrome. Real recording into Wasabi (dev prefix `dev-aws-dev/phase4-recheck/`) with
+  Start pressed at once: device 2 ch, captured 2 ch, original 2 ch float, derived 16 kHz 16-bit 1 ch,
+  SHA-256 of both downloads match, re-deriving from the downloaded original is byte-identical, browser
+  played the file to its end, unsigned requests 403; 2 test objects deleted
+  (docs/evidence/phase4/walkthrough_channels.txt).
+- Open: Edge result pending CI; test playback by ear; Wasabi encryption at rest NOT VERIFIED.
 - Next single task: push, read CI, then Gate 4 review.

@@ -55,7 +55,12 @@ class Recording(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     native_sample_rate: Mapped[int] = mapped_column(Integer, nullable=False)
+    # channel_count: channels the capture delivered (all kept in the original).
+    # device_channel_count: what the browser reported for the microphone.
+    # channel_handling: how the derived mono file is made, set by the server from channel_count
+    # (D-041, D-048).
     channel_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    device_channel_count: Mapped[int | None] = mapped_column(Integer)
     channel_handling: Mapped[str] = mapped_column(String(100), nullable=False)
     echo_cancellation: Mapped[bool | None] = mapped_column(Boolean)
     noise_suppression: Mapped[bool | None] = mapped_column(Boolean)
@@ -63,7 +68,8 @@ class Recording(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     device_label: Mapped[str] = mapped_column(String(300), nullable=False, server_default="")
     user_agent: Mapped[str] = mapped_column(String(500), nullable=False, server_default="")
     chunks_received: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    samples_received: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    # Sample frames per channel (one frame = one float32 sample for each channel).
+    frames_received: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     interrupted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     interruption_reason: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

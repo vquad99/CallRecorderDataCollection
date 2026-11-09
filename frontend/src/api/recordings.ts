@@ -23,6 +23,8 @@ export interface Recording {
   state: "RECORDING" | "INTERRUPTED" | "UPLOADED" | "PROCESSING" | "READY" | "FAILED" | "DISCARDED";
   native_sample_rate: number;
   channel_count: number;
+  device_channel_count: number | null;
+  channel_handling: string;
   echo_cancellation: boolean | null;
   noise_suppression: boolean | null;
   auto_gain_control: boolean | null;
@@ -35,8 +37,10 @@ export interface Recording {
 
 export interface StartInfo {
   native_sample_rate: number;
+  /** Channels the capture delivers; the original keeps all of them. */
   channel_count: number;
-  channel_handling: string;
+  /** What the browser reports for the microphone track (may differ, or be unknown). */
+  device_channel_count: number | null;
   echo_cancellation: boolean | null;
   noise_suppression: boolean | null;
   auto_gain_control: boolean | null;

@@ -73,10 +73,14 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Format, lint, types, unit tests, build
         run: make check-frontend
-      - name: Browser tests (TA-FND-15)
+      - name: Browser tests (TA-FND-15), Chromium and Microsoft Edge
+        env:
+          # Microsoft Edge comes preinstalled on GitHub's Ubuntu runners; the recorder runs in both.
+          PW_EDGE: "1"
         run: |
           cd frontend
           npx playwright install --with-deps chromium
+          microsoft-edge --version
           npx playwright test
       - name: Dependency vulnerability scan (TA-SEC-09)
         run: cd frontend && npm audit --audit-level=high

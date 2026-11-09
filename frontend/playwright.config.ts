@@ -1,8 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // PW_CHANNEL=chrome uses the installed Google Chrome (no browser download); CI uses Playwright's Chromium.
+// PW_EDGE=1 adds a second run in the installed Microsoft Edge (CI sets it; Edge is on its runners).
 const channel = process.env.PW_CHANNEL;
 const port = 5180;
+// A built-in fake microphone so the recorder can be exercised without hardware.
+const fakeMedia = {
+  launchOptions: {
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+  },
+};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -12,15 +19,11 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: {
-        ...devices["Desktop Chrome"],
-        ...(channel ? { channel } : {}),
-        // A built-in fake microphone so the recorder can be exercised without hardware.
-        launchOptions: {
-          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
-        },
-      },
+      use: { ...devices["Desktop Chrome"], ...(channel ? { channel } : {}), ...fakeMedia },
     },
+    ...(process.env.PW_EDGE === "1"
+      ? [{ name: "edge", use: { ...devices["Desktop Edge"], channel: "msedge", ...fakeMedia } }]
+      : []),
   ],
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,

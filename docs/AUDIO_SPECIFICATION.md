@@ -52,25 +52,36 @@ Capture (FTF-001..012):
 3. Show the project's audio rules, a live level meter, and a short test recording with playback.
 4. Capture with `channelCount: 1`, `echoCancellation: false`, `noiseSuppression: false`,
    `autoGainControl: false`; store what the browser actually applied (`MediaStreamTrack.getSettings()`).
+   `channelCount: 1` is a request; a browser may still deliver more (Chrome's fake microphone delivers 2).
+   Three facts are stored separately (D-048): `device_channel_count` (what the browser reports for the
+   microphone), `channel_count` (channels the capture actually delivered, all kept in the original) and
+   `channel_handling` (how the derived file is made, set by the server from `channel_count`).
    Some devices still process audio in hardware or the operating system; that cannot be detected
    fully and is stated in the session metadata.
-5. An AudioWorklet reads raw 32-bit float samples at the device's native rate (commonly 48 kHz).
-   MediaRecorder is not used because its usual output (Opus in WebM) is lossy (D-003).
-6. Samples are sent in ~5-second chunks during recording, each with a sequence number and SHA-256.
+5. An AudioWorklet reads raw 32-bit float samples of every channel at the device's native rate
+   (commonly 48 kHz), interleaved frame by frame. Recording can start only after the first block has
+   reported the channel count; if the layout changes mid-capture, capture stops and what was saved is
+   kept (the recording is marked interrupted). MediaRecorder is not used because its usual output (Opus
+   in WebM) is lossy (D-003).
+6. Samples are sent in ~5-second chunks (whole frames: 5 s of every channel) during recording, each
+   with a sequence number and SHA-256.
    Unsent chunks live in memory only; nothing is written to browser storage (D-005).
 7. Interruption (tab closed, device asleep, network lost): the server keeps every acknowledged chunk
    and marks the recording interrupted; the user is told exactly how much was saved. No claim is made
    that recording continued (FTF-009).
 
 Original asset (`BROWSER_ORIGINAL`): chunks joined server-side into WAV, 32-bit float, native rate,
-mono. Never overwritten.
+every captured channel (interleaved), bytes unchanged. Codec, rate, channel count and length are checked
+against the recording before it is stored; before any re-use its SHA-256 is checked against the record,
+and a damaged copy is refused. Never overwritten.
 
 Derived asset (`FTF_DERIVED_PCM`), deterministic pipeline (AUDIO-019..022):
 1. Inspect the original with ffprobe; store the result.
 2. Decode with no filters other than the ones listed here.
 3. Resample to 16 000 Hz with libsoxr, quality VHQ, through python-soxr (D-040).
-4. Mono: the first channel is kept when the browser delivers more than one; the recording stores
-   "mono" or "first channel of N" (D-041).
+4. Mono: channel 1 is kept when the original has more than one; nothing from other channels is mixed
+   in. The recording stores "mono" or "first channel of N" and the processing step says
+   "channel 1 of N kept" (D-041, D-048).
 5. Convert to signed 16-bit: round half to even, clip to the 16-bit range, no dither (recorded in
    `asset_processing_steps`).
 6. Write WAV; inspect independently with ffprobe; store tool, version, parameters and SHA-256.
