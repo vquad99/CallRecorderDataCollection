@@ -258,7 +258,7 @@ output saved to evidence.
 | TA-STOR-07 | Automated | 4 | New version keeps previous version. | STOR-007 |
 | TA-STOR-08 | Automated | 4 | Derived asset links to source; source bytes unchanged; metadata row exists. | STOR-008, FTF-011, AUDIO-012, AUDIO-015 |
 | TA-STOR-09 | Automated | 4 | Retention job deletes per policy and writes audit entries. | STOR-009, SEC-009 |
-| TA-STOR-10 | Automated | 4 | Storage interface contract suite passes for the S3 implementation. | STOR-012 |
+| TA-STOR-10 | Automated | 4, F | Storage contract, the same checks against a fake S3 (every run), Wasabi (developer machine) and SeaweedFS (CI): byte and 20 MB multipart round trips with checksum and type, missing objects, repeated deletes, key prefix, overwrite, signed links with download name, 40 parallel uploads, unreachable storage fails fast; on Wasabi, links expire and unsigned or altered links are refused. | STOR-001, STOR-003, STOR-005, STOR-006, STOR-011, STOR-012 |
 | TA-STOR-11 | Automated | 4 | A stored original is checked against its SHA-256 before re-use; a damaged copy is refused and the recording marked FAILED. | STOR-008, AUDIO-015 |
 | TM-STOR-01 | Manual | 4 | Cloud console confirms bucket private and encrypted. | STOR-001, STOR-013 |
 | TM-STOR-02 | Manual | 10 | Deleted asset handled per retention and backup policy; lifecycle rules active. | STOR-009, OPS-004 |

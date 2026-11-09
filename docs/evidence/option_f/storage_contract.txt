@@ -1,0 +1,23 @@
+$ pytest tests/test_storage_contract.py -v  (run 2026-11-09T18:39:37Z on aws-dev; fake S3 (moto) and live Wasabi bucket callrec57, ap-southeast-1, under dev-aws-dev/contract/ with signature checks on)
+tests/test_storage_contract.py::test_bytes_round_trip_with_checksum_and_type[fake-s3] PASSED [  6%]
+tests/test_storage_contract.py::test_bytes_round_trip_with_checksum_and_type[live] PASSED [ 12%]
+tests/test_storage_contract.py::test_large_file_round_trip_uses_multipart_and_stays_intact[fake-s3] PASSED [ 18%]
+tests/test_storage_contract.py::test_large_file_round_trip_uses_multipart_and_stays_intact[live] PASSED [ 25%]
+tests/test_storage_contract.py::test_missing_objects_and_repeated_deletes[fake-s3] PASSED [ 31%]
+tests/test_storage_contract.py::test_missing_objects_and_repeated_deletes[live] PASSED [ 37%]
+tests/test_storage_contract.py::test_every_key_lives_under_the_configured_prefix[fake-s3] PASSED [ 43%]
+tests/test_storage_contract.py::test_every_key_lives_under_the_configured_prefix[live] PASSED [ 50%]
+tests/test_storage_contract.py::test_overwrite_replaces_content_and_checksum[fake-s3] PASSED [ 56%]
+tests/test_storage_contract.py::test_overwrite_replaces_content_and_checksum[live] PASSED [ 62%]
+tests/test_storage_contract.py::test_signed_link_downloads_the_file_with_its_name[fake-s3] PASSED [ 68%]
+tests/test_storage_contract.py::test_signed_link_downloads_the_file_with_its_name[live] PASSED [ 75%]
+tests/test_storage_contract.py::test_many_parallel_uploads_and_downloads_stay_intact[fake-s3] PASSED [ 81%]
+tests/test_storage_contract.py::test_many_parallel_uploads_and_downloads_stay_intact[live] PASSED [ 87%]
+tests/test_storage_contract.py::test_live_links_expire_and_unsigned_or_altered_requests_are_refused[live] PASSED [ 93%]
+tests/test_storage_contract.py::test_an_unreachable_storage_fails_fast_with_an_error PASSED [100%]
+============================= 16 passed in 31.69s ==============================
+
+clean-up check: 0 object(s) left under dev-aws-dev/contract/
+encryption at rest, as reported by Wasabi on a new object: ServerSideEncryption = None
+bucket default encryption: {}
+probe deleted; objects left: 0

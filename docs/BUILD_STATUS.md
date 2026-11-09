@@ -221,16 +221,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | TASK-012 | Assignment is project-scoped. | 3 | [x] | [x] | [x] | [x] TA-TASK-11 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-001 | Private cloud object storage; bucket never public. | 4 | [x] | [x] | [ ] | [x] TA-STOR-01 | [x] TM-STOR-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [x] | [x] | [ ] | [x] TA-STOR-02 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-SEC-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
-| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-SEC-10, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_b/make_check.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
+| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
 | STOR-007 | Version tracking. | 4 | [x] | [x] | [ ] | [x] TA-STOR-07 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [x] | [x] | [ ] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [x] | [x] | [ ] | [x] TA-STOR-09 | [ ] TM-STOR-02 | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-010 | Storage usage reporting/dashboard. | 4 | [x] | [x] | [ ] | [x] TA-DASH-01 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-011 | Unauthorized user cannot download a recording. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
-| STOR-012 | Storage abstraction interface. | 4 | [x] | [x] | [ ] | [x] TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-011 | Unauthorized user cannot download a recording. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
+| STOR-012 | Storage abstraction interface. | 4 | [x] | [x] | [ ] | [x] TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-013 | Server-side encryption configured. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-STOR-01 | - | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED (docs check pending) |
 | FTF-001 | Browser support check. | 4 | [x] | [x] | [x] | [x] TA-FTF-07 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-002 | Microphone permission requested after a user action; denial gives a clear error. | 4 | [x] | [x] | [x] | [x] TA-FTF-01 | [x] TM-FTF-02 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
@@ -624,3 +624,14 @@ test in TEST_PLAN.md. It does not mean anything is built.
   folder with today's date instead of the recording's start date).
 - Results: backend 204 passed + 4 NOT RUN locally (ffprobe; run in CI)
   (docs/evidence/option_e/make_check_backend.txt).
+
+### Session 10 (continued) - Option F: storage tests
+
+- New: `backend/tests/test_storage_contract.py`, one contract run against a fake S3 on every run,
+  against the real Wasabi bucket from this machine (folder `dev-aws-dev/contract/`, emptied after),
+  and against SeaweedFS in the CI journeys job.
+- Results: 16 passed on fake S3 and Wasabi (links expire after 3 s; unsigned and altered links get
+  403); 0 objects left. No defects found.
+- Wasabi does not report encryption at rest through its API (no `ServerSideEncryption` on objects,
+  empty bucket encryption setting): still NOT VERIFIED; needs Wasabi's written statement or an account
+  setting check by the owner.
