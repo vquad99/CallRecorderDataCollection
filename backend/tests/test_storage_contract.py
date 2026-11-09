@@ -70,7 +70,7 @@ def _cleanup(raw: Any, bucket: str, prefix: str) -> None:
             raw.delete_object(Bucket=bucket, Key=obj["Key"])
 
 
-@pytest.fixture(params=["fake-s3", "live"])
+@pytest.fixture(params=["fake-s3", "real"])
 def store(request: pytest.FixtureRequest) -> Iterator[Store]:
     if request.param == "fake-s3":
         with mock_aws():
@@ -85,7 +85,7 @@ def store(request: pytest.FixtureRequest) -> Iterator[Store]:
     storage = S3Storage(_settings(prefix, **LIVE))
     raw = storage._client  # same configuration as the adapter
     try:
-        yield Store("live", storage, raw, LIVE["BUCKET"], prefix)
+        yield Store("real", storage, raw, LIVE["BUCKET"], prefix)
     finally:
         _cleanup(raw, LIVE["BUCKET"], prefix)
 
@@ -197,7 +197,7 @@ def test_many_parallel_uploads_and_downloads_stay_intact(store: Store) -> None:
         assert all(pool.map(one, range(40)))
 
 
-@pytest.mark.parametrize("store", ["live"], indirect=True)
+@pytest.mark.parametrize("store", ["real"], indirect=True)
 def test_live_links_expire_and_unsigned_or_altered_requests_are_refused(store: Store) -> None:
     if not ENFORCES_AUTH:
         pytest.skip("this storage does not check signatures (CONTRACT_STORAGE_ENFORCES_AUTH unset)")

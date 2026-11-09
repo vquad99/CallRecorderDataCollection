@@ -1,0 +1,35 @@
+GitHub Actions run 42678318811 (commit 0d3b97f) - SUCCESS
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42678318811
+First green run with the user-journeys job. Earlier runs: 42671870913 failed on the secret scan (fixed in eedf3bd); 42672292727 and 42672799533 hit GitHub's Actions outage of 2026-11-09 18:12 UTC (no jobs started); 42675711058 failed one Edge journey (test race, fixed in 0d3b97f); 42676161872 timed out two Edge browser tests (limits raised in 0d3b97f).
+
+Jobs:
+  success: Frontend lint, types, unit and browser tests
+  success: Repository rules and secret scan
+  success: Backend lint, types, tests
+  success: User journeys in a real browser (Option D)
+  success: Containers start, migrate, persist (TM-FND-02)
+
+User journeys job (PostgreSQL 16.15, SeaweedFS 4.51, real backend):
+  seed-dev: 6 account(s) created; passwords from DEMO_PASSWORD
+  {"status":"ready","checks":{"database":"ok","redis":"not_configured"}}
+  tests/test_storage_contract.py::test_bytes_round_trip_with_checksum_and_type[live] PASSED [ 10%]
+  tests/test_storage_contract.py::test_large_file_round_trip_uses_multipart_and_stays_intact[live] PASSED [ 20%]
+  tests/test_storage_contract.py::test_missing_objects_and_repeated_deletes[live] PASSED [ 30%]
+  tests/test_storage_contract.py::test_every_key_lives_under_the_configured_prefix[fake-s3] PASSED [ 40%]
+  tests/test_storage_contract.py::test_every_key_lives_under_the_configured_prefix[live] PASSED [ 50%]
+  tests/test_storage_contract.py::test_overwrite_replaces_content_and_checksum[live] PASSED [ 60%]
+  tests/test_storage_contract.py::test_signed_link_downloads_the_file_with_its_name[live] PASSED [ 70%]
+  tests/test_storage_contract.py::test_many_parallel_uploads_and_downloads_stay_intact[live] PASSED [ 80%]
+  tests/test_storage_contract.py::test_live_links_expire_and_unsigned_or_altered_requests_are_refused[live] SKIPPED [ 90%]
+  tests/test_storage_contract.py::test_an_unreachable_storage_fails_fast_with_an_error PASSED [100%]
+  SKIPPED [1] tests/test_storage_contract.py:203: this storage does not check signatures (CONTRACT_STORAGE_ENFORCES_AUTH unset)
+  ================== 9 passed, 1 skipped, 6 deselected in 4.48s ==================
+  ✓  1 [chromium] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (6.7s)
+  ✓  2 [chromium] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (8.7s)
+  ✓  3 [chromium] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (3.8s)
+  ✓  4 [chromium] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (18.4s)
+  ✓  5 [edge] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (11.6s)
+  ✓  6 [edge] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (9.4s)
+  ✓  7 [edge] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (4.3s)
+  ✓  8 [edge] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (19.4s)
+  8 passed (1.6m)

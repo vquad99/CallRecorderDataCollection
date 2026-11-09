@@ -159,7 +159,7 @@ jobs:
           CONTRACT_STORAGE_ENDPOINT_URL="$STORAGE_ENDPOINT_URL" CONTRACT_STORAGE_BUCKET="$STORAGE_BUCKET" \
           CONTRACT_STORAGE_ACCESS_KEY_ID="$STORAGE_ACCESS_KEY_ID" \
           CONTRACT_STORAGE_SECRET_ACCESS_KEY="$STORAGE_SECRET_ACCESS_KEY" CONTRACT_STORAGE_PREFIX=contract/ \
-          uv run pytest tests/test_storage_contract.py -v -k "live or unreachable"
+          uv run pytest tests/test_storage_contract.py -v -k "real or unreachable"
       - name: User journeys, Chromium and Microsoft Edge
         env:
           PW_EDGE: "1"
