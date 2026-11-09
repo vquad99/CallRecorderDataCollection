@@ -1,0 +1,21 @@
+GitHub Actions run 42660121140 (commit df5edf1, Option B) - SUCCESS
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42660121140
+
+Jobs:
+  success: Frontend lint, types, unit and browser tests
+  success: Repository rules and secret scan
+  success: Backend lint, types, tests
+  success: Containers start, migrate, persist (TM-FND-02)
+
+Key lines:
+  Microsoft Edge 156.0.4314.58 
+  ✓  1 [chromium] › e2e/console.spec.ts:52:1 › sign in, then main pages render with no console errors (1.4s)
+  ✓  2 [chromium] › e2e/recorder.spec.ts:49:1 › records with the fake microphone, uploads whole frames with checksums, and plays back (11.7s)
+  ✓  3 [edge] › e2e/console.spec.ts:52:1 › sign in, then main pages render with no console errors (9.7s)
+  ✓  4 [edge] › e2e/recorder.spec.ts:49:1 › records with the fake microphone, uploads whole frames with checksums, and plays back (20.0s)
+  4 passed (36.2s)
+  tests/test_security_access.py ......                                     [ 68%]
+  tests/test_security_api.py ........                                      [ 73%]
+  tests/test_security_auth.py .............                                [ 81%]
+  ======================= 167 passed in 145.44s (0:02:25) ========================
+  No known vulnerabilities found

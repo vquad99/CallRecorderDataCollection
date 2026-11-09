@@ -559,4 +559,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Results: backend 166 passed + 1 NOT RUN locally (ffprobe; runs in CI); frontend 50 passed; browser
   tests 2 passed in Chrome (docs/evidence/option_b/).
 - Not covered: browser-side XSS and a web vulnerability scan (Phase 10).
-- Next single task: push, read CI, then report Option B.
+- CI run 42660121140: all four jobs green; backend 167 passed (ffprobe included), browser tests
+  passed in Chromium and Microsoft Edge 156, no known dependency vulnerabilities
+  (docs/evidence/option_b/ci_run.txt).
+- Option B done; waiting for the owner's next choice.
