@@ -9,6 +9,7 @@ its own project and user names, so runs never collide and no clean-up is needed 
 | `interrupted.spec.ts` | The tab closes mid-recording; on return the moderator is told how much was kept, keeps it, and the task is recorded                                                                                                                                             |
 | `boundaries.spec.ts`  | Moderator, transcriber and client viewer try pages and records that are not theirs, by menu and by typed address; signing out and going back shows sign-in                                                                                                      |
 | `password.spec.ts`    | A forgotten password is reset from the email; the old password stops working and the other device's session ends                                                                                                                                                |
+| `network.spec.ts`     | The connection drops for 8 s mid-recording; the page keeps capturing, says parts are waiting, sends them when the connection returns; nothing is lost                                                                                                           |
 
 ## Run locally
 

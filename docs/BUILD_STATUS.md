@@ -606,7 +606,10 @@ test in TEST_PLAN.md. It does not mean anything is built.
   uses the API for downloads; exports arrive in Phase 9).
 - CI run 42671870913: the secret scan flagged the fixed password the journeys gave their throwaway
   test accounts; the journeys now generate a random password per run (commit eedf3bd).
-- Next single task: push, read CI, then report Option D.
+- CI run 42678318811 (commit 0d3b97f): all five jobs green; the 8 journeys passed in Chromium and
+  Microsoft Edge 156; storage contract passed against SeaweedFS (docs/evidence/option_d/ci_run.txt).
+  Two CI-only problems were fixed on the way: a test race in the reset journey (Edge typed into the
+  sign-in page's Email field) and too-tight time limits for Edge's first start.
 
 ### Session 10 - 2026-11-10 - Option E: audio tests
 
