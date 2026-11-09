@@ -68,6 +68,9 @@ def build_settings(**overrides: Any) -> Settings:
         "cors_allowed_origins": ["http://localhost:5173"],
         "db_connect_timeout_seconds": 2,
         "data_encryption_key": TEST_FERNET_KEY,
+        # Tests are not throttled unless a test sets its own limit.
+        "rate_limit_reads_per_minute": 100_000,
+        "rate_limit_writes_per_minute": 100_000,
     }
     values.update(overrides)
     return Settings(**values)
@@ -270,3 +273,27 @@ def link_token(email_text: str) -> str:
     match = _re.search(r"reset-password\?token=([A-Za-z0-9_-]+)", email_text)
     assert match, "no password link in email"
     return match.group(1)
+
+
+# ---------------------------------------------------------------- Phase 3: participants and tasks
+
+
+def make_participant(
+    api: Api, project_id: Any, label: str, phone: str | None = None, lang: str = "hi"
+) -> Any:
+    body: dict[str, Any] = {"display_label": label, "language_code": lang}
+    if phone:
+        body["phone"] = phone
+    response = api.post(f"/api/v1/projects/{project_id}/participants", json=body)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def set_status(db: Any, task_id: Any, status: str, held_from: str | None = None) -> None:
+    """Test-only shortcut to put a task in a given state."""
+    from sqlalchemy import update as _update
+
+    from app.modules.tasks.models import Task
+
+    db.execute(_update(Task).where(Task.id == task_id).values(status=status, held_from=held_from))
+    db.commit()

@@ -29,7 +29,7 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 
 - Collect only what the project needs (PART-010).
 - Phone numbers encrypted at application level, keyed hash for duplicate detection, masked unless
-  `participants.contact` (PART-008).
+  the caller may see contact details (PART-008, D-035, D-036).
 - Consent records separate from profiles, readable only by permitted roles (PART-006, SEC-010).
 - Exports exclude phone numbers by default; including personal data needs an explicit grant and is
   audited (EXP-004).
@@ -60,7 +60,7 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Output encoding by React; no raw HTML from user content (SEC-013).
 - Secure headers: HSTS, Content-Security-Policy, X-Content-Type-Options, frame-ancestors none,
   Referrer-Policy, Permissions-Policy allowing microphone only for the app origin (SEC-013).
-- Rate limits on auth, uploads, exports and webhooks (SEC-005).
+- Rate limits on every /api/v1 request: per session, or per IP when signed out (SEC-005, D-039).
 - CORS allowlist from configuration (FND-011).
 
 ## 7. Secrets and supply chain

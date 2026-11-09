@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     login_window_minutes: int = Field(default=15, ge=1, le=24 * 60)
     login_max_failures_per_account: int = Field(default=5, ge=1, le=100)
     login_max_failures_per_ip: int = Field(default=20, ge=1, le=1000)
+    rate_limit_reads_per_minute: int = Field(default=600, ge=1, le=100_000)
+    rate_limit_writes_per_minute: int = Field(default=120, ge=1, le=100_000)
 
     email_backend: Literal["smtp", "file"] = "file"
     email_from: str = "Conversation Collection <no-reply@localhost>"

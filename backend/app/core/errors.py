@@ -38,8 +38,10 @@ class AppError(Exception):
         code: str = "BAD_REQUEST",
         status_code: int = 400,
         details: list[dict[str, Any]] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
+        self.headers = headers
         self.message = message
         self.code = code
         self.status_code = status_code
@@ -58,7 +60,11 @@ def error_body(
 async def _app_error(_: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, AppError):
         raise exc
-    return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status_code)
+    return JSONResponse(
+        error_body(exc.code, exc.message, exc.details),
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
 
 
 async def _http_error(_: Request, exc: Exception) -> JSONResponse:

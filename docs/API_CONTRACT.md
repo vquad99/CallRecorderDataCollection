@@ -81,10 +81,12 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | Method | Path | Permission |
 |---|---|---|
 | GET, POST | /projects/{id}/participants | `participants.view` / `participants.manage` |
-| GET, PATCH | /participants/{id} | `participants.view` / `participants.manage` (corrections audited) |
-| POST | /participants/{id}/delete-request | `participants.manage` |
+| POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code) |
+| GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
+| POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
+| GET | /projects/{id}/participants/{pid}/consent | `consent.view` |
 | GET | /projects/{id}/participants/export | `participants.export` |
-| GET, POST | /tasks/{id}/consent | `consent.view` / `consent.capture` |
+| POST | /tasks/{id}/consent | `consent.capture` + assigned moderator |
 
 ## Tasks (TASK-*)
 
@@ -92,10 +94,10 @@ code in each phase; this file lists the planned surface so the traceability tabl
 |---|---|---|
 | GET, POST | /tasks | `tasks.view` / `tasks.assign` |
 | GET | /tasks/{id} | `tasks.view` |
-| POST | /tasks/{id}/transition | depends on target state; body `{to, reason_code, comment}` |
+| POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment) |
-| GET, POST | /tasks/{id}/comments | `tasks.view` |
-| GET | /tasks/{id}/history | `tasks.view` |
+| POST | /tasks/{id}/comments | `tasks.view` |
+| GET | /tasks/{id}/timeline | `tasks.view` (status history, assignments, comments) |
 
 ## Storage and face-to-face recording (STOR-*, FTF-*)
 

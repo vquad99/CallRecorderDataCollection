@@ -182,6 +182,23 @@ def _endpoints(p1: str, p2: str, other_user: str, n: int) -> list[tuple[str, str
             "member",
         ),
         ("GET", f"/api/v1/projects/{p1}/members", None, Perm.PROJECTS_VIEW, "member"),
+        ("GET", f"/api/v1/projects/{p1}/participants", None, Perm.PARTICIPANTS_VIEW, "member"),
+        (
+            "GET",
+            f"/api/v1/projects/{p1}/participants/export",
+            None,
+            Perm.PARTICIPANTS_EXPORT,
+            "member",
+        ),
+        (
+            "POST",
+            f"/api/v1/projects/{p1}/participants",
+            {"display_label": "X", "language_code": "hi"},
+            Perm.PARTICIPANTS_MANAGE,
+            "member",
+        ),
+        ("GET", "/api/v1/tasks", None, Perm.TASKS_VIEW, "global"),
+        ("GET", "/api/v1/audit-logs", None, Perm.AUDIT_VIEW, "global"),
         ("GET", f"/api/v1/projects/{p1}/member-candidates", None, Perm.PROJECTS_MEMBERS, "member"),
         (
             "POST",

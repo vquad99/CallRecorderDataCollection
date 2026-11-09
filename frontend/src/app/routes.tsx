@@ -6,6 +6,8 @@ import { RequireAuth, RequirePermission } from "../auth/guards";
 import { LoginPage } from "../auth/LoginPage";
 import { ResetPasswordPage } from "../auth/ResetPasswordPage";
 import { AccountPage } from "../features/account/AccountPage";
+import { AuditPage } from "../features/audit/AuditPage";
+import { ParticipantsTab } from "../features/projects/ParticipantsTab";
 import { ProjectCreatePage } from "../features/projects/ProjectCreatePage";
 import { ProjectDetailPage } from "../features/projects/ProjectDetailPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
@@ -22,6 +24,9 @@ import { StatusPage } from "../features/status/StatusPage";
 import { UserCreatePage } from "../features/users/UserCreatePage";
 import { UserDetailPage } from "../features/users/UserDetailPage";
 import { UserImportPage } from "../features/users/UserImportPage";
+import { TaskCreatePage } from "../features/tasks/TaskCreatePage";
+import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
+import { TasksPage } from "../features/tasks/TasksPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { AppShell } from "../layouts/AppShell";
 import { NotFoundPage } from "../routes/NotFoundPage";
@@ -50,6 +55,7 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, element: <OverviewTab /> },
                   { path: "team", element: <TeamTab /> },
+                  { path: "participants", element: <ParticipantsTab /> },
                   { path: "audio", element: <AudioRulesTab /> },
                   { path: "languages", element: <LanguagesTab /> },
                   { path: "retention", element: <RetentionTab /> },
@@ -57,6 +63,21 @@ export const routes: RouteObject[] = [
                 ],
               },
             ],
+          },
+          {
+            element: <RequirePermission permission="tasks.view" />,
+            children: [
+              { path: "tasks", element: <TasksPage /> },
+              { path: "tasks/:taskId", element: <TaskDetailPage /> },
+            ],
+          },
+          {
+            element: <RequirePermission permission="tasks.assign" />,
+            children: [{ path: "tasks/new", element: <TaskCreatePage /> }],
+          },
+          {
+            element: <RequirePermission permission="audit.view" />,
+            children: [{ path: "admin/audit", element: <AuditPage /> }],
           },
           {
             element: <RequirePermission permission="projects.create" />,

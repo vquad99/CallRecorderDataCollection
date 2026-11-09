@@ -1,0 +1,90 @@
+$ make check UV=uv  (run 2026-11-09T15:07:40Z on aws-dev; TEST_DATABASE_URL=private PostgreSQL 16 127.0.0.1:55432/ccp_test; REQUIRE_DB_TESTS=1)
+python3 tools/check_repo.py
+check_repo: 0 problem(s) in 5 checks
+cd backend && uv lock --check
+Resolved 53 packages in 3ms
+cd backend && uv run ruff format --check app tests
+72 files already formatted
+cd backend && uv run ruff check app tests
+All checks passed!
+cd backend && uv run mypy app tests
+Success: no issues found in 72 source files
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0
+rootdir: /home/quad99/conversation-collection-platform/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 121 items
+
+tests/test_app_factory.py ....                                           [  3%]
+tests/test_audit_limits_validation.py ....                               [  6%]
+tests/test_auth.py ..................                                    [ 21%]
+tests/test_config.py ................                                    [ 34%]
+tests/test_cors_and_headers.py ....                                      [ 38%]
+tests/test_db_pool.py .                                                  [ 38%]
+tests/test_errors.py ....                                                [ 42%]
+tests/test_health.py .....                                               [ 46%]
+tests/test_logging.py ...                                                [ 48%]
+tests/test_migrations.py ....                                            [ 52%]
+tests/test_participants.py .........                                     [ 59%]
+tests/test_permissions.py ...........                                    [ 68%]
+tests/test_projects.py .......                                           [ 74%]
+tests/test_settings_seed_audit.py .....                                  [ 78%]
+tests/test_tasks.py ...........                                          [ 87%]
+tests/test_test_database_guard.py .....                                  [ 91%]
+tests/test_users.py ..........                                           [100%]
+
+======================= 121 passed in 139.03s (0:02:19) ========================
+cd frontend && npm run format:check
+
+> ccp-frontend@0.1.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+cd frontend && npm run lint
+
+> ccp-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+cd frontend && npm run typecheck
+
+> ccp-frontend@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+cd frontend && npm test
+
+> ccp-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/quad99/conversation-collection-platform/frontend
+
+
+ Test Files  12 passed (12)
+      Tests  44 passed (44)
+   Start at  20:40:24
+   Duration  15.16s (environment 51%, tests 32%, setup 8%, import 6%, transform 2%)
+
+Environment  jsdom was created 12 times · 20.76s total, 51% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+cd frontend && npm run build
+
+> ccp-frontend@0.1.0 build
+> tsc --noEmit -p tsconfig.json && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 131 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:   0.30 kB
+dist/assets/index-Bfk0G16z.css    5.21 kB │ gzip:   1.61 kB
+dist/assets/index-Bl-8whPr.js   383.43 kB │ gzip: 115.42 kB
+
+✓ built in 368ms
+make exit=0

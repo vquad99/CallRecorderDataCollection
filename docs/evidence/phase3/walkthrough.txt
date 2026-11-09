@@ -1,0 +1,13 @@
+Phase 3 manual integration walk-through - 2026-11-09T15:06:28Z
+Real backend (migrations 0001-0003, seed-dev) + Vite; installed Google Chrome via playwright-core.
+
+project admin added 2 participants; full phone numbers visible to project admin
+task T000001 created and assigned to Demo Moderator
+moderator started the task and recorded consent for A and B
+moderator view of participants (policy ADMINS_ONLY): P000001 Asha ••••••10 hi Consent
+project admin put the task on hold with a reason and resumed it
+transcriber receives for a participant: label=null phone=null code=P000001
+transcriber task list total (not assigned to any): 0
+audit log rows visible to super admin: 14 on first page
+page errors: 0
+exit=0

@@ -50,10 +50,10 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | project_audio_rules | project_id, mode, sample_rate, bit_depth, channels, qc thresholds (silence %, clipping %, min/max duration, leakage) | unique (project_id, mode) | cascade |
 | project_transcription_guidelines | project_id, version, guideline_text, verbatim_rules | unique (project_id, version) | restrict |
 | project_retention_rules | project_id, asset_kind, retain_days, delete_action | unique (project_id, asset_kind) | cascade |
-| participants | participant_code, display_label (S), phone_e164_enc (S), phone_hash (S), language_code, dialect, deleted_at | unique participant_code; index phone_hash (duplicate detection) | soft delete |
+| participants | participant_code (P + 6 digits, from `participant_code_seq`), display_label (S), phone_e164_enc (S), phone_hash (S), phone_hint (last 2 digits), language_code, dialect, notes (S), created_by, deleted_at, deleted_by, deletion_reason | unique participant_code; index phone_hash (duplicate detection) | soft delete |
 | participant_project_links | participant_id, project_id | unique pair | restrict |
-| consent_records | participant_id, task_id, call_session_id, status, method, captured_by, captured_at, policy_version, consent_asset_id | index (participant_id, task_id) | restrict |
-| tasks | project_id, recording_mode, status, priority, due_at, participant_a_id, participant_b_id, reason_code | index (project_id, status), (due_at) | restrict |
+| consent_records | participant_id, project_id, task_id, status, method, policy_version, captured_by, note (call_session_id and consent_asset_id arrive with Phases 4-6) | index (participant_id, task_id) | restrict |
+| tasks | task_code (T + 6 digits, from `task_code_seq`), project_id, recording_mode, status, held_from, priority, due_at, participant_a_id, participant_b_id (must differ), reason_code, created_by | index (project_id, status), (due_at) | restrict |
 | task_assignments | task_id, user_id, role_code, active, assigned_by, reason, assigned_at, ended_at | partial unique (task_id, role_code) where active | restrict |
 | task_status_history | task_id, from_status, to_status, actor_id, reason_code, comment, at | index (task_id, at) | restrict |
 | task_comments | task_id, author_id, body, internal (bool) | index (task_id) | restrict |

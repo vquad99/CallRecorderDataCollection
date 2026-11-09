@@ -18,6 +18,7 @@ export function useProject(): ProjectContext {
 const TABS = [
   { to: "", label: "Overview", end: true },
   { to: "team", label: "Team", end: false },
+  { to: "participants", label: "Participants", end: false },
   { to: "audio", label: "Audio rules", end: false },
   { to: "languages", label: "Languages", end: false },
   { to: "retention", label: "Retention", end: false },

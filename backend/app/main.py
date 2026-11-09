@@ -19,6 +19,7 @@ from app.core.email import build_sender
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.ratelimit import build_limiter
 from app.core.security import SecurityHeadersMiddleware
 from app.db.session import create_db_engine, make_session_factory
 from app.modules.auth.security import FieldCipher
@@ -49,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = make_session_factory(engine)
     app.state.cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
     app.state.email_sender = build_sender(settings)
+    app.state.rate_limiter = build_limiter(settings)
 
     register_exception_handlers(app)
     app.include_router(health_router)

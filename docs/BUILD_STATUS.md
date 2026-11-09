@@ -11,12 +11,12 @@ test in TEST_PLAN.md. It does not mean anything is built.
 
 | Module | Prefix | Requirements | Requirements reviewed | Backend | Database | Frontend | Automated tests | Manual test | Status | Blocker |
 |---|---|---:|---|---|---|---|---|---|---|---|
-| Authentication | AUTH | 16 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
-| User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
-| Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
+| Authentication | AUTH | 16 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
+| User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
+| Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
-| Participants | PART | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Task assignment | TASK | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Participants | PART | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 awaiting owner approval |
+| Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 awaiting owner approval |
 | Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
 | Face-to-face recording | FTF | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Storage | STOR | 13 | Yes | No | No | No | No | No | NOT STARTED | - |
@@ -27,7 +27,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Transcript QC | TQC | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Exports | EXP | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Dashboard | DASH | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Security and audit | SEC | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Security and audit | SEC | 15 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | Remaining items in Phases 4 and 10 |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 approved; FND-027 done in Phase 2 |
 | Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
@@ -46,8 +46,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 |---|---|---|---|
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
-| 2 Auth, users, roles, projects | IN PROGRESS | 2 | All Gate 2 conditions met (docs/evidence/phase2/ci_run.txt); waiting for owner approval |
-| 3 Participants, tasks, workflow | NOT STARTED | 3 | - |
+| 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
+| 3 Participants, tasks, workflow | IN PROGRESS | 3 | All Gate 3 conditions met locally (docs/evidence/phase3/); CI run and owner approval pending |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
@@ -191,34 +191,34 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PROJ-007 | QC rules per project. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03, TA-AQC-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-008 | Retention policy. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-009 | Lifecycle status: draft, active, paused, completed, archived. | 2 | [x] | [x] | [x] | [x] TA-PROJ-04 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| PROJ-010 | Archived projects receive no new work unless an authorized admin reopens them. | 2 | [x] | [x] | [ ] | [ ] TA-PROJ-05 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Guard built; task creation that uses it is Phase 3 |
-| PROJ-011 | Project settings appear in task creation and reports. | 2 | [ ] | [ ] | [ ] | n/a | [ ] TM-PROJ-01 | - | NOT STARTED | Needs tasks (Phase 3) and reports (Phase 9) |
+| PROJ-010 | Archived projects receive no new work unless an authorized admin reopens them. | 2 | [x] | [x] | [ ] | [x] TA-PROJ-05 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-011 | Project settings appear in task creation and reports. | 2 | [x] | [ ] | [x] | n/a | [ ] TM-PROJ-01 | docs/evidence/phase3/make_check.txt | IN PROGRESS | Task creation uses project modes; reports in Phase 9 |
 | PROJ-012 | Project isolation enforced. | 2 | [x] | [x] | [x] | [x] TA-PROJ-06 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-013 | Frontend: project list, create/edit, detail tabs overview, team, audio rules, language, retention. | 2 | [x] | [x] | [x] | [x] TA-PROJ-07 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| PART-001 | Participant A and B records attached to a task. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
-| PART-002 | Unique participant ID from a participant ID generator. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
-| PART-003 | Name or approved display label. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
-| PART-004 | Phone number for telephony tasks, normalized to one format. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-02 | n/a | - | NOT STARTED | - |
-| PART-005 | Language and dialect. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
-| PART-006 | Consent stored separately from the profile: status, method, time, staff member, policy/version; consent audit history. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-03 | n/a | - | NOT STARTED | - |
-| PART-007 | Duplicate participant detection. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-04 | n/a | - | NOT STARTED | - |
-| PART-008 | Restricted personal data; phone numbers visible only with permission, masked otherwise. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-05 | n/a | - | NOT STARTED | - |
-| PART-009 | Retention and deletion support. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-06 | n/a | - | NOT STARTED | - |
-| PART-010 | Only necessary participant details stored. | 3 | [ ] | [ ] | [ ] | n/a | [ ] TM-PART-01 | - | NOT STARTED | - |
-| PART-011 | Unauthorized users cannot export participant contact details. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-07 | n/a | - | NOT STARTED | - |
-| PART-012 | Participant correction workflow. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-08 | n/a | - | NOT STARTED | - |
-| TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-01 | n/a | - | NOT STARTED | - |
-| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> TRANSCRIPTION_PENDING -> TRANSCRIPTION_IN_PROGRESS -> TRANSCRIPT_QC -> APPROVED. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-02 | n/a | - | NOT STARTED | - |
-| TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-03 | n/a | - | NOT STARTED | - |
-| TASK-004 | Invalid or arbitrary state jumps rejected at API level (and in the UI). | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-04 | [ ] TM-TASK-01 | - | NOT STARTED | - |
-| TASK-005 | Only the assigned moderator sees and starts the task. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-05 | n/a | - | NOT STARTED | - |
-| TASK-006 | Reassignment requires a reason and creates history. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-06 | n/a | - | NOT STARTED | - |
-| TASK-007 | Task comments and history timeline. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-07 | n/a | - | NOT STARTED | - |
-| TASK-008 | Every state change records user, time and reason. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-07 | [ ] TM-TASK-01 | - | NOT STARTED | - |
-| TASK-009 | Allowed statuses and transitions defined in one backend service. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-08 | n/a | - | NOT STARTED | - |
-| TASK-010 | State change and its history row written in one database transaction. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-09 | n/a | - | NOT STARTED | - |
-| TASK-011 | Task list filters and task detail page. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-10 | n/a | - | NOT STARTED | - |
-| TASK-012 | Assignment is project-scoped. | 3 | [ ] | [ ] | [ ] | [ ] TA-TASK-11 | n/a | - | NOT STARTED | - |
+| PART-001 | Participant A and B records attached to a task. | 3 | [x] | [x] | [x] | [x] TA-PART-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-002 | Unique participant ID from a participant ID generator. | 3 | [x] | [x] | [x] | [x] TA-PART-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-003 | Name or approved display label. | 3 | [x] | [x] | [x] | [x] TA-PART-01 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-004 | Phone number for telephony tasks, normalized to one format. | 3 | [x] | [x] | [x] | [x] TA-PART-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-005 | Language and dialect. | 3 | [x] | [x] | [x] | [x] TA-PART-01 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-006 | Consent stored separately from the profile: status, method, time, staff member, policy/version; consent audit history. | 3 | [x] | [x] | [x] | [x] TA-PART-03 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-007 | Duplicate participant detection. | 3 | [x] | [x] | [x] | [x] TA-PART-04 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-008 | Restricted personal data; phone numbers visible only with permission, masked otherwise. | 3 | [x] | [x] | [x] | [x] TA-PART-05 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-009 | Retention and deletion support. | 3 | [x] | [x] | [x] | [x] TA-PART-06 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-010 | Only necessary participant details stored. | 3 | [x] | [x] | [x] | n/a | [x] TM-PART-01 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| PART-011 | Unauthorized users cannot export participant contact details. | 3 | [x] | [x] | [x] | [x] TA-PART-07 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-012 | Participant correction workflow. | 3 | [x] | [x] | [x] | [x] TA-PART-08 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | 3 | [x] | [x] | [x] | [x] TA-TASK-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> TRANSCRIPTION_PENDING -> TRANSCRIPTION_IN_PROGRESS -> TRANSCRIPT_QC -> APPROVED. | 3 | [x] | [x] | [x] | [x] TA-TASK-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | 3 | [x] | [x] | [x] | [x] TA-TASK-03 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-004 | Invalid or arbitrary state jumps rejected at API level (and in the UI). | 3 | [x] | [x] | [x] | [x] TA-TASK-04 | [x] TM-TASK-01 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-005 | Only the assigned moderator sees and starts the task. | 3 | [x] | [x] | [x] | [x] TA-TASK-05 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-006 | Reassignment requires a reason and creates history. | 3 | [x] | [x] | [x] | [x] TA-TASK-06 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| TASK-007 | Task comments and history timeline. | 3 | [x] | [x] | [x] | [x] TA-TASK-07 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-008 | Every state change records user, time and reason. | 3 | [x] | [x] | [x] | [x] TA-TASK-07 | [x] TM-TASK-01 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-009 | Allowed statuses and transitions defined in one backend service. | 3 | [x] | [x] | [x] | [x] TA-TASK-08 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| TASK-010 | State change and its history row written in one database transaction. | 3 | [x] | [x] | [x] | [x] TA-TASK-09 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| TASK-011 | Task list filters and task detail page. | 3 | [x] | [x] | [x] | [x] TA-TASK-10 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-012 | Assignment is project-scoped. | 3 | [x] | [x] | [x] | [x] TA-TASK-11 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-001 | Private cloud object storage; bucket never public. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-01 | [ ] TM-STOR-01 | - | NOT STARTED | - |
 | STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-02 | n/a | - | NOT STARTED | - |
 | STOR-003 | Secure upload. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-03 | n/a | - | NOT STARTED | - |
@@ -363,17 +363,17 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | DASH-004 | Role and project visibility enforced. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-04 | n/a | - | NOT STARTED | - |
 | DASH-005 | Provider charges labelled as estimates with rate source and date. | 9 | [ ] | [ ] | [ ] | n/a | [ ] TM-DASH-01 | - | NOT STARTED | - |
 | DASH-006 | Empty datasets and large date ranges handled. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-05 | n/a | - | NOT STARTED | - |
-| SEC-001 | Audit log for sensitive actions; audit log integrity reviewed. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-01 | [ ] TM-SEC-06 | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
+| SEC-001 | Audit log for sensitive actions; audit log integrity reviewed. | 3, 10 | [x] | [x] | [x] | [ ] TA-SEC-01 | [x] TM-SEC-06 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | IN PROGRESS | Integrity review (TM-SEC-06) in Phase 10 |
 | SEC-002 | TLS everywhere. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-003 | Encryption at rest, including backups. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-004 | Secret manager; no secrets in frontend code or Git; repository secret scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
-| SEC-005 | Rate limits. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-03 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
-| SEC-006 | Input validation. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-04 | n/a | - | NOT STARTED | - |
+| SEC-005 | Rate limits. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-03 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| SEC-006 | Input validation. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-04 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-05 | [ ] TM-SEC-02 | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
 | SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-03 | - | NOT STARTED | - |
 | SEC-009 | Data retention and deletion enforced. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-STOR-09, TA-PART-06 | n/a | - | NOT STARTED | - |
-| SEC-010 | Consent record access controls. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-06 | n/a | - | NOT STARTED | - |
-| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-07, TA-STOR-05 | n/a | - | NOT STARTED | - |
+| SEC-010 | Consent record access controls. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-06 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [ ] TA-SEC-07, TA-STOR-05 | n/a | docs/evidence/phase3/make_check.txt | IN PROGRESS | Recording download checks arrive in Phase 4 |
 | SEC-012 | Webhook signature failures rejected. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-TEL-03 | n/a | - | NOT STARTED | - |
 | SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | NOT STARTED | - |
@@ -463,3 +463,23 @@ test in TEST_PLAN.md. It does not mean anything is built.
   scan, on a hard-coded test-only encryption key; tests now generate the key per run.
 - Gate 2: every condition met; waiting for owner approval.
 - Next single task (after approval): Phase 3 / F1 - participant records, consent and duplicate detection.
+
+### Session 4 - 2026-11-09 - Phase 3 (participants, tasks, workflow, audit)
+
+- Owner approved Gate 2 and asked for Phase 3.
+- Backend: migration 0003 (participants, participant_project_links, consent_records, tasks,
+  task_assignments, task_status_history, task_comments; code sequences). Participant service with
+  E.164 phones encrypted + keyed-hash duplicate detection, three visibility tiers (D-035), corrections,
+  deletion that removes personal data (D-038), contact export, consent history. Task service with one
+  workflow module (D-037), moderator assignment and reassignment with reason, start by the assigned
+  moderator only, hold/resume/cancel with reason codes, consent capture by the assigned moderator,
+  comments and timeline; status, history and audit written in one transaction. Audit-log viewer
+  (Project Admins see their projects only). Rate limits (D-039).
+- Frontend: project Participants tab, Tasks list, New task, Task detail (assign, status with reasons,
+  consent, history), Audit log page; navigation adds Tasks and Audit log.
+- Tests: backend 121 passed (every one of the 169 status pairs tried through the API; rollback when
+  the history write fails; every write route rejects malformed bodies; escalation attempts fail;
+  rate limit returns 429); frontend 44 passed; browser test 1 passed.
+- Manual: real walk-through with project admin, moderator, transcriber and super admin
+  (docs/evidence/phase3/walkthrough.txt, 5 screenshots).
+- Next single task: push, read CI, then Gate 3 review.

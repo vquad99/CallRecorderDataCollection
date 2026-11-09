@@ -6,8 +6,10 @@ import { Button } from "../components/form/Button";
 
 const LINKS = [
   { to: "/projects", label: "Projects", permission: "projects.view" },
+  { to: "/tasks", label: "Tasks", permission: "tasks.view" },
   { to: "/admin/users", label: "Users", permission: "users.manage" },
   { to: "/admin/settings", label: "Settings", permission: "settings.manage" },
+  { to: "/admin/audit", label: "Audit log", permission: "audit.view" },
   { to: "/status", label: "System status", permission: null },
 ];
 
