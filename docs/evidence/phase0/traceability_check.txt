@@ -1,7 +1,7 @@
 Traceability check (spec v1.0 + runbook) - generated 2026-11-09
 modules: 27
-requirements: 327
-tests: 251 (automated 192, manual 59)
+requirements: 328
+tests: 252 (automated 193, manual 59)
 requirements without a test: 0
 tests covering no requirement: 0
 unknown test references: 0

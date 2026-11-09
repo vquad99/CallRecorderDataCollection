@@ -21,7 +21,7 @@ fills the Version column from those lockfiles. No version is claimed before that
 | Reverse proxy | Nginx or managed ingress | to pin in Phase 1 | infra |
 | Password hashing | Argon2id library | to pin in Phase 2 | backend lockfile |
 | PWA | web manifest + service worker | to pin in Phase 10 | frontend lockfile |
-| ASR | Whisper Large-v3, AI4Bharat candidates | chosen after evaluation (Phase 7) | - |
+| ASR (optional per project) | Deepgram API through the ASR adapter (D-018) | API/model version recorded per job; capabilities NOT VERIFIED until Phase 7 | backend lockfile (client library, if used) |
 
 ## Test and quality tools
 

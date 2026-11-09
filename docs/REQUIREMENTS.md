@@ -428,18 +428,19 @@ Phase: 7 | Requirements: 10
 
 ### ASR - Module 10 - AI transcription
 
-Phase: 7 | Requirements: 9
+Phase: 7 | Requirements: 10
 
 | ID | Requirement | Source |
 |---|---|---|
 | ASR-001 | Provider-neutral ASR interface: submit job, get status, retrieve result, cancel if supported. | S6 M10; R J2 |
-| ASR-002 | Initial candidates Whisper Large-v3 and AI4Bharat models for supported Indic languages; others only after evaluation. | S6 M10 |
+| ASR-002 | AI transcription provider: Deepgram (owner decision 2026-11-09, replaces the spec's initial candidates Whisper Large-v3 / AI4Bharat); its capabilities, models, language coverage and prices used only after official-documentation check and evaluation; other providers only after evaluation. | S6 M10; owner 2026-11-09 |
 | ASR-003 | Audio queued for transcription after it passes audio QC. | S6 M10; R J3.1-3 |
 | ASR-004 | Language and dialect selected per job. | S6 M10 |
 | ASR-005 | Stored per job: provider/model name, exact version, language, settings, source asset ID, status, start/end times, raw response, normalized transcript, error details. | S6 M10; R J2, J3.6 |
 | ASR-006 | Timestamps, speaker labels and confidence stored only when the model returns them; otherwise null. | S6 M10; R J2 |
 | ASR-007 | Bounded retries; permanent failure visible to admin. | S6 M10; R J3.8-9 |
 | ASR-008 | Worker fetches audio through an authorized service; human review task created; AI and human transcripts compared. | S6 M10; R J3.4, J3.10 |
+| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent and human transcription starts from an empty transcript; when on but the Deepgram key is missing, the UI and API show Not configured and work falls back to human transcription. | Owner 2026-11-09 |
 | ASR-009 | Labelled reference set per launch language/dialect; WER/CER, speaker-label accuracy if supported, timestamp error, processing time, cost per audio hour; dataset size and method recorded; no claims from tiny samples. | S6 M10; R J4 |
 
 ### TRN - Module 11 - Human transcription workspace

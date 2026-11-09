@@ -42,7 +42,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | role_permissions | role_id, permission_id | unique pair | cascade with role |
 | sessions | user_id, token_hash (S), created_at, last_seen_at, expires_at, revoked_at, ip (S), user_agent | index (user_id), unique token_hash | cascade with user |
 | password_reset_tokens | user_id, token_hash (S), expires_at, used_at | unique token_hash | cascade with user |
-| projects | code, name, status, recording_modes, daily targets per mode, phone_visibility_policy, consent_policy_version, deleted_at | unique code; index status | soft delete |
+| projects | code, name, status, recording_modes, daily targets per mode, phone_visibility_policy, consent_policy_version, asr_enabled (default false), asr_provider, asr_settings, deleted_at | unique code; index status | soft delete |
 | project_languages | project_id, language_code, dialect | unique (project_id, language_code, dialect) | cascade |
 | project_memberships | user_id, project_id, role_code | unique (user_id, project_id, role_code) | cascade |
 | project_audio_rules | project_id, mode, sample_rate, bit_depth, channels, qc thresholds (silence %, clipping %, min/max duration, leakage) | unique (project_id, mode) | cascade |

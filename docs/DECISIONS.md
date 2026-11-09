@@ -23,6 +23,7 @@ The owner approved Phase 0 on 2026-11-09; the decisions proposed in it are Accep
 | D-014 | 2026-11-09 | Accepted | Status vocabulary = runbook A3 (`NOT STARTED` ... `ACCEPTED`). | Spec 13 and runbook A3 differ; the spec's own initial "Blocked pending provider proof" is not in its list. |
 | D-015 | 2026-11-09 | Accepted (Phase 0 approval) | One membership table `project_memberships` (spec: user_project_memberships); one asset table `audio_assets` (runbook I1: recording_assets). | Same concept, one table each; avoids duplicate sources of truth. |
 | D-016 | 2026-11-09 | Accepted | Spec v1.0 and runbook both binding; runbook prefixes FTF, AQC, OPS used; extra prefixes for rules the runbook does not prefix. | Owner supplied the runbook after the spec. |
+| D-018 | 2026-11-09 | Accepted | AI transcription uses Deepgram through the ASR adapter and is optional: on/off per project, default off; off = human transcription from an empty transcript. Replaces the spec's initial candidates (Whisper Large-v3, AI4Bharat). | Owner: "transcription we can use deepgram and make it optional". Deepgram's models, language coverage, pricing and data handling are NOT VERIFIED until checked in Phase 7 (docs/integrations/deepgram/). |
 | D-017 | 2026-11-09 | Accepted (Phase 0 approval) | Raw provider payloads and raw ASR responses stored in private object storage, referenced from the database; fields the workflow reads get typed columns. | Keeps the database queryable; runbook I4.2 and J2 require keeping raw data. |
 
 ## Open blockers and questions
@@ -35,7 +36,7 @@ The owner approved Phase 0 on 2026-11-09; the decisions proposed in it are Accep
 | B-04 | Phase 4 cloud storage, 5, 10 | Cloud provider, account access, region (data residency). | Owner |
 | B-05 | Storage sizing, deletion workflow | Retention period for final files, browser originals (6x the size of the derived file) and provider originals. | Client |
 | B-06 | Phase 7 | Launch languages and dialects; reference audio with human transcripts for evaluation. | Client |
-| B-07 | Phase 7 | GPU compute for Whisper Large-v3 / AI4Bharat (account, budget). | Owner |
+| B-07 | Phase 7 | Deepgram account and API key (server-side secret); confirm Deepgram covers the launch languages/dialects; confirm sending participant audio to Deepgram is allowed by the client and the consent text. No GPU needed any more (D-018). | Owner / client |
 | B-08 | Phase 1 | Build machine (aws-dev): Docker and FFmpeg missing; root disk 94 % used (3.5 GB free). | Owner: install Docker + FFmpeg (needs sudo) and free about 15 GB, or name another machine |
 | B-09 | Phase 4 device tests, Phase 10 | Domain name + TLS (microphone needs HTTPS outside localhost). | Owner |
 | B-10 | TEL-015, PART-006 | Call-recording consent law and provider terms in India; consent script wording. NOT VERIFIED. | Owner / legal |

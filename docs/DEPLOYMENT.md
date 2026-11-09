@@ -18,7 +18,7 @@ SEC-008, SEC-014. Cloud provider, account and region are open (DECISIONS.md B-04
 | Frontend (static build) | Vite dev server / Nginx | Nginx or CDN behind TLS |
 | Backend (FastAPI) | container | containers, 2+ replicas |
 | Workers (Celery: webhooks, media, qc, exports) | container | containers, scaled per queue |
-| ASR workers | optional (CPU, small models) | GPU instances (B-07) |
+| ASR worker | same worker image, `asr` queue | same; calls the Deepgram API (key in secret manager); idle when AI transcription is off (D-018) |
 | PostgreSQL | container with volume | managed PostgreSQL, automated encrypted backups |
 | Redis | container | managed Redis |
 | Object storage | MinIO container | private S3-compatible bucket, encryption, versioning, lifecycle |

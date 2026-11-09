@@ -27,7 +27,7 @@ Check result: `docs/evidence/phase0/traceability_check.txt`.
 | AUDIO | Audio rules, conversion and validation | 24 | 0 | 0 |
 | TEL | Module 6 - Telephony provider integration | 38 | 0 | 38 |
 | AQC | Module 9 - Audio quality control | 10 | 0 | 0 |
-| ASR | Module 10 - AI transcription | 9 | 0 | 0 |
+| ASR | Module 10 - AI transcription | 10 | 0 | 0 |
 | TRN | Module 11 - Human transcription workspace | 12 | 0 | 0 |
 | TQC | Module 12 - Transcript quality control | 6 | 0 | 0 |
 | EXP | Module 13 - Metadata and exports | 10 | 0 | 0 |
@@ -36,7 +36,7 @@ Check result: `docs/evidence/phase0/traceability_check.txt`.
 | PWA | Module 16 - PWA installation and usability | 9 | 0 | 0 |
 | OPS | Deployment and operations | 9 | 0 | 0 |
 | LOAD | Capacity and performance testing | 5 | 0 | 0 |
-| | **Total** | **327** | **0** | **38** |
+| | **Total** | **328** | **0** | **38** |
 
 ## Requirement by requirement
 
@@ -289,13 +289,14 @@ Check result: `docs/evidence/phase0/traceability_check.txt`.
 | AQC-009 | Read-only analysis service; never modifies the source. | 7 | audio_qc_results | /api/v1/audio-qc* | /qc/audio | TA-AQC-11 | NOT STARTED | - |
 | AQC-010 | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. | 7 | audio_qc_results | /api/v1/audio-qc* | /qc/audio | TA-AQC-02, TA-AQC-03, TA-AQC-04, TA-AQC-05, TA-AQC-06, TA-AQC-08, TA-AQC-10, TA-AQC-12, TA-AQC-15 | NOT STARTED | - |
 | ASR-001 | Provider-neutral ASR interface: submit job, get status, retrieve result, cancel if supported. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-01 | NOT STARTED | - |
-| ASR-002 | Initial candidates Whisper Large-v3 and AI4Bharat models for supported Indic languages; others only after evaluation. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TM-ASR-01 | NOT STARTED | - |
+| ASR-002 | AI transcription provider: Deepgram (owner decision 2026-11-09, replaces the spec's initial candidates Whisper Large-v3 / AI4Bharat); its capabilities, models, language coverage and prices used only after official-documentation check and evaluation; other providers only after evaluation. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TM-ASR-01 | NOT STARTED | - |
 | ASR-003 | Audio queued for transcription after it passes audio QC. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-02, TA-ASR-07 | NOT STARTED | - |
 | ASR-004 | Language and dialect selected per job. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-02 | NOT STARTED | - |
 | ASR-005 | Stored per job: provider/model name, exact version, language, settings, source asset ID, status, start/end times, raw response, normalized transcript, error details. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-03 | NOT STARTED | - |
 | ASR-006 | Timestamps, speaker labels and confidence stored only when the model returns them; otherwise null. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-04 | NOT STARTED | - |
 | ASR-007 | Bounded retries; permanent failure visible to admin. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-05 | NOT STARTED | - |
 | ASR-008 | Worker fetches audio through an authorized service; human review task created; AI and human transcripts compared. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-06, TA-ASR-07 | NOT STARTED | - |
+| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent and human transcription starts from an empty transcript; when on but the Deepgram key is missing, the UI and API show Not configured and work falls back to human transcription. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TA-ASR-08, TA-GEN-04 | NOT STARTED | - |
 | ASR-009 | Labelled reference set per launch language/dialect; WER/CER, speaker-label accuracy if supported, timestamp error, processing time, cost per audio hour; dataset size and method recorded; no claims from tiny samples. | 7 | transcription_jobs, transcripts, transcript_segments | /api/v1/transcription-jobs* | /admin/asr-jobs | TM-ASR-02 | NOT STARTED | - |
 | TRN-001 | Assigned task queue; a transcriber cannot open or edit another person's task. | 8 | transcription_assignments, transcripts, transcript_segments, transcript_revisions | /api/v1/transcripts* | /transcription, /transcription/:taskId | TA-TRN-01 | NOT STARTED | - |
 | TRN-002 | Audio player with playback speed, seek and segment navigation. | 8 | transcription_assignments, transcripts, transcript_segments, transcript_revisions | /api/v1/transcripts* | /transcription, /transcription/:taskId | TM-TRN-01 | NOT STARTED | - |

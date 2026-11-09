@@ -62,6 +62,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET, PATCH | /projects/{id} | member / `projects.manage` |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /guidelines, /retention | member / `projects.manage` |
+| GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
 | GET, POST, DELETE | /projects/{id}/members | `projects.members` |
 
 ## Participants (PART-*)

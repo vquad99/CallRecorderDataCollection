@@ -76,7 +76,7 @@ output saved to evidence.
 | TA-GEN-01 | Automated | 1 | CI fails on TODO/FIXME/placeholder/stub/NotImplemented or test-double imports inside production source paths. | GEN-002 |
 | TA-GEN-02 | Automated | 1 | CI runs the single lint + type-check + test command and fails on any failure; lint rejects bare/empty except and empty catch blocks. | GEN-008, FND-028 |
 | TA-GEN-03 | Automated | 1 | CI check: every status in BUILD_STATUS.md is from the allowed vocabulary and every checked box names an existing evidence path. | GEN-012, PROC-005 |
-| TA-GEN-04 | Automated | 2 | With provider/ASR credentials absent, the related UI and API return a truthful 'Not configured' state, never success. | GEN-004 |
+| TA-GEN-04 | Automated | 2 | With provider/ASR credentials absent, the related UI and API return a truthful 'Not configured' state, never success. | GEN-004, ASR-010 |
 | TA-GEN-05 | Automated | 1 | CI runs formatter check, linter, type checker and tests for backend and frontend. | GEN-010 |
 | TA-GEN-06 | Automated | 1 | CI check: every test module declares the requirement IDs it covers. | GEN-011 |
 | TA-GEN-07 | Automated | 0, 1 | CI check: every Phase 0 document and folder exists. | PROC-002 |
@@ -345,7 +345,8 @@ output saved to evidence.
 | TA-ASR-05 | Automated | 7 | Bounded retries; permanent failure visible to admin. | ASR-007 |
 | TA-ASR-06 | Automated | 7 | AI and human transcripts stored separately and compared (WER/CER). | ASR-008 |
 | TA-ASR-07 | Automated | 7 | Job created only for QC-passed audio; human review task created on success. | ASR-003, ASR-008 |
-| TM-ASR-01 | Manual | 7 | Model shortlist evaluated per launch language; decision recorded. | ASR-002 |
+| TA-ASR-08 | Automated | 7 | Project with AI transcription off: task passes audio QC to TRANSCRIPTION_PENDING with no ASR job and no outbound call; switching it on creates jobs for new audio only. | ASR-010 |
+| TM-ASR-01 | Manual | 7 | Deepgram checked against official documentation (models, languages, pricing, data handling) and evaluated per launch language; result recorded in docs/integrations/deepgram/. | ASR-002 |
 | TM-ASR-02 | Manual | 7 | Evaluation report per runbook J4 with dataset size and method. | ASR-009 |
 
 ### TRN - Module 11 - Human transcription workspace

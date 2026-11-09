@@ -25,10 +25,10 @@ A modular monolith: one backend application, one worker image, one web frontend,
    (all state, no audio)  (queue, limits)  (audio, transcripts, exports)
          ^                   |
          |                   v
-  Celery workers: webhooks | media | qc | asr (GPU) | exports
+  Celery workers: webhooks | media | qc | asr | exports
          |
          +--> Telephony provider API  (only through the telephony adapter)
-         +--> ASR model runtime        (only through the ASR adapter)
+         +--> Deepgram API             (only through the ASR adapter; optional per project)
 
   Telephony provider --signed webhooks--> /api/v1/webhooks/telephony/<provider>
 ```
@@ -178,7 +178,7 @@ issued after a permission check.
 | webhooks | apply verified provider events, idempotently |
 | media | fetch provider recordings, assemble chunks, build stereo, convert, hash, validate |
 | qc | audio QC (read-only on sources) |
-| asr | transcription through the ASR adapter (GPU workers) |
+| asr | transcription through the ASR adapter (Deepgram API); skipped when the project has AI transcription off |
 | exports | build export packages with manifest and checksums; expire old bundles |
 
 Every job stores status, attempts and last error; bounded retries; permanent failures visible to admins.

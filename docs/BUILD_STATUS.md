@@ -22,7 +22,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Storage | STOR | 13 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Audio rules and conversion | AUDIO | 24 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Audio QC | AQC | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
-| AI transcription | ASR | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
+| AI transcription | ASR | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Human transcription | TRN | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Transcript QC | TQC | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Exports | EXP | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
@@ -38,7 +38,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Product scope | PROD | 4 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Contract and work rules | GEN | 14 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Build process and tracking | PROC | 9 | Yes | No | No | No | No | No | IN PROGRESS | Owner approval of Phase 0 |
-| **Total** | | **327** | | | | | | | | |
+| **Total** | | **328** | | | | | | | | |
 
 ## Phases and gates
 
@@ -61,7 +61,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Condition | Result | Evidence |
 |---|---|---|
 | Existing repository understood | Pass: new repository, no code before Phase 0 | docs/evidence/phase0/inspection_commands.txt |
-| Requirements mapped | Pass: 327 requirements, each with a source and >= 1 test | docs/evidence/phase0/traceability_check.txt |
+| Requirements mapped | Pass: 328 requirements, each with a source and >= 1 test | docs/evidence/phase0/traceability_check.txt |
 | Architecture documented | Pass | ARCHITECTURE.md, DATABASE.md, API_CONTRACT.md, SECURITY.md, AUDIO_SPECIFICATION.md, DEPLOYMENT.md |
 | Unknowns listed | Pass: B-01..B-12 | DECISIONS.md |
 | No existing code deleted | Pass: there was none | docs/evidence/phase0/inspection_commands.txt |
@@ -320,13 +320,14 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AQC-009 | Read-only analysis service; never modifies the source. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | - | NOT STARTED | - |
 | AQC-010 | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-02, TA-AQC-03, TA-AQC-04, TA-AQC-05, TA-AQC-06, TA-AQC-08, TA-AQC-10, TA-AQC-12, TA-AQC-15 | n/a | - | NOT STARTED | - |
 | ASR-001 | Provider-neutral ASR interface: submit job, get status, retrieve result, cancel if supported. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-01 | n/a | - | NOT STARTED | - |
-| ASR-002 | Initial candidates Whisper Large-v3 and AI4Bharat models for supported Indic languages; others only after evaluation. | 7 | [ ] | [ ] | [ ] | n/a | [ ] TM-ASR-01 | - | NOT STARTED | - |
+| ASR-002 | AI transcription provider: Deepgram (owner decision 2026-11-09, replaces the spec's initial candidates Whisper Large-v3 / AI4Bharat); its capabilities, models, language coverage and prices used only after official-documentation check and evaluation; other providers only after evaluation. | 7 | [ ] | [ ] | [ ] | n/a | [ ] TM-ASR-01 | - | NOT STARTED | - |
 | ASR-003 | Audio queued for transcription after it passes audio QC. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-02, TA-ASR-07 | n/a | - | NOT STARTED | - |
 | ASR-004 | Language and dialect selected per job. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-02 | n/a | - | NOT STARTED | - |
 | ASR-005 | Stored per job: provider/model name, exact version, language, settings, source asset ID, status, start/end times, raw response, normalized transcript, error details. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-03 | n/a | - | NOT STARTED | - |
 | ASR-006 | Timestamps, speaker labels and confidence stored only when the model returns them; otherwise null. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-04 | n/a | - | NOT STARTED | - |
 | ASR-007 | Bounded retries; permanent failure visible to admin. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-05 | n/a | - | NOT STARTED | - |
 | ASR-008 | Worker fetches audio through an authorized service; human review task created; AI and human transcripts compared. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-06, TA-ASR-07 | n/a | - | NOT STARTED | - |
+| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent and human transcription starts from an empty transcript; when on but the Deepgram key is missing, the UI and API show Not configured and work falls back to human transcription. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-08, TA-GEN-04 | n/a | - | NOT STARTED | - |
 | ASR-009 | Labelled reference set per launch language/dialect; WER/CER, speaker-label accuracy if supported, timestamp error, processing time, cost per audio hour; dataset size and method recorded; no claims from tiny samples. | 7 | [ ] | [ ] | [ ] | n/a | [ ] TM-ASR-02 | - | NOT STARTED | - |
 | TRN-001 | Assigned task queue; a transcriber cannot open or edit another person's task. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-01 | n/a | - | NOT STARTED | - |
 | TRN-002 | Audio player with playback speed, seek and segment navigation. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TRN-01 | - | NOT STARTED | - |
@@ -413,4 +414,5 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Owner approved Phase 0 on 2026-11-09 and named the remote https://github.com/vquad99/CallRecorderDataCollection.
 - Commit: see git log (first commit of the repository).
 - Remaining: B-08 for Phase 1.
+- Owner decision: AI transcription uses Deepgram and is optional per project (ASR-002, ASR-010, D-018).
 - Next single task: Phase 1 / D1 - backend application factory with configuration validation.

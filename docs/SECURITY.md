@@ -34,6 +34,8 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
   audited (EXP-004).
 - Retention rules per project and asset kind; deletion jobs and requests audited (STOR-009, PART-009).
 - Evidence and test data never contain real personal data (GEN-006).
+- AI transcription sends participant audio to Deepgram only for projects that switch it on (ASR-010);
+  whether the client and consent text allow this is open (DECISIONS.md B-07).
 
 ## 4. Files and storage
 
