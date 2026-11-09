@@ -667,3 +667,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
   once to watch its tests fail (7 of 8 failed; the restart test passes either way, by design).
 - Results: database restart transparent (session kept); outage answered 503, no error-level log; all
   5 journeys passed in Chrome; 8 test objects deleted from Wasabi (docs/evidence/option_h/).
+- CI run 42681849714 (commit a42e1f0, Options E-H): all five jobs green; backend 225 passed (ffprobe
+  included), frontend 319, browser tests 4, journeys 10 (5 in Chromium, 5 in Edge), storage contract
+  against SeaweedFS 8 passed; no known dependency vulnerabilities (docs/evidence/option_h/ci_run.txt).
+- Options E, F, G and H done; waiting for the owner's next choice.

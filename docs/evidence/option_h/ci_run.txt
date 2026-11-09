@@ -1,0 +1,33 @@
+GitHub Actions run 42681849714 (commit a42e1f0, Options E-H) - SUCCESS
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42681849714
+
+Jobs:
+  success: Repository rules and secret scan
+  success: Frontend lint, types, unit and browser tests
+  success: Backend lint, types, tests
+  success: Containers start, migrate, persist (TM-FND-02)
+  success: User journeys in a real browser (Option D)
+
+Key lines:
+  Frontend lint, types, unit and bro | Test Files  17 passed (17)
+  Frontend lint, types, unit and bro | Tests  319 passed (319)
+  Frontend lint, types, unit and bro | 4 passed (1.0m)
+  Backend lint, types, tests | tests/test_audio_quality.py .........................................    [ 19%]
+  Backend lint, types, tests | tests/test_recovery.py .........                                         [ 68%]
+  Backend lint, types, tests | tests/test_storage_contract.py .s.s.s.s.s.s.ss.                          [ 88%]
+  Backend lint, types, tests | ================== 225 passed, 8 skipped in 169.61s (0:02:49) ==================
+  Backend lint, types, tests | No known vulnerabilities found
+  User journeys in a real browser (O | ================= 8 passed, 1 skipped, 7 deselected in 26.28s ==================
+  User journeys in a real browser (O | ✓   1 [chromium] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (8.1s)
+  User journeys in a real browser (O | ✓   2 [chromium] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (9.6s)
+  User journeys in a real browser (O | ✓   3 [chromium] › journeys/network.spec.ts:17:1 › a network drop mid-recording loses nothing (31.8s)
+  User journeys in a real browser (O | ✓   4 [chromium] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (4.8s)
+  User journeys in a real browser (O | ✓   5 [chromium] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (19.4s)
+  User journeys in a real browser (O | ✓   6 [edge] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (32.9s)
+  User journeys in a real browser (O | ✓   7 [edge] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (12.6s)
+  User journeys in a real browser (O | ✓   8 [edge] › journeys/network.spec.ts:17:1 › a network drop mid-recording loses nothing (32.1s)
+  User journeys in a real browser (O | ✓   9 [edge] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (5.8s)
+  User journeys in a real browser (O | ✓  10 [edge] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (21.9s)
+  User journeys in a real browser (O | 10 passed (4.0m)
+
+Backend 225 = 221 local + the 4 ffprobe checks (8 skipped: the real-storage contract cases, which run in the journeys job against SeaweedFS and ran against Wasabi locally).
