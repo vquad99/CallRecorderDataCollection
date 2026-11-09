@@ -1,0 +1,16 @@
+CI run 42636982501 - https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42636982501
+Commit a34c9b8, 2026-11-09. Conclusion: success
+  Backend lint, types, tests: success
+  Repository rules and secret scan: success
+  Frontend lint, types, unit and browser tests: success
+  Containers start, migrate, persist (TM-FND-02): success
+
+Key lines:
+  check_repo: 0 problem(s) in 5 checks
+  gitleaks: no leaks found
+  backend: 97 passed (REQUIRE_DB_TESTS=1, PostgreSQL 16 service); pip-audit: No known vulnerabilities found
+  frontend: unit tests + build passed; browser test 1 passed
+  npm audit (--audit-level=high passed): 7 packages moderate = one advisory GHSA-g3hv-75wg-m249 (minimatch via typescript-eslint, development lint tooling only; same known issue as Phase 1)
+  containers: db, redis, storage, backend, web Healthy; /health/ready {"database":"ok","redis":"ok"}; migration applied; data kept across restart
+
+Earlier run 42636278253 (commit 7e68916) failed only the secret scan: a hard-coded test-only encryption key in backend/tests/conftest.py. Fixed in a34c9b8 (key generated per run; old line listed in .gitleaksignore).

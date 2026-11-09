@@ -46,7 +46,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 |---|---|---|---|
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
-| 2 Auth, users, roles, projects | IN PROGRESS | 2 | All Gate 2 conditions met locally (docs/evidence/phase2/); CI run and owner approval pending |
+| 2 Auth, users, roles, projects | IN PROGRESS | 2 | All Gate 2 conditions met (docs/evidence/phase2/ci_run.txt); waiting for owner approval |
 | 3 Participants, tasks, workflow | NOT STARTED | 3 | - |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
@@ -459,4 +459,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Fixed during the session: decimal values shown inconsistently; demo accounts used a domain the
   email checker rejects (D-030); code permissions disagreed with the approved matrix in 3 places (D-029).
 - Open: PROJ-010 / PROJ-011 complete in later phases; production email needs an SMTP provider (B-13).
-- Next single task: push, read CI, then Gate 2 review.
+- CI run 42636982501 (commit a34c9b8): all 4 jobs succeeded. The previous run failed only the secret
+  scan, on a hard-coded test-only encryption key; tests now generate the key per run.
+- Gate 2: every condition met; waiting for owner approval.
+- Next single task (after approval): Phase 3 / F1 - participant records, consent and duplicate detection.
