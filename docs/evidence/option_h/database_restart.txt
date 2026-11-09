@@ -1,0 +1,17 @@
+Database restart while the backend runs (Option H) - 2026-11-09T19:01:58Z, aws-dev
+Backend: uvicorn, 1 process, pool_pre_ping on; database: private PostgreSQL 16 (pg_ctl).
+
+sign in: HTTP 200
+before: /auth/me 200, /health/ready 200
+1. database restarted (fast). Right after: /auth/me 200, 200, 200; /health/ready 200
+2. database stopped. While down: /auth/me 500; /health/ready 503 {"status":"not_ready","checks":{"database":"error","redis":"not_configured"}}
+   error body seen by the browser: {"error": {"code": "INTERNAL_ERROR", "message": "Internal server error", "request_id": "01a38ea94e284764a53b292b12129c29"}}
+3. database started again. Right after: /auth/me 200, 200; /health/ready 200
+   the session survived both: the user did not have to sign in again
+
+Repeated after the fix (D-055), 2026-11-09T19:03:17Z:
+before: /auth/me 200 (same session cookie as above, after a server restart too)
+database stopped. While down: /auth/me 503; body: {"error":{"code":"DATABASE_UNAVAILABLE","message":"The database is not reachable right now; try again shortly","request_id":"4c20f3b4e65248a4a0daedbd1bb59e5e"}}
+   Retry-After: retry-after: 5
+database started again. Right after: /auth/me 200; /health/ready 200
+server log lines at ERROR level during the outage: 0

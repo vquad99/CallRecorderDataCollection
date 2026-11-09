@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     signed_url_seconds: int = Field(default=300, ge=30, le=3600)
     media_work_dir: str = "var/media"
     max_chunk_bytes: int = Field(default=8_000_000, ge=1024, le=64_000_000)
+    # Recovery (H): a recording left UPLOADED this long was never picked up; one PROCESSING this
+    # long was abandoned by a stopped process. The sweep runs at start-up and every interval.
+    processing_pickup_seconds: int = Field(default=60, ge=5, le=3600)
+    processing_stale_minutes: int = Field(default=15, ge=1, le=24 * 60)
+    recovery_interval_seconds: int = Field(default=60, ge=0, le=3600)  # 0 = start-up only
     # Largest request body for every other API call (JSON); larger bodies get 413 (SEC-006).
     # 2.5 MB covers the largest JSON field (user CSV import, 2 000 000 characters) plus encoding.
     max_request_bytes: int = Field(default=2_500_000, ge=10_000, le=64_000_000)

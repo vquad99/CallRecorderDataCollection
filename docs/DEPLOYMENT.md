@@ -45,6 +45,16 @@ starts every service, migrates, and proves data survives a database restart (D-0
 
 ## 5. Operations (to be completed in Phase 10)
 
+Commands (run where the backend's settings are available):
+
+| Command | When | What it does |
+|---|---|---|
+| `python -m app.cli retention` | daily (scheduler) | Deletes stored files older than each project's retention rules, with audit entries |
+| `python -m app.cli recover-recordings` | on demand | Sends every recording left half-done by a stopped process to processing again; the web processes also do this at start-up and every `RECOVERY_INTERVAL_SECONDS` (D-055) |
+
+Recovery settings: `PROCESSING_PICKUP_SECONDS` (60), `PROCESSING_STALE_MINUTES` (15),
+`RECOVERY_INTERVAL_SECONDS` (60; 0 = start-up only).
+
 | Item | Requirement | Status |
 |---|---|---|
 | Infrastructure configuration in repository | OPS-002 | NOT STARTED |

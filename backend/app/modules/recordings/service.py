@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import func, select
+from botocore.exceptions import BotoCoreError, ClientError
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -37,6 +38,16 @@ logger = logging.getLogger("app.recordings")
 
 def not_found() -> AppError:
     return AppError("Recording not found", code="NOT_FOUND", status_code=404)
+
+
+def storage_unavailable() -> AppError:
+    """Storage is unreachable or failing: the client keeps the data and tries again (H)."""
+    return AppError(
+        "File storage is not reachable right now; the upload will be retried",
+        code="STORAGE_UNAVAILABLE",
+        status_code=503,
+        headers={"Retry-After": "5"},
+    )
 
 
 def _prefix(project: Project, task: Task, when: datetime) -> str:
@@ -201,7 +212,11 @@ def put_chunk(
     project = db.get(Project, task.project_id)
     assert project is not None  # noqa: S101
     key = f"{_prefix(project, task, rec.started_at)}/original/chunks/{rec.id}/{seq:06d}.f32"
-    storage.put_bytes(key, data, content_type="application/octet-stream", sha256=actual)
+    try:
+        storage.put_bytes(key, data, content_type="application/octet-stream", sha256=actual)
+    except (BotoCoreError, ClientError):
+        logger.warning("chunk_storage_failed", extra={"recording_id": str(rec.id), "seq": seq})
+        raise storage_unavailable() from None
     chunk = RecordingChunk(
         recording_id=rec.id, seq=seq, size_bytes=len(data), sha256=actual, storage_key=key
     )
@@ -279,7 +294,11 @@ def discard(
     for chunk in db.scalars(
         select(RecordingChunk).where(RecordingChunk.recording_id == rec.id)
     ).all():
-        storage.delete(chunk.storage_key)
+        try:
+            storage.delete(chunk.storage_key)
+        except (BotoCoreError, ClientError):
+            db.rollback()
+            raise storage_unavailable() from None
         chunk.object_deleted = True
     rec.state = "DISCARDED"
     rec.ended_at = datetime.now(UTC)
@@ -345,16 +364,42 @@ def _asset(
 def process(
     db: Session, settings: Settings, storage: ObjectStorage, recording_id: uuid.UUID
 ) -> Recording:
-    """Build the original and the derived 16 kHz file, validate both, mark the task recorded."""
-    rec = db.get(Recording, recording_id)
-    if rec is None or rec.state not in ("UPLOADED", "READY", "FAILED"):
+    """Build the original and the derived 16 kHz file, validate both, mark the task recorded.
+
+    The recording is claimed with one conditional UPDATE, so two processes (a re-delivered job, the
+    recovery sweep, a second web worker) never work on it at once; a PROCESSING recording older than
+    PROCESSING_STALE_MINUTES was abandoned by a stopped process and may be claimed again (H).
+    """
+    if db.get(Recording, recording_id) is None:
         raise not_found()
+    stale = datetime.now(UTC) - timedelta(minutes=settings.processing_stale_minutes)
+    claimed = (
+        db.execute(
+            update(Recording)
+            .where(
+                Recording.id == recording_id,
+                or_(
+                    Recording.state.in_(("UPLOADED", "READY", "FAILED")),
+                    and_(Recording.state == "PROCESSING", Recording.updated_at < stale),
+                ),
+            )
+            .values(state="PROCESSING", updated_at=func.now())
+            .returning(Recording.id)
+            .execution_options(synchronize_session=False)
+        ).scalar_one_or_none()
+        is not None
+    )
+    db.commit()
+    rec = db.get(Recording, recording_id)
+    assert rec is not None  # noqa: S101
+    db.refresh(rec)
+    if not claimed:
+        logger.info("processing_already_claimed", extra={"recording_id": str(recording_id)})
+        return rec
     task = db.get(Task, rec.task_id)
     project = db.get(Project, task.project_id) if task else None
     assert task is not None  # noqa: S101
     assert project is not None  # noqa: S101
-    rec.state = "PROCESSING"
-    db.commit()
     work = Path(settings.media_work_dir)
     work.mkdir(parents=True, exist_ok=True)
     try:
@@ -501,6 +546,27 @@ def process(
     if task is not None and task.status == "IN_PROGRESS":
         tasks.system_transition(db, task, "RECORDED", comment="Face-to-face recording ready")
     return rec
+
+
+def stalled_recordings(
+    db: Session, settings: Settings, now: datetime | None = None
+) -> list[uuid.UUID]:
+    """Recordings whose processing never started or was abandoned by a stopped process (H)."""
+    now = now or datetime.now(UTC)
+    pickup = now - timedelta(seconds=settings.processing_pickup_seconds)
+    stale = now - timedelta(minutes=settings.processing_stale_minutes)
+    return list(
+        db.scalars(
+            select(Recording.id)
+            .where(
+                or_(
+                    and_(Recording.state == "UPLOADED", Recording.updated_at < pickup),
+                    and_(Recording.state == "PROCESSING", Recording.updated_at < stale),
+                )
+            )
+            .order_by(Recording.updated_at)
+        ).all()
+    )
 
 
 def assets_for(

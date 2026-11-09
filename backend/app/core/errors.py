@@ -6,11 +6,13 @@ are ever returned to the client; full details go to the server log.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import request_id_var
@@ -91,7 +93,22 @@ async def _validation_error(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _database_unavailable(_: Request, exc: Exception) -> JSONResponse:
+    """The database cannot be reached (or asked to retry): a temporary state, not a crash (H)."""
+    logging.getLogger("app.errors").warning(
+        "database_unavailable", extra={"error_type": type(exc).__name__}
+    )
+    return JSONResponse(
+        error_body(
+            "DATABASE_UNAVAILABLE", "The database is not reachable right now; try again shortly"
+        ),
+        status_code=503,
+        headers={"Retry-After": "5"},
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _app_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(OperationalError, _database_unavailable)

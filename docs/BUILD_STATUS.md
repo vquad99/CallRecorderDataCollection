@@ -222,12 +222,12 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | STOR-001 | Private cloud object storage; bucket never public. | 4 | [x] | [x] | [ ] | [x] TA-STOR-01 | [x] TM-STOR-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [x] | [x] | [ ] | [x] TA-STOR-02 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04, TA-STOR-12, TM-STOR-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-SEC-10, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_b/make_check.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
 | STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
 | STOR-007 | Version tracking. | 4 | [x] | [x] | [ ] | [x] TA-STOR-07 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [x] | [x] | [ ] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [x] | [x] | [ ] | [x] TA-STOR-09 | [ ] TM-STOR-02 | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [x] | [x] | [ ] | [x] TA-STOR-09, TA-STOR-12 | [ ] TM-STOR-02 | docs/evidence/phase4/make_check.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-010 | Storage usage reporting/dashboard. | 4 | [x] | [x] | [ ] | [x] TA-DASH-01 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-011 | Unauthorized user cannot download a recording. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
 | STOR-012 | Storage abstraction interface. | 4 | [x] | [x] | [ ] | [x] TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -240,8 +240,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FTF-006 | Project audio rules shown before start. | 4 | [x] | [x] | [x] | [x] TA-FTF-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-007 | Start and stop controls; resume; pause only if technically safe. | 4 | [x] | [x] | [x] | [x] TA-FTF-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-008 | Recording duration and state displayed. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
-| FTF-009 | Interruption/error events captured; recoverable data preserved where safely possible; accurate recovery message after refresh, tab close or network loss; no claim that recording continues after tab closure or device sleep. | 4 | [x] | [x] | [x] | [x] TA-FND-20 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt | VERIFIED | - |
-| FTF-010 | Resumable upload with progress and retry. | 4 | [x] | [x] | [x] | [x] TA-STOR-04, TA-FND-20 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt | VERIFIED | - |
+| FTF-009 | Interruption/error events captured; recoverable data preserved where safely possible; accurate recovery message after refresh, tab close or network loss; no claim that recording continues after tab closure or device sleep. | 4 | [x] | [x] | [x] | [x] TA-FND-20, TA-STOR-12 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | VERIFIED | - |
+| FTF-010 | Resumable upload with progress and retry. | 4 | [x] | [x] | [x] | [x] TA-STOR-04, TA-FND-20, TA-STOR-12 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | VERIFIED | - |
 | FTF-011 | Browser capture stored as the original asset. | 4 | [x] | [x] | [x] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [x] | [x] | [x] | [x] TA-FTF-04 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-013 | Derived PCM WAV generated and validated. | 4 | [x] | [x] | [x] | [x] TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
@@ -649,3 +649,18 @@ test in TEST_PLAN.md. It does not mean anything is built.
   once; one Argon2id check takes about 150 ms on all 4 cores), 0 errors before the stop.
 - Not a capacity proof (CAP-004): load generator, database and server shared one 4-CPU machine; no
   Redis worker. 210 test objects (1.36 GB) deleted from Wasabi (docs/evidence/option_g/).
+
+### Session 10 (continued) - Option H: recovery tests
+
+- New: `backend/tests/test_recovery.py` (9 tests), journey `frontend/journeys/network.spec.ts`
+  (connection off for 8 s mid-recording), scripted database restart and outage against the running
+  backend.
+- Found and fixed (D-055): a recording could stay PROCESSING forever after a worker stopped (the
+  re-delivered job refused it) and UPLOADED forever after a failed queue hand-off; now claimed
+  atomically, swept at start-up and every minute, and recoverable with
+  `python -m app.cli recover-recordings`; storage and database outages answered as 503
+  `STORAGE_UNAVAILABLE` / `DATABASE_UNAVAILABLE` with Retry-After instead of internal errors;
+  `python -m app.cli retention` was listed but did nothing (now runs). Each recovery fix was removed
+  once to watch its tests fail (7 of 8 failed; the restart test passes either way, by design).
+- Results: database restart transparent (session kept); outage answered 503, no error-level log; all
+  5 journeys passed in Chrome; 8 test objects deleted from Wasabi (docs/evidence/option_h/).

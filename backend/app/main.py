@@ -36,8 +36,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_db_engine(settings)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(started: FastAPI) -> AsyncIterator[None]:
+        from app.modules.recordings.worker_dispatch import start_recovery_loop
+
+        # Recordings left half-done by a stopped process are picked up again (Option H).
+        stop = start_recovery_loop(started) if started.state.storage is not None else None
         yield
+        if stop is not None:
+            stop.set()
         engine.dispose()
 
     docs = settings.api_docs_enabled

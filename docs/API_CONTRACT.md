@@ -19,6 +19,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
   `VALIDATION_ERROR`. Every /api response carries `Cache-Control: no-store` and
   `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
 - An object in a project the caller cannot see answers exactly like an object that does not exist.
+- Temporary outages (D-055): 503 `STORAGE_UNAVAILABLE` or `DATABASE_UNAVAILABLE` with `Retry-After: 5`;
+  clients keep their data and try again (the recorder's uploader retries every 5xx).
 
 ## Health (FND-007)
 

@@ -1,8 +1,16 @@
-"""Run recording processing in the background: Celery with Redis, otherwise in-process."""
+"""Run recording processing in the background: Celery with Redis, otherwise in-process.
+
+Recovery (Option H): if a hand-off fails or a process stops mid-way, the recording is left UPLOADED
+or PROCESSING. `recover` finds such recordings and processes them again; it runs at start-up and
+every RECOVERY_INTERVAL_SECONDS in each web process, and on demand with
+`python -m app.cli recover-recordings`. Claiming inside `service.process` keeps two processes from
+working on the same recording.
+"""
 
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from typing import Any
 
@@ -21,10 +29,56 @@ def run_inline(app: FastAPI, recording_id: uuid.UUID) -> None:
         logger.exception("inline_processing_failed", extra={"recording_id": str(recording_id)})
 
 
+def _send(celery: Any, recording_id: uuid.UUID) -> bool:
+    try:
+        celery.send_task("recordings.process", args=[str(recording_id)])
+        return True
+    except Exception:
+        # Redis unreachable: the recording stays UPLOADED and the recovery sweep sends it later.
+        logger.exception("processing_dispatch_failed", extra={"recording_id": str(recording_id)})
+        return False
+
+
 def dispatch_processing(app: FastAPI, recording_id: uuid.UUID, background: BackgroundTasks) -> None:
     celery: Any = getattr(app.state, "celery", None)
     if celery is not None:
-        celery.send_task("recordings.process", args=[str(recording_id)])
+        _send(celery, recording_id)
     else:
         # Development and tests without Redis: runs after the response, in this process.
         background.add_task(run_inline, app, recording_id)
+
+
+def recover(app: FastAPI) -> int:
+    """Hand every stalled recording to processing again; returns how many were found."""
+    if app.state.storage is None:
+        return 0
+    with app.state.session_factory() as db:
+        stalled = service.stalled_recordings(db, app.state.settings)
+    celery: Any = getattr(app.state, "celery", None)
+    for recording_id in stalled:
+        if celery is not None:
+            if not _send(celery, recording_id):
+                break
+        else:
+            run_inline(app, recording_id)
+    if stalled:
+        logger.info("recovery_dispatched", extra={"count": len(stalled)})
+    return len(stalled)
+
+
+def start_recovery_loop(app: FastAPI) -> threading.Event:
+    """Sweep at start-up, then every RECOVERY_INTERVAL_SECONDS (0: start-up only). Set to stop."""
+    stop = threading.Event()
+
+    def loop() -> None:
+        while True:
+            try:
+                recover(app)
+            except Exception:
+                logger.exception("recovery_sweep_failed")
+            interval = app.state.settings.recovery_interval_seconds
+            if interval == 0 or stop.wait(interval):
+                return
+
+    threading.Thread(target=loop, name="recording-recovery", daemon=True).start()
+    return stop

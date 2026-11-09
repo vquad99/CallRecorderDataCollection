@@ -101,6 +101,22 @@ def run_retention(settings: Settings) -> int:
     return count
 
 
+def run_recovery(settings: Settings) -> int:
+    from app.main import create_app
+    from app.modules.recordings.worker_dispatch import recover
+
+    app = create_app(settings)
+    if app.state.storage is None:
+        raise SeedRefused("storage is not configured")
+    if settings.redis_url is not None:
+        from celery import Celery
+
+        app.state.celery = Celery("ccp", broker=settings.redis_url.get_secret_value())
+    count = recover(app)
+    app.state.engine.dispose()
+    return count
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -108,12 +124,20 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "retention", help="delete stored files older than each project's retention rules"
     )
+    sub.add_parser(
+        "recover-recordings",
+        help="process again every recording left half-done by a stopped process",
+    )
     args = parser.parse_args(argv)
     try:
         settings = load_settings()
         if args.command == "seed-dev":
             created = seed_dev(settings, os.environ.get("DEMO_PASSWORD", ""))
             print(f"seed-dev: {len(created)} account(s) created; passwords from DEMO_PASSWORD")
+        elif args.command == "retention":
+            print(f"retention: {run_retention(settings)} file(s) deleted")
+        elif args.command == "recover-recordings":
+            print(f"recover-recordings: {run_recovery(settings)} recording(s) handed to processing")
     except (ConfigError, SeedRefused) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
