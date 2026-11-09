@@ -14,3 +14,23 @@ Failure (frontend job, step 'Browser tests (TA-FND-15)'):
   > 102 |   expect(started?.["channel_handling"]).toBe(count > 1 ? `first channel of ${count}` : "mono");
 
 Cause: Start was pressed before the capture's first audio block arrived, so the page sent channel_handling "mono" (its default) while the browser reported 2 channels. Fixed under Option A (DECISIONS.md D-048); re-run result below.
+
+----
+GitHub Actions run 42652152398 (commit 95d6fd5, Option A fix) - SUCCESS
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42652152398
+
+Jobs:
+  success: Frontend lint, types, unit and browser tests
+  success: Repository rules and secret scan
+  success: Backend lint, types, tests
+  success: Containers start, migrate, persist (TM-FND-02)
+
+Key lines:
+  Microsoft Edge 156.0.4314.58 
+  ✓  1 [chromium] › e2e/console.spec.ts:52:1 › sign in, then main pages render with no console errors (1.5s)
+  ✓  2 [chromium] › e2e/recorder.spec.ts:49:1 › records with the fake microphone, uploads whole frames with checksums, and plays back (11.8s)
+  ✓  3 [edge] › e2e/console.spec.ts:52:1 › sign in, then main pages render with no console errors (8.9s)
+  ✓  4 [edge] › e2e/recorder.spec.ts:49:1 › records with the fake microphone, uploads whole frames with checksums, and plays back (19.7s)
+  4 passed (34.3s)
+  ======================== 139 passed in 79.18s (0:01:19) ========================
+  (backend: 139 = 138 local + the ffprobe check, which runs here with REQUIRE_FFPROBE=1)
