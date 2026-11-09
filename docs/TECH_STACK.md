@@ -16,7 +16,7 @@ fills the Version column from those lockfiles. No version is claimed before that
 | ORM / migrations | SQLAlchemy + Alembic | to pin in Phase 1 | backend lockfile |
 | Database | PostgreSQL | to pin in Phase 1 (container image tag) | infra/docker-compose |
 | Queue | Celery + Redis | to pin in Phase 1 | backend lockfile, compose |
-| Object storage | S3-compatible; MinIO locally | to pin in Phase 1 | compose |
+| Object storage | Wasabi (S3-compatible) in cloud, MinIO locally (D-019) | MinIO image pinned in Phase 1; S3 client library pinned in backend lockfile | compose, backend lockfile |
 | Audio | FFmpeg + numpy/soundfile | to pin in Phase 1 | Dockerfile, backend lockfile |
 | Reverse proxy | Nginx or managed ingress | to pin in Phase 1 | infra |
 | Password hashing | Argon2id library | to pin in Phase 2 | backend lockfile |

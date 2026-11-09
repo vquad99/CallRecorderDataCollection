@@ -21,7 +21,7 @@ SEC-008, SEC-014. Cloud provider, account and region are open (DECISIONS.md B-04
 | ASR worker | same worker image, `asr` queue | same; calls the Deepgram API (key in secret manager); idle when AI transcription is off (D-018) |
 | PostgreSQL | container with volume | managed PostgreSQL, automated encrypted backups |
 | Redis | container | managed Redis |
-| Object storage | MinIO container | private S3-compatible bucket, encryption, versioning, lifecycle |
+| Object storage | MinIO container | Wasabi private bucket (D-019): encryption, versioning, lifecycle as confirmed in Wasabi docs |
 | Reverse proxy / ingress | Nginx container | Nginx or managed ingress, TLS |
 | Monitoring and logs | container logs | central logs, metrics, error tracking, alerts |
 | Secrets | `.env` (never committed) | cloud secret manager (OPS-003) |
