@@ -36,7 +36,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 
 | Table | Key columns | Constraints / indexes | On delete |
 |---|---|---|---|
-| users | email (S), display_name (S), password_hash (S), status, mfa_secret_enc (S), last_login_at, deleted_at | unique lower(email) | soft delete |
+| users | email (S), display_name (S), password_hash (S), status, mfa_secret_enc (S), mfa_last_step (last accepted authenticator time step, D-050), last_login_at, deleted_at | unique lower(email) | soft delete |
 | roles | code, name | unique code | restrict |
 | permissions | code, description | unique code | restrict |
 | role_permissions | role_id, permission_id | unique pair | cascade with role |

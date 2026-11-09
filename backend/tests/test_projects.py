@@ -206,3 +206,25 @@ def test_member_candidates_lists_active_non_members_only(admin: Api, db: Any, ne
     viewer: Api = new_api()
     viewer.login(member.email)
     assert viewer.get(f"/api/v1/projects/{project.id}/member-candidates").status_code == 403
+
+
+def test_saving_the_same_lists_again_is_not_an_error(admin: Api, db: Any) -> None:
+    """Found by the Option B route sweep: the second save of an unchanged list was a 500 (the new
+    row was inserted before the old one was deleted, hitting the unique key)."""
+    pid = make_project(db, "TWICE").id
+    languages = {
+        "languages": [
+            {"language_code": "hi", "dialect": ""},
+            {"language_code": "ta", "dialect": "Madurai"},
+        ]
+    }
+    for days in (30, 30, 60):
+        saved = admin.put(f"/api/v1/projects/{pid}/languages", json=languages)
+        assert saved.status_code == 200, saved.text
+        kept = admin.put(
+            f"/api/v1/projects/{pid}/retention",
+            json={"rules": [{"asset_kind": "FTF_DERIVED_PCM", "retain_days": days}]},
+        )
+        assert kept.status_code == 200, kept.text
+    assert kept.json()["retention_rules"] == [{"asset_kind": "FTF_DERIVED_PCM", "retain_days": 60}]
+    assert len(saved.json()["languages"]) == 2

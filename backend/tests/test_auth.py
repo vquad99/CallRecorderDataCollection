@@ -3,6 +3,8 @@
 Requirements: AUTH-001, AUTH-002, AUTH-003, AUTH-004, AUTH-005, AUTH-006, AUTH-007, AUTH-008, AUTH-009, AUTH-010, AUTH-012, AUTH-013, AUTH-014, AUTH-015, SEC-007
 """
 
+import time
+import types
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -11,8 +13,8 @@ import pytest
 from sqlalchemy import select, update
 
 from app.modules.audit.models import AuditLog
+from app.modules.auth import security
 from app.modules.auth.models import User, UserSession
-from app.modules.auth.security import totp_now
 from tests.conftest import TEST_PASSWORD, link_token, make_user, read_outbox
 
 pytestmark = pytest.mark.db
@@ -216,13 +218,24 @@ def test_user_lists_and_revokes_own_sessions(db: Any, new_api: Any) -> None:
     assert laptop.get("/api/v1/auth/me").status_code == 200
 
 
-def test_mfa_enrol_confirm_login_and_disable(db: Any, new_api: Any) -> None:
+def test_mfa_enrol_confirm_login_and_disable(
+    db: Any, new_api: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Each step uses its own code: a code is accepted once only (D-050). The clock is fixed so the
+    # three codes (previous, current and next 30-second step) stay valid for the whole test.
+    now = time.time()
+    step = int(now // security.TOTP_STEP_SECONDS)
+    monkeypatch.setattr(security, "time", types.SimpleNamespace(time=lambda: now))
+
+    def code(offset: int, secret: str) -> str:
+        return security._totp_at(secret, step + offset)
+
     user = make_user(db, "mfa@example.org", ["MODERATOR"])
     api = new_api()
     api.login(user.email)
     secret = api.post("/api/v1/auth/mfa/enroll").json()["secret"]
     assert api.post("/api/v1/auth/mfa/confirm", json={"code": "000000"}).status_code == 400
-    assert api.post("/api/v1/auth/mfa/confirm", json={"code": totp_now(secret)}).status_code == 204
+    assert api.post("/api/v1/auth/mfa/confirm", json={"code": code(-1, secret)}).status_code == 204
     db.expire_all()
     stored = db.get(User, user.id)
     assert stored.mfa_enabled
@@ -232,10 +245,10 @@ def test_mfa_enrol_confirm_login_and_disable(db: Any, new_api: Any) -> None:
     needs_code = fresh.login(user.email)
     assert needs_code.json()["error"]["code"] == "MFA_REQUIRED"
     assert fresh.login(user.email, totp_code="123456").json()["error"]["code"] in {"MFA_INVALID"}
-    assert fresh.login(user.email, totp_code=totp_now(secret)).status_code == 200
+    assert fresh.login(user.email, totp_code=code(0, secret)).status_code == 200
 
     off = fresh.post(
-        "/api/v1/auth/mfa/disable", json={"password": TEST_PASSWORD, "code": totp_now(secret)}
+        "/api/v1/auth/mfa/disable", json={"password": TEST_PASSWORD, "code": code(1, secret)}
     )
     assert off.status_code == 204
     assert {"auth.mfa_enabled", "auth.mfa_disabled"} <= set(_actions(db, user.id))

@@ -176,6 +176,10 @@ output saved to evidence.
 | TA-AUTH-14 | Automated | 2 | /auth/me returns current user; no response anywhere contains password or hash fields. | AUTH-015 |
 | TA-AUTH-15 | Automated | 2 | Session cookie is HttpOnly, Secure, SameSite; nothing sensitive written to localStorage. | AUTH-013 |
 | TA-AUTH-16 | Automated | 2 | E2E: login, forgot/reset password, session-expired message, protected route redirect. | AUTH-016 |
+| TA-AUTH-17 | Automated | 4 (Option B) | A session ID planted before sign-in is never used; session tokens stored only as SHA-256. | AUTH-003, AUTH-013 |
+| TA-AUTH-18 | Automated | 4 (Option B) | Removed role, removed project membership, administrator revocation and password reset take effect at the next request. | AUTH-005, AUTH-010, ROLE-010 |
+| TA-AUTH-19 | Automated | 4 (Option B) | An authenticator code is accepted once only (enrolment code included); code guessing and password guessing through a signed-in session are throttled. | AUTH-008, AUTH-009 |
+| TA-AUTH-20 | Automated | 4 (Option B) | Unknown, wrong and disabled accounts get identical sign-in answers; an unknown address costs a full password check; reset links use the configured site, never the request's Host. | AUTH-002, AUTH-004 |
 | TM-AUTH-01 | Manual | 2 | Manual checklist from spec M1 verification list. | AUTH-001, AUTH-002, AUTH-005, AUTH-007, AUTH-011 |
 
 ### USER - Module 2 - User management
@@ -203,6 +207,7 @@ output saved to evidence.
 | TA-PROJ-05 | Automated | 2 | Archived project rejects new tasks; authorized reopen allows them. | PROJ-010 |
 | TA-PROJ-06 | Automated | 2 | User of project X cannot read or change project Y. | PROJ-012 |
 | TA-PROJ-07 | Automated | 2 | E2E: project list, create/edit and the five detail tabs. | PROJ-013 |
+| TA-PROJ-08 | Automated | 4 (Option B) | Saving an unchanged language or retention list again succeeds (was a server error). | PROJ-002, STOR-009 |
 | TM-PROJ-01 | Manual | 3, 9 | Project settings visible in task creation and reports. | PROJ-011 |
 
 ### PART - Module 4 - Participant management
@@ -417,6 +422,13 @@ output saved to evidence.
 | TA-SEC-07 | Automated | 3 | Self role change and project hopping fail. | SEC-011 |
 | TA-SEC-08 | Automated | 10 | Responses carry secure headers; user content is output-encoded. | SEC-013 |
 | TA-SEC-09 | Automated | 1 | Dependency vulnerability scan runs in CI. | SEC-015 |
+| TA-SEC-10 | Automated | 4 (Option B) | Route inventory: every API route has an access rule; every role (plus an unassigned moderator) against every route on its own project matches the rule; on another project the answer equals the answer for a missing object; no response to a member contains another project's IDs; request bodies cannot pull in another project's objects. | ROLE-002..008, ROLE-010, AUTH-011, SEC-007, SEC-010, SEC-011, STOR-005 |
+| TA-SEC-11 | Automated | 4 (Option B) | Every state-changing route refuses a missing or forged CSRF token. | SEC-007 |
+| TA-SEC-12 | Automated | 4 (Option B) | Malformed IDs in every path give 422; injection strings in every search and filter never cause a server error or widen results. | SEC-006, SEC-007 |
+| TA-SEC-13 | Automated | 4 (Option B) | No response carries a password, secret, token or encrypted field, or echoes the session token; errors never echo submitted values. | AUTH-015, SEC-013 |
+| TA-SEC-14 | Automated | 4 (Option B) | Bodies over the limits get 413 (declared and streamed; audio chunks their own limit); NUL characters get 422, signed in or not. | SEC-006 |
+| TA-SEC-15 | Automated | 4 (Option B) | Fields owned by the server (id, status, task and participant codes, roles, project code) cannot be set by a client. | SEC-011, TASK-002, PART-002 |
+| TA-SEC-16 | Automated | 4 (Option B) | API answers of every kind (200, 401, 403, 404, 413, 422) carry nosniff, frame denial, no-referrer, no-store, a deny-all content policy and a request ID. | SEC-013 |
 | TM-SEC-01 | Manual | 10 | TLS on all endpoints; encryption at rest for database, storage, backups. | SEC-002, SEC-003, OPS-005 |
 | TM-SEC-02 | Manual | 10 | Web vulnerability scan; findings resolved or recorded. | SEC-007 |
 | TM-SEC-03 | Manual | 10 | Backup restored into a test environment and verified. | SEC-008, OPS-004, OPS-009 |

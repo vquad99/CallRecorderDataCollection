@@ -35,16 +35,25 @@ const asha = {
   display_label: "Asha",
   phone: "+919876543210",
   has_phone: true,
+  consent_visible: true,
   notes: "",
   deleted: false,
   created_at: "",
 };
-const hidden = { ...asha, id: "b1", participant_code: "P000002", display_label: null, phone: null };
+const hidden = {
+  ...asha,
+  id: "b1",
+  participant_code: "P000002",
+  display_label: null,
+  phone: null,
+  consent_visible: false,
+};
 
 describe("participants tab", () => {
   it("shows hidden fields as hidden and offers no editing without manage rights", async () => {
     fakeApi(
-      signedInAs(["projects.view", "participants.view"], {
+      // consent.view is held, but the server says this person's consent is not this user's to see.
+      signedInAs(["projects.view", "participants.view", "consent.view"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
@@ -57,6 +66,7 @@ describe("participants tab", () => {
     expect(screen.getAllByText("Hidden")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Add participant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export contacts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Consent" })).not.toBeInTheDocument();
   });
 
   it("adds a participant and deletes one with a reason", async () => {

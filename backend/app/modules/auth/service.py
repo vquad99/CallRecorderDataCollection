@@ -22,9 +22,9 @@ from app.modules.auth.security import (
     needs_rehash,
     new_token,
     new_totp_secret,
+    totp_step,
     totp_uri,
     verify_password,
-    verify_totp,
 )
 
 logger = logging.getLogger("app.auth")
@@ -107,6 +107,11 @@ def _record_attempt(db: Session, email: str, ip: str | None, succeeded: bool) ->
     db.add(LoginAttempt(email=email, ip=ip, succeeded=succeeded))
 
 
+def _fresh_step(user: User, step: int | None) -> bool:
+    """A valid authenticator code from a time step later than the last one accepted (D-050)."""
+    return step is not None and (user.mfa_last_step is None or step > user.mfa_last_step)
+
+
 # ---------------------------------------------------------------- login / logout
 
 
@@ -148,13 +153,15 @@ def login(
         db.commit()
         raise AppError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS", status_code=401)
 
+    step: int | None = None
     if user.mfa_enabled:
         if not totp_code:
             raise AppError(
                 "Enter the code from your authenticator app", code="MFA_REQUIRED", status_code=401
             )
         secret = cipher.decrypt(user.mfa_secret_enc or "")
-        if not verify_totp(secret, totp_code):
+        step = totp_step(secret, totp_code)
+        if not _fresh_step(user, step):
             _record_attempt(db, email, ip, succeeded=False)
             audit.record(
                 db,
@@ -170,6 +177,8 @@ def login(
                 "The authenticator code is not valid", code="MFA_INVALID", status_code=401
             )
 
+    if user.mfa_enabled:
+        user.mfa_last_step = step
     if user.password_hash and needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
     now = datetime.now(UTC)
@@ -366,7 +375,11 @@ def change_password(
     ip: str | None,
 ) -> None:
     user = _user(db, user_id)
+    # Guessing the password through a signed-in session is throttled like sign-in (AUTH-009).
+    ensure_not_throttled(db, settings, user.email, ip)
     if not verify_password(user.password_hash, current):
+        _record_attempt(db, user.email, ip, succeeded=False)
+        db.commit()
         raise AppError(
             "Current password is not correct", code="INVALID_CREDENTIALS", status_code=400
         )
@@ -405,9 +418,11 @@ def mfa_confirm(
     user = _user(db, user_id)
     if user.mfa_enabled or not user.mfa_secret_enc:
         raise AppError("Start enrolment first", code="MFA_NOT_PENDING", status_code=409)
-    if not verify_totp(cipher.decrypt(user.mfa_secret_enc), code):
+    step = totp_step(cipher.decrypt(user.mfa_secret_enc), code)
+    if step is None:
         raise AppError("The authenticator code is not valid", code="MFA_INVALID", status_code=400)
     user.mfa_enabled = True
+    user.mfa_last_step = step  # the enrolment code cannot then be used to sign in
     audit.record(
         db,
         action="auth.mfa_enabled",
@@ -420,19 +435,29 @@ def mfa_confirm(
 
 
 def mfa_disable(
-    db: Session, cipher: FieldCipher, user_id: uuid.UUID, password: str, code: str, ip: str | None
+    db: Session,
+    settings: Settings,
+    cipher: FieldCipher,
+    user_id: uuid.UUID,
+    password: str,
+    code: str,
+    ip: str | None,
 ) -> None:
     user = _user(db, user_id)
     if not user.mfa_enabled or not user.mfa_secret_enc:
         raise AppError("Two-step sign-in is not on", code="MFA_NOT_ENABLED", status_code=409)
-    if not verify_password(user.password_hash, password) or not verify_totp(
-        cipher.decrypt(user.mfa_secret_enc), code
-    ):
+    ensure_not_throttled(db, settings, user.email, ip)
+    password_ok = verify_password(user.password_hash, password)
+    step = totp_step(cipher.decrypt(user.mfa_secret_enc), code)
+    if not password_ok or not _fresh_step(user, step):
+        _record_attempt(db, user.email, ip, succeeded=False)
+        db.commit()
         raise AppError(
             "Password or code is not correct", code="INVALID_CREDENTIALS", status_code=400
         )
     user.mfa_enabled = False
     user.mfa_secret_enc = None
+    user.mfa_last_step = None
     audit.record(
         db,
         action="auth.mfa_disabled",

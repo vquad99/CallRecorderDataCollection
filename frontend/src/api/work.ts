@@ -10,6 +10,8 @@ export interface Participant {
   display_label: string | null;
   phone: string | null;
   has_phone: boolean;
+  /** Whether this user may open the person's consent history (managers, assigned moderator). */
+  consent_visible: boolean;
   notes: string | null;
   deleted: boolean;
   created_at: string;

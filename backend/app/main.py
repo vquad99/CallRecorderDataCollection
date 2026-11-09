@@ -18,7 +18,11 @@ from app.core.config import Settings, load_settings
 from app.core.email import build_sender
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.middleware import (
+    REQUEST_ID_HEADER,
+    RequestContextMiddleware,
+    RequestLimitsMiddleware,
+)
 from app.core.ratelimit import build_limiter
 from app.core.security import SecurityHeadersMiddleware
 from app.core.storage import build_storage
@@ -63,7 +67,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router)
 
-    # Added last = outermost: request context wraps CORS and security headers.
+    # Added last = outermost: request context wraps CORS and security headers, which wrap the body
+    # size limit, so a 413 still carries the request ID and the security headers.
+    app.add_middleware(
+        RequestLimitsMiddleware,
+        default_limit=settings.max_request_bytes,
+        chunk_limit=settings.max_chunk_bytes,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,

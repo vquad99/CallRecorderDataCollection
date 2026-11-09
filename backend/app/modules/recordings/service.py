@@ -578,8 +578,11 @@ def apply_retention(db: Session, storage: ObjectStorage, now: datetime | None = 
 
 
 def usage(db: Session, principal: Principal) -> list[tuple[str, str, int, int]]:
-    """(project code, asset kind, files, bytes) for live assets the caller may see (STOR-010)."""
-    if not principal.can(Perm.DASHBOARD_VIEW):
+    """(project code, asset kind, files, bytes) for the projects the caller manages (STOR-010).
+
+    Project-wide storage figures are administration data: Super Admin sees every project, a Project
+    Admin their own; other roles' dashboards cover their own work only (matrix, D-049)."""
+    if not (principal.can(Perm.DASHBOARD_VIEW) and principal.can(Perm.PROJECTS_MANAGE)):
         raise forbidden()
     query = (
         select(

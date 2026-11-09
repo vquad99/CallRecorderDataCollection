@@ -455,6 +455,9 @@ def consent_history(
 ) -> list[ConsentRecord]:
     project, participant = get_in_project(db, principal, project_id, participant_id)
     _require(principal, Perm.CONSENT_VIEW, project)
+    if not visibility(db, principal, project, participant.id).profile:
+        # Matrix: consent.view is "A" for a Moderator - only people on their own open tasks (D-049).
+        raise forbidden()
     return list(
         db.scalars(
             select(ConsentRecord)

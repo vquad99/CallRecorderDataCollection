@@ -282,7 +282,12 @@ def set_languages(
     project = get_manageable(db, principal, project_id)
     unique = sorted({(code.strip(), dialect.strip()) for code, dialect in entries})
     before = sorted((lang.language_code, lang.dialect) for lang in project.languages)
-    project.languages = [ProjectLanguage(language_code=c, dialect=d) for c, d in unique]
+    # Keep the rows that stay: replacing them would insert a duplicate before the old row is
+    # deleted (the unit of work inserts first) and fail on the unique key.
+    current = {(lang.language_code, lang.dialect): lang for lang in project.languages}
+    project.languages = [
+        current.get((c, d)) or ProjectLanguage(language_code=c, dialect=d) for c, d in unique
+    ]
     audit.record(
         db,
         action="project.languages_changed",
@@ -428,7 +433,13 @@ def set_retention(
     if len(set(kinds)) != len(kinds):
         raise AppError("Each asset kind may appear once", code="DUPLICATE_KIND", status_code=422)
     before = {r.asset_kind: r.retain_days for r in project.retention_rules}
-    project.retention_rules = [ProjectRetentionRule(asset_kind=k, retain_days=d) for k, d in rules]
+    current = {r.asset_kind: r for r in project.retention_rules}
+    kept = []
+    for kind, days in rules:  # update rows in place for the same reason as set_languages
+        row = current.get(kind) or ProjectRetentionRule(asset_kind=kind, retain_days=days)
+        row.retain_days = days
+        kept.append(row)
+    project.retention_rules = kept
     audit.record(
         db,
         action="project.retention_changed",

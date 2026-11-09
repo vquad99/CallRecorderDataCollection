@@ -14,6 +14,11 @@ code in each phase; this file lists the planned surface so the traceability tabl
 - State-changing requests need the CSRF header; session is an HttpOnly cookie.
 - List endpoints: `page`, `page_size`, `sort`, filters as query parameters.
 - External service not configured: 503 with code `NOT_CONFIGURED` (GEN-004).
+- Request limits (D-052): bodies over MAX_REQUEST_BYTES (2.5 MB; audio chunks MAX_CHUNK_BYTES, 8 MB)
+  get 413 `PAYLOAD_TOO_LARGE`; a NUL character in the path, query string or a JSON body gets 422
+  `VALIDATION_ERROR`. Every /api response carries `Cache-Control: no-store` and
+  `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+- An object in a project the caller cannot see answers exactly like an object that does not exist.
 
 ## Health (FND-007)
 
@@ -84,9 +89,9 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code) |
 | GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
-| GET | /projects/{id}/participants/{pid}/consent | `consent.view` |
+| GET | /projects/{id}/participants/{pid}/consent | `consent.view` + participant manager, or the moderator on an open task with that person (D-049); each participant row carries `consent_visible` |
 | GET | /projects/{id}/participants/export | `participants.export` |
-| POST | /tasks/{id}/consent | `consent.capture` + assigned moderator |
+| POST | /tasks/{id}/consent | `consent.capture` + the task's assigned moderator, whatever the role (D-051) |
 
 ## Tasks (TASK-*)
 
@@ -110,7 +115,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /recordings/{id}/discard | the recording's moderator; deletes uploaded chunks |
 | GET | /recordings/{id} | task visibility; includes assets with the full validation record |
 | POST | /assets/{id}/url | body `{purpose: play or download}`; play needs `recordings.view`, download `recordings.download`; signed link valid SIGNED_URL_SECONDS (300) |
-| GET | /storage/usage | `dashboard.view`; files and bytes per project and asset kind |
+| GET | /storage/usage | `dashboard.view` + `projects.manage` (D-049); files and bytes per managed project and asset kind |
 
 ## Telephony (TEL-*) - BLOCKED until Gate 5
 

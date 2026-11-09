@@ -72,17 +72,22 @@ def _totp_at(secret: str, step: int) -> str:
     return str(code).zfill(TOTP_DIGITS)
 
 
-def totp_now(secret: str, at: float | None = None) -> str:
-    return _totp_at(secret, int((at if at is not None else time.time()) // TOTP_STEP_SECONDS))
+def totp_step(secret: str, code: str, at: float | None = None) -> int | None:
+    """RFC 6238 with one step of clock drift either way. Returns the time step the code belongs to,
+    so the caller can refuse a code whose step was already used (RFC 6238 section 5.2)."""
+    code = code.strip()
+    if not (code.isdigit() and len(code) == TOTP_DIGITS):
+        return None
+    now = int((at if at is not None else time.time()) // TOTP_STEP_SECONDS)
+    matched = None
+    for step in (now - 1, now, now + 1):  # every candidate is compared: no early exit
+        if hmac.compare_digest(_totp_at(secret, step), code):
+            matched = step
+    return matched
 
 
 def verify_totp(secret: str, code: str, at: float | None = None) -> bool:
-    """RFC 6238 with one step of clock drift either way."""
-    code = code.strip()
-    if not (code.isdigit() and len(code) == TOTP_DIGITS):
-        return False
-    step = int((at if at is not None else time.time()) // TOTP_STEP_SECONDS)
-    return any(hmac.compare_digest(_totp_at(secret, step + d), code) for d in (-1, 0, 1))
+    return totp_step(secret, code, at) is not None
 
 
 class FieldCipher:

@@ -242,7 +242,7 @@ export function ParticipantsTab() {
                       {p.dialect ? ` (${p.dialect})` : ""}
                     </td>
                     <td className="actions">
-                      {can("consent.view") ? (
+                      {p.consent_visible ? (
                         <Button
                           variant="secondary"
                           onClick={() => setConsentFor(consentFor === p.id ? null : p.id)}

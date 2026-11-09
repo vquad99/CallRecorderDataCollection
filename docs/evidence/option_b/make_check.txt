@@ -1,0 +1,97 @@
+$ make check UV=uv  (run 2026-11-09T16:50:51Z on aws-dev, Option B backend security tests; private PostgreSQL 16; REQUIRE_DB_TESTS=1; ffprobe not installed here, so its independent check is NOT RUN locally and runs in CI)
+python3 tools/check_repo.py
+check_repo: 0 problem(s) in 5 checks
+cd backend && uv lock --check
+Resolved 82 packages in 2ms
+cd backend && uv run ruff format --check app tests
+88 files already formatted
+cd backend && uv run ruff check app tests
+All checks passed!
+cd backend && uv run mypy app tests
+Success: no issues found in 88 source files
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0
+rootdir: /home/quad99/conversation-collection-platform/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 167 items
+
+tests/test_app_factory.py ....                                           [  2%]
+tests/test_audit_limits_validation.py ....                               [  4%]
+tests/test_auth.py ..................                                    [ 15%]
+tests/test_config.py ................                                    [ 25%]
+tests/test_cors_and_headers.py ....                                      [ 27%]
+tests/test_db_pool.py .                                                  [ 28%]
+tests/test_errors.py ....                                                [ 30%]
+tests/test_health.py .....                                               [ 33%]
+tests/test_logging.py ...                                                [ 35%]
+tests/test_media.py ......s                                              [ 39%]
+tests/test_migrations.py ....                                            [ 41%]
+tests/test_participants.py .........                                     [ 47%]
+tests/test_permissions.py ...........                                    [ 53%]
+tests/test_projects.py ........                                          [ 58%]
+tests/test_recordings.py ...........                                     [ 65%]
+tests/test_security_access.py ......                                     [ 68%]
+tests/test_security_api.py ........                                      [ 73%]
+tests/test_security_auth.py .............                                [ 81%]
+tests/test_settings_seed_audit.py .....                                  [ 84%]
+tests/test_tasks.py ...........                                          [ 91%]
+tests/test_test_database_guard.py .....                                  [ 94%]
+tests/test_users.py ..........                                           [100%]
+
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_media.py:127: ffprobe not installed here (independent check NOT RUN locally; runs in CI)
+================== 166 passed, 1 skipped in 349.78s (0:05:49) ==================
+cd frontend && npm run format:check
+
+> ccp-frontend@0.1.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+cd frontend && npm run lint
+
+> ccp-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+cd frontend && npm run typecheck
+
+> ccp-frontend@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+cd frontend && npm test
+
+> ccp-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/quad99/conversation-collection-platform/frontend
+
+
+ Test Files  14 passed (14)
+      Tests  50 passed (50)
+   Start at  22:27:13
+   Duration  19.93s (environment 52%, tests 31%, setup 8%, import 7%, transform 2%)
+
+Environment  jsdom was created 14 times · 27.38s total, 52% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+cd frontend && npm run build
+
+> ccp-frontend@0.1.0 build
+> tsc --noEmit -p tsconfig.json && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 134 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:   0.30 kB
+dist/assets/index-Bfk0G16z.css    5.21 kB │ gzip:   1.61 kB
+dist/assets/index-Cq8KMq7O.js   397.69 kB │ gzip: 120.08 kB
+
+✓ built in 402ms
+exit=0

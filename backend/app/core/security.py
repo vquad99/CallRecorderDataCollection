@@ -15,6 +15,12 @@ _BASE_HEADERS = {
     "Cross-Origin-Resource-Policy": "same-site",
 }
 _HSTS = "max-age=31536000; includeSubDomains"
+# API answers hold personal data (participants, consent, audit): never stored by a browser or a
+# shared cache, and never rendered as a page (SEC-013).
+_API_HEADERS = {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+}
 
 
 class SecurityHeadersMiddleware:
@@ -32,6 +38,9 @@ class SecurityHeadersMiddleware:
                 headers = MutableHeaders(scope=message)
                 for name, value in _BASE_HEADERS.items():
                     headers.setdefault(name, value)
+                if scope["path"].startswith("/api/"):
+                    for name, value in _API_HEADERS.items():
+                        headers.setdefault(name, value)
                 if self.hsts:
                     headers.setdefault("Strict-Transport-Security", _HSTS)
             await send(message)

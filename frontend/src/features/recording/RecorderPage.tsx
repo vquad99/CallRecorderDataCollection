@@ -15,6 +15,8 @@ import { toApiError, useResource } from "../../hooks/useResource";
 import { ChunkUploader } from "./uploader";
 
 const CHUNK_SECONDS = 5;
+// Kept well under the server's MAX_CHUNK_BYTES (8 MB) even for many channels at high rates.
+const MAX_CHUNK_BYTES = 4_000_000;
 const TEST_SECONDS = 5;
 const NO_AUDIO_SECONDS = 5;
 const CONSTRAINTS = {
@@ -350,7 +352,10 @@ export function RecorderPage() {
       uploader.current = new ChunkUploader(
         (seq, body, sha) => rec.putChunk(created.id, seq, body, sha),
         // Whole frames per chunk: every chunk holds the same seconds of every channel.
-        Math.round(audio.sampleRate * CHUNK_SECONDS) * captured,
+        Math.min(
+          Math.round(audio.sampleRate * CHUNK_SECONDS),
+          Math.floor(MAX_CHUNK_BYTES / (4 * captured)),
+        ) * captured,
         { onProgress: (sent, waiting) => setProgress({ sent, waiting }), onProblem: setProblem },
       );
       setElapsed(0);

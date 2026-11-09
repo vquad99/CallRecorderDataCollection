@@ -48,7 +48,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
 | 3 Participants, tasks, workflow | ACCEPTED | 3 | Approved by owner 2026-11-09 |
-| 4 Storage, face-to-face recording | IN PROGRESS | 4 | Gate 4 conditions met: CI run 42652152398 green (Chromium + Microsoft Edge, ffprobe); first run 42648499520 failed and was fixed under Option A (D-048); waiting for owner approval |
+| 4 Storage, face-to-face recording | ACCEPTED | 4 | Approved by owner 2026-11-09 (CI run 42652152398 green; Option A fix D-048) |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
 | 7 Audio QC, AI transcription | NOT STARTED | 7 | - |
@@ -152,24 +152,24 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | ROLE-005 | Transcriber: assigned transcription tasks only; play permitted audio; create, edit, submit transcripts. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-006 | QC Executive: assigned QC tasks only; review audio and transcripts; pass, fail or return with reason codes and comments. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-007 | Client Viewer: read-only, explicitly shared project results only; no internal notes or restricted participant data. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01, TA-ROLE-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [x] | [x] | [x] | n/a | [x] TM-ROLE-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [x] | [x] | [x] | [x] TA-SEC-10 | [x] TM-ROLE-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
 | ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03, TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03, TA-ROLE-01, TA-SEC-10, TA-AUTH-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | AUTH-001 | Login with correct credentials succeeds (POST /api/v1/auth/login). | 2 | [x] | [x] | [x] | [x] TA-AUTH-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| AUTH-002 | Wrong credentials fail. | 2 | [x] | [x] | [x] | [x] TA-AUTH-02 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| AUTH-003 | Logout revokes the session on the server (POST /api/v1/auth/logout). | 2 | [x] | [x] | [x] | [x] TA-AUTH-03 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| AUTH-004 | Password reset with expiring single-use tokens (POST /api/v1/auth/password/forgot, /password/reset). | 2 | [x] | [x] | [x] | [x] TA-AUTH-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| AUTH-005 | Session expiry; an expired session requires login. | 2 | [x] | [x] | [x] | [x] TA-AUTH-05 | [ ] TM-AUTH-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-002 | Wrong credentials fail. | 2 | [x] | [x] | [x] | [x] TA-AUTH-02, TA-AUTH-20 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
+| AUTH-003 | Logout revokes the session on the server (POST /api/v1/auth/logout). | 2 | [x] | [x] | [x] | [x] TA-AUTH-03, TA-AUTH-17 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
+| AUTH-004 | Password reset with expiring single-use tokens (POST /api/v1/auth/password/forgot, /password/reset). | 2 | [x] | [x] | [x] | [x] TA-AUTH-04, TA-AUTH-20 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
+| AUTH-005 | Session expiry; an expired session requires login. | 2 | [x] | [x] | [x] | [x] TA-AUTH-05, TA-AUTH-18 | [ ] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-006 | Passwords hashed with a modern adaptive algorithm. | 2 | [x] | [x] | [x] | [x] TA-AUTH-06 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-007 | Account active/disabled state; disabled users cannot log in. | 2 | [x] | [x] | [x] | [x] TA-AUTH-07 | [ ] TM-AUTH-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-008 | Optional multi-factor authentication, added only after the base flow is secure. | 2 | [x] | [x] | [x] | [x] TA-AUTH-08 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-009 | Failed login throttling blocks repeated failures. | 2 | [x] | [x] | [x] | [x] TA-AUTH-09 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-010 | Session and device management, including revocation. | 2 | [x] | [x] | [x] | [x] TA-AUTH-10 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-011 | Role and project access enforced; a moderator cannot open admin APIs by changing a URL or calling the API outside the UI. | 2 | [x] | [x] | [x] | [x] TA-AUTH-11, TA-ROLE-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-008 | Optional multi-factor authentication, added only after the base flow is secure. | 2 | [x] | [x] | [x] | [x] TA-AUTH-08, TA-AUTH-19 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-009 | Failed login throttling blocks repeated failures. | 2 | [x] | [x] | [x] | [x] TA-AUTH-09, TA-AUTH-19 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-010 | Session and device management, including revocation. | 2 | [x] | [x] | [x] | [x] TA-AUTH-10, TA-AUTH-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-011 | Role and project access enforced; a moderator cannot open admin APIs by changing a URL or calling the API outside the UI. | 2 | [x] | [x] | [x] | [x] TA-AUTH-11, TA-ROLE-01, TA-SEC-10 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
 | AUTH-012 | User model with normalized unique email/username. | 2 | [x] | [x] | [x] | [x] TA-AUTH-12 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-013 | Secure HTTP-only SameSite cookies (or a documented secure token strategy); no long-lived secrets in browser local storage. | 2 | [x] | [x] | [x] | [x] TA-AUTH-15 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-013 | Secure HTTP-only SameSite cookies (or a documented secure token strategy); no long-lived secrets in browser local storage. | 2 | [x] | [x] | [x] | [x] TA-AUTH-15, TA-AUTH-17 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-014 | Audit events for login failures, password changes and account disablement. | 2 | [x] | [x] | [x] | [x] TA-AUTH-13 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-015 | GET /api/v1/auth/me returns the current user; no API ever returns a password or hash. | 2 | [x] | [x] | [x] | [x] TA-AUTH-14 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-016 | Frontend: login, forgot password, reset password pages, session-expired message, protected route wrapper. | 2 | [x] | [x] | [x] | [x] TA-AUTH-16 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
@@ -183,7 +183,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | USER-008 | A deactivated user loses access immediately or at the next enforced session check. | 2 | [x] | [x] | [x] | [x] TA-USER-08 | [ ] TM-USER-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | USER-009 | One user per role created; each sees only permitted pages and data. | 2 | [x] | [x] | [x] | n/a | [x] TM-USER-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | PROJ-001 | Project create/edit; unique project code and name. | 2 | [x] | [x] | [x] | [x] TA-PROJ-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| PROJ-002 | Languages and dialects. | 2 | [x] | [x] | [x] | [x] TA-PROJ-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-002 | Languages and dialects. | 2 | [x] | [x] | [x] | [x] TA-PROJ-02, TA-PROJ-08 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-003 | Allowed recording modes. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-004 | Daily recording targets. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-005 | Audio specification fields. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -223,7 +223,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [x] | [x] | [ ] | [x] TA-STOR-02 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-SEC-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
 | STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | STOR-007 | Version tracking. | 4 | [x] | [x] | [ ] | [x] TA-STOR-07 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [x] | [x] | [ ] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -368,14 +368,14 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-003 | Encryption at rest, including backups. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-004 | Secret manager; no secrets in frontend code or Git; repository secret scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
 | SEC-005 | Rate limits. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-03 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| SEC-006 | Input validation. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-04 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-05 | [ ] TM-SEC-02 | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
+| SEC-006 | Input validation. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-04, TA-SEC-12, TA-SEC-14 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-05, TA-SEC-10, TA-SEC-11, TA-SEC-12 | [ ] TM-SEC-02 | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IN PROGRESS | Automated CSRF, SQL-injection and cross-project checks done (Option B); browser XSS and web scan in Phase 10 |
 | SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-03 | - | NOT STARTED | - |
 | SEC-009 | Data retention and deletion enforced. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-STOR-09, TA-PART-06 | n/a | - | NOT STARTED | - |
-| SEC-010 | Consent record access controls. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-06 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [x] TA-SEC-07, TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| SEC-010 | Consent record access controls. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-06, TA-SEC-10 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [x] TA-SEC-07, TA-STOR-05, TA-SEC-10, TA-SEC-15 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-012 | Webhook signature failures rejected. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-TEL-03 | n/a | - | NOT STARTED | - |
-| SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
+| SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08, TA-SEC-13, TA-SEC-16 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/option_b/make_check.txt | IN PROGRESS | Ongoing every phase |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | NOT STARTED | - |
 | SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [x] TA-SEC-09 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | Moderate dev-only advisory recorded |
 | PWA-001 | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-01 | n/a | - | NOT STARTED | - |
@@ -536,3 +536,27 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Open: test playback by ear; 60-second real sample through ffprobe; Edge on Windows; Wasabi encryption
   at rest NOT VERIFIED.
 - Gate 4: conditions met; waiting for owner approval.
+
+### Session 7 - 2026-11-09 - Option B: backend security testing
+
+- Owner approved Gate 4 and asked for Option B (backend security testing: authentication, roles,
+  permissions, APIs) from their test and optimisation list.
+- New tests (28): `test_security_access.py` - every API route has a written access rule; every role
+  plus an unassigned moderator against all 68 routes on its own project; on another project the
+  answer equals the answer for a missing object; no response to a member contains the other project's
+  IDs; request bodies cannot pull in another project's objects; CSRF on every state-changing route;
+  malformed IDs; no credential fields in responses. `test_security_auth.py` - session fixation, hashed
+  tokens, rights changes at the next request, single-use authenticator codes, throttled code and
+  password guessing, identical sign-in failures, constant-cost unknown addresses, reset links ignore
+  the Host header. `test_security_api.py` - size limits, NUL characters, injection strings,
+  server-owned fields, errors echo nothing, protective headers on every kind of answer.
+- Found and fixed: consent history readable by any moderator in the project, storage totals readable
+  by every role (D-049); authenticator code replay and unthrottled password checks in a signed-in
+  session (D-050, migration 0006); NUL characters caused server errors on every text input including
+  sign-in, no request size limit, API answers cacheable (D-052); saving an unchanged language or
+  retention list was a server error. Recorded the existing consent-capture rule (D-051). Each fix was
+  removed once to watch its test fail, then restored.
+- Results: backend 166 passed + 1 NOT RUN locally (ffprobe; runs in CI); frontend 50 passed; browser
+  tests 2 passed in Chrome (docs/evidence/option_b/).
+- Not covered: browser-side XSS and a web vulnerability scan (Phase 10).
+- Next single task: push, read CI, then report Option B.

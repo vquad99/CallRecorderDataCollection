@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -58,6 +59,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ACTIVE")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     mfa_secret_enc: Mapped[str | None] = mapped_column(Text)
+    # Time step of the last authenticator code accepted; a code is never accepted twice (D-050).
+    mfa_last_step: Mapped[int | None] = mapped_column(BigInteger)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     roles: Mapped[list[RoleRecord]] = relationship(secondary="user_roles", lazy="selectin")

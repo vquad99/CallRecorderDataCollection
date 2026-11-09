@@ -24,6 +24,102 @@ REQUEST_ID_HEADER = "X-Request-ID"
 _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 
 
+_CHUNK_PATH = re.compile(r"^/api/v1/recordings/[^/]+/chunks/[^/]+$")
+# A JSON \u0000 escape: preceded by an even number of backslashes (an odd number means the text
+# itself contains a backslash followed by "u0000", which is allowed).
+_JSON_NUL = re.compile(rb"(?<!\\)(?:\\\\)*\\u0000")
+
+
+class RequestLimitsMiddleware:
+    """Input limits applied before the application reads a request (SEC-006).
+
+    Size: audio chunk uploads may be up to MAX_CHUNK_BYTES, everything else up to MAX_REQUEST_BYTES;
+    larger bodies get 413. The declared Content-Length is checked first; a body sent without one
+    (chunked transfer) is read up to the limit and refused as soon as it passes it, so memory use
+    stays bounded either way.
+
+    NUL characters: PostgreSQL text cannot hold them, so a NUL in the path, the query string or a
+    JSON body is refused with 422 here instead of failing as a server error deeper down (any caller,
+    signed in or not, could otherwise trigger 500s at will). Binary audio chunks are not inspected.
+    """
+
+    def __init__(self, app: ASGIApp, *, default_limit: int, chunk_limit: int) -> None:
+        self.app = app
+        self.default_limit = default_limit
+        self.chunk_limit = chunk_limit
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if "\x00" in scope["path"] or b"%00" in scope.get("query_string", b""):
+            await self._refuse_nul(send)
+            return
+        if scope["method"] in ("GET", "HEAD", "OPTIONS"):
+            await self.app(scope, receive, send)
+            return
+        is_chunk = bool(_CHUNK_PATH.match(scope["path"]))
+        limit = self.chunk_limit if is_chunk else self.default_limit
+        headers = Headers(scope=scope)
+        declared = headers.get("content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > limit):
+            await self._refuse(send, limit)
+            return
+        parts: list[bytes] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                return  # client went away before sending the whole body
+            part = message.get("body", b"")
+            size += len(part)
+            if size > limit:
+                await self._refuse(send, limit)
+                return
+            parts.append(part)
+            if not message.get("more_body", False):
+                break
+        body = b"".join(parts)
+        if not is_chunk and _JSON_NUL.search(body):
+            await self._refuse_nul(send)
+            return
+        delivered = False
+
+        async def replay() -> Message:
+            nonlocal delivered
+            if delivered:
+                return await receive()
+            delivered = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _refuse(send: Send, limit: int) -> None:
+        await _send_error(
+            send, 413, "PAYLOAD_TOO_LARGE", f"Request body is larger than {limit} bytes"
+        )
+
+    @staticmethod
+    async def _refuse_nul(send: Send) -> None:
+        await _send_error(send, 422, "VALIDATION_ERROR", "Text must not contain NUL characters")
+
+
+async def _send_error(send: Send, status: int, code: str, message: str) -> None:
+    payload = json.dumps(error_body(code, message)).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(payload)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": payload})
+
+
 class RequestContextMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

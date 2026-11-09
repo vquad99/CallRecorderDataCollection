@@ -37,6 +37,7 @@ class ParticipantOut(BaseModel):
     has_phone: bool
     notes: str | None
     deleted: bool
+    consent_visible: bool  # whether this caller may open the person's consent history
     created_at: datetime
 
 
@@ -60,6 +61,7 @@ def present(
         has_phone=p.phone_e164_enc is not None,
         notes=p.notes if v.notes else None,
         deleted=p.deleted_at is not None,
+        consent_visible=v.profile and principal.can_in_project(Perm.CONSENT_VIEW, project.id),
         created_at=p.created_at,
     )
 

@@ -252,5 +252,8 @@ def mfa_disable(
     principal: CurrentPrincipal,
     db: DbSession,
     cipher: Cipher,
+    settings: AppSettings,
 ) -> None:
-    service.mfa_disable(db, cipher, principal.user_id, body.password, body.code, client_ip(request))
+    service.mfa_disable(
+        db, settings, cipher, principal.user_id, body.password, body.code, client_ip(request)
+    )
