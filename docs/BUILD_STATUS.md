@@ -29,7 +29,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Dashboard | DASH | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Security and audit | SEC | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | CI and compose run pending; FND-027 waits for Phase 2 |
+| Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 awaiting owner approval; FND-027 moved to Phase 2 (D-025) |
 | Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
 | Deployment and operations | OPS | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Load and performance | LOAD | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
@@ -45,7 +45,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Phase | Status | Gate | Gate result |
 |---|---|---|---|
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
-| 1 Foundation | IN PROGRESS | 1 | Local checks pass (docs/evidence/phase1/); CI and container checks pending |
+| 1 Foundation | IN PROGRESS | 1 | All Gate 1 conditions met (docs/evidence/phase1/ci_run.txt); waiting for owner approval |
 | 2 Auth, users, roles, projects | NOT STARTED | 2 | - |
 | 3 Participants, tasks, workflow | NOT STARTED | 3 | - |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
@@ -133,12 +133,12 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FND-021 | Frontend unit test setup; runner passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-022 | Lint and format commands; lint passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-023 | Browser console shows no application errors. | 1 | n/a | n/a | [x] | [x] TA-FND-15 | n/a | docs/evidence/phase1/e2e.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
-| FND-024 | Docker Compose for app, database, Redis and local object storage, with health checks and persistent volumes; one documented command starts dependencies; restart preserves database data. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-FND-02 | - | IN PROGRESS | NOT RUN: no Docker here; CI compose job |
-| FND-025 | .env.example with variable names and safe example values only; .gitignore; no secrets in Git. | 1 | [ ] | n/a | [ ] | [ ] TA-SEC-02 | [ ] TM-FND-02 | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
+| FND-024 | Docker Compose for app, database, Redis and local object storage, with health checks and persistent volumes; one documented command starts dependencies; restart preserves database data. | 1 | [ ] | n/a | [ ] | n/a | [x] TM-FND-02 | docs/evidence/phase1/ci_run.txt | VERIFIED | - |
+| FND-025 | .env.example with variable names and safe example values only; .gitignore; no secrets in Git. | 1 | [ ] | n/a | [ ] | [x] TA-SEC-02 | [x] TM-FND-02 | docs/evidence/phase1/ci_run.txt; docs/evidence/phase1/make_check.txt | VERIFIED | - |
 | FND-026 | Database migration command; migration runs from an empty database. | 1 | [x] | n/a | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-16 | n/a | - | NOT STARTED | Needs users table (Phase 2) |
-| FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [ ] TA-GEN-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
-| FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-ARCH-03 | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
+| FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [x] TA-GEN-02 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [x] TM-ARCH-03 | docs/evidence/phase1/ci_run.txt | VERIFIED | - |
 | DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-01 | n/a | - | NOT STARTED | - |
 | DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | 1-9 | n/a | [x] | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -377,7 +377,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-012 | Webhook signature failures rejected. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-TEL-03 | n/a | - | NOT STARTED | - |
 | SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | NOT STARTED | - |
-| SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-09 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
+| SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [x] TA-SEC-09 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | Moderate dev-only advisory recorded |
 | PWA-001 | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-01 | n/a | - | NOT STARTED | - |
 | PWA-002 | Install prompt where supported; standalone launch. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
 | PWA-003 | Responsive layouts. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-02 | - | NOT STARTED | - |
@@ -431,4 +431,10 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - NOT RUN here: Docker Compose start, health checks and restart persistence (no Docker on the build
   machine) - run by the CI `compose` job; secret and dependency scans - CI.
 - INCOMPLETE: FND-027 demo-account seed needs the users table (Phase 2).
-- Next single task: push and read the CI result; then Gate 1 review.
+- CI run 42619512800 on commit 65807da: all 4 jobs succeeded - repo rules + secret scan (no leaks),
+  backend 43 passed with REQUIRE_DB_TESTS=1 + pip-audit clean, frontend 21 + 1 browser test + build,
+  containers (db, redis, storage, backend, web) healthy, migration applied, data kept across a database
+  restart. Evidence: docs/evidence/phase1/ci_run.txt.
+- Known issue: 1 moderate npm advisory in dev-only lint tooling (minimatch via typescript-eslint).
+- Gate 1: every condition met; waiting for owner approval.
+- Next single task (after approval): Phase 2 / E1 - users, sessions and login.

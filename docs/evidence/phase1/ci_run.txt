@@ -1,0 +1,31 @@
+CI run 42619512800 - https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42619512800
+Commit 65807da, 2026-11-09. Conclusion: success
+  Frontend lint, types, unit and browser tests: success
+  Backend lint, types, tests: success
+  Repository rules and secret scan: success
+  Containers start, migrate, persist (TM-FND-02): success
+
+Key lines from the job logs:
+    1 passed (2.4s)
+   Container ccp-backend-1  Healthy
+   Container ccp-db-1  Healthy
+   Container ccp-redis-1  Healthy
+   Container ccp-storage-1  Healthy
+   Container ccp-web-1  Healthy
+  ============================== 43 passed in 0.87s ==============================
+  No known vulnerabilities found
+        Tests  21 passed (21)
+   Test Files  5 passed (5)
+  curl -fsS http://127.0.0.1:8000/health/ready | tee /dev/stderr | grep -q '"status":"ready"'
+  curl -fsS http://127.0.0.1:8080/health/ready | grep -q '"status":"ready"'
+  12:44PM INF no leaks found
+  check_repo: 0 problem(s) in 5 checks
+  {"status":"ready","checks":{"database":"ok","redis":"ok"}}
+  
+        @typescript-eslint/eslint-plugin  >=6.16.0
+
+Known issue (not blocking, --audit-level=high passed): npm audit reports 1 moderate advisory, GHSA-g3hv-75wg-m249
+(minimatch 7.0.0-11.0.0, denial of service via glob patterns) pulled in by typescript-eslint dev tooling.
+Development-time lint only; not in the built frontend. npm suggests a breaking downgrade of typescript-eslint;
+not applied. Re-check when typescript-eslint updates its minimatch dependency.
+Backend pip-audit: no known vulnerabilities.
