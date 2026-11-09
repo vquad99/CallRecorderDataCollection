@@ -1,0 +1,192 @@
+"""Project management: create, configure, lifecycle, members, isolation.
+
+Requirements: PROJ-001, PROJ-002, PROJ-003, PROJ-004, PROJ-005, PROJ-006, PROJ-007, PROJ-008, PROJ-009, PROJ-010, PROJ-012, USER-003, CAP-003
+"""
+
+from typing import Any
+
+import pytest
+
+from app.core.errors import AppError
+from app.modules.projects.service import ensure_accepts_new_work
+from tests.conftest import Api, make_project, make_user
+
+pytestmark = pytest.mark.db
+
+NEW_PROJECT = {
+    "code": "hindi-01",
+    "name": "Hindi conversations",
+    "allows_telephony": True,
+    "allows_face_to_face": True,
+    "target_telephony_hours_per_day": "62.5",
+    "target_face_to_face_hours_per_day": "62.5",
+}
+
+
+@pytest.fixture
+def admin(db: Any, new_api: Any) -> Api:
+    make_user(db, "root@example.org", ["SUPER_ADMIN"])
+    api: Api = new_api()
+    api.login("root@example.org")
+    return api
+
+
+def test_create_project_with_spec_defaults(admin: Api) -> None:
+    response = admin.post("/api/v1/projects", json=NEW_PROJECT)
+    assert response.status_code == 201
+    project = response.json()
+    assert project["code"] == "HINDI-01"
+    assert project["status"] == "DRAFT"
+    assert project["accepts_new_work"] is False
+    rules = {r["mode"]: r for r in project["audio_rules"]}
+    assert (
+        rules["TELEPHONY"]["sample_rate"],
+        rules["TELEPHONY"]["bit_depth"],
+        rules["TELEPHONY"]["channels"],
+    ) == (16000, 16, 2)
+    assert rules["FACE_TO_FACE"]["channels"] == 1
+    assert rules["TELEPHONY"]["max_silence_pct"] == "25.00"
+    assert rules["TELEPHONY"]["max_clipping_pct"] is None
+    dup = admin.post("/api/v1/projects", json=NEW_PROJECT)
+    assert dup.json()["error"]["code"] == "PROJECT_CODE_TAKEN"
+
+
+def test_mode_and_target_validation(admin: Api) -> None:
+    none = admin.post(
+        "/api/v1/projects",
+        json={**NEW_PROJECT, "allows_telephony": False, "allows_face_to_face": False},
+    )
+    assert none.json()["error"]["code"] == "MODE_REQUIRED"
+    mismatch = admin.post(
+        "/api/v1/projects", json={**NEW_PROJECT, "code": "X2", "allows_telephony": False}
+    )
+    assert mismatch.json()["error"]["code"] == "MODE_NOT_ALLOWED"
+
+
+def test_languages_audio_rules_guidelines_retention(admin: Api) -> None:
+    pid = admin.post("/api/v1/projects", json=NEW_PROJECT).json()["id"]
+    langs = admin.put(
+        f"/api/v1/projects/{pid}/languages",
+        json={
+            "languages": [
+                {"language_code": "hi", "dialect": "Awadhi"},
+                {"language_code": "hi", "dialect": ""},
+            ]
+        },
+    )
+    assert [(x["language_code"], x["dialect"]) for x in langs.json()["languages"]] == [
+        ("hi", ""),
+        ("hi", "Awadhi"),
+    ]
+    rule = {
+        "sample_rate": 16000,
+        "bit_depth": 16,
+        "max_silence_pct": "20",
+        "max_clipping_pct": "0.5",
+        "min_duration_seconds": 300,
+        "max_duration_seconds": 3600,
+    }
+    ok = admin.put(
+        f"/api/v1/projects/{pid}/audio-rules",
+        json={
+            "rules": [
+                {**rule, "mode": "TELEPHONY", "channels": 2},
+                {**rule, "mode": "FACE_TO_FACE", "channels": 1},
+            ]
+        },
+    )
+    assert ok.status_code == 200
+    assert {r["mode"]: r["max_silence_pct"] for r in ok.json()["audio_rules"]} == {
+        "FACE_TO_FACE": "20.00",
+        "TELEPHONY": "20.00",
+    }
+    missing_mode = admin.put(
+        f"/api/v1/projects/{pid}/audio-rules",
+        json={"rules": [{**rule, "mode": "TELEPHONY", "channels": 2}]},
+    )
+    assert missing_mode.json()["error"]["code"] == "MODE_NOT_ALLOWED"
+    first = admin.post(
+        f"/api/v1/projects/{pid}/guidelines",
+        json={"guideline_text": "Verbatim, mark [noise].", "verbatim": True},
+    ).json()
+    second = admin.post(
+        f"/api/v1/projects/{pid}/guidelines", json={"guideline_text": "v2", "verbatim": True}
+    ).json()
+    assert (first["version"], second["version"]) == (1, 2)
+    assert [g["version"] for g in admin.get(f"/api/v1/projects/{pid}/guidelines").json()] == [2, 1]
+    retention = admin.put(
+        f"/api/v1/projects/{pid}/retention",
+        json={"rules": [{"asset_kind": "BROWSER_ORIGINAL", "retain_days": 90}]},
+    )
+    assert retention.json()["retention_rules"] == [
+        {"asset_kind": "BROWSER_ORIGINAL", "retain_days": 90}
+    ]
+
+
+def test_lifecycle_rules_and_archived_projects_take_no_new_work(admin: Api, db: Any) -> None:
+    pid = admin.post("/api/v1/projects", json=NEW_PROJECT).json()["id"]
+
+    def status(s: str, reason: str | None = None) -> Any:
+        return admin.post(f"/api/v1/projects/{pid}/status", json={"status": s, "reason": reason})
+
+    assert status("COMPLETED").json()["error"]["code"] == "INVALID_TRANSITION"
+    assert status("ACTIVE").json()["accepts_new_work"] is True
+    assert status("ARCHIVED").json()["error"]["code"] == "REASON_REQUIRED"
+    archived = status("ARCHIVED", "Collection finished").json()
+    assert archived["status"] == "ARCHIVED"
+    assert (
+        admin.patch(
+            f"/api/v1/projects/{pid}", json={k: v for k, v in NEW_PROJECT.items() if k != "code"}
+        ).json()["error"]["code"]
+        == "PROJECT_ARCHIVED"
+    )
+    from app.modules.projects.models import Project
+
+    db.expire_all()
+    with pytest.raises(AppError) as info:
+        ensure_accepts_new_work(db.get(Project, archived["id"]))
+    assert info.value.code == "PROJECT_NOT_ACCEPTING_WORK"
+    assert status("ACTIVE").json()["error"]["code"] == "REASON_REQUIRED"
+    assert status("ACTIVE", "Client asked for more").json()["status"] == "ACTIVE"
+
+
+def test_project_isolation_between_project_admins(db: Any, new_api: Any) -> None:
+    mine, other = make_project(db, "MINE"), make_project(db, "OTHER")
+    make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[mine])
+    api: Api = new_api()
+    api.login("pa@example.org")
+    assert [p["code"] for p in api.get("/api/v1/projects").json()["items"]] == ["MINE"]
+    assert api.get(f"/api/v1/projects/{other.id}").status_code == 404
+    assert (
+        api.put(f"/api/v1/projects/{other.id}/languages", json={"languages": []}).status_code == 404
+    )
+    assert api.get(f"/api/v1/projects/{mine.id}").status_code == 200
+    assert api.post("/api/v1/projects", json=NEW_PROJECT).status_code == 403
+
+
+def test_members_add_remove_and_disabled_users(admin: Api, db: Any) -> None:
+    project = make_project(db, "TEAM")
+    worker = make_user(db, "worker@example.org", ["MODERATOR"])
+    gone = make_user(db, "gone@example.org", ["MODERATOR"], status="DISABLED")
+    assert (
+        admin.post(
+            f"/api/v1/projects/{project.id}/members", json={"user_id": str(worker.id)}
+        ).status_code
+        == 204
+    )
+    assert (
+        admin.post(
+            f"/api/v1/projects/{project.id}/members", json={"user_id": str(worker.id)}
+        ).json()["error"]["code"]
+        == "ALREADY_MEMBER"
+    )
+    assert (
+        admin.post(f"/api/v1/projects/{project.id}/members", json={"user_id": str(gone.id)}).json()[
+            "error"
+        ]["code"]
+        == "USER_DISABLED"
+    )
+    members = admin.get(f"/api/v1/projects/{project.id}/members").json()
+    assert [m["email"] for m in members] == ["worker@example.org"]
+    assert admin.delete(f"/api/v1/projects/{project.id}/members/{worker.id}").status_code == 204
+    assert admin.get(f"/api/v1/projects/{project.id}/members").json() == []

@@ -15,11 +15,13 @@ from app import __version__
 from app.api.health import router as health_router
 from app.api.router import api_router
 from app.core.config import Settings, load_settings
+from app.core.email import build_sender
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
 from app.core.security import SecurityHeadersMiddleware
 from app.db.session import create_db_engine, make_session_factory
+from app.modules.auth.security import FieldCipher
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -45,6 +47,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
+    app.state.cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
+    app.state.email_sender = build_sender(settings)
 
     register_exception_handlers(app)
     app.include_router(health_router)

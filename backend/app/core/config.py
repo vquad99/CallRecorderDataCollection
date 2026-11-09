@@ -40,6 +40,45 @@ class Settings(BaseSettings):
 
     redis_url: SecretStr | None = None
 
+    # Phase 2: accounts and sessions
+    public_app_url: str = "http://localhost:5173"
+    data_encryption_key: SecretStr
+    session_idle_minutes: int = Field(default=30, ge=5, le=24 * 60)
+    session_absolute_hours: int = Field(default=12, ge=1, le=24 * 30)
+    cookie_secure: bool | None = None
+    password_min_length: int = Field(default=12, ge=8, le=64)
+    password_reset_minutes: int = Field(default=30, ge=5, le=24 * 60)
+    invite_hours: int = Field(default=72, ge=1, le=24 * 14)
+    login_window_minutes: int = Field(default=15, ge=1, le=24 * 60)
+    login_max_failures_per_account: int = Field(default=5, ge=1, le=100)
+    login_max_failures_per_ip: int = Field(default=20, ge=1, le=1000)
+
+    email_backend: Literal["smtp", "file"] = "file"
+    email_from: str = "Conversation Collection <no-reply@localhost>"
+    email_file_dir: str = "var/outbox"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+
+    @field_validator("data_encryption_key")
+    @classmethod
+    def _fernet_key(cls, value: SecretStr) -> SecretStr:
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(value.get_secret_value().encode())
+        except (ValueError, TypeError):
+            raise ValueError("must be a Fernet key (32 url-safe base64-encoded bytes)") from None
+        return value
+
+    @field_validator("public_app_url")
+    @classmethod
+    def _app_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")) or value.endswith("/"):
+            raise ValueError("must be scheme://host[:port] without a trailing slash")
+        return value
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -83,7 +122,19 @@ class Settings(BaseSettings):
                 raise ValueError("API docs must be disabled in production")
             if self.redis_url is None:
                 raise ValueError("REDIS_URL is required in production")
+            if self.email_backend != "smtp" or not self.smtp_host:
+                raise ValueError("production needs EMAIL_BACKEND=smtp and SMTP_HOST")
+            if not self.public_app_url.startswith("https://"):
+                raise ValueError("PUBLIC_APP_URL must use https in production")
+            if self.cookie_secure is False:
+                raise ValueError("COOKIE_SECURE cannot be false in production")
         return self
+
+    @property
+    def cookies_secure(self) -> bool:
+        if self.cookie_secure is None:
+            return self.app_env not in ("development", "test")
+        return self.cookie_secure
 
     @property
     def api_docs_enabled(self) -> bool:
@@ -95,7 +146,9 @@ class Settings(BaseSettings):
         """Values that must never appear in logs or responses."""
         from sqlalchemy.engine import make_url
 
-        values = [self.secret_key.get_secret_value()]
+        values = [self.secret_key.get_secret_value(), self.data_encryption_key.get_secret_value()]
+        if self.smtp_password is not None:
+            values.append(self.smtp_password.get_secret_value())
         password = make_url(self.database_url.get_secret_value()).password
         if password:
             values.append(str(password))
