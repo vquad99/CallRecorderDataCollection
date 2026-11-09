@@ -13,7 +13,10 @@ const fakeMedia = {
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30_000,
+  // Microsoft Edge's first start plus the dev server's first compile took 26 s on CI runners
+  // (Option C run); 30 s left no margin.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   reporter: [["list"]],
   use: { baseURL: `http://127.0.0.1:${port}`, trace: "retain-on-failure" },
   projects: [

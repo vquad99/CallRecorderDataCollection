@@ -42,6 +42,8 @@ test("a forgotten password is reset by email and old sessions end", async ({ bro
     const asked = Date.now() - 1000;
     await phone.goto("/login");
     await phone.getByRole("link", { name: /Forgot/ }).click();
+    // Both pages have an Email field: type only once the reset page is showing.
+    await expect(phone.getByRole("heading", { name: "Reset your password" })).toBeVisible();
     await phone.getByLabel(/^Email/).fill(email);
     await phone.getByRole("button", { name: "Send reset link" }).click();
     await expect(phone.getByRole("status")).toBeVisible();
