@@ -398,9 +398,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | OPS-009 | Clean deployment reproduced from docs/DEPLOYMENT.md; backup restore tested. | 10 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-03, TM-SEC-03 | - | NOT STARTED | - |
 | LOAD-001 | Load test: 50 simultaneous call setups, 50 active conferences, moderator departure from all 50. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-01 | - | NOT STARTED | - |
 | LOAD-002 | 100 participant legs when moderators join by web/VoIP; leg count recalculated if moderators use phone legs. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-01, TM-TEL-04 | - | NOT STARTED | - |
-| LOAD-003 | Load test: concurrent recording downloads and uploads, ASR backlog, QC activity, dashboard queries, webhook bursts. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-02 | - | NOT STARTED | - |
+| LOAD-003 | Load test: concurrent recording downloads and uploads, ASR backlog, QC activity, dashboard queries, webhook bursts. | 10 | n/a | n/a | n/a | n/a | [x] TM-LOAD-04 (development server only) | docs/evidence/option_g/load_report.txt | IN PROGRESS | Development-server run done (Option G); production run and telephony load in Phase 10 (CAP-004) |
 | LOAD-004 | 250 recording hours/day (125 per mode) processed. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-02 | - | NOT STARTED | - |
-| LOAD-005 | Report: date, environment, concurrent users/calls, API latency, call setup success, provider concurrency, worker queue delay, upload throughput, storage growth, ASR throughput, database CPU/connections, memory, network, error rates, recording success and integrity, bottlenecks and fixes. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-03 | - | NOT STARTED | - |
+| LOAD-005 | Report: date, environment, concurrent users/calls, API latency, call setup success, provider concurrency, worker queue delay, upload throughput, storage growth, ASR throughput, database CPU/connections, memory, network, error rates, recording success and integrity, bottlenecks and fixes. | 10 | n/a | n/a | n/a | n/a | [x] TM-LOAD-04 (development server only) | docs/evidence/option_g/load_report.txt | IN PROGRESS | Development-server run done (Option G); production run and telephony load in Phase 10 (CAP-004) |
 
 ## Session log
 
@@ -635,3 +635,17 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Wasabi does not report encryption at rest through its API (no `ServerSideEncryption` on objects,
   empty bucket encryption setting): still NOT VERIFIED; needs Wasabi's written statement or an account
   setting check by the owner.
+
+### Session 10 (continued) - Option G: load test
+
+- New: `backend/loadtest/f2f_load.py` (linted and type-checked with the backend): 50 moderators
+  recording at once at real-time pace plus 10 people browsing; per-endpoint latency, errors, delay
+  to files ready, CPU, memory, database connections; stops itself above 90 % CPU (5-second average)
+  or memory, the owner's rule.
+- 1 server process: 2 059 requests, 0 errors, 576 MB uploaded, 50/50 recordings ready (median 7.6 s,
+  max 15.1 s after stop), CPU 5-second peak 83 %, memory 47 %, 16 database connections; slowest
+  answers 3-9 s during the start and completion bursts.
+- 4 server processes: stopped by the 90 % rule after 16 s (CPU 95 % while 50 people signed in at
+  once; one Argon2id check takes about 150 ms on all 4 cores), 0 errors before the stop.
+- Not a capacity proof (CAP-004): load generator, database and server shared one 4-CPU machine; no
+  Redis worker. 210 test objects (1.36 GB) deleted from Wasabi (docs/evidence/option_g/).

@@ -472,3 +472,4 @@ output saved to evidence.
 | TM-LOAD-01 | Manual | 10 | 50 call setups, 50 conferences, 100 participant legs, moderator departure from all 50. | CAP-004, TEL-020, TEL-038, LOAD-001, LOAD-002 |
 | TM-LOAD-02 | Manual | 10 | Uploads/downloads, ASR backlog, QC, dashboards, webhook bursts at 250 h/day. | LOAD-003, LOAD-004 |
 | TM-LOAD-03 | Manual | 10 | Load report holds every required measurement; no claim from a local or mock test. | CAP-004, LOAD-005 |
+| TM-LOAD-04 | Manual (tool) | 4 (Option G) | Face-to-face load on the development server with `backend/loadtest/f2f_load.py`: 50 moderators recording at once plus 10 people browsing; errors, latency per endpoint, delay to files ready, CPU, memory, database connections; stops itself above 90 % CPU or memory. Not a capacity proof (CAP-004). | LOAD-003, LOAD-005 |

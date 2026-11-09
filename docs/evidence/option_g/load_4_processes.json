@@ -1,0 +1,143 @@
+{
+  "moderators": 50,
+  "browsers": 10,
+  "recording_seconds": 60,
+  "wall_seconds": 16,
+  "stopped_early": "CPU above 90.0% (5-second average 95%)",
+  "requests": 299,
+  "error_requests": 0,
+  "uploaded_mb": 0.0,
+  "recordings_ready": 0,
+  "recordings_failed": [],
+  "ready_delay_s": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 0
+  },
+  "machine": {
+    "cpu_5s_average_max": 96,
+    "cpu_max": 98,
+    "cpu_mean": 89,
+    "memory_max_pct": 47,
+    "backend_rss_max_mb": 937,
+    "db_connections_max": 24
+  },
+  "endpoints": {
+    "browse audit-logs": {
+      "requests": 10,
+      "errors": {},
+      "p50_ms": 554,
+      "p95_ms": 733,
+      "p99_ms": 733,
+      "max_ms": 733
+    },
+    "browse projects": {
+      "requests": 10,
+      "errors": {},
+      "p50_ms": 387,
+      "p95_ms": 841,
+      "p99_ms": 841,
+      "max_ms": 841
+    },
+    "browse tasks": {
+      "requests": 10,
+      "errors": {},
+      "p50_ms": 248,
+      "p95_ms": 698,
+      "p99_ms": 698,
+      "max_ms": 698
+    },
+    "browse users": {
+      "requests": 9,
+      "errors": {},
+      "p50_ms": 533,
+      "p95_ms": 558,
+      "p99_ms": 558,
+      "max_ms": 558
+    },
+    "recording start": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 329,
+      "p95_ms": 736,
+      "p99_ms": 970,
+      "max_ms": 970
+    },
+    "sign in": {
+      "requests": 60,
+      "errors": {},
+      "p50_ms": 1024,
+      "p95_ms": 1824,
+      "p99_ms": 1913,
+      "max_ms": 1914
+    },
+    "task detail": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 384,
+      "p95_ms": 716,
+      "p99_ms": 999,
+      "max_ms": 999
+    },
+    "task list": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 325,
+      "p95_ms": 702,
+      "p99_ms": 729,
+      "max_ms": 729
+    },
+    "task start": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 568,
+      "p95_ms": 791,
+      "p99_ms": 993,
+      "max_ms": 993
+    }
+  },
+  "timeline": [
+    {
+      "cpu": 56.4,
+      "mem": 46.5,
+      "backend_rss_mb": 937.3,
+      "db_connections": 15,
+      "second": 0
+    },
+    {
+      "cpu": 93.2,
+      "mem": 45.7,
+      "backend_rss_mb": 596.1,
+      "db_connections": 13,
+      "second": 1
+    },
+    {
+      "cpu": 97.2,
+      "mem": 46.5,
+      "backend_rss_mb": 599.7,
+      "db_connections": 17,
+      "second": 3
+    },
+    {
+      "cpu": 92.9,
+      "mem": 46.2,
+      "backend_rss_mb": 709.3,
+      "db_connections": 18,
+      "second": 4
+    },
+    {
+      "cpu": 97.7,
+      "mem": 46.4,
+      "backend_rss_mb": 630.7,
+      "db_connections": 24,
+      "second": 6
+    },
+    {
+      "cpu": 94.2,
+      "mem": 46.9,
+      "backend_rss_mb": 605.6,
+      "db_connections": 22,
+      "second": 7
+    }
+  ]
+}

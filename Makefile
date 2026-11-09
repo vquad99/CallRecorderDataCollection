@@ -47,9 +47,9 @@ check-repo:
 
 check-backend:
 	cd backend && $(UV) lock --check
-	cd backend && $(UV) run ruff format --check app tests
-	cd backend && $(UV) run ruff check app tests
-	cd backend && $(UV) run mypy app tests
+	cd backend && $(UV) run ruff format --check app tests loadtest
+	cd backend && $(UV) run ruff check app tests loadtest
+	cd backend && $(UV) run mypy app tests loadtest
 	cd backend && $(UV) run pytest
 
 check-frontend:

@@ -1,0 +1,994 @@
+{
+  "moderators": 50,
+  "browsers": 10,
+  "recording_seconds": 60,
+  "wall_seconds": 132,
+  "stopped_early": null,
+  "requests": 2059,
+  "error_requests": 0,
+  "uploaded_mb": 576.0,
+  "recordings_ready": 50,
+  "recordings_failed": [],
+  "ready_delay_s": {
+    "p50": 7.6,
+    "p95": 13.6,
+    "max": 15.1
+  },
+  "machine": {
+    "cpu_5s_average_max": 83,
+    "cpu_max": 96,
+    "cpu_mean": 31,
+    "memory_max_pct": 47,
+    "backend_rss_max_mb": 7,
+    "db_connections_max": 16
+  },
+  "endpoints": {
+    "browse audit-logs": {
+      "requests": 200,
+      "errors": {},
+      "p50_ms": 39,
+      "p95_ms": 925,
+      "p99_ms": 3252,
+      "max_ms": 3899
+    },
+    "browse projects": {
+      "requests": 210,
+      "errors": {},
+      "p50_ms": 49,
+      "p95_ms": 1239,
+      "p99_ms": 4904,
+      "max_ms": 6019
+    },
+    "browse storage/usage": {
+      "requests": 200,
+      "errors": {},
+      "p50_ms": 38,
+      "p95_ms": 1283,
+      "p99_ms": 5584,
+      "max_ms": 6502
+    },
+    "browse tasks": {
+      "requests": 204,
+      "errors": {},
+      "p50_ms": 35,
+      "p95_ms": 786,
+      "p99_ms": 3266,
+      "max_ms": 5156
+    },
+    "browse users": {
+      "requests": 200,
+      "errors": {},
+      "p50_ms": 52,
+      "p95_ms": 1043,
+      "p99_ms": 1873,
+      "max_ms": 3203
+    },
+    "chunk upload": {
+      "requests": 600,
+      "errors": {},
+      "p50_ms": 155,
+      "p95_ms": 1517,
+      "p99_ms": 5936,
+      "max_ms": 9007
+    },
+    "recording complete": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 1099,
+      "p95_ms": 5098,
+      "p99_ms": 6492,
+      "max_ms": 6492
+    },
+    "recording poll": {
+      "requests": 135,
+      "errors": {},
+      "p50_ms": 1884,
+      "p95_ms": 5714,
+      "p99_ms": 8735,
+      "max_ms": 13308
+    },
+    "recording start": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 810,
+      "p95_ms": 1337,
+      "p99_ms": 1401,
+      "max_ms": 1401
+    },
+    "sign in": {
+      "requests": 60,
+      "errors": {},
+      "p50_ms": 1562,
+      "p95_ms": 2135,
+      "p99_ms": 2192,
+      "max_ms": 2193
+    },
+    "task detail": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 1002,
+      "p95_ms": 1650,
+      "p99_ms": 1856,
+      "max_ms": 1856
+    },
+    "task list": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 736,
+      "p95_ms": 1620,
+      "p99_ms": 1775,
+      "max_ms": 1775
+    },
+    "task start": {
+      "requests": 50,
+      "errors": {},
+      "p50_ms": 928,
+      "p95_ms": 1670,
+      "p99_ms": 1984,
+      "max_ms": 1984
+    }
+  },
+  "timeline": [
+    {
+      "cpu": 63.2,
+      "mem": 46.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 15,
+      "second": 0
+    },
+    {
+      "cpu": 77.8,
+      "mem": 45.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 2
+    },
+    {
+      "cpu": 95.9,
+      "mem": 45.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 13,
+      "second": 3
+    },
+    {
+      "cpu": 74.7,
+      "mem": 45.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 5
+    },
+    {
+      "cpu": 69.2,
+      "mem": 44.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 6
+    },
+    {
+      "cpu": 95.4,
+      "mem": 44.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 7
+    },
+    {
+      "cpu": 80.4,
+      "mem": 43.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 8
+    },
+    {
+      "cpu": 79.3,
+      "mem": 43.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 9
+    },
+    {
+      "cpu": 72.7,
+      "mem": 43.6,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 10
+    },
+    {
+      "cpu": 48.7,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 11
+    },
+    {
+      "cpu": 42.0,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 13
+    },
+    {
+      "cpu": 31.8,
+      "mem": 43.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 14
+    },
+    {
+      "cpu": 21.4,
+      "mem": 43.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 15
+    },
+    {
+      "cpu": 17.5,
+      "mem": 43.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 16
+    },
+    {
+      "cpu": 28.9,
+      "mem": 42.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 7,
+      "second": 17
+    },
+    {
+      "cpu": 28.9,
+      "mem": 42.7,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 18
+    },
+    {
+      "cpu": 23.8,
+      "mem": 42.7,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 19
+    },
+    {
+      "cpu": 24.0,
+      "mem": 42.6,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 20
+    },
+    {
+      "cpu": 15.8,
+      "mem": 42.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 21
+    },
+    {
+      "cpu": 34.8,
+      "mem": 42.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 22
+    },
+    {
+      "cpu": 31.1,
+      "mem": 42.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 23
+    },
+    {
+      "cpu": 20.1,
+      "mem": 42.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 24
+    },
+    {
+      "cpu": 18.3,
+      "mem": 42.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 25
+    },
+    {
+      "cpu": 18.1,
+      "mem": 42.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 26
+    },
+    {
+      "cpu": 41.9,
+      "mem": 42.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 27
+    },
+    {
+      "cpu": 25.5,
+      "mem": 42.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 28
+    },
+    {
+      "cpu": 20.7,
+      "mem": 42.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 29
+    },
+    {
+      "cpu": 14.1,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 30
+    },
+    {
+      "cpu": 23.9,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 31
+    },
+    {
+      "cpu": 42.4,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 33
+    },
+    {
+      "cpu": 26.8,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 34
+    },
+    {
+      "cpu": 22.4,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 35
+    },
+    {
+      "cpu": 14.4,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 36
+    },
+    {
+      "cpu": 30.5,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 37
+    },
+    {
+      "cpu": 29.0,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 38
+    },
+    {
+      "cpu": 22.7,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 39
+    },
+    {
+      "cpu": 26.4,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 40
+    },
+    {
+      "cpu": 14.4,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 41
+    },
+    {
+      "cpu": 34.0,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 11,
+      "second": 42
+    },
+    {
+      "cpu": 29.5,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 43
+    },
+    {
+      "cpu": 20.0,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 44
+    },
+    {
+      "cpu": 18.4,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 45
+    },
+    {
+      "cpu": 18.6,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 46
+    },
+    {
+      "cpu": 35.0,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 7,
+      "second": 47
+    },
+    {
+      "cpu": 23.6,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 48
+    },
+    {
+      "cpu": 21.5,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 49
+    },
+    {
+      "cpu": 17.1,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 50
+    },
+    {
+      "cpu": 35.3,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 51
+    },
+    {
+      "cpu": 44.7,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 10,
+      "second": 53
+    },
+    {
+      "cpu": 24.2,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 54
+    },
+    {
+      "cpu": 21.4,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 55
+    },
+    {
+      "cpu": 14.7,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 56
+    },
+    {
+      "cpu": 32.5,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 57
+    },
+    {
+      "cpu": 38.1,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 58
+    },
+    {
+      "cpu": 31.2,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 59
+    },
+    {
+      "cpu": 22.4,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 60
+    },
+    {
+      "cpu": 14.9,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 61
+    },
+    {
+      "cpu": 37.3,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 62
+    },
+    {
+      "cpu": 37.7,
+      "mem": 42.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 7,
+      "second": 63
+    },
+    {
+      "cpu": 27.9,
+      "mem": 42.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 64
+    },
+    {
+      "cpu": 44.7,
+      "mem": 42.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 8,
+      "second": 65
+    },
+    {
+      "cpu": 49.6,
+      "mem": 42.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 11,
+      "second": 66
+    },
+    {
+      "cpu": 49.9,
+      "mem": 43.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 67
+    },
+    {
+      "cpu": 51.7,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 68
+    },
+    {
+      "cpu": 45.1,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 69
+    },
+    {
+      "cpu": 48.4,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 70
+    },
+    {
+      "cpu": 47.8,
+      "mem": 43.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 72
+    },
+    {
+      "cpu": 62.1,
+      "mem": 45.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 73
+    },
+    {
+      "cpu": 64.0,
+      "mem": 45.6,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 74
+    },
+    {
+      "cpu": 46.7,
+      "mem": 44.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 75
+    },
+    {
+      "cpu": 55.1,
+      "mem": 45.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 76
+    },
+    {
+      "cpu": 35.9,
+      "mem": 45.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 77
+    },
+    {
+      "cpu": 47.3,
+      "mem": 45.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 78
+    },
+    {
+      "cpu": 44.8,
+      "mem": 45.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 79
+    },
+    {
+      "cpu": 68.4,
+      "mem": 46.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 80
+    },
+    {
+      "cpu": 43.9,
+      "mem": 45.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 81
+    },
+    {
+      "cpu": 55.4,
+      "mem": 46.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 82
+    },
+    {
+      "cpu": 55.3,
+      "mem": 45.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 83
+    },
+    {
+      "cpu": 47.0,
+      "mem": 46.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 84
+    },
+    {
+      "cpu": 51.0,
+      "mem": 46.9,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 85
+    },
+    {
+      "cpu": 69.2,
+      "mem": 47.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 86
+    },
+    {
+      "cpu": 71.1,
+      "mem": 46.6,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 88
+    },
+    {
+      "cpu": 50.2,
+      "mem": 45.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 16,
+      "second": 89
+    },
+    {
+      "cpu": 52.2,
+      "mem": 45.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 11,
+      "second": 90
+    },
+    {
+      "cpu": 48.8,
+      "mem": 45.3,
+      "backend_rss_mb": 7.1,
+      "db_connections": 9,
+      "second": 91
+    },
+    {
+      "cpu": 21.7,
+      "mem": 45.2,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 92
+    },
+    {
+      "cpu": 10.1,
+      "mem": 45.1,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 93
+    },
+    {
+      "cpu": 9.6,
+      "mem": 45.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 94
+    },
+    {
+      "cpu": 9.4,
+      "mem": 45.0,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 95
+    },
+    {
+      "cpu": 17.1,
+      "mem": 44.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 96
+    },
+    {
+      "cpu": 16.2,
+      "mem": 44.8,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 97
+    },
+    {
+      "cpu": 8.9,
+      "mem": 44.6,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 98
+    },
+    {
+      "cpu": 11.5,
+      "mem": 43.7,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 99
+    },
+    {
+      "cpu": 9.6,
+      "mem": 43.7,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 100
+    },
+    {
+      "cpu": 9.5,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 101
+    },
+    {
+      "cpu": 10.8,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 102
+    },
+    {
+      "cpu": 8.5,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 103
+    },
+    {
+      "cpu": 8.8,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 104
+    },
+    {
+      "cpu": 19.5,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 105
+    },
+    {
+      "cpu": 9.4,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 106
+    },
+    {
+      "cpu": 9.9,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 108
+    },
+    {
+      "cpu": 9.8,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 109
+    },
+    {
+      "cpu": 8.9,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 110
+    },
+    {
+      "cpu": 9.2,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 111
+    },
+    {
+      "cpu": 14.5,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 112
+    },
+    {
+      "cpu": 10.3,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 113
+    },
+    {
+      "cpu": 20.7,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 114
+    },
+    {
+      "cpu": 10.3,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 115
+    },
+    {
+      "cpu": 9.1,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 116
+    },
+    {
+      "cpu": 12.1,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 117
+    },
+    {
+      "cpu": 12.2,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 118
+    },
+    {
+      "cpu": 10.9,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 119
+    },
+    {
+      "cpu": 10.4,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 120
+    },
+    {
+      "cpu": 10.0,
+      "mem": 43.4,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 121
+    },
+    {
+      "cpu": 22.9,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 122
+    },
+    {
+      "cpu": 9.3,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 123
+    },
+    {
+      "cpu": 9.6,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 124
+    },
+    {
+      "cpu": 9.6,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 125
+    },
+    {
+      "cpu": 12.0,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 126
+    },
+    {
+      "cpu": 11.0,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 127
+    },
+    {
+      "cpu": 11.2,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 129
+    },
+    {
+      "cpu": 8.1,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 130
+    },
+    {
+      "cpu": 7.4,
+      "mem": 43.5,
+      "backend_rss_mb": 7.1,
+      "db_connections": 6,
+      "second": 131
+    }
+  ]
+}
