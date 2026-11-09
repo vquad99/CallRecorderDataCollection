@@ -1,0 +1,47 @@
+$ make check-backend UV=uv  (run 2026-11-09T18:32:31Z on aws-dev, Option E audio tests; private PostgreSQL 16; REQUIRE_DB_TESTS=1; ffprobe not installed here, so its independent checks are NOT RUN locally and run in CI)
+cd backend && uv lock --check
+Resolved 82 packages in 2ms
+cd backend && uv run ruff format --check app tests
+90 files already formatted
+cd backend && uv run ruff check app tests
+All checks passed!
+cd backend && uv run mypy app tests
+Success: no issues found in 90 source files
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0
+rootdir: /home/quad99/conversation-collection-platform/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 208 items
+
+tests/test_app_factory.py ....                                           [  1%]
+tests/test_audio_quality.py ......................................sss    [ 21%]
+tests/test_audit_limits_validation.py ....                               [ 23%]
+tests/test_auth.py ..................                                    [ 32%]
+tests/test_config.py ................                                    [ 39%]
+tests/test_cors_and_headers.py ....                                      [ 41%]
+tests/test_db_pool.py .                                                  [ 42%]
+tests/test_errors.py ....                                                [ 44%]
+tests/test_health.py .....                                               [ 46%]
+tests/test_logging.py ...                                                [ 48%]
+tests/test_media.py ......s                                              [ 51%]
+tests/test_migrations.py ....                                            [ 53%]
+tests/test_participants.py .........                                     [ 57%]
+tests/test_permissions.py ...........                                    [ 62%]
+tests/test_projects.py ........                                          [ 66%]
+tests/test_recordings.py ...........                                     [ 72%]
+tests/test_security_access.py ......                                     [ 75%]
+tests/test_security_api.py ........                                      [ 78%]
+tests/test_security_auth.py .............                                [ 85%]
+tests/test_settings_seed_audit.py .....                                  [ 87%]
+tests/test_tasks.py ...........                                          [ 92%]
+tests/test_test_database_guard.py .....                                  [ 95%]
+tests/test_users.py ..........                                           [100%]
+
+=========================== short test summary info ============================
+SKIPPED [3] tests/test_audio_quality.py:253: ffprobe not installed here (independent check NOT RUN locally; runs in CI)
+SKIPPED [1] tests/test_media.py:127: ffprobe not installed here (independent check NOT RUN locally; runs in CI)
+================== 204 passed, 4 skipped in 298.64s (0:04:58) ==================
+exit=0

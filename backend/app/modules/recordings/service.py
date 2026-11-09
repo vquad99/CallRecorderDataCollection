@@ -173,6 +173,13 @@ def put_chunk(
             code="CHECKSUM_MISMATCH",
             status_code=422,
         )
+    if not media.all_finite(data):
+        # A browser never sends these; they would turn into noise or silence in the delivery file.
+        raise AppError(
+            "Chunk contains invalid sample values (not a number or infinite)",
+            code="INVALID_AUDIO",
+            status_code=422,
+        )
     existing = db.scalar(
         select(RecordingChunk).where(
             RecordingChunk.recording_id == rec.id, RecordingChunk.seq == seq

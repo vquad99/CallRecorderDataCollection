@@ -607,3 +607,20 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - CI run 42671870913: the secret scan flagged the fixed password the journeys gave their throwaway
   test accounts; the journeys now generate a random password per run (commit eedf3bd).
 - Next single task: push, read CI, then report Option D.
+
+### Session 10 - 2026-11-10 - Option E: audio tests
+
+- Owner asked for Options E, F, G and H, stopping if usage passes 90 %. Claude plan usage is not
+  visible from here; machine use is watched instead (the disk was already at 97 % before the
+  request, so the disk rule is "stop if free space drops below 1 GB").
+- New: generated audio fixtures (`backend/tests/audio_fixtures.py`) and `test_audio_quality.py`
+  (37 tests): level measurement against an independent calculation, silence and its threshold, low
+  volume, exact clipping counts, over-range capture, every rate from 8 to 192 kHz, 1 to 8 channels, a
+  10 ms recording, seven kinds of damaged file, impossible sample values, a part damaged in storage,
+  and ffprobe on unusual formats (CI).
+- Found and fixed (D-054): uploads with NaN or infinite samples were accepted; the WAV inspector
+  crashed on a file cut inside its header or claiming zero channels, and accepted data that was not
+  whole frames. Also fixed a test that failed when run across midnight UTC (it compared the storage
+  folder with today's date instead of the recording's start date).
+- Results: backend 204 passed + 4 NOT RUN locally (ffprobe; run in CI)
+  (docs/evidence/option_e/make_check_backend.txt).

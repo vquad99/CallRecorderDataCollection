@@ -294,6 +294,9 @@ output saved to evidence.
 | TA-AUDIO-07 | Automated | 4 | Same input twice produces byte-identical derived output. | AUDIO-019 |
 | TA-AUDIO-08 | Automated | 4 | Pipeline stores ffprobe inspection of the original before converting. | AUDIO-020 |
 | TA-AUDIO-09 | Automated | 4 | Stereo source: documented downmix method recorded; mono source: no downmix applied. | AUDIO-021 |
+| TA-AUDIO-10 | Automated | 4 (Option E) | Peak and RMS equal an independent calculation (tones and noise, -6 to -45 dBFS); digital silence reported as 100 % silence with no level; silence share and the -50 dBFS threshold; low volume measured; clipping counted exactly; over-range capture kept in the original and clipped only in the delivery file. | AUDIO-017, AUDIO-022, AQC-003, AQC-010 |
+| TA-AUDIO-11 | Automated | 4 (Option E) | Every capture rate from 8 kHz to 192 kHz converts to 16 kHz mono with the same length (within 1 ms), no gain change, byte-identical twice; 1 to 8 channels all kept in the original, delivery equal to channel 1 alone; a 10 ms recording converts; ffprobe agrees on 8 kHz mono, 44.1 kHz stereo and 96 kHz 4-channel files (CI). | AUDIO-014, AUDIO-019, AUDIO-020, AUDIO-021 |
+| TA-AUDIO-12 | Automated | 4 (Option E) | Damaged files (cut inside the samples or the header, header only, no data chunk, not WAV, data not whole frames, zero channels) are refused with a plain reason before any sample is read; uploads with NaN or infinite samples are refused (422 INVALID_AUDIO); a part damaged in storage fails processing truthfully (FAILED, no assets, task unchanged). | AUDIO-017, AQC-010, FTF-011 |
 | TM-AUDIO-01 | Manual | 5, 6 | Telephony file checked with ffprobe; output saved as evidence. | AUDIO-002, AUDIO-023 |
 
 ### TEL - Module 6 - Telephony provider integration

@@ -6,6 +6,7 @@ Requirements: FTF-005, FTF-007, FTF-009, FTF-010, FTF-011, FTF-012, FTF-013, FTF
 
 import hashlib
 import io
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -195,9 +196,9 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     db = world["db"]
     db.expire_all()
     keys = {a.kind: a.storage_key for a in db.scalars(select(AudioAsset)).all()}
-    assert keys["FTF_DERIVED_PCM"].startswith(
-        f"VOICE/face-to-face/{datetime.now(UTC):%Y/%m/%d}/{tid}/derived/"
-    )
+    # Files are filed under the day the recording started (not "today": a test may cross midnight).
+    day = f"{db.get(Recording, uuid.UUID(rid)).started_at:%Y/%m/%d}"
+    assert keys["FTF_DERIVED_PCM"].startswith(f"VOICE/face-to-face/{day}/{tid}/derived/")
     stored = s3.get_object(Bucket=BUCKET, Key=keys["FTF_DERIVED_PCM"])
     body = stored["Body"].read()
     assert hashlib.sha256(body).hexdigest() == derived["sha256"] == stored["Metadata"]["sha256"]
@@ -207,7 +208,7 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     assert original_body.endswith(b"".join(parts)), "original keeps the browser samples unchanged"
     remaining = s3.list_objects_v2(
         Bucket=BUCKET,
-        Prefix=f"VOICE/face-to-face/{datetime.now(UTC):%Y/%m/%d}/{tid}/original/chunks/",
+        Prefix=f"VOICE/face-to-face/{day}/{tid}/original/chunks/",
     ).get("KeyCount", 0)
     assert remaining == 0, "chunks are removed once the original is stored"
     steps = db.scalars(select(AssetProcessingStep.tool)).all()

@@ -93,6 +93,9 @@ uses the same resampler; it is not used because the FFmpeg program could not be 
 Resampling 48 kHz to 16 kHz and reducing to 16 bits is not lossless. The derived file is labelled
 derived, the original is kept, and the client's acceptance is open (DECISIONS.md B-03).
 
+Input checks (D-054): uploaded samples must be real numbers (no NaN or infinity); the inspector
+refuses cut-off files, inconsistent format fields and data that is not whole frames.
+
 ## 4. Validation record (AUDIO-017)
 
 Stored for every final asset: file extension and actual container, codec / sample format, sample rate,

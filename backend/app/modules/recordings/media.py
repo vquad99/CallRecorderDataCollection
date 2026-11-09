@@ -116,8 +116,18 @@ class WavInfo:
     data_bytes: int
 
 
+def all_finite(data: bytes) -> bool:
+    """True when raw float32 samples hold only real numbers (no NaN, no infinity)."""
+    return bool(np.isfinite(np.frombuffer(data, dtype="<f4")).all())
+
+
 def inspect_wav(path: Path) -> WavInfo:
-    """Read the RIFF/WAVE structure directly (no decoding library involved)."""
+    """Read the RIFF/WAVE structure directly (no decoding library involved).
+
+    Every way a file can be damaged raises ValueError with a plain reason: cut off, inconsistent
+    format fields, or a data chunk that is not a whole number of frames.
+    """
+    file_size = path.stat().st_size
     with path.open("rb") as handle:
         head = handle.read(12)
         if len(head) < 12 or head[:4] != b"RIFF" or head[8:12] != b"WAVE":
@@ -129,14 +139,23 @@ def inspect_wav(path: Path) -> WavInfo:
                 raise ValueError("WAV file has no data chunk")
             cid, size = chunk[:4], struct.unpack("<I", chunk[4:])[0]
             if cid == b"fmt ":
-                fmt = struct.unpack("<HHIIHH", handle.read(16))
+                raw = handle.read(16)
+                if size < 16 or len(raw) < 16:
+                    raise ValueError("WAV file is cut off inside its format header")
+                fmt = struct.unpack("<HHIIHH", raw)
                 handle.seek(size - 16 + (size % 2), 1)
             elif cid == b"data":
                 if fmt is None:
                     raise ValueError("WAV data chunk before fmt chunk")
                 tag, channels, rate, _byte_rate, block_align, bits = fmt
+                if channels < 1 or rate < 1 or bits < 8 or block_align != channels * (bits // 8):
+                    raise ValueError("WAV format fields are inconsistent")
+                if size % block_align:
+                    raise ValueError("WAV data is not a whole number of frames")
+                if handle.tell() + size > file_size:
+                    raise ValueError("WAV data is truncated")
                 codec = {1: f"pcm_s{bits}le", 3: f"pcm_f{bits}le"}.get(tag, f"wav_format_{tag}")
-                frames = size // block_align if block_align else 0
+                frames = size // block_align
                 return WavInfo(
                     container="wav",
                     codec=codec,
