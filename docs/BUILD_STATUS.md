@@ -48,7 +48,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
 | 3 Participants, tasks, workflow | ACCEPTED | 3 | Approved by owner 2026-11-09 |
-| 4 Storage, face-to-face recording | IN PROGRESS | 4 | CI run 42648499520 FAILED (recorder browser test, channel race); fixed under the owner's Option A (D-048), passes locally; new CI run and owner approval pending |
+| 4 Storage, face-to-face recording | IN PROGRESS | 4 | Gate 4 conditions met: CI run 42652152398 green (Chromium + Microsoft Edge, ffprobe); first run 42648499520 failed and was fixed under Option A (D-048); waiting for owner approval |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
 | 7 Audio QC, AI transcription | NOT STARTED | 7 | - |
@@ -246,7 +246,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [x] | [x] | [x] | [x] TA-FTF-04 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-013 | Derived PCM WAV generated and validated. | 4 | [x] | [x] | [x] | [x] TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-014 | Session metadata captured. | 4 | [x] | [x] | [x] | [x] TA-FTF-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
-| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt; docs/evidence/phase4/walkthrough_channels.txt | IN PROGRESS | Chrome verified; Microsoft Edge (Linux) added to CI, result pending; Edge on Windows not tested |
+| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt; docs/evidence/phase4/walkthrough_channels.txt | IN PROGRESS | Chrome and Microsoft Edge 156 (Linux, CI) verified with fake microphone; 60-second real sample through ffprobe not done (no ffprobe on the build machine); Edge on Windows not tested |
 | AUDIO-001 | Telephony: one WAV per conversation. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | n/a | - | NOT STARTED | - |
 | AUDIO-002 | Telephony final file: stereo, 16 kHz, 16-bit signed PCM. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | [ ] TM-AUDIO-01 | - | NOT STARTED | - |
 | AUDIO-003 | Left channel = Participant A only; right channel = Participant B only. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AQC-08 | [ ] TM-TEL-02 | - | NOT STARTED | - |
@@ -531,5 +531,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
   SHA-256 of both downloads match, re-deriving from the downloaded original is byte-identical, browser
   played the file to its end, unsigned requests 403; 2 test objects deleted
   (docs/evidence/phase4/walkthrough_channels.txt).
-- Open: Edge result pending CI; test playback by ear; Wasabi encryption at rest NOT VERIFIED.
-- Next single task: push, read CI, then Gate 4 review.
+- CI run 42652152398: all four jobs green; browser tests passed in Chromium and Microsoft Edge 156;
+  backend 139 passed including the ffprobe check (docs/evidence/phase4/ci_run.txt).
+- Open: test playback by ear; 60-second real sample through ffprobe; Edge on Windows; Wasabi encryption
+  at rest NOT VERIFIED.
+- Gate 4: conditions met; waiting for owner approval.
