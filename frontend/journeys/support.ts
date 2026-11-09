@@ -3,7 +3,7 @@
 //
 // Environment: E2E_ADMIN_PASSWORD (the seeded Super Admin's password, DEMO_PASSWORD), E2E_OUTBOX
 // (the backend's EMAIL_FILE_DIR, where invitation and reset emails are written as files).
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,7 +12,8 @@ import { expect, type Page, type TestInfo } from "@playwright/test";
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "demo.super-admin@example.org";
 export const SEEDED_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "";
 export const OUTBOX = process.env.E2E_OUTBOX ?? "";
-export const NEW_PASSWORD = "journey-passphrase-2026";
+// A fresh password for every run: nothing that works anywhere is stored in the code.
+export const NEW_PASSWORD = `journey-${randomBytes(12).toString("hex")}`;
 
 /** A short code unique to this test run and browser, so reruns never collide. */
 export function runCode(info: TestInfo): string {
