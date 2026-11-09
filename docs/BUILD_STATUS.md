@@ -581,4 +581,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
   status" but opened Projects. Each fix was removed once to watch its tests fail, then restored.
 - Results: frontend 319 passed, build OK; browser tests 2 passed in Chrome
   (docs/evidence/option_c/). Backend unchanged since Option B.
-- Next single task: push, read CI, then report Option C.
+- CI run 42665229942: all four jobs green; frontend 319 passed, browser tests passed in Chromium and
+  Microsoft Edge 156, backend 167 passed, no known dependency vulnerabilities
+  (docs/evidence/option_c/ci_run.txt).
+- Option C done; waiting for the owner's next choice.
