@@ -1,0 +1,3 @@
+# Test-only Fernet key that was hard-coded in backend/tests/conftest.py in commit 1a04643.
+# It encrypted nothing outside the test suite; tests now generate a fresh key per run.
+1a04643ceae24888fe1ca96cf5ebc284fab443ce:backend/tests/conftest.py:generic-api-key:30

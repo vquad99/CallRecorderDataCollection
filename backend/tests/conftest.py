@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -26,8 +27,8 @@ from app.main import create_app
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 UNREACHABLE_DB = "postgresql+psycopg://ccp:unit-test-db-password@127.0.0.1:1/unreachable"
 TEST_SECRET = "unit-test-secret-key-0123456789-abcdefghij"
-# Fixed Fernet key for tests only (never used outside the test suite).
-TEST_FERNET_KEY = "aXcxTWWh9t0b5dsCB0fJlrS9eXpIM0pLe3RtK5fbsI0="
+# Encryption key for this test run only: generated fresh, never stored anywhere.
+TEST_FERNET_KEY = Fernet.generate_key().decode()
 
 MakeClient = Callable[..., TestClient]
 
