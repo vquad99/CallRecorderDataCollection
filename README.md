@@ -47,6 +47,7 @@ Or the whole stack in containers: `make up` (UI on http://127.0.0.1:8080), `make
 ```bash
 make check                    # repo rules + backend (format, lint, types, tests) + frontend (format, lint, types, tests, build)
 make e2e                      # browser test (PW_CHANNEL=chrome uses an installed Chrome)
+make journeys                 # user journeys against a running backend (frontend/journeys/README.md)
 ```
 
 Backend database tests need `TEST_DATABASE_URL` pointing at a database whose name ends in `_test`

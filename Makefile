@@ -4,7 +4,7 @@ COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
 LOAD_ENV = set -a && . ./.env && set +a
 
 .PHONY: install deps-up deps-down up down migrate seed-dev key backend worker frontend \
-        check check-repo check-backend check-frontend e2e
+        check check-repo check-backend check-frontend e2e journeys
 
 install:
 	cd backend && $(UV) sync --frozen
@@ -61,3 +61,8 @@ check-frontend:
 
 e2e:
 	cd frontend && npx playwright test
+
+# User journeys against the real backend (Option D). Needs the backend running on :8000 with
+# EMAIL_FILE_DIR=$(E2E_OUTBOX) and `seed-dev` done; E2E_ADMIN_PASSWORD = DEMO_PASSWORD.
+journeys:
+	cd frontend && npx playwright test --config playwright.journeys.config.ts

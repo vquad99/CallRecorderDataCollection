@@ -1,0 +1,37 @@
+$ npx playwright test --config playwright.journeys.config.ts  (what `make journeys` runs; run 2026-11-09T18:09:29Z on aws-dev; Google Chrome 155 (PW_CHANNEL=chrome) with fake microphone; real backend on :8000 (no Redis: processing in-process), private PostgreSQL 16, storage = Wasabi bucket callrec57 under dev prefix dev-aws-dev/journeys/, emails written to files; second run on the same database)
+
+Running 4 tests using 1 worker
+
+  ✓  1 [chromium] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (14.8s)
+  ✓  2 [chromium] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (13.7s)
+  ✓  3 [chromium] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (9.3s)
+  ✓  4 [chromium] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (25.9s)
+
+  4 passed (1.1m)
+exit=0
+
+Server side over both runs (backend log and database):
+  audio chunks uploaded: 6
+  recordings marked interrupted: 2
+  recordings completed: 4
+  passwords set or reset: 6
+  consent records: 4
+  signed links: 6
+  server errors (5xx): 0; ERROR log lines: 0
+  recordings (state, interrupted, frames, channels):
+    READY, true, 220500, 2
+    READY, false, 368640, 2
+    READY, true, 220500, 2
+    READY, false, 368640, 2
+  files (kind, channels, rate, bytes):
+    BROWSER_ORIGINAL, 2, 44100, 1764056
+    FTF_DERIVED_PCM, 1, 16000, 160044
+    BROWSER_ORIGINAL, 2, 44100, 2949176
+    FTF_DERIVED_PCM, 1, 16000, 267538
+    BROWSER_ORIGINAL, 2, 44100, 1764056
+    FTF_DERIVED_PCM, 1, 16000, 160044
+    BROWSER_ORIGINAL, 2, 44100, 2949176
+    FTF_DERIVED_PCM, 1, 16000, 267538
+  emails written: 6
+
+clean-up: 8 test object(s) under dev-aws-dev/journeys/ deleted from Wasabi; 0 left

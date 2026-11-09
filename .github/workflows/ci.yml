@@ -85,6 +85,82 @@ jobs:
       - name: Dependency vulnerability scan (TA-SEC-09)
         run: cd frontend && npm audit --audit-level=high
 
+  journeys:
+    name: User journeys in a real browser (Option D)
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: ccp
+          POSTGRES_PASSWORD: ci-only-db-password
+          POSTGRES_DB: ccp
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ccp -d ccp"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://ccp:ci-only-db-password@127.0.0.1:5432/ccp
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:5181
+      PUBLIC_APP_URL: http://127.0.0.1:5181
+      EMAIL_BACKEND: file
+      EMAIL_FILE_DIR: /tmp/ccp-outbox
+      E2E_OUTBOX: /tmp/ccp-outbox
+      MEDIA_WORK_DIR: /tmp/ccp-media
+      STORAGE_ENDPOINT_URL: http://127.0.0.1:8333
+      STORAGE_BUCKET: ccp-journeys
+      STORAGE_CREATE_BUCKET: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.1"
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Start S3-compatible file storage (SeaweedFS)
+        run: |
+          docker run -d --name storage -p 127.0.0.1:8333:8333 -p 127.0.0.1:9333:9333 \
+            chrislusf/seaweedfs:4.51 server -dir=/data -s3 -s3.port=8333
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9333/cluster/status >/dev/null && break; sleep 2; done
+      - name: Install (frozen lockfiles) and Playwright's Chromium
+        run: |
+          cd backend && uv sync --frozen && cd ..
+          cd frontend && npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Keys and passwords for this run only
+        run: |
+          SECRET="$(openssl rand -hex 32)"; DEMO="ci-$(openssl rand -hex 12)"
+          FERNET="$(cd backend && uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          for v in "$SECRET" "$DEMO" "$FERNET"; do echo "::add-mask::$v"; done
+          {
+            echo "SECRET_KEY=$SECRET"
+            echo "DATA_ENCRYPTION_KEY=$FERNET"
+            echo "DEMO_PASSWORD=$DEMO"
+            echo "E2E_ADMIN_PASSWORD=$DEMO"
+            echo "STORAGE_ACCESS_KEY_ID=ci-$(openssl rand -hex 8)"
+            echo "STORAGE_SECRET_ACCESS_KEY=ci-$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Migrate, seed one account per role, start the backend
+        run: |
+          cd backend
+          uv run alembic upgrade head
+          uv run python -m app.cli seed-dev
+          nohup uv run uvicorn app.main:create_app --factory --port 8000 > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/health/ready >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8000/health/ready
+      - name: User journeys, Chromium and Microsoft Edge
+        env:
+          PW_EDGE: "1"
+        run: cd frontend && npx playwright test --config playwright.journeys.config.ts
+      - name: Backend log on failure
+        if: failure()
+        run: tail -n 300 /tmp/backend.log
+
   compose:
     name: Containers start, migrate, persist (TM-FND-02)
     runs-on: ubuntu-24.04

@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "journeys": "playwright test --config playwright.journeys.config.ts"
   },
   "dependencies": {
     "react": "19.3.1",

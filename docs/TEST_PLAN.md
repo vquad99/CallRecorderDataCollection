@@ -136,6 +136,7 @@ output saved to evidence.
 | TA-FND-17 | Automated | 4 (Option C) | Page inventory: every route has an entry; every page shows its content with no axe violations, a polite loading message, and for a server error (with its reference), not found, no permission, service not configured and a lost connection an error that says what happened and recovers with Try again; guarded pages show No access without their permission; signed-out visitors go to sign-in with the address kept. | FND-015, FND-018, FND-019, AUTH-016, ROLE-011 |
 | TA-FND-18 | Automated | 4 (Option C) | Navigation: each of the six roles sees exactly its menu, each entry opens its page and is marked current; account and sign-out work; no link on any page leads to a missing page. | FND-015, FND-020, ROLE-011 |
 | TA-FND-19 | Automated | 4 (Option C) | Form inventory: every form in the source has an entry; each sends what was entered in exactly one request, sends nothing more on a second click while waiting, and shows a validation error naming the field, a conflict, a server error with its reference and a lost connection without losing what was typed. | FND-016, FND-018, FND-019, SEC-006 |
+| TA-FND-20 | Automated | 4 (Option D) | User journeys in Chromium and Microsoft Edge against the real backend, database and storage: project set-up, email invitation and password, member and participants, task, consent, face-to-face recording and playback, intact downloads, audit trail; interrupted recording kept and finished; role boundaries by menu and typed address, sign-out and back; password reset by email ending other sessions. | USER-001, USER-002, AUTH-004, AUTH-010, ROLE-004..007, TASK-001..003, PART-006, FTF-001..015, STOR-005, SEC-001 |
 | TM-FND-01 | Manual | 1 | Review: backend and frontend folder layout per runbook D1/D2. | FND-001, FND-013 |
 | TM-FND-02 | Manual | 1 | One command starts dependencies; health checks green; restart keeps data; .env.example has names and safe values only. | FND-024, FND-025 |
 
@@ -278,7 +279,7 @@ output saved to evidence.
 | TA-FTF-10 | Automated | 4 | The browser decodes the 16 kHz 16-bit mono delivery file and plays it to the end of its stated length; runs in Chromium and Microsoft Edge in CI. | FTF-005, FTF-015 |
 | TM-FTF-01 | Manual | 4 | Chrome and Edge: mic test, meter, test playback, timer; 60-second sample; original and derived checked with ffprobe. | FTF-004, FTF-005, FTF-008, FTF-015, AUDIO-014, AUDIO-016 |
 | TM-FTF-02 | Manual | 4 | Deny permission; clear error shown. | FTF-002 |
-| TM-FTF-03 | Manual | 4 | Refresh, close tab, cut network mid-recording; recovery message accurate; saved audio intact. | FTF-009, FTF-010 |
+| TM-FTF-03 | Manual | 4 | (Closing the tab is automated in TA-FND-20.) Refresh, close tab, cut network mid-recording; recovery message accurate; saved audio intact. | FTF-009, FTF-010 |
 
 ### AUDIO - Audio rules, conversion and validation
 
