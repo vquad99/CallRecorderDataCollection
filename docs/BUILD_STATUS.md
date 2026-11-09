@@ -604,4 +604,6 @@ test in TEST_PLAN.md. It does not mean anything is built.
   Wasabi (docs/evidence/option_d/journeys.txt). No product defects found by the journeys.
 - Not covered by the screens yet: playing or downloading a recording as an administrator (the journey
   uses the API for downloads; exports arrive in Phase 9).
+- CI run 42671870913: the secret scan flagged the fixed password the journeys gave their throwaway
+  test accounts; the journeys now generate a random password per run (commit eedf3bd).
 - Next single task: push, read CI, then report Option D.
