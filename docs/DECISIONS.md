@@ -31,6 +31,14 @@ The owner approved Phase 0 on 2026-11-09; the decisions proposed in it are Accep
 | D-024 | 2026-11-09 | Accepted | Baseline migration 0001 creates `system_settings`; its `updated_by` foreign key to `users` is added by the Phase 2 migration. | Phase 1 needs one real migration to prove the migration path; the users table belongs to Phase 2. |
 | D-025 | 2026-11-09 | Accepted | FND-027 (development-only demo-account seed) moves to Phase 2. | Demo accounts need the users table; a seed command with nothing to seed would be a stub (GEN-002). |
 | D-026 | 2026-11-09 | Accepted | Container start-up, health checks and restart persistence (TM-FND-02) are tested by the CI `compose` job. | The build machine has no Docker (B-08). |
+| D-027 | 2026-11-09 | Accepted | Login throttling counts failures in PostgreSQL (`login_attempts`): 5 per account and 20 per IP in 15 minutes by default, all configurable. | Works without Redis in development and tests; volume is small (50 staff). SECURITY.md first said Redis. |
+| D-028 | 2026-11-09 | Accepted | A user can hold several roles (`user_roles`); `project_memberships` links a user to a project without its own role. | Runbook E3 treats "assign role" and "assign project membership" as separate actions. |
+| D-029 | 2026-11-09 | Accepted | Code permission list made to follow the approved matrix exactly: Super Admin does not hold `calls.start` or `recordings.create`; Client Viewer holds `participants.view`. A test reads the matrix in ARCHITECTURE.md and fails on any difference. | The approved matrix is the source. Phase 3 must return participant IDs only (no names or phone numbers) to Client Viewers. |
+| D-030 | 2026-11-09 | Accepted | Demo accounts use `@example.org` (reserved for documentation, RFC 2606). | The email checker rejects `.test` addresses, so seeded `.test` accounts could not be edited in the admin screen. |
+| D-031 | 2026-11-09 | Accepted | The 100-character line limit is not applied to test files. | Test files hold long API paths and request bodies; production code keeps the limit. |
+| D-032 | 2026-11-09 | Accepted | `GET /api/v1/projects/{id}/member-candidates` (needs `projects.members`) lists active non-members for the team picker. | A Project Admin must add people without the Super-Admin-only user list. |
+| D-033 | 2026-11-09 | Accepted | A request about a project the caller is not a member of answers 404, before any finer permission check. | Does not reveal which projects exist. |
+| D-034 | 2026-11-09 | Accepted | Email: `file` backend (writes .eml files) for development and tests; production refuses to start unless `EMAIL_BACKEND=smtp` and `SMTP_HOST` are set. | Invitations and password resets must really be sent in production; see B-13. |
 | D-018 | 2026-11-09 | Accepted | AI transcription uses Deepgram through the ASR adapter and is optional: on/off per project, default off; off = human transcription from an empty transcript. Replaces the spec's initial candidates (Whisper Large-v3, AI4Bharat). | Owner: "transcription we can use deepgram and make it optional". Deepgram's models, language coverage, pricing and data handling are NOT VERIFIED until checked in Phase 7 (docs/integrations/deepgram/). |
 | D-017 | 2026-11-09 | Accepted (Phase 0 approval) | Raw provider payloads and raw ASR responses stored in private object storage, referenced from the database; fields the workflow reads get typed columns. | Keeps the database queryable; runbook I4.2 and J2 require keeping raw data. |
 
@@ -49,6 +57,7 @@ The owner approved Phase 0 on 2026-11-09; the decisions proposed in it are Accep
 | B-09 | Phase 4 device tests, Phase 10 | Domain name + TLS (microphone needs HTTPS outside localhost). | Owner |
 | B-10 | TEL-015, PART-006 | Call-recording consent law and provider terms in India; consent script wording. NOT VERIFIED. | Owner / legal |
 | B-11 | - | Resolved 2026-11-09: pushes use a deploy key with write access on github.com/vquad99/CallRecorderDataCollection; CI = GitHub Actions. | - |
+| B-13 | Production email | SMTP provider, sender address and credentials for invitations and password resets (D-034). | Owner |
 | B-12 | Traceability to source text | The spec v1.0 was pasted in chat and is not saved as a file in the repository (the runbook is, as RUNBOOK_SOURCE.md). | Owner: the spec file, if it should be kept verbatim |
 
 ## Provider documentation log (GEN-005)

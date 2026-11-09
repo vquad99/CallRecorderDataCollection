@@ -49,6 +49,10 @@ services:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://ccp:${POSTGRES_PASSWORD}@db:5432/ccp
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env (make key)}
+      PUBLIC_APP_URL: http://127.0.0.1:8080
+      EMAIL_BACKEND: file
+      EMAIL_FILE_DIR: /tmp/outbox
       REDIS_URL: redis://redis:6379/0
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

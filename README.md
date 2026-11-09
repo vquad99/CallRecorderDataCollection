@@ -27,7 +27,11 @@ cp .env.example .env          # then replace every change-me value
 make install                  # backend (uv, frozen lockfile) + frontend (npm ci)
 make deps-up                  # PostgreSQL, Redis, local S3 storage in Docker
 make migrate                  # apply database migrations
+make seed-dev                 # optional: one demo account per role (password = DEMO_PASSWORD)
 ```
+
+`make key` prints a value for `DATA_ENCRYPTION_KEY`. Development email (invitations, password
+resets) is written as files to `EMAIL_FILE_DIR` instead of being sent.
 
 ## Run
 

@@ -1,0 +1,19 @@
+Phase 2 manual integration walk-through - 2026-11-09T14:31:39Z
+Real backend (uvicorn, private PostgreSQL 16, migrations 0001-0002, seed-dev) + Vite dev server; installed Google Chrome via playwright-core.
+
+wrong password message: Invalid email or password (reference 198729b9211e48f295a6476dfb7b2116)
+super admin nav: Projects
+Users
+Settings
+System status
+created user through the UI; invitation reported as sent
+invitation email found (1 email file(s) in outbox)
+invited user signed in; nav: Projects
+System status
+moderator nav: Projects
+System status
+moderator sees the DEMO project (member)
+moderator calling /api/v1/users directly from the browser: HTTP 403
+after sign-out /api/v1/auth/me: HTTP 401
+page errors: 0
+exit=0

@@ -190,3 +190,19 @@ def test_members_add_remove_and_disabled_users(admin: Api, db: Any) -> None:
     assert [m["email"] for m in members] == ["worker@example.org"]
     assert admin.delete(f"/api/v1/projects/{project.id}/members/{worker.id}").status_code == 204
     assert admin.get(f"/api/v1/projects/{project.id}/members").json() == []
+
+
+def test_member_candidates_lists_active_non_members_only(admin: Api, db: Any, new_api: Any) -> None:
+    project = make_project(db, "PICK")
+    member = make_user(db, "member@example.org", ["MODERATOR"], projects=[project])
+    make_user(db, "free@example.org", ["TRANSCRIBER"])
+    make_user(db, "off@example.org", ["TRANSCRIBER"], status="DISABLED")
+    emails = [
+        c["email"] for c in admin.get(f"/api/v1/projects/{project.id}/member-candidates").json()
+    ]
+    assert "free@example.org" in emails
+    assert "member@example.org" not in emails
+    assert "off@example.org" not in emails
+    viewer: Api = new_api()
+    viewer.login(member.email)
+    assert viewer.get(f"/api/v1/projects/{project.id}/member-candidates").status_code == 403

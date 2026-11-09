@@ -303,6 +303,31 @@ def list_members(
     ]
 
 
+class CandidateOut(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    display_name: str
+    roles: list[str]
+
+
+@router.get("/{project_id}/member-candidates", response_model=list[CandidateOut])
+def member_candidates(
+    project_id: uuid.UUID,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+) -> list[CandidateOut]:
+    return [
+        CandidateOut(
+            user_id=u.id,
+            email=u.email,
+            display_name=u.display_name,
+            roles=sorted(r.code for r in u.roles),
+        )
+        for u in service.member_candidates(db, principal, project_id, search)
+    ]
+
+
 class MemberBody(BaseModel):
     user_id: uuid.UUID
 

@@ -21,7 +21,8 @@ from app.modules.auth.security import hash_password
 from app.modules.projects.models import Project, ProjectAudioRule, ProjectMembership
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
 
-DEMO_DOMAIN = "example.test"
+# Reserved for documentation (RFC 2606) and accepted by the email checker (.test is not).
+DEMO_DOMAIN = "example.org"
 
 
 class SeedRefused(RuntimeError):

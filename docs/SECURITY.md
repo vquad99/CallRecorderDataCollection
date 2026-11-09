@@ -5,11 +5,12 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 
 ## 1. Authentication
 
-- Server-side sessions; session ID in an HttpOnly, Secure, SameSite=Strict cookie; CSRF token on every
-  state-changing request (SEC-007). No long-lived secrets in localStorage (AUTH-013).
+- Server-side sessions; session token in an HttpOnly, Secure (outside development), SameSite=Strict cookie;
+  only its SHA-256 is stored. CSRF double-submit: a readable `csrf_token` cookie must equal the
+  `X-CSRF-Token` header on every POST/PUT/PATCH/DELETE under /api/v1 (SEC-007). No long-lived secrets in localStorage (AUTH-013).
 - Passwords: Argon2id with per-password salt; never logged or returned (AUTH-006, AUTH-015).
 - Idle and absolute session expiry, configurable; revocation per session and per user (AUTH-005, AUTH-010).
-- Failed-login throttling per account and per IP in Redis (AUTH-009).
+- Failed-login throttling per account and per IP, counted in PostgreSQL `login_attempts` (AUTH-009, D-027).
 - Password reset: random token, stored hashed, single use, short expiry; same response whether the email
   exists or not (AUTH-004).
 - Optional TOTP MFA after the base flow is proven (AUTH-008).

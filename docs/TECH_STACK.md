@@ -18,6 +18,9 @@ the lockfile or image tag it names.
 | Migrations | alembic | 1.20.1 | uv.lock |
 | PostgreSQL driver | psycopg | 3.3.6 | uv.lock |
 | Redis client | redis | 8.1.0 | uv.lock |
+| Password hashing | argon2-cffi | 25.1.0 | uv.lock |
+| Field encryption | cryptography | 50.0.2 | uv.lock |
+| Email validation | email-validator | 2.3.0 | uv.lock |
 | Backend tests | pytest | 9.1.1 | uv.lock |
 | Test HTTP client | httpx2 | 2.16.0 | uv.lock |
 | Python lint/format | ruff | 0.17.2 | uv.lock |
@@ -54,7 +57,6 @@ gitleaks/gitleaks-action@v3.
 | Queue workers | Celery (with Redis) | first background job (Phase 4) |
 | Audio | FFmpeg + numpy/soundfile | 4 |
 | Object storage client | S3 client library against Wasabi / SeaweedFS (D-019, D-020) | 4 |
-| Password hashing | Argon2id library | 2 |
 | ASR | Deepgram API through the ASR adapter, optional per project (D-018) | 7 |
 | Error tracking, metrics | to choose | 10 |
 

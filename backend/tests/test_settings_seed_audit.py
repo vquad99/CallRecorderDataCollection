@@ -85,7 +85,7 @@ def test_seed_creates_one_account_per_role_and_is_idempotent(
     assert seed_dev(settings, "demo-password-123") == []
     assert len(db.scalars(select(User)).all()) == 6
     api: Api = new_api()
-    assert api.login("demo.moderator@example.test", "demo-password-123").status_code == 200
+    assert api.login("demo.moderator@example.org", "demo-password-123").status_code == 200
     assert [p["code"] for p in api.get("/api/v1/projects").json()["items"]] == ["DEMO"]
 
 

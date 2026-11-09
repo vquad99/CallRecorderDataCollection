@@ -3,7 +3,7 @@ UV ?= uv
 COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
 LOAD_ENV = set -a && . ./.env && set +a
 
-.PHONY: install deps-up deps-down up down migrate backend frontend \
+.PHONY: install deps-up deps-down up down migrate seed-dev key backend frontend \
         check check-repo check-backend check-frontend e2e
 
 install:
@@ -24,6 +24,12 @@ down:
 
 migrate:
 	$(LOAD_ENV) && cd backend && $(UV) run alembic upgrade head
+
+seed-dev:           ## demo account per role + DEMO project (development only, uses DEMO_PASSWORD)
+	$(LOAD_ENV) && cd backend && $(UV) run python -m app.cli seed-dev
+
+key:                ## print a new DATA_ENCRYPTION_KEY
+	@python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
 backend:
 	$(LOAD_ENV) && cd backend && $(UV) run uvicorn app.main:create_app --factory --reload --port 8000

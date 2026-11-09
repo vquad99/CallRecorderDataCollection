@@ -88,6 +88,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i "s/change-me-local-db-password/ci-$(openssl rand -hex 12)/g; s/change-me-change-me-change-me-change-me-0000/ci-$(openssl rand -hex 24)/" .env
+          sed -i "s|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=$(make -s key)|" .env
       - name: Start every service and wait for health checks
         run: docker compose --env-file .env -f infra/docker-compose.yml up -d --build --wait --wait-timeout 300
       - name: Run migrations as a separate step

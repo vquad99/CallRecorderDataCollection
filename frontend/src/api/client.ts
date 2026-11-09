@@ -32,6 +32,7 @@ export interface RequestOptions {
   acceptStatuses?: readonly number[];
 }
 
+export const UNAUTHENTICATED_EVENT = "ccp:unauthenticated";
 const CSRF_COOKIE = "csrf_token";
 const CSRF_HEADER = "X-CSRF-Token";
 
@@ -103,5 +104,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   const body = await parseJson(response);
   if (response.ok || options.acceptStatuses?.includes(response.status)) return body as T;
-  throw errorFromBody(response, body);
+  const error = errorFromBody(response, body);
+  if (error.status === 401 && !path.startsWith("/api/v1/auth/")) {
+    // Lets the sign-in state react when a session ends mid-use (AUTH-016).
+    window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT, { detail: { code: error.code } }));
+  }
+  throw error;
+}
+
+/** Fetch a file (e.g. a CSV export) with the session cookie and hand it to the browser. */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}${path}`, { credentials: "include" });
+  } catch {
+    throw new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Cannot reach the server" });
+  }
+  if (!response.ok) throw errorFromBody(response, await parseJson(response));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }

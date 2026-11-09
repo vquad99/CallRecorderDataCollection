@@ -1,0 +1,535 @@
+// Project detail tabs. Forms appear only for roles that may change the project; the server
+// enforces the same rules (PROJ-002..011, USER-003).
+import { useState, type FormEvent } from "react";
+
+import type { ApiError } from "../../api/client";
+import { ROLE_LABELS } from "../../api/admin";
+import * as api from "../../api/projects";
+import { useAuth } from "../../auth/AuthContext";
+import { Button } from "../../components/form/Button";
+import { Select } from "../../components/form/Select";
+import { TextField } from "../../components/form/TextField";
+import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
+import { toApiError, useResource } from "../../hooks/useResource";
+import { useProject } from "./ProjectDetailPage";
+import { ProjectForm } from "./ProjectForm";
+import { STATUS_LABELS } from "./ProjectsPage";
+
+function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const text = await action();
+      if (typeof text === "string") setMessage(text);
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, message, run };
+}
+
+export function OverviewTab() {
+  const { project, replace } = useProject();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
+  const { busy, error, message, run } = useAction();
+  const next = api.NEXT_STATUSES[project.status];
+  const [target, setTarget] = useState<api.ProjectStatus>(next[0] ?? project.status);
+  const [reason, setReason] = useState("");
+
+  return (
+    <div className="stack">
+      <p>
+        {project.accepts_new_work
+          ? "This project accepts new work."
+          : "This project does not accept new work until it is active."}
+        {project.status_reason ? ` Last status reason: ${project.status_reason}` : ""}
+      </p>
+      <ProjectForm
+        key={project.status}
+        initial={{
+          name: project.name,
+          description: project.description,
+          allows_telephony: project.allows_telephony,
+          allows_face_to_face: project.allows_face_to_face,
+          target_telephony_hours_per_day: project.target_telephony_hours_per_day,
+          target_face_to_face_hours_per_day: project.target_face_to_face_hours_per_day,
+          phone_visibility_policy: project.phone_visibility_policy,
+          consent_policy_version: project.consent_policy_version,
+        }}
+        submitLabel="Save project"
+        busy={busy}
+        disabled={!canManage || project.status === "ARCHIVED"}
+        onSubmit={(fields) =>
+          void run(async () => {
+            replace(await api.updateProject(project.id, fields));
+            return "Saved.";
+          })
+        }
+      />
+      {canManage ? (
+        <form
+          className="card"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            void run(async () => {
+              replace(await api.changeProjectStatus(project.id, target, reason));
+              setReason("");
+              return "Status changed.";
+            });
+          }}
+        >
+          <h2>Status</h2>
+          <Select
+            label="Change status to"
+            value={target}
+            onChange={(e) => setTarget(e.target.value as api.ProjectStatus)}
+            options={next.map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+          />
+          <TextField
+            label="Reason"
+            hint="Required when archiving or reopening."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <Button type="submit" busy={busy}>
+            Change status
+          </Button>
+        </form>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </div>
+  );
+}
+
+export function TeamTab() {
+  const { project } = useProject();
+  const { can } = useAuth();
+  const canEdit = can("projects.members");
+  const members = useResource(() => api.listMembers(project.id), [project.id]);
+  const [search, setSearch] = useState("");
+  const [candidates, setCandidates] = useState<api.Candidate[] | null>(null);
+  const { busy, error, message, run } = useAction();
+
+  return (
+    <div className="stack">
+      {members.state.status === "loading" ? <LoadingState /> : null}
+      {members.state.status === "failed" ? (
+        <ErrorState message={members.state.error.message} onRetry={members.reload} />
+      ) : null}
+      {members.state.status === "loaded" && members.state.data.length === 0 ? (
+        <EmptyState title="No members yet" />
+      ) : null}
+      {members.state.status === "loaded" && members.state.data.length > 0 ? (
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Roles</th>
+              {canEdit ? <th scope="col">Action</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {members.state.data.map((m) => (
+              <tr key={m.user_id}>
+                <td>
+                  {m.display_name} <span className="muted">{m.email}</span>
+                </td>
+                <td>{m.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
+                {canEdit ? (
+                  <td>
+                    <Button
+                      variant="secondary"
+                      busy={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await api.removeMember(project.id, m.user_id);
+                          members.reload();
+                          return `${m.email} removed.`;
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {canEdit ? (
+        <form
+          className="card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => setCandidates(await api.listCandidates(project.id, search)));
+          }}
+        >
+          <h2>Add people</h2>
+          <TextField
+            label="Find by name or email"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Button type="submit" variant="secondary" busy={busy}>
+            Search
+          </Button>
+          {candidates?.length === 0 ? (
+            <p>No matching active users who are not already members.</p>
+          ) : null}
+          {candidates && candidates.length > 0 ? (
+            <ul className="list">
+              {candidates.map((c) => (
+                <li key={c.user_id}>
+                  {c.display_name} ({c.email}) -{" "}
+                  {c.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}{" "}
+                  <Button
+                    busy={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await api.addMember(project.id, c.user_id);
+                        setCandidates(candidates.filter((x) => x.user_id !== c.user_id));
+                        members.reload();
+                        return `${c.email} added.`;
+                      })
+                    }
+                  >
+                    Add
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </form>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </div>
+  );
+}
+
+export function AudioRulesTab() {
+  const { project, replace } = useProject();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
+  const [rules, setRules] = useState<api.AudioRule[]>(project.audio_rules);
+  const { busy, error, message, run } = useAction();
+  const update = (i: number, patch: Partial<api.AudioRule>) =>
+    setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  return (
+    <form
+      className="stack"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void run(async () => {
+          const saved = await api.setAudioRules(project.id, rules);
+          replace(saved);
+          setRules(saved.audio_rules);
+          return "Audio rules saved.";
+        });
+      }}
+    >
+      {rules.map((r, i) => (
+        <fieldset key={r.mode} className="card" disabled={!canManage}>
+          <legend>{r.mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</legend>
+          <TextField
+            label="Sample rate (Hz)"
+            type="number"
+            value={String(r.sample_rate)}
+            onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
+          />
+          <Select
+            label="Bit depth"
+            value={String(r.bit_depth)}
+            onChange={(e) =>
+              update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
+            }
+            options={[
+              { value: "16", label: "16-bit" },
+              { value: "24", label: "24-bit" },
+              { value: "32", label: "32-bit" },
+            ]}
+          />
+          <Select
+            label="Channels"
+            value={String(r.channels)}
+            onChange={(e) =>
+              update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
+            }
+            options={[
+              { value: "1", label: "Mono (1)" },
+              { value: "2", label: "Stereo (2)" },
+            ]}
+          />
+          <TextField
+            label="Maximum silence (%)"
+            type="number"
+            min={0}
+            max={100}
+            value={r.max_silence_pct}
+            onChange={(e) => update(i, { max_silence_pct: e.target.value })}
+          />
+          <TextField
+            label="Maximum clipping (%)"
+            hint="Leave empty for no limit."
+            type="number"
+            min={0}
+            max={100}
+            value={r.max_clipping_pct ?? ""}
+            onChange={(e) =>
+              update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
+            }
+          />
+          <TextField
+            label="Minimum duration (seconds)"
+            type="number"
+            min={0}
+            value={String(r.min_duration_seconds)}
+            onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
+          />
+          <TextField
+            label="Maximum duration (seconds)"
+            hint="Leave empty for no limit."
+            type="number"
+            min={1}
+            value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
+            onChange={(e) =>
+              update(i, {
+                max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+          />
+        </fieldset>
+      ))}
+      {canManage ? (
+        <Button type="submit" busy={busy}>
+          Save audio rules
+        </Button>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </form>
+  );
+}
+
+export function LanguagesTab() {
+  const { project, replace } = useProject();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
+  const [code, setCode] = useState("");
+  const [dialect, setDialect] = useState("");
+  const { busy, error, message, run } = useAction();
+  const save = (languages: api.Language[], text: string) =>
+    run(async () => {
+      replace(await api.setLanguages(project.id, languages));
+      return text;
+    });
+
+  return (
+    <div className="stack">
+      {project.languages.length === 0 ? <EmptyState title="No languages yet" /> : null}
+      <ul className="list">
+        {project.languages.map((l) => (
+          <li key={`${l.language_code}/${l.dialect}`}>
+            {l.language_code}
+            {l.dialect ? ` (${l.dialect})` : ""}{" "}
+            {canManage ? (
+              <Button
+                variant="secondary"
+                busy={busy}
+                onClick={() =>
+                  void save(
+                    project.languages.filter((x) => x !== l),
+                    "Language removed.",
+                  )
+                }
+              >
+                Remove
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {canManage ? (
+        <form
+          className="card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save(
+              [...project.languages, { language_code: code.trim(), dialect: dialect.trim() }],
+              "Language added.",
+            ).then(() => {
+              setCode("");
+              setDialect("");
+            });
+          }}
+        >
+          <TextField
+            label="Language code"
+            hint="ISO code, for example hi, ta, en-IN."
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+          <TextField
+            label="Dialect"
+            hint="Optional."
+            value={dialect}
+            onChange={(e) => setDialect(e.target.value)}
+          />
+          <Button type="submit" busy={busy} disabled={!code.trim()}>
+            Add language
+          </Button>
+        </form>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </div>
+  );
+}
+
+const KIND_LABELS: Record<string, string> = {
+  PROVIDER_ORIGINAL_TRACK: "Provider original tracks",
+  PROVIDER_ORIGINAL_MIXED: "Provider mixed recordings",
+  TELEPHONY_FINAL_STEREO: "Final telephony WAV",
+  CONSENT_RECORDING: "Consent recordings",
+  BROWSER_ORIGINAL: "Browser original captures",
+  FTF_DERIVED_PCM: "Face-to-face 16 kHz WAV",
+  TRANSCRIPT_FILE: "Transcript files",
+  EXPORT_PACKAGE: "Export packages",
+};
+
+export function RetentionTab() {
+  const { project, replace } = useProject();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
+  const initial = Object.fromEntries(
+    project.retention_rules.map((r) => [r.asset_kind, String(r.retain_days)]),
+  );
+  const [days, setDays] = useState<Record<string, string>>(initial);
+  const { busy, error, message, run } = useAction();
+
+  return (
+    <form
+      className="card"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void run(async () => {
+          const rules = Object.entries(days)
+            .filter(([, v]) => v.trim() !== "")
+            .map(([asset_kind, v]) => ({ asset_kind, retain_days: Number(v) }));
+          replace(await api.setRetention(project.id, rules));
+          return "Retention saved.";
+        });
+      }}
+    >
+      <fieldset disabled={!canManage} className="plain-fieldset">
+        <p>Days to keep each kind of file. Leave empty when no rule is set yet.</p>
+        {api.ASSET_KINDS.map((kind) => (
+          <TextField
+            key={kind}
+            label={KIND_LABELS[kind] ?? kind}
+            type="number"
+            min={1}
+            value={days[kind] ?? ""}
+            onChange={(e) => setDays({ ...days, [kind]: e.target.value })}
+          />
+        ))}
+        {canManage ? (
+          <Button type="submit" busy={busy}>
+            Save retention
+          </Button>
+        ) : null}
+      </fieldset>
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </form>
+  );
+}
+
+export function GuidelinesTab() {
+  const { project } = useProject();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
+  const guidelines = useResource(() => api.listGuidelines(project.id), [project.id]);
+  const [text, setText] = useState("");
+  const [verbatim, setVerbatim] = useState(true);
+  const { busy, error, message, run } = useAction();
+
+  return (
+    <div className="stack">
+      {guidelines.state.status === "loading" ? <LoadingState /> : null}
+      {guidelines.state.status === "failed" ? (
+        <ErrorState message={guidelines.state.error.message} onRetry={guidelines.reload} />
+      ) : null}
+      {guidelines.state.status === "loaded" && guidelines.state.data.length === 0 ? (
+        <EmptyState title="No guidelines yet" />
+      ) : null}
+      {guidelines.state.status === "loaded"
+        ? guidelines.state.data.map((g) => (
+            <article key={g.version} className="card">
+              <h2>
+                Version {g.version} {g.verbatim ? "(verbatim)" : ""}
+              </h2>
+              <p className="muted">{new Date(g.created_at).toLocaleString()}</p>
+              <p className="pre">{g.guideline_text}</p>
+            </article>
+          ))
+        : null}
+      {canManage ? (
+        <form
+          className="card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              const g = await api.addGuideline(project.id, text, verbatim);
+              setText("");
+              guidelines.reload();
+              return `Version ${g.version} published.`;
+            });
+          }}
+        >
+          <h2>Publish a new version</h2>
+          <div className="field">
+            <label htmlFor="guideline-text" className="field__label">
+              Guideline text
+            </label>
+            <textarea
+              id="guideline-text"
+              className="field__input"
+              rows={6}
+              required
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </div>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={verbatim}
+              onChange={(e) => setVerbatim(e.target.checked)}
+            />
+            Verbatim transcription
+          </label>
+          <Button type="submit" busy={busy} disabled={!text.trim()}>
+            Publish version
+          </Button>
+        </form>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </div>
+  );
+}

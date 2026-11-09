@@ -182,6 +182,7 @@ def _endpoints(p1: str, p2: str, other_user: str, n: int) -> list[tuple[str, str
             "member",
         ),
         ("GET", f"/api/v1/projects/{p1}/members", None, Perm.PROJECTS_VIEW, "member"),
+        ("GET", f"/api/v1/projects/{p1}/member-candidates", None, Perm.PROJECTS_MEMBERS, "member"),
         (
             "POST",
             f"/api/v1/projects/{p1}/members",

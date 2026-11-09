@@ -510,3 +510,20 @@ def remove_member(
         before={"user_id": str(user_id)},
     )
     db.commit()
+
+
+def member_candidates(
+    db: Session, principal: Principal, project_id: uuid.UUID, search: str | None, limit: int = 20
+) -> list[User]:
+    """Active users who are not yet members, for the team picker (needs projects.members)."""
+    project = get_manageable(db, principal, project_id, Perm.PROJECTS_MEMBERS)
+    query = select(User).where(
+        User.status == "ACTIVE",
+        User.id.not_in(
+            select(ProjectMembership.user_id).where(ProjectMembership.project_id == project.id)
+        ),
+    )
+    if search:
+        like = f"%{search.strip().lower()}%"
+        query = query.where(or_(User.email.like(like), func.lower(User.display_name).like(like)))
+    return list(db.scalars(query.order_by(User.email).limit(limit)).all())

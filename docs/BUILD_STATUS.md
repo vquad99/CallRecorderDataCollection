@@ -11,10 +11,10 @@ test in TEST_PLAN.md. It does not mean anything is built.
 
 | Module | Prefix | Requirements | Requirements reviewed | Backend | Database | Frontend | Automated tests | Manual test | Status | Blocker |
 |---|---|---:|---|---|---|---|---|---|---|---|
-| Authentication | AUTH | 16 | Yes | No | No | No | No | No | NOT STARTED | - |
-| User management | USER | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Roles and permissions | ROLE | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Projects | PROJ | 13 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Authentication | AUTH | 16 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
+| User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
+| Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 awaiting owner approval |
+| Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
 | Participants | PART | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Task assignment | TASK | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
@@ -29,11 +29,11 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Dashboard | DASH | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Security and audit | SEC | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 awaiting owner approval; FND-027 moved to Phase 2 (D-025) |
+| Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 approved; FND-027 done in Phase 2 |
 | Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
 | Deployment and operations | OPS | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Load and performance | LOAD | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Capacity and configuration | CAP | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Capacity and configuration | CAP | 5 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | Load-test parts in Phase 10 |
 | Architecture and stack | ARCH | 5 | Yes | No | No | No | Yes | No | IN PROGRESS | Region decision open (B-04) |
 | Product scope | PROD | 4 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Contract and work rules | GEN | 14 | Yes | No | No | No | Yes | No | IN PROGRESS | Ongoing every phase |
@@ -45,8 +45,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Phase | Status | Gate | Gate result |
 |---|---|---|---|
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
-| 1 Foundation | IN PROGRESS | 1 | All Gate 1 conditions met (docs/evidence/phase1/ci_run.txt); waiting for owner approval |
-| 2 Auth, users, roles, projects | NOT STARTED | 2 | - |
+| 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
+| 2 Auth, users, roles, projects | IN PROGRESS | 2 | All Gate 2 conditions met locally (docs/evidence/phase2/); CI run and owner approval pending |
 | 3 Participants, tasks, workflow | NOT STARTED | 3 | - |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
@@ -100,9 +100,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PROD-002 | Installable as a PWA from the browser's install option. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
 | PROD-003 | No native Android or iOS app; participants install nothing; no physical GSM gateway. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PROD-02 | - | NOT STARTED | - |
 | PROD-004 | Two recording modes - telephony and face-to-face - with assets in separate folders/prefixes. | 1, 10 | n/a | n/a | [ ] | [ ] TA-STOR-02 | [ ] TM-PROD-02 | - | NOT STARTED | - |
-| CAP-001 | Capacity settings (50 staff, 50 concurrent conferences, 2 participants, 250 h/day, 125 h/day each mode, cloud, web + PWA) stored as editable configuration, not source constants. | 2, 10 | [ ] | [ ] | [ ] | [ ] TA-CAP-01 | n/a | - | NOT STARTED | - |
-| CAP-002 | An administrator changes targets without a code deployment. | 2, 10 | [ ] | [ ] | [ ] | [ ] TA-CAP-02 | [ ] TM-CAP-01 | - | NOT STARTED | - |
-| CAP-003 | Languages configurable per project. | 2, 10 | [ ] | [ ] | [ ] | [ ] TA-PROJ-02 | n/a | - | NOT STARTED | - |
+| CAP-001 | Capacity settings (50 staff, 50 concurrent conferences, 2 participants, 250 h/day, 125 h/day each mode, cloud, web + PWA) stored as editable configuration, not source constants. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| CAP-002 | An administrator changes targets without a code deployment. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-02 | [ ] TM-CAP-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| CAP-003 | Languages configurable per project. | 2, 10 | [x] | [x] | [x] | [x] TA-PROJ-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | CAP-004 | Capacity is proven only by a load test plus provider-side concurrency confirmation; never from a local or mock test. | 2, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-LOAD-01, TM-LOAD-03, TM-TEL-03 | - | NOT STARTED | - |
 | CAP-005 | Storage sizing: 115.2 MB/h mono, 230.4 MB/h stereo, 43.2 GB/day at target, 1.296 TB/30 days, about 15.77 TB/year, excluding originals, backups, replicas, metadata and derived copies; retention confirmed before final sizing. | 2, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-CAP-02 | - | NOT STARTED | - |
 | ARCH-001 | Modular monolith first; no unnecessary microservices. | 0, 1 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-01 | - | NOT STARTED | - |
@@ -136,65 +136,65 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FND-024 | Docker Compose for app, database, Redis and local object storage, with health checks and persistent volumes; one documented command starts dependencies; restart preserves database data. | 1 | [ ] | n/a | [ ] | n/a | [x] TM-FND-02 | docs/evidence/phase1/ci_run.txt | VERIFIED | - |
 | FND-025 | .env.example with variable names and safe example values only; .gitignore; no secrets in Git. | 1 | [ ] | n/a | [ ] | [x] TA-SEC-02 | [x] TM-FND-02 | docs/evidence/phase1/ci_run.txt; docs/evidence/phase1/make_check.txt | VERIFIED | - |
 | FND-026 | Database migration command; migration runs from an empty database. | 1 | [x] | n/a | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-16 | n/a | - | NOT STARTED | Needs users table (Phase 2) |
+| FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [x] | n/a | [ ] | [x] TA-FND-16 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [x] TA-GEN-02 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [x] TM-ARCH-03 | docs/evidence/phase1/ci_run.txt | VERIFIED | - |
-| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-01 | n/a | - | NOT STARTED | - |
+| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | 1-9 | n/a | [x] | n/a | [ ] TA-DB-01 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Tables arrive phase by phase |
 | DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | 1-9 | n/a | [x] | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | DB-004 | Workflow state stored in the database, never only in frontend state. | 1-9 | n/a | [ ] | n/a | [ ] TA-TASK-02 | n/a | - | NOT STARTED | - |
 | DB-005 | Sensitive columns documented. | 1-9 | n/a | [ ] | n/a | n/a | [ ] TM-DB-01 | - | NOT STARTED | - |
 | DB-006 | No binary audio in PostgreSQL; only object-storage keys and metadata. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-04 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
-| ROLE-001 | Authorization enforced on the backend for every protected API; hidden controls are not security. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-002 | Super Admin: full access, system settings and integrations, all users and projects. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators, transcribers and QC staff; view project reports and recordings. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-004 | Moderator: assigned tasks only; participant details per project policy; start/control assigned calls; record face-to-face; record consent; submit sessions. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-005 | Transcriber: assigned transcription tasks only; play permitted audio; create, edit, submit transcripts. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-006 | QC Executive: assigned QC tasks only; review audio and transcripts; pass, fail or return with reason codes and comments. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-007 | Client Viewer: read-only, explicitly shared project results only; no internal notes or restricted participant data. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01, TA-ROLE-02 | n/a | - | NOT STARTED | - |
-| ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [ ] | [ ] | [ ] | n/a | [ ] TM-ROLE-01 | - | NOT STARTED | - |
-| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-03 | n/a | - | NOT STARTED | - |
-| ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-03, TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-04 | n/a | - | NOT STARTED | - |
-| ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
-| AUTH-001 | Login with correct credentials succeeds (POST /api/v1/auth/login). | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-01 | [ ] TM-AUTH-01 | - | NOT STARTED | - |
-| AUTH-002 | Wrong credentials fail. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-02 | [ ] TM-AUTH-01 | - | NOT STARTED | - |
-| AUTH-003 | Logout revokes the session on the server (POST /api/v1/auth/logout). | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-03 | n/a | - | NOT STARTED | - |
-| AUTH-004 | Password reset with expiring single-use tokens (POST /api/v1/auth/password/forgot, /password/reset). | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-04 | n/a | - | NOT STARTED | - |
-| AUTH-005 | Session expiry; an expired session requires login. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-05 | [ ] TM-AUTH-01 | - | NOT STARTED | - |
-| AUTH-006 | Passwords hashed with a modern adaptive algorithm. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-06 | n/a | - | NOT STARTED | - |
-| AUTH-007 | Account active/disabled state; disabled users cannot log in. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-07 | [ ] TM-AUTH-01 | - | NOT STARTED | - |
-| AUTH-008 | Optional multi-factor authentication, added only after the base flow is secure. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-08 | n/a | - | NOT STARTED | - |
-| AUTH-009 | Failed login throttling blocks repeated failures. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-09 | n/a | - | NOT STARTED | - |
-| AUTH-010 | Session and device management, including revocation. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-10 | n/a | - | NOT STARTED | - |
-| AUTH-011 | Role and project access enforced; a moderator cannot open admin APIs by changing a URL or calling the API outside the UI. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-11, TA-ROLE-01 | [ ] TM-AUTH-01 | - | NOT STARTED | - |
-| AUTH-012 | User model with normalized unique email/username. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-12 | n/a | - | NOT STARTED | - |
-| AUTH-013 | Secure HTTP-only SameSite cookies (or a documented secure token strategy); no long-lived secrets in browser local storage. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-15 | n/a | - | NOT STARTED | - |
-| AUTH-014 | Audit events for login failures, password changes and account disablement. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-13 | n/a | - | NOT STARTED | - |
-| AUTH-015 | GET /api/v1/auth/me returns the current user; no API ever returns a password or hash. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-14 | n/a | - | NOT STARTED | - |
-| AUTH-016 | Frontend: login, forgot password, reset password pages, session-expired message, protected route wrapper. | 2 | [ ] | [ ] | [ ] | [ ] TA-AUTH-16 | n/a | - | NOT STARTED | - |
-| USER-001 | Create, edit, deactivate and reactivate users. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-01 | n/a | - | NOT STARTED | - |
-| USER-002 | Assign roles. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-02 | n/a | - | NOT STARTED | - |
-| USER-003 | Assign project membership. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-03 | n/a | - | NOT STARTED | - |
-| USER-004 | User list with search, filter and pagination. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-04 | n/a | - | NOT STARTED | - |
-| USER-005 | CSV import with validation preview. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-05 | n/a | - | NOT STARTED | - |
-| USER-006 | CSV export with permission checks (authorized admins only). | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-06 | n/a | - | NOT STARTED | - |
-| USER-007 | Every role and membership change audited with who made it. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-07 | [ ] TM-USER-01 | - | NOT STARTED | - |
-| USER-008 | A deactivated user loses access immediately or at the next enforced session check. | 2 | [ ] | [ ] | [ ] | [ ] TA-USER-08 | [ ] TM-USER-01 | - | NOT STARTED | - |
-| USER-009 | One user per role created; each sees only permitted pages and data. | 2 | [ ] | [ ] | [ ] | n/a | [ ] TM-USER-01 | - | NOT STARTED | - |
-| PROJ-001 | Project create/edit; unique project code and name. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-01 | n/a | - | NOT STARTED | - |
-| PROJ-002 | Languages and dialects. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-02 | n/a | - | NOT STARTED | - |
-| PROJ-003 | Allowed recording modes. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03 | n/a | - | NOT STARTED | - |
-| PROJ-004 | Daily recording targets. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03 | n/a | - | NOT STARTED | - |
-| PROJ-005 | Audio specification fields. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03 | n/a | - | NOT STARTED | - |
-| PROJ-006 | Transcription guidelines with version. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03 | n/a | - | NOT STARTED | - |
-| PROJ-007 | QC rules per project. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03, TA-AQC-01 | n/a | - | NOT STARTED | - |
-| PROJ-008 | Retention policy. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-03 | n/a | - | NOT STARTED | - |
-| PROJ-009 | Lifecycle status: draft, active, paused, completed, archived. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-04 | n/a | - | NOT STARTED | - |
-| PROJ-010 | Archived projects receive no new work unless an authorized admin reopens them. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-05 | n/a | - | NOT STARTED | - |
-| PROJ-011 | Project settings appear in task creation and reports. | 2 | [ ] | [ ] | [ ] | n/a | [ ] TM-PROJ-01 | - | NOT STARTED | - |
-| PROJ-012 | Project isolation enforced. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-06 | n/a | - | NOT STARTED | - |
-| PROJ-013 | Frontend: project list, create/edit, detail tabs overview, team, audio rules, language, retention. | 2 | [ ] | [ ] | [ ] | [ ] TA-PROJ-07 | n/a | - | NOT STARTED | - |
+| ROLE-001 | Authorization enforced on the backend for every protected API; hidden controls are not security. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-002 | Super Admin: full access, system settings and integrations, all users and projects. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators, transcribers and QC staff; view project reports and recordings. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-004 | Moderator: assigned tasks only; participant details per project policy; start/control assigned calls; record face-to-face; record consent; submit sessions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-005 | Transcriber: assigned transcription tasks only; play permitted audio; create, edit, submit transcripts. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-006 | QC Executive: assigned QC tasks only; review audio and transcripts; pass, fail or return with reason codes and comments. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-007 | Client Viewer: read-only, explicitly shared project results only; no internal notes or restricted participant data. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01, TA-ROLE-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [x] | [x] | [x] | n/a | [x] TM-ROLE-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03, TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-001 | Login with correct credentials succeeds (POST /api/v1/auth/login). | 2 | [x] | [x] | [x] | [x] TA-AUTH-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-002 | Wrong credentials fail. | 2 | [x] | [x] | [x] | [x] TA-AUTH-02 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-003 | Logout revokes the session on the server (POST /api/v1/auth/logout). | 2 | [x] | [x] | [x] | [x] TA-AUTH-03 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-004 | Password reset with expiring single-use tokens (POST /api/v1/auth/password/forgot, /password/reset). | 2 | [x] | [x] | [x] | [x] TA-AUTH-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-005 | Session expiry; an expired session requires login. | 2 | [x] | [x] | [x] | [x] TA-AUTH-05 | [ ] TM-AUTH-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-006 | Passwords hashed with a modern adaptive algorithm. | 2 | [x] | [x] | [x] | [x] TA-AUTH-06 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-007 | Account active/disabled state; disabled users cannot log in. | 2 | [x] | [x] | [x] | [x] TA-AUTH-07 | [ ] TM-AUTH-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-008 | Optional multi-factor authentication, added only after the base flow is secure. | 2 | [x] | [x] | [x] | [x] TA-AUTH-08 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-009 | Failed login throttling blocks repeated failures. | 2 | [x] | [x] | [x] | [x] TA-AUTH-09 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-010 | Session and device management, including revocation. | 2 | [x] | [x] | [x] | [x] TA-AUTH-10 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-011 | Role and project access enforced; a moderator cannot open admin APIs by changing a URL or calling the API outside the UI. | 2 | [x] | [x] | [x] | [x] TA-AUTH-11, TA-ROLE-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-012 | User model with normalized unique email/username. | 2 | [x] | [x] | [x] | [x] TA-AUTH-12 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-013 | Secure HTTP-only SameSite cookies (or a documented secure token strategy); no long-lived secrets in browser local storage. | 2 | [x] | [x] | [x] | [x] TA-AUTH-15 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-014 | Audit events for login failures, password changes and account disablement. | 2 | [x] | [x] | [x] | [x] TA-AUTH-13 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-015 | GET /api/v1/auth/me returns the current user; no API ever returns a password or hash. | 2 | [x] | [x] | [x] | [x] TA-AUTH-14 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AUTH-016 | Frontend: login, forgot password, reset password pages, session-expired message, protected route wrapper. | 2 | [x] | [x] | [x] | [x] TA-AUTH-16 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| USER-001 | Create, edit, deactivate and reactivate users. | 2 | [x] | [x] | [x] | [x] TA-USER-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| USER-002 | Assign roles. | 2 | [x] | [x] | [x] | [x] TA-USER-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-003 | Assign project membership. | 2 | [x] | [x] | [x] | [x] TA-USER-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-004 | User list with search, filter and pagination. | 2 | [x] | [x] | [x] | [x] TA-USER-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| USER-005 | CSV import with validation preview. | 2 | [x] | [x] | [x] | [x] TA-USER-05 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-006 | CSV export with permission checks (authorized admins only). | 2 | [x] | [x] | [x] | [x] TA-USER-06 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-007 | Every role and membership change audited with who made it. | 2 | [x] | [x] | [x] | [x] TA-USER-07 | [ ] TM-USER-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-008 | A deactivated user loses access immediately or at the next enforced session check. | 2 | [x] | [x] | [x] | [x] TA-USER-08 | [ ] TM-USER-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| USER-009 | One user per role created; each sees only permitted pages and data. | 2 | [x] | [x] | [x] | n/a | [x] TM-USER-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| PROJ-001 | Project create/edit; unique project code and name. | 2 | [x] | [x] | [x] | [x] TA-PROJ-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-002 | Languages and dialects. | 2 | [x] | [x] | [x] | [x] TA-PROJ-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-003 | Allowed recording modes. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-004 | Daily recording targets. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-005 | Audio specification fields. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-006 | Transcription guidelines with version. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-007 | QC rules per project. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03, TA-AQC-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-008 | Retention policy. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-009 | Lifecycle status: draft, active, paused, completed, archived. | 2 | [x] | [x] | [x] | [x] TA-PROJ-04 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-010 | Archived projects receive no new work unless an authorized admin reopens them. | 2 | [x] | [x] | [ ] | [ ] TA-PROJ-05 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Guard built; task creation that uses it is Phase 3 |
+| PROJ-011 | Project settings appear in task creation and reports. | 2 | [ ] | [ ] | [ ] | n/a | [ ] TM-PROJ-01 | - | NOT STARTED | Needs tasks (Phase 3) and reports (Phase 9) |
+| PROJ-012 | Project isolation enforced. | 2 | [x] | [x] | [x] | [x] TA-PROJ-06 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-013 | Frontend: project list, create/edit, detail tabs overview, team, audio rules, language, retention. | 2 | [x] | [x] | [x] | [x] TA-PROJ-07 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | PART-001 | Participant A and B records attached to a task. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
 | PART-002 | Unique participant ID from a participant ID generator. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
 | PART-003 | Name or approved display label. | 3 | [ ] | [ ] | [ ] | [ ] TA-PART-01 | n/a | - | NOT STARTED | - |
@@ -363,13 +363,13 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | DASH-004 | Role and project visibility enforced. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-04 | n/a | - | NOT STARTED | - |
 | DASH-005 | Provider charges labelled as estimates with rate source and date. | 9 | [ ] | [ ] | [ ] | n/a | [ ] TM-DASH-01 | - | NOT STARTED | - |
 | DASH-006 | Empty datasets and large date ranges handled. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-05 | n/a | - | NOT STARTED | - |
-| SEC-001 | Audit log for sensitive actions; audit log integrity reviewed. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-01 | [ ] TM-SEC-06 | - | NOT STARTED | - |
+| SEC-001 | Audit log for sensitive actions; audit log integrity reviewed. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-01 | [ ] TM-SEC-06 | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
 | SEC-002 | TLS everywhere. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-003 | Encryption at rest, including backups. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-004 | Secret manager; no secrets in frontend code or Git; repository secret scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
-| SEC-005 | Rate limits. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-03 | n/a | - | NOT STARTED | - |
+| SEC-005 | Rate limits. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-03 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
 | SEC-006 | Input validation. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-04 | n/a | - | NOT STARTED | - |
-| SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-05 | [ ] TM-SEC-02 | - | NOT STARTED | - |
+| SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-05 | [ ] TM-SEC-02 | docs/evidence/phase2/make_check.txt | IN PROGRESS | Started in Phase 2; completed in Phases 3 and 10 |
 | SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-03 | - | NOT STARTED | - |
 | SEC-009 | Data retention and deletion enforced. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-STOR-09, TA-PART-06 | n/a | - | NOT STARTED | - |
 | SEC-010 | Consent record access controls. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-06 | n/a | - | NOT STARTED | - |
@@ -438,3 +438,25 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Known issue: 1 moderate npm advisory in dev-only lint tooling (minimatch via typescript-eslint).
 - Gate 1: every condition met; waiting for owner approval.
 - Next single task (after approval): Phase 2 / E1 - users, sessions and login.
+
+### Session 3 - 2026-11-09 - Phase 2 (accounts, roles, projects)
+
+- Owner approved Gate 1 and asked for Phase 2.
+- Backend: migration 0002 (users, roles, permissions, role_permissions, user_roles, sessions,
+  password_reset_tokens, login_attempts, audit_logs with an append-only trigger, projects and its
+  languages / audio rules / guidelines / retention / memberships; roles, permissions and capacity
+  targets seeded). Login, logout, session expiry (idle + absolute), CSRF double-submit, Argon2id,
+  throttling, password reset and invitations by email, password change, own-session list/revoke,
+  optional TOTP two-step sign-in, user admin with CSV import preview and export, projects with
+  lifecycle rules, team picker, capacity settings, `python -m app.cli seed-dev`.
+- Frontend: sign-in, forgot/reset password, account (password, two-step sign-in, devices), users
+  (list, add, edit, import), projects (list, add, six tabs), capacity settings; navigation and routes
+  filtered by permission (usability only).
+- Tests: backend 97 passed (permission matrix for all six roles, registry = database = documented
+  matrix, every non-public route rejects anonymous callers); frontend 37 passed; browser test 1 passed.
+  The permission test was proven both ways (removing the settings check made 6 tests fail).
+- Manual: real backend + frontend walk-through (docs/evidence/phase2/walkthrough.txt, 10 screenshots).
+- Fixed during the session: decimal values shown inconsistently; demo accounts used a domain the
+  email checker rejects (D-030); code permissions disagreed with the approved matrix in 3 places (D-029).
+- Open: PROJ-010 / PROJ-011 complete in later phases; production email needs an SMTP provider (B-13).
+- Next single task: push, read CI, then Gate 2 review.

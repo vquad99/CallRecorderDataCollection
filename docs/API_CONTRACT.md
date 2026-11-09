@@ -32,6 +32,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
+| GET | /auth/csrf | public; sets the CSRF cookie |
 | POST | /auth/login | public, throttled |
 | POST | /auth/logout | authenticated |
 | GET | /auth/me | authenticated |
@@ -39,7 +40,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /auth/password/reset | public, single-use token |
 | GET | /auth/sessions | authenticated (own) |
 | DELETE | /auth/sessions/{id} | authenticated (own) or `users.manage` |
-| POST | /auth/mfa/enroll, /auth/mfa/verify | authenticated |
+| POST | /auth/password/change | authenticated |
+| POST | /auth/mfa/enroll, /auth/mfa/confirm, /auth/mfa/disable | authenticated |
 
 ## Users and roles (USER-*, ROLE-*)
 
@@ -51,7 +53,9 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | PUT | /users/{id}/roles | `users.manage` |
 | POST | /users/import/preview, /users/import/confirm | `users.manage` |
 | GET | /users/export | `users.manage` |
-| GET | /roles, /permissions | `users.manage` |
+| POST | /users/{id}/send-password-link | `users.manage` |
+| POST | /users/{id}/sessions/revoke | `users.manage` |
+| GET | /roles | `users.manage` |
 
 ## Settings (CAP-*)
 
@@ -69,7 +73,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /guidelines, /retention | member / `projects.manage` |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
-| GET, POST, DELETE | /projects/{id}/members | `projects.members` |
+| GET, POST, DELETE | /projects/{id}/members | GET: `projects.view`; POST/DELETE: `projects.members` |
+| GET | /projects/{id}/member-candidates | `projects.members` (D-032) |
 
 ## Participants (PART-*)
 
