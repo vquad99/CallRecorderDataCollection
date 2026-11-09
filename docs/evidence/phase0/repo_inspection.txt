@@ -1,0 +1,29 @@
+Repository inspection - 2026-11-09 (Phase 0, step 1)
+
+Path: /home/quad99/conversation-collection-platform
+Git: true branch=main commits=0 remote=none
+
+Files before Phase 0: none (folder created empty for this project; no prior code)
+Framework / versions in repo: none
+Database setup in repo: none
+Tests in repo: none
+Deployment setup in repo: none
+Incomplete modules in repo: none (no modules exist)
+
+Build machine (aws-dev):
+  OS: Ubuntu 24.04.4 LTS
+  CPU: 4 cores; RAM: 15Gi
+  Root disk: 54G used of 58G, 3.5G free (94%)
+  python3: Python 3.12.3
+  node: v22.23.3; npm: 10.9.9
+  psql client: 16.15; a PostgreSQL 16 server is running for another project (not to be used)
+  google-chrome: Google Chrome 155.0.8059.84 
+  docker: MISSING
+  ffmpeg: MISSING
+  ffprobe: MISSING
+  sox: MISSING
+  soxi: MISSING
+  redis-server: MISSING
+
+Risks to existing code: none in this repository.
+Environment risks: Docker and FFmpeg missing; root disk nearly full; shared machine runs another project's database (Phase 1 must use its own containers/database).

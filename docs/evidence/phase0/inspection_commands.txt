@@ -1,0 +1,47 @@
+Phase 0 inspection commands (runbook C0.1) - run 2026-11-09T11:37:58Z
+
+$ pwd
+/home/quad99/conversation-collection-platform
+
+$ ls -la
+total 16
+drwxrwxr-x  4 quad99 quad99 4096 Nov  9 16:58 .
+drwxr-x--- 29 quad99 quad99 4096 Nov  9 16:58 ..
+drwxrwxr-x  7 quad99 quad99 4096 Nov  9 16:58 .git
+drwxrwxr-x  3 quad99 quad99 4096 Nov  9 17:07 docs
+
+$ find . -maxdepth 2 -type f | sort | head -300
+./.git/HEAD
+./.git/config
+./.git/description
+./docs/ARCHITECTURE.md
+./docs/BUILD_STATUS.md
+./docs/DATABASE.md
+./docs/DECISIONS.md
+./docs/REQUIREMENTS.md
+./docs/RUNBOOK_SOURCE.md
+./docs/TEST_PLAN.md
+./docs/TRACEABILITY.md
+
+$ git status --short
+?? docs/
+
+$ git log -5 --oneline
+fatal: your current branch 'main' does not have any commits yet
+
+Inspected for: package manifests, Python dependency files, Docker files, env examples, migrations, test folders, CI config, deployment config
+  package.json: not present
+  pyproject.toml: not present
+  requirements.txt: not present
+  poetry.lock: not present
+  uv.lock: not present
+  Dockerfile: not present
+  docker-compose.yml: not present
+  compose.yaml: not present
+  .env.example: not present
+  alembic.ini: not present
+  migrations: not present
+  tests: not present
+  .github: not present
+  .gitlab-ci.yml: not present
+Environment variable values: none exist in this repository (nothing to redact).
