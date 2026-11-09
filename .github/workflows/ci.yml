@@ -1,0 +1,110 @@
+# CI runs the same checks as `make check` (FND-028), plus secret, dependency and container checks.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repo:
+    name: Repository rules and secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Repository rules (TA-GEN-01/03/06/07, TA-ARCH-01)
+        run: python3 tools/check_repo.py
+      - name: Secret scan (TA-SEC-02)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend:
+    name: Backend lint, types, tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: ccp
+          POSTGRES_PASSWORD: ci-only-db-password
+          POSTGRES_DB: ccp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ccp -d ccp_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://ccp:ci-only-db-password@127.0.0.1:5432/ccp_test
+      REQUIRE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.1"
+          python-version: "3.12"
+      - name: Install (frozen lockfile)
+        run: cd backend && uv sync --frozen
+      - name: Format, lint, types, tests
+        run: make check-backend UV=uv
+      - name: Dependency vulnerability scan (TA-SEC-09)
+        run: cd backend && uv run --with pip-audit pip-audit
+
+  frontend:
+    name: Frontend lint, types, unit and browser tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (frozen lockfile)
+        run: cd frontend && npm ci --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Format, lint, types, unit tests, build
+        run: make check-frontend
+      - name: Browser tests (TA-FND-15)
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Dependency vulnerability scan (TA-SEC-09)
+        run: cd frontend && npm audit --audit-level=high
+
+  compose:
+    name: Containers start, migrate, persist (TM-FND-02)
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare .env from the example
+        run: |
+          cp .env.example .env
+          sed -i "s/change-me-local-db-password/ci-$(openssl rand -hex 12)/g; s/change-me-change-me-change-me-change-me-0000/ci-$(openssl rand -hex 24)/" .env
+      - name: Start every service and wait for health checks
+        run: docker compose --env-file .env -f infra/docker-compose.yml up -d --build --wait --wait-timeout 300
+      - name: Run migrations as a separate step
+        run: docker compose --env-file .env -f infra/docker-compose.yml run --rm backend alembic upgrade head
+      - name: Backend ready (database + Redis) directly and through the web server
+        run: |
+          curl -fsS http://127.0.0.1:8000/health/ready | tee /dev/stderr | grep -q '"status":"ready"'
+          curl -fsS http://127.0.0.1:8080/health/ready | grep -q '"status":"ready"'
+          curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8080/api/v1/version | grep -q '"version"'
+      - name: Data survives a database restart
+        run: |
+          C="docker compose --env-file .env -f infra/docker-compose.yml"
+          $C exec -T db psql -U ccp -d ccp -c "INSERT INTO system_settings (key, value_type, value_text) VALUES ('ci.persistence', 'text', 'kept')"
+          $C restart db
+          $C exec -T db sh -c 'until pg_isready -U ccp -d ccp; do sleep 1; done'
+          $C exec -T db psql -U ccp -d ccp -Atc "SELECT value_text FROM system_settings WHERE key = 'ci.persistence'" | grep -qx kept
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --env-file .env -f infra/docker-compose.yml logs --no-color --tail 200

@@ -10,7 +10,7 @@ the reason, and its requirement is not marked VERIFIED (GEN-007).
 | 1 | Unit | pytest, Vitest | business rules, validation, state transitions, audio calculations |
 | 2 | API | pytest + HTTP client against the real app | auth, permissions, CRUD, error handling |
 | 3 | Database | pytest against real PostgreSQL | migrations, constraints, transactions |
-| 4 | Integration | pytest with real PostgreSQL, Redis, MinIO; provider adapters with test doubles under `tests/` only | storage, queues, adapters |
+| 4 | Integration | pytest with real PostgreSQL, Redis, SeaweedFS (S3 API); provider adapters with test doubles under `tests/` only | storage, queues, adapters |
 | 5 | Contract | pytest | provider request/response mapping against the provider's documented schemas (docs/integrations/) |
 | 6 | Audio fixtures | pytest + generated WAV fixtures | format, channel mapping, corruption, silence, clipping |
 | 7 | Frontend | Vitest + React Testing Library | forms, states, permission-filtered navigation, error handling |

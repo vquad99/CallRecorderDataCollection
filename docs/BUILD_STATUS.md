@@ -29,15 +29,15 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Dashboard | DASH | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Security and audit | SEC | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Foundation (Phase 1) | FND | 29 | Yes | No | No | No | No | No | NOT STARTED | B-08 build machine |
-| Database model | DB | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | CI and compose run pending; FND-027 waits for Phase 2 |
+| Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
 | Deployment and operations | OPS | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Load and performance | LOAD | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Capacity and configuration | CAP | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Architecture and stack | ARCH | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Architecture and stack | ARCH | 5 | Yes | No | No | No | Yes | No | IN PROGRESS | Region decision open (B-04) |
 | Product scope | PROD | 4 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Contract and work rules | GEN | 14 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Build process and tracking | PROC | 9 | Yes | No | No | No | No | No | IN PROGRESS | Owner approval of Phase 0 |
+| Contract and work rules | GEN | 14 | Yes | No | No | No | Yes | No | IN PROGRESS | Ongoing every phase |
+| Build process and tracking | PROC | 9 | Yes | No | No | No | Yes | Yes | IN PROGRESS | Ongoing every phase |
 | **Total** | | **328** | | | | | | | | |
 
 ## Phases and gates
@@ -45,7 +45,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Phase | Status | Gate | Gate result |
 |---|---|---|---|
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
-| 1 Foundation | NOT STARTED | 1 | Blocked by B-08 (no Docker/FFmpeg, disk 94 % full) |
+| 1 Foundation | IN PROGRESS | 1 | Local checks pass (docs/evidence/phase1/); CI and container checks pending |
 | 2 Auth, users, roles, projects | NOT STARTED | 2 | - |
 | 3 Participants, tasks, workflow | NOT STARTED | 3 | - |
 | 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
@@ -73,25 +73,25 @@ test in TEST_PLAN.md. It does not mean anything is built.
 
 | Requirement ID | Description | Phase | Backend | Database | Frontend | Automated test | Manual test | Evidence path | Status | Blocker |
 |---|---|---|---|---|---|---|---|---|---|---|
-| GEN-001 | Specification and runbook are the binding contract; the whole runbook is read before code changes; no module skipped, silently removed or silently changed. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-01 | docs/evidence/phase0/traceability_check.txt | IN PROGRESS | Owner approval of Phase 0 |
-| GEN-002 | No fake data, mocked success, dummy buttons, placeholder pages, stub methods, TODO, FIXME or NotImplemented in production paths or in any feature marked complete; mocks only in isolated tests. | All | n/a | n/a | n/a | [ ] TA-GEN-01 | [ ] TM-GEN-02 | - | NOT STARTED | - |
+| GEN-001 | Specification and runbook are the binding contract; the whole runbook is read before code changes; no module skipped, silently removed or silently changed. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-01 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
+| GEN-002 | No fake data, mocked success, dummy buttons, placeholder pages, stub methods, TODO, FIXME or NotImplemented in production paths or in any feature marked complete; mocks only in isolated tests. | All | n/a | n/a | n/a | [ ] TA-GEN-01 | [ ] TM-GEN-02 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | GEN-003 | A module is complete only when code exists, the app runs, the feature works, automated tests pass, the manual checklist passes and evidence is in BUILD_STATUS.md. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
 | GEN-004 | A blocked requirement is marked BLOCKED with evidence; provider-independent parts are built behind an adapter or marked boundary; an unconfigured external service shows a truthful Not configured state; nothing pretends to work. | All | n/a | n/a | n/a | [ ] TA-GEN-04 | [ ] TM-GEN-03 | - | NOT STARTED | - |
 | GEN-005 | No invented telephony endpoints, provider features, prices, compliance permissions, audio formats or model capabilities; official documentation URL, access date, feature and test evidence saved in docs/integrations/. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-04 | - | NOT STARTED | - |
 | GEN-006 | Evidence per module in docs/evidence/ (files, migrations, API routes, UI routes, tests and results, manual steps and results, screenshots where useful, defects, remaining work, commit hash); no real personal data or secrets in evidence. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
 | GEN-007 | A test not run is reported NOT RUN with the reason and its requirement is not marked verified; unfinished work is INCOMPLETE; undocumented provider claims are NOT VERIFIED. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
-| GEN-008 | No failing tests reported as success; no swallowed exceptions - errors are logged and surfaced. | All | n/a | n/a | n/a | [ ] TA-GEN-02 | [ ] TM-GEN-02 | - | NOT STARTED | - |
+| GEN-008 | No failing tests reported as success; no swallowed exceptions - errors are logged and surfaced. | All | n/a | n/a | n/a | [ ] TA-GEN-02 | [ ] TM-GEN-02 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | GEN-009 | Existing working code preserved (no delete or rewrite without reason and approval); one small task at a time; when context or time runs out, save state, update the tracker and stop at a clean checkpoint. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
-| GEN-010 | After each task: format, lint, type-check, test, inspect the diff, update the tracker. | All | n/a | n/a | n/a | [ ] TA-GEN-05 | [ ] TM-GEN-05 | - | NOT STARTED | - |
-| GEN-011 | Requirement IDs appear in the tracker, in tests, and in code comments where useful. | All | n/a | n/a | n/a | [ ] TA-GEN-06 | n/a | - | NOT STARTED | - |
-| GEN-012 | Status vocabulary only: NOT STARTED, IN PROGRESS, BLOCKED, IMPLEMENTED — TESTS FAILING, IMPLEMENTED — AUTOMATED TESTS PASS, VERIFIED, ACCEPTED; VERIFIED needs automated and manual verification; ACCEPTED needs gate approval. | All | n/a | n/a | n/a | [ ] TA-GEN-03 | n/a | - | NOT STARTED | - |
+| GEN-010 | After each task: format, lint, type-check, test, inspect the diff, update the tracker. | All | n/a | n/a | n/a | [ ] TA-GEN-05 | [ ] TM-GEN-05 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
+| GEN-011 | Requirement IDs appear in the tracker, in tests, and in code comments where useful. | All | n/a | n/a | n/a | [ ] TA-GEN-06 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
+| GEN-012 | Status vocabulary only: NOT STARTED, IN PROGRESS, BLOCKED, IMPLEMENTED — TESTS FAILING, IMPLEMENTED — AUTOMATED TESTS PASS, VERIFIED, ACCEPTED; VERIFIED needs automated and manual verification; ACCEPTED needs gate approval. | All | n/a | n/a | n/a | [ ] TA-GEN-03 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | GEN-013 | No 'fully done' style claims unless the relevant acceptance gate has passed. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
 | GEN-014 | All applicable automated test layers exist: unit, API, database, integration (isolated test doubles), contract (provider mapping against documented schemas), audio fixtures, frontend, end-to-end, security, load; screenshots never replace integration tests. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-07 | - | NOT STARTED | - |
 | PROC-001 | Phases run in order; the next phase starts only after the current gate passes; no gate skipped. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
-| PROC-002 | Phase 0 documentation: REQUIREMENTS, REQUIREMENT_TRACEABILITY, ARCHITECTURE, DATABASE, API_CONTRACT, SECURITY, AUDIO_SPECIFICATION, TELEPHONY_PROVIDER_EVALUATION, TEST_PLAN, BUILD_STATUS, DECISIONS, TECH_STACK, DEPLOYMENT, integrations/, evidence/. | All | n/a | n/a | n/a | [ ] TA-GEN-07 | [ ] TM-GEN-01 | docs/evidence/phase0/doc_check.txt | IN PROGRESS | Owner approval of Phase 0 |
-| PROC-003 | Phase 0 inspection commands (pwd, ls -la, find, git status --short, git log -5 --oneline) run and recorded; manifests, dependency files, Docker files, env examples, migrations, tests, CI and deployment config inspected; secret values never printed. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-06 | docs/evidence/phase0/inspection_commands.txt | IN PROGRESS | Owner approval of Phase 0 |
-| PROC-004 | Traceability rows hold ID, requirement, phase, database, API, UI, test, status, evidence. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-01 | docs/evidence/phase0/traceability_check.txt | IN PROGRESS | Owner approval of Phase 0 |
-| PROC-005 | BUILD_STATUS.md has one row per module and one per requirement (Requirement ID, Description, Phase, Backend, Database, Frontend, Automated test, Manual test, Evidence path, Status, Blocker); every checkbox links to real evidence or stays unchecked; updated every session. | All | n/a | n/a | n/a | [ ] TA-GEN-03 | [ ] TM-GEN-03 | docs/evidence/phase0/traceability_check.txt | IN PROGRESS | Owner approval of Phase 0 |
+| PROC-002 | Phase 0 documentation: REQUIREMENTS, REQUIREMENT_TRACEABILITY, ARCHITECTURE, DATABASE, API_CONTRACT, SECURITY, AUDIO_SPECIFICATION, TELEPHONY_PROVIDER_EVALUATION, TEST_PLAN, BUILD_STATUS, DECISIONS, TECH_STACK, DEPLOYMENT, integrations/, evidence/. | All | n/a | n/a | n/a | [x] TA-GEN-07 | [x] TM-GEN-01 | docs/evidence/phase0/doc_check.txt | ACCEPTED | - |
+| PROC-003 | Phase 0 inspection commands (pwd, ls -la, find, git status --short, git log -5 --oneline) run and recorded; manifests, dependency files, Docker files, env examples, migrations, tests, CI and deployment config inspected; secret values never printed. | All | n/a | n/a | n/a | n/a | [x] TM-GEN-06 | docs/evidence/phase0/doc_check.txt | ACCEPTED | - |
+| PROC-004 | Traceability rows hold ID, requirement, phase, database, API, UI, test, status, evidence. | All | n/a | n/a | n/a | n/a | [x] TM-GEN-01 | docs/evidence/phase0/doc_check.txt | ACCEPTED | - |
+| PROC-005 | BUILD_STATUS.md has one row per module and one per requirement (Requirement ID, Description, Phase, Backend, Database, Frontend, Automated test, Manual test, Evidence path, Status, Blocker); every checkbox links to real evidence or stays unchecked; updated every session. | All | n/a | n/a | n/a | [ ] TA-GEN-03 | [ ] TM-GEN-03 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | PROC-006 | End of every session: git status --short, git diff --check, relevant tests, tracker update, remaining work recorded; commit only if the owner's workflow permits. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
 | PROC-007 | Report after every session/phase in the required format (runbook A2 fields, spec 17 items), with exact commands and files. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
 | PROC-008 | Ask only for truly blocking decisions or credentials; owner approval before major architectural changes or deleting code; stop after Phase 0 and request approval. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
@@ -107,44 +107,44 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | CAP-005 | Storage sizing: 115.2 MB/h mono, 230.4 MB/h stereo, 43.2 GB/day at target, 1.296 TB/30 days, about 15.77 TB/year, excluding originals, backups, replicas, metadata and derived copies; retention confirmed before final sizing. | 2, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-CAP-02 | - | NOT STARTED | - |
 | ARCH-001 | Modular monolith first; no unnecessary microservices. | 0, 1 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-01 | - | NOT STARTED | - |
 | ARCH-002 | Stack: React + TypeScript, FastAPI, PostgreSQL, Alembic, Celery + Redis, FFmpeg + a tested Python audio library, private S3-compatible storage, Docker, Nginx or managed ingress, web manifest + service worker; Pytest, Vitest/React Testing Library, Playwright; unless the repository already has a functioning equivalent. | 0, 1 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-01 | - | NOT STARTED | - |
-| ARCH-003 | Stable versions pinned and recorded in docs/TECH_STACK.md. | 0, 1 | n/a | n/a | n/a | [ ] TA-ARCH-01 | n/a | - | NOT STARTED | B-08 build machine |
+| ARCH-003 | Stable versions pinned and recorded in docs/TECH_STACK.md. | 0, 1 | n/a | n/a | n/a | [x] TA-ARCH-01 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ARCH-004 | Cloud region chosen for data residency, latency and client requirements; recorded as a decision. | 0, 1 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-02 | - | NOT STARTED | - |
-| ARCH-005 | Repository inspected before choosing or changing frameworks. | 0, 1 | n/a | n/a | n/a | n/a | [ ] TM-GEN-06 | docs/evidence/phase0/inspection_commands.txt | IN PROGRESS | Owner approval of Phase 0 |
-| FND-001 | Backend layout: app/main.py, core/{config,logging,security,errors}.py, api/router.py, db/{base,session}.py, db/migrations/, modules/, tests/, pyproject.toml, Dockerfile. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-FND-01 | - | NOT STARTED | B-08 build machine |
-| FND-002 | FastAPI application factory. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-01 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-003 | Configuration from environment variables; required variables validated at startup; invalid configuration prevents unsafe startup. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-02 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-004 | Structured JSON logging with request IDs and no secrets. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-03 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-005 | Request ID middleware. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-03 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-006 | Global exception handlers. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-04 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-007 | /health/live returns success; /health/ready fails clearly when the database is unavailable. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-05 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-008 | PostgreSQL connection pool. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-06 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-009 | Alembic configured. | 1 | [ ] | n/a | [ ] | [ ] TA-DB-03 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-010 | Separate test database configuration. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-07 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-011 | CORS allowlist from environment variables. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-08 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-012 | API version prefix /api/v1. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-09 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-013 | Frontend layout: src/{app,api,auth,components,features,layouts,routes,styles,test}, public/, package.json, vite.config.ts, tsconfig.json. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-FND-01 | - | NOT STARTED | B-08 build machine |
-| FND-014 | React + TypeScript with strict TypeScript; type check passes. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-10 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-015 | Route handling. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-11 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-016 | Shared API client. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-12 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-017 | Global error boundary. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-13 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-018 | Loading, empty and error components. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-13 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-019 | Accessible form controls. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-14 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-020 | Responsive application shell. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-PWA-02 | - | NOT STARTED | B-08 build machine |
-| FND-021 | Frontend unit test setup; runner passes. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-10 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-022 | Lint and format commands; lint passes. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-10 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-023 | Browser console shows no application errors. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-15 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-024 | Docker Compose for app, database, Redis and local object storage, with health checks and persistent volumes; one documented command starts dependencies; restart preserves database data. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-FND-02 | - | NOT STARTED | B-08 build machine |
-| FND-025 | .env.example with variable names and safe example values only; .gitignore; no secrets in Git. | 1 | [ ] | n/a | [ ] | [ ] TA-SEC-02 | [ ] TM-FND-02 | - | NOT STARTED | B-08 build machine |
-| FND-026 | Database migration command; migration runs from an empty database. | 1 | [ ] | n/a | [ ] | [ ] TA-DB-03 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-16 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [ ] TA-GEN-02 | n/a | - | NOT STARTED | B-08 build machine |
-| FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-ARCH-03 | - | NOT STARTED | B-08 build machine |
+| ARCH-005 | Repository inspected before choosing or changing frameworks. | 0, 1 | n/a | n/a | n/a | n/a | [x] TM-GEN-06 | docs/evidence/phase0/doc_check.txt | ACCEPTED | - |
+| FND-001 | Backend layout: app/main.py, core/{config,logging,security,errors}.py, api/router.py, db/{base,session}.py, db/migrations/, modules/, tests/, pyproject.toml, Dockerfile. | 1 | [x] | n/a | n/a | n/a | [x] TM-FND-01 | docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-002 | FastAPI application factory. | 1 | [x] | n/a | n/a | [x] TA-FND-01 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-003 | Configuration from environment variables; required variables validated at startup; invalid configuration prevents unsafe startup. | 1 | [x] | n/a | n/a | [x] TA-FND-02 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-004 | Structured JSON logging with request IDs and no secrets. | 1 | [x] | n/a | n/a | [x] TA-FND-03 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-005 | Request ID middleware. | 1 | [x] | n/a | n/a | [x] TA-FND-03 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-006 | Global exception handlers. | 1 | [x] | n/a | n/a | [x] TA-FND-04 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-007 | /health/live returns success; /health/ready fails clearly when the database is unavailable. | 1 | [x] | n/a | n/a | [x] TA-FND-05 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-008 | PostgreSQL connection pool. | 1 | [x] | n/a | n/a | [x] TA-FND-06 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-009 | Alembic configured. | 1 | [x] | n/a | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-010 | Separate test database configuration. | 1 | [x] | n/a | n/a | [x] TA-FND-07 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-011 | CORS allowlist from environment variables. | 1 | [x] | n/a | n/a | [x] TA-FND-08 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-012 | API version prefix /api/v1. | 1 | [x] | n/a | n/a | [x] TA-FND-09 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-013 | Frontend layout: src/{app,api,auth,components,features,layouts,routes,styles,test}, public/, package.json, vite.config.ts, tsconfig.json. | 1 | n/a | n/a | [x] | n/a | [x] TM-FND-01 | docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-014 | React + TypeScript with strict TypeScript; type check passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-015 | Route handling. | 1 | n/a | n/a | [x] | [x] TA-FND-11 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-016 | Shared API client. | 1 | n/a | n/a | [x] | [x] TA-FND-12 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-017 | Global error boundary. | 1 | n/a | n/a | [x] | [x] TA-FND-13 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-018 | Loading, empty and error components. | 1 | n/a | n/a | [x] | [x] TA-FND-13 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-019 | Accessible form controls. | 1 | n/a | n/a | [x] | [x] TA-FND-14 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-020 | Responsive application shell. | 1 | n/a | n/a | [x] | n/a | [x] TM-PWA-02 | docs/evidence/phase1/manual_checks.txt; docs/evidence/phase1/screens/status_375x800.png | VERIFIED | - |
+| FND-021 | Frontend unit test setup; runner passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-022 | Lint and format commands; lint passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-023 | Browser console shows no application errors. | 1 | n/a | n/a | [x] | [x] TA-FND-15 | n/a | docs/evidence/phase1/e2e.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-024 | Docker Compose for app, database, Redis and local object storage, with health checks and persistent volumes; one documented command starts dependencies; restart preserves database data. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-FND-02 | - | IN PROGRESS | NOT RUN: no Docker here; CI compose job |
+| FND-025 | .env.example with variable names and safe example values only; .gitignore; no secrets in Git. | 1 | [ ] | n/a | [ ] | [ ] TA-SEC-02 | [ ] TM-FND-02 | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
+| FND-026 | Database migration command; migration runs from an empty database. | 1 | [x] | n/a | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [ ] | n/a | [ ] | [ ] TA-FND-16 | n/a | - | NOT STARTED | Needs users table (Phase 2) |
+| FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [ ] TA-GEN-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
+| FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [ ] TM-ARCH-03 | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
 | DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-01 | n/a | - | NOT STARTED | - |
-| DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-02 | n/a | - | NOT STARTED | - |
-| DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-03 | n/a | - | NOT STARTED | B-08 build machine |
+| DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
+| DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | 1-9 | n/a | [x] | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | DB-004 | Workflow state stored in the database, never only in frontend state. | 1-9 | n/a | [ ] | n/a | [ ] TA-TASK-02 | n/a | - | NOT STARTED | - |
 | DB-005 | Sensitive columns documented. | 1-9 | n/a | [ ] | n/a | n/a | [ ] TM-DB-01 | - | NOT STARTED | - |
-| DB-006 | No binary audio in PostgreSQL; only object-storage keys and metadata. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-04 | n/a | - | NOT STARTED | - |
+| DB-006 | No binary audio in PostgreSQL; only object-storage keys and metadata. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-04 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | ROLE-001 | Authorization enforced on the backend for every protected API; hidden controls are not security. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
 | ROLE-002 | Super Admin: full access, system settings and integrations, all users and projects. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
 | ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators, transcribers and QC staff; view project reports and recordings. | 2 | [ ] | [ ] | [ ] | [ ] TA-ROLE-01 | n/a | - | NOT STARTED | - |
@@ -366,7 +366,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-001 | Audit log for sensitive actions; audit log integrity reviewed. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-01 | [ ] TM-SEC-06 | - | NOT STARTED | - |
 | SEC-002 | TLS everywhere. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
 | SEC-003 | Encryption at rest, including backups. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-01 | - | NOT STARTED | - |
-| SEC-004 | Secret manager; no secrets in frontend code or Git; repository secret scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-02 | n/a | - | NOT STARTED | - |
+| SEC-004 | Secret manager; no secrets in frontend code or Git; repository secret scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
 | SEC-005 | Rate limits. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-03 | n/a | - | NOT STARTED | - |
 | SEC-006 | Input validation. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-04 | n/a | - | NOT STARTED | - |
 | SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-05 | [ ] TM-SEC-02 | - | NOT STARTED | - |
@@ -375,9 +375,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-010 | Consent record access controls. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-06 | n/a | - | NOT STARTED | - |
 | SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-07, TA-STOR-05 | n/a | - | NOT STARTED | - |
 | SEC-012 | Webhook signature failures rejected. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-TEL-03 | n/a | - | NOT STARTED | - |
-| SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | - | NOT STARTED | - |
+| SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | NOT STARTED | - |
-| SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-09 | n/a | - | NOT STARTED | - |
+| SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-09 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | CI run pending |
 | PWA-001 | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-01 | n/a | - | NOT STARTED | - |
 | PWA-002 | Install prompt where supported; standalone launch. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
 | PWA-003 | Responsive layouts. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-02 | - | NOT STARTED | - |
@@ -416,3 +416,19 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Remaining: B-08 for Phase 1.
 - Owner decision: AI transcription uses Deepgram and is optional per project (ASR-002, ASR-010, D-018).
 - Next single task: Phase 1 / D1 - backend application factory with configuration validation.
+
+### Session 2 - 2026-11-09 - Phase 1 (foundation)
+
+- Backend (FastAPI app factory, validated environment config, JSON logs with request IDs and redaction,
+  request ID middleware, one error format, /health/live and /health/ready, pooled PostgreSQL engine,
+  Alembic with baseline migration 0001 `system_settings`, CORS allowlist, /api/v1 prefix, security headers).
+- Frontend (React + strict TypeScript, routes, shared API client, error boundary, loading/empty/error
+  states, accessible form controls, responsive shell, system status page, Vitest + Playwright).
+- Local environment and CI: infra/docker-compose.yml, Dockerfiles, nginx, .env.example, .gitignore,
+  Makefile (`make check`), tools/check_repo.py, .github/workflows/ci.yml.
+- Tests: `make check UV=uv` -> repo rules 0 problems, backend 43 passed (DB tests on a private PostgreSQL),
+  frontend 21 passed, build OK; `PW_CHANNEL=chrome npx playwright test` -> 1 passed. Evidence: docs/evidence/phase1/.
+- NOT RUN here: Docker Compose start, health checks and restart persistence (no Docker on the build
+  machine) - run by the CI `compose` job; secret and dependency scans - CI.
+- INCOMPLETE: FND-027 demo-account seed needs the users table (Phase 2).
+- Next single task: push and read the CI result; then Gate 1 review.

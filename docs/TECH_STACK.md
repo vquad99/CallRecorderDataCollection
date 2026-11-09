@@ -1,55 +1,72 @@
 # Technology stack
 
-Status: baseline chosen (runbook B4, spec 7); versions NOT pinned yet. Phase 1 picks current stable
-releases, pins them in lockfiles (`backend/uv.lock` or equivalent, `frontend/package-lock.json`) and
-fills the Version column from those lockfiles. No version is claimed before that (ARCH-003).
+Status: pinned in Phase 1 (2026-11-09). Releases were resolved only from versions published at least
+two weeks earlier: `exclude-newer = 2026-10-26` in `backend/pyproject.toml`, `npm install --before=2026-10-26`
+(DECISIONS.md D-023). `tools/check_repo.py` (TA-ARCH-01) fails CI when a version below differs from
+the lockfile or image tag it names.
 
-## Application stack
+## Pinned versions
 
-| Layer | Choice | Version | Pinned in |
+| Component | Package | Version | Source |
 |---|---|---|---|
-| Frontend framework | React + TypeScript (strict) | to pin in Phase 1 | frontend/package-lock.json |
-| Frontend build | Vite | to pin in Phase 1 | frontend/package-lock.json |
-| Accessible components | to choose in Phase 1 (DECISIONS.md) | - | - |
-| Backend framework | FastAPI | to pin in Phase 1 | backend lockfile |
-| Validation | pydantic | to pin in Phase 1 | backend lockfile |
-| ORM / migrations | SQLAlchemy + Alembic | to pin in Phase 1 | backend lockfile |
-| Database | PostgreSQL | to pin in Phase 1 (container image tag) | infra/docker-compose |
-| Queue | Celery + Redis | to pin in Phase 1 | backend lockfile, compose |
-| Object storage | Wasabi (S3-compatible) in cloud, MinIO locally (D-019) | MinIO image pinned in Phase 1; S3 client library pinned in backend lockfile | compose, backend lockfile |
-| Audio | FFmpeg + numpy/soundfile | to pin in Phase 1 | Dockerfile, backend lockfile |
-| Reverse proxy | Nginx or managed ingress | to pin in Phase 1 | infra |
-| Password hashing | Argon2id library | to pin in Phase 2 | backend lockfile |
-| PWA | web manifest + service worker | to pin in Phase 10 | frontend lockfile |
-| ASR (optional per project) | Deepgram API through the ASR adapter (D-018) | API/model version recorded per job; capabilities NOT VERIFIED until Phase 7 | backend lockfile (client library, if used) |
+| Backend framework | fastapi | 0.162.0 | uv.lock |
+| ASGI toolkit | starlette | 1.10.0 | uv.lock |
+| ASGI server | uvicorn | 0.54.0 | uv.lock |
+| Validation | pydantic | 2.14.1 | uv.lock |
+| Settings | pydantic-settings | 2.16.1 | uv.lock |
+| ORM | sqlalchemy | 2.1.6 | uv.lock |
+| Migrations | alembic | 1.20.1 | uv.lock |
+| PostgreSQL driver | psycopg | 3.3.6 | uv.lock |
+| Redis client | redis | 8.1.0 | uv.lock |
+| Backend tests | pytest | 9.1.1 | uv.lock |
+| Test HTTP client | httpx2 | 2.16.0 | uv.lock |
+| Python lint/format | ruff | 0.17.2 | uv.lock |
+| Python types | mypy | 2.4.0 | uv.lock |
+| UI library | react | 19.3.1 | package-lock.json |
+| UI rendering | react-dom | 19.3.1 | package-lock.json |
+| Routing | react-router | 8.5.0 | package-lock.json |
+| Build tool | vite | 8.3.5 | package-lock.json |
+| Language | typescript | 6.0.3 | package-lock.json |
+| Unit tests | vitest | 5.0.5 | package-lock.json |
+| Test DOM | jsdom | 30.1.3 | package-lock.json |
+| Component tests | @testing-library/react | 16.3.3 | package-lock.json |
+| Accessibility checks | axe-core | 4.14.0 | package-lock.json |
+| JS lint | eslint | 9.39.5 | package-lock.json |
+| TS lint rules | typescript-eslint | 8.72.0 | package-lock.json |
+| Accessibility lint | eslint-plugin-jsx-a11y | 6.10.2 | package-lock.json |
+| Formatter | prettier | 3.9.10 | package-lock.json |
+| Browser tests | @playwright/test | 1.64.1 | package-lock.json |
+| Database image | postgres | 16.15-alpine | infra/docker-compose.yml |
+| Redis image | redis | 7.4.12-alpine | infra/docker-compose.yml |
+| Local S3 storage image | chrislusf/seaweedfs | 4.51 | infra/docker-compose.yml |
+| Backend base image | python | 3.12.16-slim-bookworm | backend/Dockerfile |
+| Frontend build image | node | 22.23.4-alpine | frontend/Dockerfile |
+| Web server image | nginx | 1.28.3-alpine | frontend/Dockerfile |
 
-## Test and quality tools
+Tooling outside the lockfiles: uv 0.13.1 (backend/Dockerfile, CI), Node.js 22.23.x (CI 22.23.4),
+Python 3.12. GitHub Actions: actions/checkout@v7, actions/setup-node@v7, astral-sh/setup-uv@v10.3.3,
+gitleaks/gitleaks-action@v3.
 
-| Purpose | Choice | Version |
+## Chosen, not yet pinned (later phases)
+
+| Layer | Choice | Phase |
 |---|---|---|
-| Backend tests | pytest | to pin in Phase 1 |
-| Frontend unit tests | Vitest + React Testing Library | to pin in Phase 1 |
-| End-to-end | Playwright | to pin in Phase 1 |
-| Python lint/format/types | to choose in Phase 1 (e.g. ruff + mypy) | to pin |
-| TS lint/format | to choose in Phase 1 (e.g. ESLint + Prettier) | to pin |
-| Secret scan | to choose in Phase 1 | to pin |
-| Dependency scan | to choose in Phase 1 | to pin |
+| Queue workers | Celery (with Redis) | first background job (Phase 4) |
+| Audio | FFmpeg + numpy/soundfile | 4 |
+| Object storage client | S3 client library against Wasabi / SeaweedFS (D-019, D-020) | 4 |
+| Password hashing | Argon2id library | 2 |
+| ASR | Deepgram API through the ASR adapter, optional per project (D-018) | 7 |
+| Error tracking, metrics | to choose | 10 |
+
+## Known version issue
+
+ESLint 9.39.5 is marked "no longer supported" by ESLint. It is used because eslint-plugin-jsx-a11y
+6.10.2 (accessibility lint) does not accept ESLint 10 (npm peer-dependency conflict seen 2026-11-09).
+Revisit when the plugin supports ESLint 10 (D-022).
 
 ## Build machine as found (2026-11-09, aws-dev)
 
-These are the tools present on the machine, not project pins.
-
-| Tool | Found |
-|---|---|
-| OS | Ubuntu 24.04.4 LTS, 4 CPU, 15 GiB RAM |
-| Python | 3.12.3 (/usr/bin/python3) |
-| Node.js / npm | v22.23.3 / 10.9.9 |
-| psql client | 16.15 (the running PostgreSQL server belongs to another project and is not used) |
-| Google Chrome | 155.0.8059.84 |
-| Docker | MISSING |
-| FFmpeg / ffprobe | MISSING |
-| Redis | MISSING |
-| Free disk | 3.5 GB of 58 GB (94 % used) |
-
-Phase 1 cannot run its Docker-based setup here until Docker and FFmpeg are installed and disk is freed
-(DECISIONS.md B-08).
+Ubuntu 24.04.4, 4 CPU, 15 GiB RAM; Python 3.12.3; Node.js 22.23.3 / npm 10.9.9; Google Chrome
+155.0.8059.84; Docker, FFmpeg and Redis not installed; root disk about 2 GB free after Phase 1 installs.
+A PostgreSQL 16 server on the machine belongs to another project and is not used; Phase 1 tests ran
+against a private throwaway PostgreSQL instance on port 55432.

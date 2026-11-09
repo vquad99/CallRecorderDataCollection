@@ -20,7 +20,13 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | Method | Path | Notes |
 |---|---|---|
 | GET | /health/live | process alive |
-| GET | /health/ready | database (and queue) reachable; clear failure otherwise |
+| GET | /health/ready | 200 `{"status":"ready","checks":{...}}` or 503 `{"status":"not_ready",...}`; checks: database, redis (`ok` / `error` / `not_configured`) |
+
+## Meta (built in Phase 1)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | /api/v1/version | public; `{name, version, environment}` |
 
 ## Auth (AUTH-*)
 

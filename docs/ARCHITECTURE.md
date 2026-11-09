@@ -43,8 +43,8 @@ backend/
   app/db/                     base.py, session.py, migrations/ (Alembic)
   app/modules/<module>/       models, schemas, service, router per module
   app/adapters/               telephony/, asr/, storage/  - the only place provider code lives
-  app/tests/
   pyproject.toml, Dockerfile
+  tests/                      pytest (outside app/, never shipped in the image - D-021)
 frontend/
   src/{app,api,auth,components,features,layouts,routes,styles,test}
   public/  (manifest.webmanifest, icons)
@@ -57,7 +57,7 @@ docs/
 
 See TECH_STACK.md. Baseline (runbook B4): React + TypeScript, FastAPI, PostgreSQL + Alembic,
 Celery + Redis, FFmpeg + a tested Python audio library, private S3-compatible storage (Wasabi in cloud,
-MinIO locally, D-019),
+SeaweedFS locally, D-019/D-020),
 Docker, Nginx or managed ingress, web manifest + service worker; pytest, Vitest + React Testing Library,
 Playwright.
 
@@ -168,7 +168,7 @@ during recording (nothing kept in browser storage), server assembles the origina
 <project>/exports/<export>/        (temporary, expiring)
 ```
 
-Task and export IDs are random UUIDs. Bucket (Wasabi in cloud, MinIO locally): public access blocked, server-side encryption,
+Task and export IDs are random UUIDs. Bucket (Wasabi in cloud, SeaweedFS locally): public access blocked, server-side encryption,
 versioning, lifecycle rules per project retention policy. Access only through short-lived signed URLs
 issued after a permission check.
 

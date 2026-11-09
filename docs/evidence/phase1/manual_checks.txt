@@ -1,0 +1,14 @@
+Manual checks - 2026-11-09, aws-dev
+
+1. Real server started with valid config (uvicorn app.main:create_app --factory), migrations applied (alembic upgrade head) on private PostgreSQL 16:
+   GET /health/ready -> {"status":"ready","checks":{"database":"ok","redis":"not_configured"}}
+   GET /api/v1/version -> 200, X-Request-ID header present
+2. Real server started with SECRET_KEY=short -> exit 1, 'ConfigError: Invalid configuration: SECRET_KEY: ...' (value not printed).
+3. Real backend + Vite dev server together: /health/ready through the Vite proxy -> ready; status page shows Ready, Database OK, Redis Not configured, Version 0.1.0 (development).
+4. Screenshots at 375x800, 768x900, 1280x800 in screens/ (installed Chrome 155): no horizontal scroll, layout adapts (TM-PWA-02, FND-020).
+5. tools/check_repo.py proven both ways: a planted TODO in backend/app/api/router.py, a status 'Done' in BUILD_STATUS.md and a test file without a Requirements line produced 3 failures, exit 1; after reverting, 0 problems.
+
+NOT RUN here (no Docker on this machine): docker compose up, container health checks, restart persistence (TM-FND-02). These run in the CI 'compose' job.
+Access log sample (secrets redacted by design):
+{"ts": "2026-11-09T12:41:10.734036+00:00", "level": "INFO", "logger": "app.request", "message": "request", "request_id": "4dc6981e79954e2d8baa157bdee8b15c", "method": "GET", "path": "/health/live", "status": 200, "duration_ms": 48.89}
+{"ts": "2026-11-09T12:41:10.821596+00:00", "level": "INFO", "logger": "app.request", "message": "request", "request_id": "f30a7111a0094545b4d1e1835401eaec", "method": "GET", "path": "/health/ready", "status": 200, "duration_ms": 27.28}

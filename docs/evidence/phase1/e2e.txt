@@ -1,0 +1,7 @@
+$ PW_CHANNEL=chrome npx playwright test  (installed Google Chrome 155)
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › e2e/console.spec.ts:16:1 › main pages render with no console errors (2.8s)
+
+  1 passed (5.7s)

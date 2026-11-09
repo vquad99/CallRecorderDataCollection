@@ -21,15 +21,18 @@ SEC-008, SEC-014. Cloud provider, account and region are open (DECISIONS.md B-04
 | ASR worker | same worker image, `asr` queue | same; calls the Deepgram API (key in secret manager); idle when AI transcription is off (D-018) |
 | PostgreSQL | container with volume | managed PostgreSQL, automated encrypted backups |
 | Redis | container | managed Redis |
-| Object storage | MinIO container | Wasabi private bucket (D-019): encryption, versioning, lifecycle as confirmed in Wasabi docs |
+| Object storage | SeaweedFS container (S3 API, D-020) | Wasabi private bucket (D-019): encryption, versioning, lifecycle as confirmed in Wasabi docs |
 | Reverse proxy / ingress | Nginx container | Nginx or managed ingress, TLS |
 | Monitoring and logs | container logs | central logs, metrics, error tracking, alerts |
 | Secrets | `.env` (never committed) | cloud secret manager (OPS-003) |
 
 ## 3. Local setup (Phase 1, FND-024..029)
 
-To be written in Phase 1 as exact commands, e.g. one command to start dependencies, one to migrate,
-one dev-only seed, one test command. Requires Docker, FFmpeg and disk space on the build machine (B-08).
+See README.md. Commands (Makefile): `make install`, `make deps-up` (PostgreSQL, Redis, SeaweedFS in
+Docker, bound to 127.0.0.1), `make migrate`, `make backend`, `make frontend`, `make check`, `make e2e`,
+`make up` / `make down` (whole stack in containers, web on 127.0.0.1:8080). The dev-only demo-account
+seed arrives with the users table in Phase 2 (D-025). CI runs the same checks plus a container job that
+starts every service, migrates, and proves data survives a database restart (D-026).
 
 ## 4. Release procedure (Phase 10)
 

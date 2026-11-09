@@ -1,0 +1,82 @@
+$ make check UV=uv  (run 2026-11-09T12:41:39Z on aws-dev; TEST_DATABASE_URL=private PostgreSQL 16 on 127.0.0.1:55432/ccp_test; REQUIRE_DB_TESTS=1)
+python3 tools/check_repo.py
+check_repo: 0 problem(s) in 5 checks
+cd backend && uv lock --check
+Resolved 46 packages in 2ms
+cd backend && uv run ruff format --check app tests
+31 files already formatted
+cd backend && uv run ruff check app tests
+All checks passed!
+cd backend && uv run mypy app tests
+Success: no issues found in 31 source files
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0
+rootdir: /home/quad99/conversation-collection-platform/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 43 items
+
+tests/test_app_factory.py ....                                           [  9%]
+tests/test_config.py .............                                       [ 39%]
+tests/test_cors_and_headers.py ....                                      [ 48%]
+tests/test_db_pool.py .                                                  [ 51%]
+tests/test_errors.py ....                                                [ 60%]
+tests/test_health.py .....                                               [ 72%]
+tests/test_logging.py ...                                                [ 79%]
+tests/test_migrations.py ....                                            [ 88%]
+tests/test_test_database_guard.py .....                                  [100%]
+
+============================== 43 passed in 1.62s ==============================
+cd frontend && npm run format:check
+
+> ccp-frontend@0.1.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+cd frontend && npm run lint
+
+> ccp-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+cd frontend && npm run typecheck
+
+> ccp-frontend@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+cd frontend && npm test
+
+> ccp-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/quad99/conversation-collection-platform/frontend
+
+
+ Test Files  5 passed (5)
+      Tests  21 passed (21)
+   Start at  18:12:05
+   Duration  9.46s (environment 64%, tests 16%, setup 12%, import 6%, transform 1%)
+
+Environment  jsdom was created 5 times · 13.56s total, 64% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+cd frontend && npm run build
+
+> ccp-frontend@0.1.0 build
+> tsc --noEmit -p tsconfig.json && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 99 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:   0.30 kB
+dist/assets/index-XWMoRkb-.css    3.34 kB │ gzip:   1.15 kB
+dist/assets/index-DUFsDk83.js   318.63 kB │ gzip: 100.55 kB
+
+✓ built in 443ms
+make exit=0
