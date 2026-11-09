@@ -12,6 +12,8 @@ from app.modules.auth.deps import csrf_protect
 from app.modules.auth.router import router as auth_router
 from app.modules.participants.router import router as participants_router
 from app.modules.projects.router import router as projects_router
+from app.modules.recordings.router import router as recordings_router
+from app.modules.recordings.router import usage_router as storage_usage_router
 from app.modules.settings.router import router as settings_router
 from app.modules.tasks.router import router as tasks_router
 from app.modules.users.router import router as users_router
@@ -42,3 +44,5 @@ api_router.include_router(settings_router)
 api_router.include_router(participants_router)
 api_router.include_router(tasks_router)
 api_router.include_router(audit_router)
+api_router.include_router(recordings_router)
+api_router.include_router(storage_usage_router)

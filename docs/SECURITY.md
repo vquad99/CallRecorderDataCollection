@@ -41,7 +41,8 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 ## 4. Files and storage
 
 - Private bucket, public access blocked, server-side encryption, versioning (STOR-001, STOR-013).
-- Downloads only by short-lived signed URL issued after a permission check (STOR-005).
+- Downloads only by short-lived signed URL issued after a permission check (STOR-005); verified on
+  Wasabi: unsigned requests 403, expired links 403 (docs/evidence/phase4/wasabi_checks.txt).
 - SHA-256 on upload and after storage; mismatch fails the upload (STOR-006).
 - Service worker never caches audio or API responses with user data (PWA-004); logout clears caches
   holding user data (PWA-007).

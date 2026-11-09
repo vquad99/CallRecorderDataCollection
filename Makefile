@@ -3,7 +3,7 @@ UV ?= uv
 COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
 LOAD_ENV = set -a && . ./.env && set +a
 
-.PHONY: install deps-up deps-down up down migrate seed-dev key backend frontend \
+.PHONY: install deps-up deps-down up down migrate seed-dev key backend worker frontend \
         check check-repo check-backend check-frontend e2e
 
 install:
@@ -33,6 +33,9 @@ key:                ## print a new DATA_ENCRYPTION_KEY
 
 backend:
 	$(LOAD_ENV) && cd backend && $(UV) run uvicorn app.main:create_app --factory --reload --port 8000
+
+worker:             ## recording processing (needs REDIS_URL; without Redis the backend processes in-process)
+	$(LOAD_ENV) && cd backend && $(UV) run celery -A app.worker worker --loglevel=INFO
 
 frontend:
 	cd frontend && npm run dev

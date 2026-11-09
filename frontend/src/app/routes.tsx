@@ -28,6 +28,7 @@ import { TaskCreatePage } from "../features/tasks/TaskCreatePage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TasksPage } from "../features/tasks/TasksPage";
 import { UsersPage } from "../features/users/UsersPage";
+import { RecorderPage } from "../features/recording/RecorderPage";
 import { AppShell } from "../layouts/AppShell";
 import { NotFoundPage } from "../routes/NotFoundPage";
 
@@ -69,6 +70,7 @@ export const routes: RouteObject[] = [
             children: [
               { path: "tasks", element: <TasksPage /> },
               { path: "tasks/:taskId", element: <TaskDetailPage /> },
+              { path: "tasks/:taskId/record", element: <RecorderPage /> },
             ],
           },
           {

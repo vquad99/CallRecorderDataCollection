@@ -1,6 +1,6 @@
 // One task: participants and consent, moderator, status actions, comments and timeline (TASK-*).
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { listMembers } from "../../api/projects";
@@ -305,6 +305,15 @@ export function TaskDetailPage() {
         <Assignment task={task} onChange={replace} />
       ) : null}
       {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}
+      {task.is_moderator &&
+      task.recording_mode === "FACE_TO_FACE" &&
+      task.status === "IN_PROGRESS" ? (
+        <p>
+          <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
+            Open the recorder
+          </Link>
+        </p>
+      ) : null}
       <Actions task={task} onChange={replace} />
       <Timeline
         taskId={task.id}

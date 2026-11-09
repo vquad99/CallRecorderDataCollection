@@ -6,6 +6,12 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "playwright-report", "test-results"] },
+  {
+    files: ["public/recorder-worklet.js"],
+    languageOptions: {
+      globals: { AudioWorkletProcessor: "readonly", registerProcessor: "readonly" },
+    },
+  },
   js.configs.recommended,
   ...tseslint.configs.strict,
   jsxA11y.flatConfigs.recommended,

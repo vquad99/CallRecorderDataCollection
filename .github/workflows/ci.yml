@@ -41,12 +41,15 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql+psycopg://ccp:ci-only-db-password@127.0.0.1:5432/ccp_test
       REQUIRE_DB_TESTS: "1"
+      REQUIRE_FFPROBE: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.1"
           python-version: "3.12"
+      - name: Install FFmpeg for the independent file check (ffprobe)
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
       - name: Install (frozen lockfile)
         run: cd backend && uv sync --frozen
       - name: Format, lint, types, tests
@@ -106,6 +109,24 @@ jobs:
           $C restart db
           $C exec -T db sh -c 'until pg_isready -U ccp -d ccp; do sleep 1; done'
           $C exec -T db psql -U ccp -d ccp -Atc "SELECT value_text FROM system_settings WHERE key = 'ci.persistence'" | grep -qx kept
+      - name: Worker running; storage adapter round trip against SeaweedFS
+        run: |
+          C="docker compose --env-file .env -f infra/docker-compose.yml"
+          test "$($C ps worker --format '{{.State}}')" = running
+          $C exec -T backend python -c "
+          import hashlib
+          from app.core.config import load_settings
+          from app.core.storage import build_storage
+          s = build_storage(load_settings())
+          data = b'ci-storage-check'
+          h = hashlib.sha256(data).hexdigest()
+          s.put_bytes('ci/check.bin', data, content_type='application/octet-stream', sha256=h)
+          info = s.head('ci/check.bin')
+          assert info and info.size == len(data) and info.sha256 == h, info
+          s.delete('ci/check.bin')
+          assert s.head('ci/check.bin') is None
+          print('storage round trip ok')
+          "
       - name: Logs on failure
         if: failure()
         run: docker compose --env-file .env -f infra/docker-compose.yml logs --no-color --tail 200

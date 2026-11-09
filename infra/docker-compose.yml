@@ -2,6 +2,15 @@
 # Run through the Makefile (it passes --env-file .env). Ports bind to 127.0.0.1 only.
 name: ccp
 
+# Local S3 settings shared by the backend and the worker (SeaweedFS accepts any key locally).
+x-storage-env: &storage_env
+  STORAGE_ENDPOINT_URL: http://storage:8333
+  STORAGE_BUCKET: ccp-local
+  STORAGE_ACCESS_KEY_ID: local-dev
+  STORAGE_SECRET_ACCESS_KEY: local-dev-secret
+  STORAGE_CREATE_BUCKET: "true"
+  MEDIA_WORK_DIR: /tmp/media
+
 services:
   db:
     image: postgres:16.15-alpine
@@ -56,15 +65,31 @@ services:
       REDIS_URL: redis://redis:6379/0
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      <<: *storage_env
     ports: ["127.0.0.1:${BACKEND_PORT:-8000}:8000"]
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+      storage: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).status == 200 else 1)"]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Processes finished recordings (Celery). Same image as the backend.
+  worker:
+    build: ../backend
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://ccp:${POSTGRES_PASSWORD}@db:5432/ccp
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env (make key)}
+      REDIS_URL: redis://redis:6379/0
+      <<: *storage_env
+    depends_on:
+      backend: { condition: service_healthy }
 
   web:
     build: ../frontend

@@ -15,12 +15,12 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
-| Participants | PART | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 awaiting owner approval |
-| Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 awaiting owner approval |
+| Participants | PART | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
+| Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
-| Face-to-face recording | FTF | 15 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Storage | STOR | 13 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Audio rules and conversion | AUDIO | 24 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Face-to-face recording | FTF | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Edge and by-ear playback checks open |
+| Storage | STOR | 13 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED |
+| Audio rules and conversion | AUDIO | 24 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Telephony parts in Phases 5-6 |
 | Audio QC | AQC | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | AI transcription | ASR | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Human transcription | TRN | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
@@ -47,8 +47,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 0 Inspect and plan | ACCEPTED | 0 | Approved by owner 2026-11-09 |
 | 1 Foundation | ACCEPTED | 1 | Approved by owner 2026-11-09 |
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
-| 3 Participants, tasks, workflow | IN PROGRESS | 3 | All Gate 3 conditions met (docs/evidence/phase3/ci_run.txt); waiting for owner approval |
-| 4 Storage, face-to-face recording | NOT STARTED | 4 | - |
+| 3 Participants, tasks, workflow | ACCEPTED | 3 | Approved by owner 2026-11-09 |
+| 4 Storage, face-to-face recording | IN PROGRESS | 4 | Gate 4 conditions met locally (docs/evidence/phase4/); CI run and owner approval pending |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
 | 7 Audio QC, AI transcription | NOT STARTED | 7 | - |
@@ -76,7 +76,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | GEN-001 | Specification and runbook are the binding contract; the whole runbook is read before code changes; no module skipped, silently removed or silently changed. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-01 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | GEN-002 | No fake data, mocked success, dummy buttons, placeholder pages, stub methods, TODO, FIXME or NotImplemented in production paths or in any feature marked complete; mocks only in isolated tests. | All | n/a | n/a | n/a | [ ] TA-GEN-01 | [ ] TM-GEN-02 | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | GEN-003 | A module is complete only when code exists, the app runs, the feature works, automated tests pass, the manual checklist passes and evidence is in BUILD_STATUS.md. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
-| GEN-004 | A blocked requirement is marked BLOCKED with evidence; provider-independent parts are built behind an adapter or marked boundary; an unconfigured external service shows a truthful Not configured state; nothing pretends to work. | All | n/a | n/a | n/a | [ ] TA-GEN-04 | [ ] TM-GEN-03 | - | NOT STARTED | - |
+| GEN-004 | A blocked requirement is marked BLOCKED with evidence; provider-independent parts are built behind an adapter or marked boundary; an unconfigured external service shows a truthful Not configured state; nothing pretends to work. | All | n/a | n/a | n/a | [x] TA-GEN-04 | [ ] TM-GEN-03 | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | GEN-005 | No invented telephony endpoints, provider features, prices, compliance permissions, audio formats or model capabilities; official documentation URL, access date, feature and test evidence saved in docs/integrations/. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-04 | - | NOT STARTED | - |
 | GEN-006 | Evidence per module in docs/evidence/ (files, migrations, API routes, UI routes, tests and results, manual steps and results, screenshots where useful, defects, remaining work, commit hash); no real personal data or secrets in evidence. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
 | GEN-007 | A test not run is reported NOT RUN with the reason and its requirement is not marked verified; unfinished work is INCOMPLETE; undocumented provider claims are NOT VERIFIED. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-05 | - | NOT STARTED | - |
@@ -219,38 +219,38 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | TASK-010 | State change and its history row written in one database transaction. | 3 | [x] | [x] | [x] | [x] TA-TASK-09 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | TASK-011 | Task list filters and task detail page. | 3 | [x] | [x] | [x] | [x] TA-TASK-10 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-012 | Assignment is project-scoped. | 3 | [x] | [x] | [x] | [x] TA-TASK-11 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-001 | Private cloud object storage; bucket never public. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-01 | [ ] TM-STOR-01 | - | NOT STARTED | - |
-| STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-02 | n/a | - | NOT STARTED | - |
-| STOR-003 | Secure upload. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-03 | n/a | - | NOT STARTED | - |
-| STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-04 | n/a | - | NOT STARTED | - |
-| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-05 | n/a | - | NOT STARTED | - |
-| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-06 | n/a | - | NOT STARTED | - |
-| STOR-007 | Version tracking. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-07 | n/a | - | NOT STARTED | - |
-| STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-08 | n/a | - | NOT STARTED | - |
-| STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-09 | [ ] TM-STOR-02 | - | NOT STARTED | - |
-| STOR-010 | Storage usage reporting/dashboard. | 4 | [ ] | [ ] | [ ] | [ ] TA-DASH-01 | n/a | - | NOT STARTED | - |
-| STOR-011 | Unauthorized user cannot download a recording. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-05 | n/a | - | NOT STARTED | - |
-| STOR-012 | Storage abstraction interface. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-10 | n/a | - | NOT STARTED | - |
-| STOR-013 | Server-side encryption configured. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-STOR-01 | - | NOT STARTED | - |
-| FTF-001 | Browser support check. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-07 | n/a | - | NOT STARTED | - |
-| FTF-002 | Microphone permission requested after a user action; denial gives a clear error. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-01 | [ ] TM-FTF-02 | - | NOT STARTED | - |
-| FTF-003 | Microphones enumerated after permission; moderator selects a device. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-02 | n/a | - | NOT STARTED | - |
-| FTF-004 | Live input-level meter. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-01 | - | NOT STARTED | - |
-| FTF-005 | Short test recording and playback. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-01 | - | NOT STARTED | - |
-| FTF-006 | Project audio rules shown before start. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-08 | n/a | - | NOT STARTED | - |
-| FTF-007 | Start and stop controls; resume; pause only if technically safe. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-03 | n/a | - | NOT STARTED | - |
-| FTF-008 | Recording duration and state displayed. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-01 | - | NOT STARTED | - |
-| FTF-009 | Interruption/error events captured; recoverable data preserved where safely possible; accurate recovery message after refresh, tab close or network loss; no claim that recording continues after tab closure or device sleep. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-03 | - | NOT STARTED | - |
-| FTF-010 | Resumable upload with progress and retry. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-04 | [ ] TM-FTF-03 | - | NOT STARTED | - |
-| FTF-011 | Browser capture stored as the original asset. | 4 | [ ] | [ ] | [ ] | [ ] TA-STOR-08 | n/a | - | NOT STARTED | - |
-| FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-04 | n/a | - | NOT STARTED | - |
-| FTF-013 | Derived PCM WAV generated and validated. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-05 | n/a | - | NOT STARTED | - |
-| FTF-014 | Session metadata captured. | 4 | [ ] | [ ] | [ ] | [ ] TA-FTF-06 | n/a | - | NOT STARTED | - |
-| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-01 | - | NOT STARTED | - |
+| STOR-001 | Private cloud object storage; bucket never public. | 4 | [x] | [x] | [ ] | [x] TA-STOR-01 | [x] TM-STOR-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-002 | Object keys: <project>/face-to-face/YYYY/MM/DD/<task>/original/ and /derived/, <project>/telephony/YYYY/MM/DD/<task>/provider-original/ and /final/, <project>/transcripts/<task>/, <project>/metadata/. | 4 | [x] | [x] | [ ] | [x] TA-STOR-02 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-007 | Version tracking. | 4 | [x] | [x] | [ ] | [x] TA-STOR-07 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [x] | [x] | [ ] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [x] | [x] | [ ] | [x] TA-STOR-09 | [ ] TM-STOR-02 | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-010 | Storage usage reporting/dashboard. | 4 | [x] | [x] | [ ] | [x] TA-DASH-01 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-011 | Unauthorized user cannot download a recording. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| STOR-012 | Storage abstraction interface. | 4 | [x] | [x] | [ ] | [x] TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-013 | Server-side encryption configured. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-STOR-01 | - | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED (docs check pending) |
+| FTF-001 | Browser support check. | 4 | [x] | [x] | [x] | [x] TA-FTF-07 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-002 | Microphone permission requested after a user action; denial gives a clear error. | 4 | [x] | [x] | [x] | [x] TA-FTF-01 | [x] TM-FTF-02 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-003 | Microphones enumerated after permission; moderator selects a device. | 4 | [x] | [x] | [x] | [x] TA-FTF-02 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-004 | Live input-level meter. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-005 | Short test recording and playback. | 4 | [ ] | [ ] | [x] | n/a | [ ] TM-FTF-01 | docs/evidence/phase4/e2e.txt | IN PROGRESS | Test playback not yet checked by ear (no speakers on the build machine) |
+| FTF-006 | Project audio rules shown before start. | 4 | [x] | [x] | [x] | [x] TA-FTF-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-007 | Start and stop controls; resume; pause only if technically safe. | 4 | [x] | [x] | [x] | [x] TA-FTF-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-008 | Recording duration and state displayed. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-009 | Interruption/error events captured; recoverable data preserved where safely possible; accurate recovery message after refresh, tab close or network loss; no claim that recording continues after tab closure or device sleep. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-010 | Resumable upload with progress and retry. | 4 | [x] | [x] | [x] | [x] TA-STOR-04 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-011 | Browser capture stored as the original asset. | 4 | [x] | [x] | [x] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [x] | [x] | [x] | [x] TA-FTF-04 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-013 | Derived PCM WAV generated and validated. | 4 | [x] | [x] | [x] | [x] TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-014 | Session metadata captured. | 4 | [x] | [x] | [x] | [x] TA-FTF-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| FTF-015 | Tested in supported Chrome and Edge versions; a 60-second sample's original and derived files inspected with an independent tool. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt | IN PROGRESS | Chrome verified; Edge not available on the build machine |
 | AUDIO-001 | Telephony: one WAV per conversation. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | n/a | - | NOT STARTED | - |
 | AUDIO-002 | Telephony final file: stereo, 16 kHz, 16-bit signed PCM. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | [ ] TM-AUDIO-01 | - | NOT STARTED | - |
 | AUDIO-003 | Left channel = Participant A only; right channel = Participant B only. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AQC-08 | [ ] TM-TEL-02 | - | NOT STARTED | - |
-| AUDIO-004 | No noise suppression, normalization, compression, EQ or enhancement in either mode. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-02, TA-FTF-04 | n/a | - | NOT STARTED | - |
+| AUDIO-004 | No noise suppression, normalization, compression, EQ or enhancement in either mode. | 4-7 | [x] | [ ] | [x] | [ ] TA-AUDIO-02, TA-FTF-04 | n/a | docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | IN PROGRESS | Face-to-face verified; telephony in Phase 6 |
 | AUDIO-005 | No lossy compression in the stored final WAV. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-01 | n/a | - | NOT STARTED | - |
 | AUDIO-006 | Provider 'stereo' / 'dual-channel' claims verified on the actual file. | 4-7 | [ ] | [ ] | [ ] | n/a | [ ] TM-TEL-02 | - | NOT STARTED | - |
 | AUDIO-007 | No leakage of A into B's channel or B into A's. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AQC-09 | [ ] TM-TEL-02 | - | NOT STARTED | - |
@@ -260,16 +260,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AUDIO-011 | A mixed mono recording is never copied into left and right; the requirement is marked BLOCKED/unsupported. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-04, TA-AQC-10 | n/a | - | NOT STARTED | - |
 | AUDIO-012 | Separate tracks combined into stereo without altering content; provider originals preserved; every derived-file operation recorded. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-02, TA-STOR-08 | n/a | - | NOT STARTED | - |
 | AUDIO-013 | Actual provider codec and recording specification recorded; no 'uncompressed end-to-end' or native 16 kHz claim for a phone call without provider proof. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-05 | [ ] TM-TEL-04 | - | NOT STARTED | - |
-| AUDIO-014 | Face-to-face derived target: WAV, mono, 16 000 Hz, 16-bit signed PCM. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-FTF-05 | [ ] TM-FTF-01 | - | NOT STARTED | - |
-| AUDIO-015 | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-STOR-08, TA-FTF-05 | n/a | - | NOT STARTED | - |
-| AUDIO-016 | Microphone capture needs HTTPS, user permission and a supported browser; clear microphone test before recording. | 4-7 | [ ] | [ ] | [ ] | n/a | [ ] TM-FTF-01 | - | NOT STARTED | - |
-| AUDIO-017 | Every final asset stores: extension and actual container, codec/sample format, sample rate, bit depth, channels, duration, size, peak, clipping count or %, silence %, RMS, hash, source recording ID, processing history. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-06 | n/a | - | NOT STARTED | - |
-| AUDIO-018 | QC analysis never modifies source audio. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | - | NOT STARTED | - |
-| AUDIO-019 | Deterministic, tested processing pipeline. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-07 | n/a | - | NOT STARTED | - |
-| AUDIO-020 | Actual original inspected before conversion; decoded without noise reduction or enhancement; resampled to 16 kHz with a documented high-quality resampler; converted to signed 16-bit; written as WAV; original never overwritten. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-FTF-05, TA-AUDIO-08 | n/a | - | NOT STARTED | - |
-| AUDIO-021 | Conversion to mono only when source channel handling is understood; exact downmix method documented. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-09 | n/a | - | NOT STARTED | - |
-| AUDIO-022 | Processing tool, version, parameters and checksum stored for every derived file. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-06 | n/a | - | NOT STARTED | - |
-| AUDIO-023 | Independent inspection with ffprobe (-v error -show_streams -show_format) or equivalent. | 4-7 | [ ] | [ ] | [ ] | n/a | [ ] TM-AUDIO-01 | - | NOT STARTED | - |
+| AUDIO-014 | Face-to-face derived target: WAV, mono, 16 000 Hz, 16-bit signed PCM. | 4-7 | [x] | [x] | [ ] | [x] TA-FTF-05 | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-015 | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. | 4-7 | [x] | [x] | [ ] | [x] TA-STOR-08, TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-016 | Microphone capture needs HTTPS, user permission and a supported browser; clear microphone test before recording. | 4-7 | [ ] | [ ] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
+| AUDIO-017 | Every final asset stores: extension and actual container, codec/sample format, sample rate, bit depth, channels, duration, size, peak, clipping count or %, silence %, RMS, hash, source recording ID, processing history. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-018 | QC analysis never modifies source audio. | 4-7 | [x] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | docs/evidence/phase4/make_check.txt | IN PROGRESS | Measurements read-only; full QC in Phase 7 |
+| AUDIO-019 | Deterministic, tested processing pipeline. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-07 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-020 | Actual original inspected before conversion; decoded without noise reduction or enhancement; resampled to 16 kHz with a documented high-quality resampler; converted to signed 16-bit; written as WAV; original never overwritten. | 4-7 | [x] | [x] | [ ] | [x] TA-FTF-05, TA-AUDIO-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-021 | Conversion to mono only when source channel handling is understood; exact downmix method documented. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-09 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-022 | Processing tool, version, parameters and checksum stored for every derived file. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
+| AUDIO-023 | Independent inspection with ffprobe (-v error -show_streams -show_format) or equivalent. | 4-7 | [x] | [ ] | [ ] | n/a | [x] TM-AUDIO-01 | docs/evidence/phase4/wasabi_checks.txt | IN PROGRESS | libsndfile check done; ffprobe check runs in CI |
 | AUDIO-024 | Stereo join of separate tracks used only for genuinely separate, aligned tracks, tested on controlled fixtures first. | 4-7 | [ ] | [ ] | [ ] | [ ] TA-AUDIO-02 | n/a | - | NOT STARTED | - |
 | TEL-001 | All provider code behind one adapter interface (internal names, e.g. start_call_to_a, add_b_to_conference, join_moderator, start_recording, moderator_leave, end_conference, get_recording, verify_webhook); real calls implemented only from verified official documentation. | 5, 6 | [ ] | [ ] | [ ] | [ ] TA-TEL-01 | n/a | - | BLOCKED | B-01 provider |
 | TEL-002 | Create outbound call to Participant A. | 5, 6 | [ ] | [ ] | [ ] | [ ] TA-TEL-02 | [ ] TM-TEL-01 | - | BLOCKED | B-01 provider |
@@ -373,7 +373,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-03 | - | NOT STARTED | - |
 | SEC-009 | Data retention and deletion enforced. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-STOR-09, TA-PART-06 | n/a | - | NOT STARTED | - |
 | SEC-010 | Consent record access controls. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-06 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [ ] TA-SEC-07, TA-STOR-05 | n/a | docs/evidence/phase3/make_check.txt | IN PROGRESS | Recording download checks arrive in Phase 4 |
+| SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [x] TA-SEC-07, TA-STOR-05 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-012 | Webhook signature failures rejected. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-TEL-03 | n/a | - | NOT STARTED | - |
 | SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-SEC-08 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | NOT STARTED | - |
@@ -485,3 +485,25 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - CI run 42642154629 (commit e8db924): all 4 jobs succeeded on the first run.
 - Gate 3: every condition met; waiting for owner approval.
 - Next single task (after approval): Phase 4 / G1 - storage adapter (Wasabi / SeaweedFS) and signed URLs.
+
+### Session 5 - 2026-11-09 - Phase 4 (storage, face-to-face recording)
+
+- Owner approved Gate 3 and asked for Phase 4.
+- Downloading a standalone FFmpeg was blocked by the build machine's security check; conversion uses
+  libsoxr through python-soxr instead (D-040), with libsndfile and (in CI) ffprobe for independent checks.
+- Backend: migration 0004 (recordings, recording_chunks, audio_assets, asset_processing_steps); S3
+  storage adapter (Wasabi / SeaweedFS); chunked upload with SHA-256 checks and safe retries; interruption,
+  completion, discard; processing into the untouched browser original (32-bit float WAV) and the derived
+  16 kHz 16-bit mono WAV with a full validation record and processing history; task moves to RECORDED;
+  signed play/download links; retention job (`python -m app.cli retention`); live storage usage; Celery
+  worker (Redis) or in-process processing; truthful 503 NOT_CONFIGURED without storage.
+- Frontend: recorder page (support check, permission, device choice, level meter, test-and-playback,
+  timer, 5-second chunk uploads with retry, recovery of an interrupted recording, results and playback).
+- Tests: backend 134 passed + 1 NOT RUN locally (ffprobe; runs in CI); frontend 50 passed; browser tests 2
+  passed (one records with Chrome's fake microphone).
+- Manual: real recording into the Wasabi bucket (dev prefix) with Chrome's fake microphone; browser
+  processing confirmed off; Wasabi privacy and link expiry checked; test objects deleted
+  (docs/evidence/phase4/).
+- Open: Edge not tested (not on this machine); test playback not checked by ear; Wasabi encryption at
+  rest not verified from documentation.
+- Next single task: push, read CI, then Gate 4 review.

@@ -62,8 +62,8 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | call_participants | call_session_id, participant_id (null for moderator), leg_role (A, B, MODERATOR), provider_call_ref, joined_at, left_at | unique provider_call_ref | cascade |
 | call_events | call_session_id, event_type, provider_event_id, from_state, to_state, occurred_at, received_at | index (call_session_id, occurred_at) | cascade |
 | provider_webhook_events | provider, provider_event_id, signature_valid, received_at, processed_at, status, attempts, last_error, raw_metadata_ref | unique (provider, provider_event_id) | restrict |
-| recordings | task_id, mode, call_session_id, state, started_at, ended_at, interrupted, chunks_received, applied_capture_settings | index task_id | restrict |
-| recording_chunks | recording_id, seq, sha256, size_bytes, storage_key, received_at | unique (recording_id, seq) | cascade |
+| recordings | task_id, mode, state (RECORDING, INTERRUPTED, UPLOADED, PROCESSING, READY, FAILED, DISCARDED), created_by, native_sample_rate, channel_count, channel_handling, echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent, chunks_received, samples_received, interrupted, interruption_reason, started_at, ended_at, failure_reason (call_session_id arrives in Phase 6) | index task_id; at most one open recording per task | restrict |
+| recording_chunks | recording_id, seq, sha256, size_bytes, storage_key, object_deleted | unique (recording_id, seq) | restrict |
 | recording_channels | recording_id, channel_index (0 left, 1 right), participant_id, source_asset_id, verified_separate, verification_note | unique (recording_id, channel_index) | cascade |
 | audio_assets | recording_id, kind, parent_asset_id, storage_key, version, container, codec, sample_format, sample_rate, bit_depth, channels, duration_ms, size_bytes, sha256, peak_dbfs, clip_count, clip_pct, silence_pct, rms_dbfs, provider_codec, provider_recording_spec | unique (storage_key, version); index sha256 | retention workflow |
 | asset_processing_steps | asset_id, seq, tool, tool_version, parameters, input_asset_id, output_sha256 | unique (asset_id, seq) | cascade |
@@ -78,7 +78,6 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | export_items | export_id, task_id, asset_id, path_in_package, sha256 | unique (export_id, path_in_package) | cascade |
 | audit_logs | actor_id, action, entity_type, entity_id, project_id, before_summary, after_summary, ip (S), user_agent, request_id, occurred_at | append-only (no UPDATE/DELETE grant); index (entity_type, entity_id), (occurred_at) | never deleted inside retention |
 | system_settings | key, value_type, value_text, value_int, updated_by | unique key | restrict |
-| storage_usage_daily | project_id, day, mode, asset_kind, bytes, objects | unique (project_id, day, mode, asset_kind) | cascade |
 
 Raw provider payloads are not stored as opaque blobs in the database. Fields the workflow reads get
 their own columns; the raw payload, where kept for audit, goes to private object storage

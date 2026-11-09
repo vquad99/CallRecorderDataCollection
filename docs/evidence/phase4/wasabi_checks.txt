@@ -1,0 +1,9 @@
+Wasabi checks - 2026-11-09T15:40:12Z; bucket callrec57, region ap-southeast-1, prefix dev-aws-dev/phase4/
+1. downloaded derived file sha256 matches database record: True
+2. independent inspection (libsndfile): format=WAV subtype=PCM_16 rate=16000 channels=1 duration=12.07s
+3. stored object original/9d0b7614-ad64-43d7-8eae-ceb0c68a577c.wav: size=2129976, sha256 metadata present=True
+3. stored object derived/9d0b7614-ad64-43d7-8eae-ceb0c68a577c_v1.wav: size=386424, sha256 metadata present=True
+4. upload chunks removed after the original was stored: True (3 chunks)
+5. unsigned request to the object: HTTP 403 (refused; bucket is private)
+6. signed link with 5 s lifetime: HTTP 200 while valid, HTTP 403 after expiry
+7. cleanup: 2 test objects deleted; remaining: 0

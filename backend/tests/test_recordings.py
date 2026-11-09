@@ -1,0 +1,334 @@
+"""Face-to-face recording end to end against a fake S3 (test-only): start, chunk upload with retry
+and checksums, completion, processing into original + derived files, links, retention, usage.
+
+Requirements: FTF-007, FTF-009, FTF-010, FTF-011, FTF-012, FTF-013, FTF-014, STOR-002, STOR-003, STOR-004, STOR-005, STOR-006, STOR-007, STOR-008, STOR-009, STOR-010, STOR-011, STOR-012, AUDIO-015, AUDIO-017, AUDIO-019, GEN-004
+"""
+
+import hashlib
+import io
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+import boto3
+import numpy as np
+import pytest
+import soundfile
+from fastapi.testclient import TestClient
+from moto import mock_aws
+from sqlalchemy import select, update
+
+from app.main import create_app
+from app.modules.recordings import service
+from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording
+from tests.conftest import Api, build_settings, make_participant, make_project, make_user
+
+pytestmark = pytest.mark.db
+BUCKET = "ccp-test"
+RATE = 48000
+
+
+@pytest.fixture
+def s3() -> Iterator[Any]:
+    with mock_aws():
+        client = boto3.client("s3", region_name="us-east-1")
+        client.create_bucket(Bucket=BUCKET)
+        yield client
+
+
+@pytest.fixture
+def app(migrated_db: str, s3: Any, tmp_path: Path) -> Any:
+    return create_app(
+        build_settings(
+            database_url=migrated_db,
+            storage_bucket=BUCKET,
+            storage_access_key_id="test-key",
+            storage_secret_access_key="test-secret",
+            media_work_dir=str(tmp_path / "media"),
+        )
+    )
+
+
+@pytest.fixture
+def world(app: Any) -> Iterator[dict[str, Any]]:
+    clients: list[TestClient] = []
+
+    def api(email: str) -> Api:
+        client = TestClient(app)
+        clients.append(client)
+        a = Api(client)
+        assert a.login(email).status_code == 200
+        return a
+
+    with app.state.session_factory() as db:
+        project = make_project(db, "VOICE")
+        mod = make_user(db, "mod@example.org", ["MODERATOR"], projects=[project])
+        make_user(db, "mod2@example.org", ["MODERATOR"], projects=[project])
+        make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[project])
+        make_user(db, "trn@example.org", ["TRANSCRIBER"], projects=[project])
+        pa, moderator = api("pa@example.org"), api("mod@example.org")
+        a = make_participant(pa, project.id, "Asha")
+        b = make_participant(pa, project.id, "Bina")
+        task = pa.post(
+            "/api/v1/tasks",
+            json={
+                "project_id": str(project.id),
+                "recording_mode": "FACE_TO_FACE",
+                "participant_a_id": a["id"],
+                "participant_b_id": b["id"],
+            },
+        ).json()
+        pa.post(f"/api/v1/tasks/{task['id']}/assign", json={"user_id": str(mod.id)})
+        assert (
+            moderator.post(
+                f"/api/v1/tasks/{task['id']}/transition", json={"to": "IN_PROGRESS"}
+            ).status_code
+            == 200
+        )
+        yield {
+            "app": app,
+            "project": project,
+            "task": task,
+            "pa": pa,
+            "mod": moderator,
+            "api": api,
+            "db": db,
+        }
+    for c in clients:
+        c.close()
+
+
+def chunks(seconds_tone: int = 3, seconds_silence: int = 1) -> list[bytes]:
+    t = np.arange(seconds_tone * RATE) / RATE
+    audio = np.concatenate(
+        [
+            (0.5 * np.sin(2 * np.pi * 440 * t)).astype("<f4"),
+            np.zeros(seconds_silence * RATE, dtype="<f4"),
+        ]
+    )
+    return [audio[i : i + RATE].tobytes() for i in range(0, len(audio), RATE)]
+
+
+START = {
+    "native_sample_rate": RATE,
+    "channel_count": 1,
+    "channel_handling": "mono",
+    "echo_cancellation": False,
+    "noise_suppression": False,
+    "auto_gain_control": False,
+    "device_label": "Test mic",
+    "user_agent": "pytest",
+}
+
+
+def put(api: Api, rid: str, seq: int, data: bytes, sha: str | None = None) -> Any:
+    return api.put(
+        f"/api/v1/recordings/{rid}/chunks/{seq}",
+        content=data,
+        headers={
+            "Content-Type": "application/octet-stream",
+            "X-Content-SHA256": sha or hashlib.sha256(data).hexdigest(),
+        },
+    )
+
+
+def test_storage_not_configured_is_reported_truthfully(db_app: Any, db: Any, new_api: Any) -> None:
+    project = make_project(db, "NOSTORE")
+    make_user(db, "mod@example.org", ["MODERATOR"], projects=[project])
+    api: Api = new_api()
+    api.login("mod@example.org")
+    response = api.post("/api/v1/tasks/00000000-0000-0000-0000-000000000001/recordings", json=START)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "NOT_CONFIGURED"
+
+
+def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
+    mod: Api = world["mod"]
+    tid = world["task"]["id"]
+    rec = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert rec.status_code == 201, rec.text
+    rid = rec.json()["id"]
+    assert rec.json()["echo_cancellation"] is False
+    parts = chunks()
+    for seq, data in enumerate(parts):
+        assert put(mod, rid, seq, data).status_code == 200
+    assert put(mod, rid, 1, parts[1]).status_code == 200, "retrying the same chunk is harmless"
+    assert put(mod, rid, 1, parts[0]).json()["error"]["code"] == "CHUNK_CONFLICT"
+    assert put(mod, rid, 9, parts[0], sha="0" * 64).json()["error"]["code"] == "CHECKSUM_MISMATCH"
+    done = mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": len(parts)})
+    assert done.status_code == 200, done.text
+
+    detail = mod.get(f"/api/v1/recordings/{rid}").json()
+    assert detail["state"] == "READY", detail
+    assets = {a["kind"]: a for a in detail["assets"]}
+    original, derived = assets["BROWSER_ORIGINAL"], assets["FTF_DERIVED_PCM"]
+    assert (
+        original["codec"],
+        original["sample_rate"],
+        original["bit_depth"],
+        original["channels"],
+        original["duration_ms"],
+    ) == ("pcm_f32le", RATE, 32, 1, 4000)
+    assert (
+        derived["codec"],
+        derived["sample_rate"],
+        derived["bit_depth"],
+        derived["channels"],
+        derived["duration_ms"],
+    ) == ("pcm_s16le", 16000, 16, 1, 4000)
+    assert derived["parent_asset_id"] == original["id"]
+    assert derived["silence_pct"] == pytest.approx(25.0, abs=1.0)
+    assert derived["peak_dbfs"] == pytest.approx(-6.0, abs=0.3)
+
+    db = world["db"]
+    db.expire_all()
+    keys = {a.kind: a.storage_key for a in db.scalars(select(AudioAsset)).all()}
+    assert keys["FTF_DERIVED_PCM"].startswith(
+        f"VOICE/face-to-face/{datetime.now(UTC):%Y/%m/%d}/{tid}/derived/"
+    )
+    stored = s3.get_object(Bucket=BUCKET, Key=keys["FTF_DERIVED_PCM"])
+    body = stored["Body"].read()
+    assert hashlib.sha256(body).hexdigest() == derived["sha256"] == stored["Metadata"]["sha256"]
+    info = soundfile.info(io.BytesIO(body))
+    assert (info.samplerate, info.channels, info.subtype) == (16000, 1, "PCM_16")
+    original_body = s3.get_object(Bucket=BUCKET, Key=keys["BROWSER_ORIGINAL"])["Body"].read()
+    assert original_body.endswith(b"".join(parts)), "original keeps the browser samples unchanged"
+    remaining = s3.list_objects_v2(
+        Bucket=BUCKET,
+        Prefix=f"VOICE/face-to-face/{datetime.now(UTC):%Y/%m/%d}/{tid}/original/chunks/",
+    ).get("KeyCount", 0)
+    assert remaining == 0, "chunks are removed once the original is stored"
+    steps = db.scalars(select(AssetProcessingStep.tool)).all()
+    assert set(steps) == {"ccp chunk assembly", "python-soxr"}
+    assert mod.get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+
+
+def _record(world: dict[str, Any], parts: list[bytes], complete: bool = True) -> str:
+    mod: Api = world["mod"]
+    rid: str = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
+    for seq, data in enumerate(parts):
+        put(mod, rid, seq, data)
+    if complete:
+        mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": len(parts)})
+    return rid
+
+
+def test_reprocessing_creates_a_new_identical_version(world: dict[str, Any]) -> None:
+    rid = _record(world, chunks(2, 0))
+    db = world["db"]
+    service.process(
+        db, world["app"].state.settings, world["app"].state.storage, __import__("uuid").UUID(rid)
+    )
+    derived = db.scalars(
+        select(AudioAsset).where(AudioAsset.kind == "FTF_DERIVED_PCM").order_by(AudioAsset.version)
+    ).all()
+    assert [d.version for d in derived] == [1, 2]
+    assert derived[0].sha256 == derived[1].sha256
+
+
+def test_missing_chunks_block_completion(world: dict[str, Any]) -> None:
+    parts = chunks(3, 0)
+    rid = _record(world, [], complete=False)
+    put(world["mod"], rid, 0, parts[0])
+    put(world["mod"], rid, 2, parts[2])
+    response = world["mod"].post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 3})
+    assert response.json()["error"]["code"] == "MISSING_CHUNKS"
+    assert response.json()["error"]["details"] == [{"missing": [1]}]
+
+
+def test_interrupted_recording_keeps_saved_audio(world: dict[str, Any]) -> None:
+    parts = chunks(3, 0)
+    rid = _record(world, parts[:2], complete=False)
+    mod: Api = world["mod"]
+    stopped = mod.post(
+        f"/api/v1/recordings/{rid}/interrupted", json={"reason": "tab closed"}
+    ).json()
+    assert (stopped["state"], stopped["saved_seconds"]) == ("INTERRUPTED", 2.0)
+    assert put(mod, rid, 2, parts[2]).json()["error"]["code"] == "RECORDING_CLOSED"
+    assert (
+        mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 99}).status_code == 200
+    )
+    detail = mod.get(f"/api/v1/recordings/{rid}").json()
+    assert detail["interrupted"] is True
+    assert {a["kind"]: a["duration_ms"] for a in detail["assets"]}["FTF_DERIVED_PCM"] == 2000
+
+
+def test_discard_removes_uploaded_chunks(world: dict[str, Any], s3: Any) -> None:
+    rid = _record(world, chunks(2, 0), complete=False)
+    assert (
+        world["mod"]
+        .post(f"/api/v1/recordings/{rid}/discard", json={"reason": "wrong people"})
+        .json()["state"]
+        == "DISCARDED"
+    )
+    assert s3.list_objects_v2(Bucket=BUCKET).get("KeyCount", 0) == 0
+
+
+def test_who_may_record(world: dict[str, Any]) -> None:
+    tid = world["task"]["id"]
+    assert world["pa"].post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 403
+    other = world["api"]("mod2@example.org")
+    assert other.post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 404
+    rid = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START).json()["id"]
+    second = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert second.json()["error"]["code"] == "RECORDING_OPEN"
+    assert second.json()["error"]["details"] == [{"recording_id": rid}]
+
+
+def test_links_are_signed_short_lived_and_permission_checked(world: dict[str, Any]) -> None:
+    rid = _record(world, chunks(1, 0))
+    detail = world["mod"].get(f"/api/v1/recordings/{rid}").json()
+    derived = next(a for a in detail["assets"] if a["kind"] == "FTF_DERIVED_PCM")
+    play = world["mod"].post(f"/api/v1/assets/{derived['id']}/url", json={"purpose": "play"}).json()
+    assert "X-Amz-Expires=300" in play["url"]
+    assert "X-Amz-Signature=" in play["url"]
+    assert (
+        world["mod"]
+        .post(f"/api/v1/assets/{derived['id']}/url", json={"purpose": "download"})
+        .status_code
+        == 403
+    )
+    download = (
+        world["pa"].post(f"/api/v1/assets/{derived['id']}/url", json={"purpose": "download"}).json()
+    )
+    assert "response-content-disposition=attachment" in download["url"]
+    transcriber = world["api"]("trn@example.org")
+    assert (
+        transcriber.post(
+            f"/api/v1/assets/{derived['id']}/url", json={"purpose": "play"}
+        ).status_code
+        == 404
+    )
+
+
+def test_retention_deletes_expired_files_and_usage_counts_live_ones(
+    world: dict[str, Any], s3: Any
+) -> None:
+    rid = _record(world, chunks(1, 0))
+    db = world["db"]
+    from app.modules.projects.models import ProjectRetentionRule
+
+    db.add(
+        ProjectRetentionRule(
+            project_id=world["project"].id, asset_kind="BROWSER_ORIGINAL", retain_days=1
+        )
+    )
+    db.execute(
+        update(AudioAsset)
+        .where(AudioAsset.kind == "BROWSER_ORIGINAL")
+        .values(created_at=datetime.now(UTC) - timedelta(days=2))
+    )
+    db.commit()
+    before = {r["kind"]: r["files"] for r in world["pa"].get("/api/v1/storage/usage").json()}
+    assert before == {"BROWSER_ORIGINAL": 1, "FTF_DERIVED_PCM": 1}
+    assert service.apply_retention(db, world["app"].state.storage) == 1
+    original = db.scalars(select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")).one()
+    assert original.deleted_at is not None
+    assert world["app"].state.storage.head(original.storage_key) is None
+    after = {r["kind"]: r["files"] for r in world["pa"].get("/api/v1/storage/usage").json()}
+    assert after == {"FTF_DERIVED_PCM": 1}
+    assert (
+        db.scalar(select(Recording.state).where(Recording.id == __import__("uuid").UUID(rid)))
+        == "READY"
+    )

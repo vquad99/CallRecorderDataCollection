@@ -21,6 +21,12 @@ the lockfile or image tag it names.
 | Password hashing | argon2-cffi | 25.1.0 | uv.lock |
 | Field encryption | cryptography | 50.0.2 | uv.lock |
 | Email validation | email-validator | 2.3.0 | uv.lock |
+| S3 client | boto3 | 1.43.118 | uv.lock |
+| Numerics | numpy | 2.5.4 | uv.lock |
+| Resampler (libsoxr) | soxr | 1.1.0 | uv.lock |
+| WAV reading (libsndfile) | soundfile | 0.14.0 | uv.lock |
+| Background jobs | celery | 5.6.3 | uv.lock |
+| Fake S3 for tests | moto | 5.2.4 | uv.lock |
 | Backend tests | pytest | 9.1.1 | uv.lock |
 | Test HTTP client | httpx2 | 2.16.0 | uv.lock |
 | Python lint/format | ruff | 0.17.2 | uv.lock |
@@ -54,9 +60,7 @@ gitleaks/gitleaks-action@v3.
 
 | Layer | Choice | Phase |
 |---|---|---|
-| Queue workers | Celery (with Redis) | first background job (Phase 4) |
-| Audio | FFmpeg + numpy/soundfile | 4 |
-| Object storage client | S3 client library against Wasabi / SeaweedFS (D-019, D-020) | 4 |
+| Audio decoding of provider formats | FFmpeg from system packages (D-040) | 6 |
 | ASR | Deepgram API through the ASR adapter, optional per project (D-018) | 7 |
 | Error tracking, metrics | to choose | 10 |
 

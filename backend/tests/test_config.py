@@ -73,6 +73,9 @@ def test_production_rules(monkeypatch: pytest.MonkeyPatch) -> None:
         "EMAIL_BACKEND": "smtp",
         "SMTP_HOST": "smtp.example.org",
         "PUBLIC_APP_URL": "https://app.example.org",
+        "STORAGE_BUCKET": "ccp-prod",
+        "STORAGE_ACCESS_KEY_ID": "key-id",
+        "STORAGE_SECRET_ACCESS_KEY": "secret-access-key",
     }
     _set(monkeypatch, **base)
     assert load_settings().api_docs_enabled is False

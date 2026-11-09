@@ -103,15 +103,14 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| POST | /tasks/{id}/recordings | `recordings.create` |
-| PUT | /recordings/{id}/chunks/{seq} | `recordings.create` (sha256 header checked) |
-| POST | /recordings/{id}/complete | `recordings.create` |
-| POST | /recordings/{id}/interrupted | `recordings.create` |
-| GET | /recordings/{id} | `recordings.view` |
-| GET | /assets/{id} | `recordings.view` |
-| POST | /assets/{id}/download-url | `recordings.download` (short-lived signed URL) |
-| POST | /assets/{id}/delete-request | `assets.delete` |
-| GET | /storage/usage | `dashboard.view` |
+| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS (503 NOT_CONFIGURED without storage); GET: task visibility |
+| PUT | /recordings/{id}/chunks/{seq} | raw float32 body, `X-Content-SHA256` header checked; same chunk again is accepted, a different one is 409 |
+| POST | /recordings/{id}/interrupted | the recording's moderator; body `{reason}` |
+| POST | /recordings/{id}/complete | the recording's moderator; body `{chunk_count}`; 409 MISSING_CHUNKS lists gaps; starts processing |
+| POST | /recordings/{id}/discard | the recording's moderator; deletes uploaded chunks |
+| GET | /recordings/{id} | task visibility; includes assets with the full validation record |
+| POST | /assets/{id}/url | body `{purpose: play or download}`; play needs `recordings.view`, download `recordings.download`; signed link valid SIGNED_URL_SECONDS (300) |
+| GET | /storage/usage | `dashboard.view`; files and bytes per project and asset kind |
 
 ## Telephony (TEL-*) - BLOCKED until Gate 5
 

@@ -55,6 +55,19 @@ class Settings(BaseSettings):
     rate_limit_reads_per_minute: int = Field(default=600, ge=1, le=100_000)
     rate_limit_writes_per_minute: int = Field(default=120, ge=1, le=100_000)
 
+    # Phase 4: object storage (Wasabi in cloud, SeaweedFS locally) and media processing
+    storage_endpoint_url: str | None = None
+    storage_region: str = "us-east-1"
+    storage_bucket: str | None = None
+    storage_access_key_id: SecretStr | None = None
+    storage_secret_access_key: SecretStr | None = None
+    storage_key_prefix: str = ""
+    storage_create_bucket: bool = False
+    signed_url_seconds: int = Field(default=300, ge=30, le=3600)
+    media_work_dir: str = "var/media"
+    max_chunk_bytes: int = Field(default=8_000_000, ge=1024, le=64_000_000)
+    max_recording_seconds: int = Field(default=4 * 3600, ge=60, le=24 * 3600)
+
     email_backend: Literal["smtp", "file"] = "file"
     email_from: str = "Conversation Collection <no-reply@localhost>"
     email_file_dir: str = "var/outbox"
@@ -130,7 +143,16 @@ class Settings(BaseSettings):
                 raise ValueError("PUBLIC_APP_URL must use https in production")
             if self.cookie_secure is False:
                 raise ValueError("COOKIE_SECURE cannot be false in production")
+            if not self.storage_configured:
+                raise ValueError("production needs STORAGE_BUCKET and storage keys")
         return self
+
+    @property
+    def storage_configured(self) -> bool:
+        # The endpoint is optional: unset means Amazon S3 itself; Wasabi and SeaweedFS set it.
+        return bool(
+            self.storage_bucket and self.storage_access_key_id and self.storage_secret_access_key
+        )
 
     @property
     def cookies_secure(self) -> bool:
@@ -151,6 +173,8 @@ class Settings(BaseSettings):
         values = [self.secret_key.get_secret_value(), self.data_encryption_key.get_secret_value()]
         if self.smtp_password is not None:
             values.append(self.smtp_password.get_secret_value())
+        if self.storage_secret_access_key is not None:
+            values.append(self.storage_secret_access_key.get_secret_value())
         password = make_url(self.database_url.get_secret_value()).password
         if password:
             values.append(str(password))

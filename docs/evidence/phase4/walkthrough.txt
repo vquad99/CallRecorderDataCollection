@@ -1,0 +1,14 @@
+Phase 4 manual integration walk-through - 2026-11-09T15:39:26Z
+Real backend + Vite; storage = Wasabi bucket callrec57 (ap-southeast-1), dev prefix dev-aws-dev/phase4/; no Redis (in-process processing); Google Chrome fake microphone.
+
+task T000001 (face-to-face) created and assigned
+recording READY; applied: echo=false noise=false agc=false; native 44100 Hz; chunks 3
+  asset BROWSER_ORIGINAL v1: pcm_f32le 44100 Hz 32-bit 1 ch, 12074 ms, 2129976 bytes, sha256 c815138a25b8c45f...
+  asset FTF_DERIVED_PCM v1: pcm_s16le 16000 Hz 16-bit 1 ch, 12074 ms, 386424 bytes, sha256 773e062b027fe83b...
+signed play link: expires in 300 s; download through it HTTP 200
+moderator asking for a download link: HTTP 403
+transcriber (not assigned) asking for a play link: HTTP 404
+task status now: RECORDED
+refused microphone: clear message shown
+page errors: 0
+exit=0

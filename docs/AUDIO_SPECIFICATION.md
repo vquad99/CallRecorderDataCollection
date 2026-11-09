@@ -68,17 +68,16 @@ mono. Never overwritten.
 Derived asset (`FTF_DERIVED_PCM`), deterministic pipeline (AUDIO-019..022):
 1. Inspect the original with ffprobe; store the result.
 2. Decode with no filters other than the ones listed here.
-3. Resample to 16 000 Hz with a documented high-quality resampler (proposed: FFmpeg `soxr`).
-4. Mono: the capture is mono, so no downmix. If a source ever has two channels, the downmix method
-   (which channel, or equal-weight average) is a project decision recorded before conversion.
-5. Convert to signed 16-bit; the dither choice is fixed and recorded.
+3. Resample to 16 000 Hz with libsoxr, quality VHQ, through python-soxr (D-040).
+4. Mono: the first channel is kept when the browser delivers more than one; the recording stores
+   "mono" or "first channel of N" (D-041).
+5. Convert to signed 16-bit: round half to even, clip to the 16-bit range, no dither (recorded in
+   `asset_processing_steps`).
 6. Write WAV; inspect independently with ffprobe; store tool, version, parameters and SHA-256.
 
-Example (runbook O; exact parameters fixed in Phase 4 and recorded):
-
-```bash
-ffmpeg -i original.wav -af aresample=resampler=soxr -ar 16000 -ac 1 -c:a pcm_s16le derived_mono_16k.wav
-```
+Implementation: `backend/app/modules/recordings/media.py` (`resample_to_pcm16`). The runbook's FFmpeg
+example (`ffmpeg -i original.wav -af aresample=resampler=soxr -ar 16000 -ac 1 -c:a pcm_s16le out.wav`)
+uses the same resampler; it is not used because the FFmpeg program could not be installed (D-040).
 
 Resampling 48 kHz to 16 kHz and reducing to 16 bits is not lossless. The derived file is labelled
 derived, the original is kept, and the client's acceptance is open (DECISIONS.md B-03).

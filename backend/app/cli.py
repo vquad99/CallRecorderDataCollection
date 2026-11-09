@@ -87,10 +87,27 @@ def seed_dev(settings: Settings, password: str) -> list[str]:
     return created
 
 
+def run_retention(settings: Settings) -> int:
+    from app.core.storage import build_storage
+    from app.modules.recordings.service import apply_retention
+
+    storage = build_storage(settings)
+    if storage is None:
+        raise SeedRefused("storage is not configured")
+    engine = create_db_engine(settings)
+    with make_session_factory(engine)() as db:
+        count = apply_retention(db, storage)
+    engine.dispose()
+    return count
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("seed-dev", help="create demo accounts and a DEMO project (development only)")
+    sub.add_parser(
+        "retention", help="delete stored files older than each project's retention rules"
+    )
     args = parser.parse_args(argv)
     try:
         settings = load_settings()
