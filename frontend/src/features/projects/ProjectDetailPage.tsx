@@ -29,8 +29,7 @@ export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
   const { state, reload, replace } = useResource(() => getProject(projectId), [projectId]);
   if (state.status === "loading") return <LoadingState label="Loading project" />;
-  if (state.status === "failed")
-    return <ErrorState message={state.error.message} onRetry={reload} />;
+  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const project = state.data;
   return (
     <section aria-labelledby="project-title" className="stack">

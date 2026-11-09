@@ -124,12 +124,12 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FND-012 | API version prefix /api/v1. | 1 | [x] | n/a | n/a | [x] TA-FND-09 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-013 | Frontend layout: src/{app,api,auth,components,features,layouts,routes,styles,test}, public/, package.json, vite.config.ts, tsconfig.json. | 1 | n/a | n/a | [x] | n/a | [x] TM-FND-01 | docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
 | FND-014 | React + TypeScript with strict TypeScript; type check passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-015 | Route handling. | 1 | n/a | n/a | [x] | [x] TA-FND-11 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-016 | Shared API client. | 1 | n/a | n/a | [x] | [x] TA-FND-12 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
+| FND-015 | Route handling. | 1 | n/a | n/a | [x] | [x] TA-FND-11, TA-FND-17, TA-FND-18 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/option_c/make_check_frontend.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-016 | Shared API client. | 1 | n/a | n/a | [x] | [x] TA-FND-12, TA-FND-19 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/phase1/manual_checks.txt; docs/evidence/option_c/make_check_frontend.txt | VERIFIED | - |
 | FND-017 | Global error boundary. | 1 | n/a | n/a | [x] | [x] TA-FND-13 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-018 | Loading, empty and error components. | 1 | n/a | n/a | [x] | [x] TA-FND-13 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-019 | Accessible form controls. | 1 | n/a | n/a | [x] | [x] TA-FND-14 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| FND-020 | Responsive application shell. | 1 | n/a | n/a | [x] | n/a | [x] TM-PWA-02 | docs/evidence/phase1/manual_checks.txt; docs/evidence/phase1/screens/status_375x800.png | VERIFIED | - |
+| FND-018 | Loading, empty and error components. | 1 | n/a | n/a | [x] | [x] TA-FND-13, TA-FND-17, TA-FND-19 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/option_c/make_check_frontend.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-019 | Accessible form controls. | 1 | n/a | n/a | [x] | [x] TA-FND-14, TA-FND-17, TA-FND-19 | n/a | docs/evidence/phase1/make_check.txt; docs/evidence/option_c/make_check_frontend.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| FND-020 | Responsive application shell. | 1 | n/a | n/a | [x] | [x] TA-FND-18 | [x] TM-PWA-02 | docs/evidence/phase1/manual_checks.txt; docs/evidence/phase1/screens/status_375x800.png; docs/evidence/option_c/make_check_frontend.txt | VERIFIED | - |
 | FND-021 | Frontend unit test setup; runner passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-022 | Lint and format commands; lint passes. | 1 | n/a | n/a | [x] | [x] TA-FND-10 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-023 | Browser console shows no application errors. | 1 | n/a | n/a | [x] | [x] TA-FND-15 | n/a | docs/evidence/phase1/e2e.txt; docs/evidence/phase1/manual_checks.txt | VERIFIED | - |
@@ -155,7 +155,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [x] | [x] | [x] | [x] TA-SEC-10 | [x] TM-ROLE-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
 | ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03, TA-ROLE-01, TA-SEC-10, TA-AUTH-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-04 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-04, TA-FND-17, TA-FND-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_c/make_check_frontend.txt | VERIFIED | - |
 | ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | AUTH-001 | Login with correct credentials succeeds (POST /api/v1/auth/login). | 2 | [x] | [x] | [x] | [x] TA-AUTH-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | AUTH-002 | Wrong credentials fail. | 2 | [x] | [x] | [x] | [x] TA-AUTH-02, TA-AUTH-20 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
@@ -172,7 +172,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AUTH-013 | Secure HTTP-only SameSite cookies (or a documented secure token strategy); no long-lived secrets in browser local storage. | 2 | [x] | [x] | [x] | [x] TA-AUTH-15, TA-AUTH-17 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-014 | Audit events for login failures, password changes and account disablement. | 2 | [x] | [x] | [x] | [x] TA-AUTH-13 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUTH-015 | GET /api/v1/auth/me returns the current user; no API ever returns a password or hash. | 2 | [x] | [x] | [x] | [x] TA-AUTH-14 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| AUTH-016 | Frontend: login, forgot password, reset password pages, session-expired message, protected route wrapper. | 2 | [x] | [x] | [x] | [x] TA-AUTH-16 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| AUTH-016 | Frontend: login, forgot password, reset password pages, session-expired message, protected route wrapper. | 2 | [x] | [x] | [x] | [x] TA-AUTH-16, TA-FND-17 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_c/make_check_frontend.txt | VERIFIED | - |
 | USER-001 | Create, edit, deactivate and reactivate users. | 2 | [x] | [x] | [x] | [x] TA-USER-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | USER-002 | Assign roles. | 2 | [x] | [x] | [x] | [x] TA-USER-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | USER-003 | Assign project membership. | 2 | [x] | [x] | [x] | [x] TA-USER-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -563,3 +563,22 @@ test in TEST_PLAN.md. It does not mean anything is built.
   passed in Chromium and Microsoft Edge 156, no known dependency vulnerabilities
   (docs/evidence/option_b/ci_run.txt).
 - Option B done; waiting for the owner's next choice.
+
+### Session 8 - 2026-11-09 - Option C: frontend testing
+
+- Owner asked for Option C (frontend testing: forms, navigation, validation, error states).
+- New tests (269): `src/app/pages.test.tsx` - every route (inventory read from routes.tsx) loaded
+  with an axe check, loading, five kinds of failure with Try again, No access, signed-out redirect;
+  `src/app/navigation.test.tsx` - the menu of each of the six roles, current-page marking, account,
+  sign-out, no dead links; `src/app/forms.test.tsx` - every form (inventory counts `<form>` in the
+  source): one request with the entered values, no second request while waiting, and validation,
+  conflict, server and connection failures shown without losing what was typed. Shared fake backend
+  `src/test/world.ts`; the fake fetch can now delay or drop a reply.
+- Found and fixed: 17 of 19 error screens hid the server's reference and all used one generic title
+  (D-053); validation errors never named the field (D-053); the New task page showed an empty project
+  list when loading failed (D-053); the languages form wiped what was typed when saving failed; a task
+  comment could be posted twice by a quick second click; the not-found page's link said "system
+  status" but opened Projects. Each fix was removed once to watch its tests fail, then restored.
+- Results: frontend 319 passed, build OK; browser tests 2 passed in Chrome
+  (docs/evidence/option_c/). Backend unchanged since Option B.
+- Next single task: push, read CI, then report Option C.

@@ -20,15 +20,18 @@ function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  async function run(action: () => Promise<unknown>) {
+  /** Runs an action; resolves true when it worked, false when its error is now shown. */
+  async function run(action: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
       const text = await action();
       if (typeof text === "string") setMessage(text);
+      return true;
     } catch (err) {
       setError(toApiError(err));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -124,7 +127,7 @@ export function TeamTab() {
     <div className="stack">
       {members.state.status === "loading" ? <LoadingState /> : null}
       {members.state.status === "failed" ? (
-        <ErrorState message={members.state.error.message} onRetry={members.reload} />
+        <ErrorState error={members.state.error} onRetry={members.reload} />
       ) : null}
       {members.state.status === "loaded" && members.state.data.length === 0 ? (
         <EmptyState title="No members yet" />
@@ -370,9 +373,12 @@ export function LanguagesTab() {
             void save(
               [...project.languages, { language_code: code.trim(), dialect: dialect.trim() }],
               "Language added.",
-            ).then(() => {
-              setCode("");
-              setDialect("");
+            ).then((saved) => {
+              // Keep what was typed when saving failed, so it can be corrected and sent again.
+              if (saved) {
+                setCode("");
+                setDialect("");
+              }
             });
           }}
         >
@@ -472,7 +478,7 @@ export function GuidelinesTab() {
     <div className="stack">
       {guidelines.state.status === "loading" ? <LoadingState /> : null}
       {guidelines.state.status === "failed" ? (
-        <ErrorState message={guidelines.state.error.message} onRetry={guidelines.reload} />
+        <ErrorState error={guidelines.state.error} onRetry={guidelines.reload} />
       ) : null}
       {guidelines.state.status === "loaded" && guidelines.state.data.length === 0 ? (
         <EmptyState title="No guidelines yet" />

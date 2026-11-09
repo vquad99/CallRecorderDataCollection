@@ -133,6 +133,9 @@ output saved to evidence.
 | TA-FND-14 | Automated | 1 | Automated accessibility checks (axe) pass on form controls and shell. | FND-019 |
 | TA-FND-15 | Automated | 1 | Playwright run records no console errors on the main pages. | FND-023 |
 | TA-FND-16 | Automated | 1 | Seed command refuses to run when environment is production. | FND-027 |
+| TA-FND-17 | Automated | 4 (Option C) | Page inventory: every route has an entry; every page shows its content with no axe violations, a polite loading message, and for a server error (with its reference), not found, no permission, service not configured and a lost connection an error that says what happened and recovers with Try again; guarded pages show No access without their permission; signed-out visitors go to sign-in with the address kept. | FND-015, FND-018, FND-019, AUTH-016, ROLE-011 |
+| TA-FND-18 | Automated | 4 (Option C) | Navigation: each of the six roles sees exactly its menu, each entry opens its page and is marked current; account and sign-out work; no link on any page leads to a missing page. | FND-015, FND-020, ROLE-011 |
+| TA-FND-19 | Automated | 4 (Option C) | Form inventory: every form in the source has an entry; each sends what was entered in exactly one request, sends nothing more on a second click while waiting, and shows a validation error naming the field, a conflict, a server error with its reference and a lost connection without losing what was typed. | FND-016, FND-018, FND-019, SEC-006 |
 | TM-FND-01 | Manual | 1 | Review: backend and frontend folder layout per runbook D1/D2. | FND-001, FND-013 |
 | TM-FND-02 | Manual | 1 | One command starts dependencies; health checks green; restart keeps data; .env.example has names and safe values only. | FND-024, FND-025 |
 

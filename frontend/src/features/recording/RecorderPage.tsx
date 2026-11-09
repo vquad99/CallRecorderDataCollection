@@ -393,7 +393,7 @@ export function RecorderPage() {
   if (task.state.status === "loading" || existing.state.status === "loading")
     return <LoadingState label="Loading task" />;
   if (task.state.status === "failed")
-    return <ErrorState message={task.state.error.message} onRetry={task.reload} />;
+    return <ErrorState error={task.state.error} onRetry={task.reload} />;
   const t = task.state.data;
   if (t.recording_mode !== "FACE_TO_FACE" || !t.is_moderator) {
     return (

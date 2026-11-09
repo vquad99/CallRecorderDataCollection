@@ -45,12 +45,7 @@ export function StatusPage() {
       <h1 id="status-title">System status</h1>
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}
       {state.kind === "failed" ? (
-        <ErrorState
-          title="Server status unavailable"
-          message={state.error.message}
-          requestId={state.error.requestId}
-          onRetry={retry}
-        />
+        <ErrorState title="Server status unavailable" error={state.error} onRetry={retry} />
       ) : null}
       {state.kind === "loaded" ? (
         <div className="card">

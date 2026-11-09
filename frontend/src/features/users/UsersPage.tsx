@@ -88,13 +88,7 @@ export function UsersPage() {
         />
       </div>
       {state.status === "loading" ? <LoadingState label="Loading users" /> : null}
-      {state.status === "failed" ? (
-        <ErrorState
-          message={state.error.message}
-          requestId={state.error.requestId}
-          onRetry={reload}
-        />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.items.length === 0 ? (
         <EmptyState title="No users found" />
       ) : null}

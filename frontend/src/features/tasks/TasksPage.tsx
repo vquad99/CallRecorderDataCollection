@@ -80,7 +80,7 @@ export function TasksPage() {
       </div>
       {tasks.state.status === "loading" ? <LoadingState label="Loading tasks" /> : null}
       {tasks.state.status === "failed" ? (
-        <ErrorState message={tasks.state.error.message} onRetry={tasks.reload} />
+        <ErrorState error={tasks.state.error} onRetry={tasks.reload} />
       ) : null}
       {tasks.state.status === "loaded" && tasks.state.data.items.length === 0 ? (
         <EmptyState

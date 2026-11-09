@@ -83,9 +83,7 @@ function Sessions() {
     <section className="card" aria-labelledby="sessions-title">
       <h2 id="sessions-title">Signed-in devices</h2>
       {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
         <table className="table">
           <thead>

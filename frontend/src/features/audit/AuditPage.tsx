@@ -41,9 +41,7 @@ export function AuditPage() {
         />
       </div>
       {state.status === "loading" ? <LoadingState label="Loading audit log" /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.items.length === 0 ? (
         <EmptyState title="No entries" />
       ) : null}

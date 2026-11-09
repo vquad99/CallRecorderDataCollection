@@ -9,7 +9,7 @@ import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
-import { LoadingState } from "../../components/StateViews";
+import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
 
 export function TaskCreatePage() {
@@ -68,7 +68,22 @@ export function TaskCreatePage() {
     }
   }
 
-  if (projects.state.status === "loading") return <LoadingState />;
+  if (projects.state.status === "loading") return <LoadingState label="Loading projects" />;
+  if (projects.state.status === "failed") {
+    return (
+      <section aria-labelledby="new-task-title" className="stack">
+        <h1 id="new-task-title">New task</h1>
+        <ErrorState error={projects.state.error} onRetry={projects.reload} />
+      </section>
+    );
+  }
+  // The chosen project's details and people: a failure is reported, never an empty list.
+  const projectError =
+    project.state.status === "failed"
+      ? project.state.error
+      : people.state.status === "failed"
+        ? people.state.error
+        : null;
   const projectOptions =
     projects.state.status === "loaded"
       ? projects.state.data.items.map((p) => ({ value: p.id, label: `${p.code} ${p.name}` }))
@@ -126,6 +141,20 @@ export function TaskCreatePage() {
               value={due}
               onChange={(e) => setDue(e.target.value)}
             />
+            {projectError ? (
+              <>
+                <ErrorNotice error={projectError} />
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    project.reload();
+                    people.reload();
+                  }}
+                >
+                  Try again
+                </Button>
+              </>
+            ) : null}
           </>
         ) : null}
         <ErrorNotice error={error} />

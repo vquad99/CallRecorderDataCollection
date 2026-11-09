@@ -87,8 +87,7 @@ function ConsentList({ projectId, participantId }: { projectId: string; particip
     [projectId, participantId],
   );
   if (state.status === "loading") return <LoadingState label="Loading consent" />;
-  if (state.status === "failed")
-    return <ErrorState message={state.error.message} onRetry={reload} />;
+  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   if (state.data.length === 0) return <p className="muted">No consent recorded yet.</p>;
   return (
     <ul className="list">
@@ -211,7 +210,7 @@ export function ParticipantsTab() {
       />
       {list.state.status === "loading" ? <LoadingState label="Loading participants" /> : null}
       {list.state.status === "failed" ? (
-        <ErrorState message={list.state.error.message} onRetry={list.reload} />
+        <ErrorState error={list.state.error} onRetry={list.reload} />
       ) : null}
       {list.state.status === "loaded" && list.state.data.items.length === 0 ? (
         <EmptyState title="No participants yet" />

@@ -113,9 +113,7 @@ export function UserDetailPage() {
     <section aria-labelledby="user-title" className="stack">
       <h1 id="user-title">User</h1>
       {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
         <>
           <p>

@@ -1,0 +1,52 @@
+$ make check-frontend  (run 2026-11-09T17:28:59Z on aws-dev, Option C frontend tests; backend unchanged since Option B, its checks run in CI)
+cd frontend && npm run format:check
+
+> ccp-frontend@0.1.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+cd frontend && npm run lint
+
+> ccp-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+cd frontend && npm run typecheck
+
+> ccp-frontend@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+cd frontend && npm test
+
+> ccp-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/quad99/conversation-collection-platform/frontend
+
+
+ Test Files  17 passed (17)
+      Tests  319 passed (319)
+   Start at  22:59:21
+   Duration  33.67s (tests 59%, environment 30%, setup 5%, import 5%, transform 1%)
+
+Environment  jsdom was created 17 times · 28.02s total, 30% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+cd frontend && npm run build
+
+> ccp-frontend@0.1.0 build
+> tsc --noEmit -p tsconfig.json && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 134 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:   0.30 kB
+dist/assets/index-Bfk0G16z.css    5.21 kB │ gzip:   1.61 kB
+dist/assets/index-BF06SuCG.js   398.81 kB │ gzip: 120.37 kB
+
+✓ built in 364ms
+exit=0

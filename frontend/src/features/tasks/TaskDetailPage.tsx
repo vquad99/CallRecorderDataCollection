@@ -213,13 +213,12 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<ApiError | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   return (
     <section className="card" aria-labelledby="timeline-title">
       <h2 id="timeline-title">History</h2>
       {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
         <ol className="list">
           {state.data.map((e, i) => (
@@ -236,6 +235,7 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
+          setSending(true);
           work
             .addComment(taskId, text)
             .then(() => {
@@ -243,11 +243,12 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
               setOk("Comment added.");
               reload();
             })
-            .catch((err: unknown) => setError(toApiError(err)));
+            .catch((err: unknown) => setError(toApiError(err)))
+            .finally(() => setSending(false));
         }}
       >
         <TextField label="Add a comment" value={text} onChange={(e) => setText(e.target.value)} />
-        <Button type="submit" variant="secondary" disabled={!text.trim()}>
+        <Button type="submit" variant="secondary" busy={sending} disabled={!text.trim()}>
           Add comment
         </Button>
       </form>
@@ -261,8 +262,7 @@ export function TaskDetailPage() {
   const { taskId = "" } = useParams();
   const { state, reload, replace } = useResource(() => work.getTask(taskId), [taskId]);
   if (state.status === "loading") return <LoadingState label="Loading task" />;
-  if (state.status === "failed")
-    return <ErrorState message={state.error.message} onRetry={reload} />;
+  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const task = state.data;
   const consentOpen =
     task.is_moderator && (task.status === "ASSIGNED" || task.status === "IN_PROGRESS");

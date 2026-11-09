@@ -63,9 +63,7 @@ export function ProjectsPage() {
         />
       </div>
       {state.status === "loading" ? <LoadingState label="Loading projects" /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.items.length === 0 ? (
         <EmptyState title="No projects" message="You are not a member of any project yet." />
       ) : null}

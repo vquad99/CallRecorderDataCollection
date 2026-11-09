@@ -80,9 +80,7 @@ export function SettingsPage() {
       <h1 id="settings-title">Capacity targets</h1>
       <p>Targets used for planning and reports. They are goals, not proof of capacity.</p>
       {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? (
-        <ErrorState message={state.error.message} onRetry={reload} />
-      ) : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? <Form settings={state.data} onSaved={replace} /> : null}
     </section>
   );
