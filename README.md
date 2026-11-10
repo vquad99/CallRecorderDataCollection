@@ -1,10 +1,24 @@
 # Conversation Collection Platform
 
-Web application (installable as a PWA) for collecting two-person conversation recordings — telephony
-and face-to-face — then quality-checking, transcribing, reviewing and exporting them.
+Web application for collecting two-person conversation recordings with participant consent, an
+automatic audio quality check and human QC.
 
-Status: **Phase 1 (foundation)**. See `docs/BUILD_STATUS.md` for what is built and verified, and
-`docs/REQUIREMENTS.md` for the full requirement list. Nothing beyond the foundation exists yet.
+Status: **Phase 1 live** at **https://dubdesk.live**: face-to-face recording in the browser,
+participants and consent by email, tasks, automatic audio check, QC decisions, downloads with the
+consent record and a details file, dashboards per role, audit log. Phone-call recording (Phase 2),
+client export packages, transcription and app install are not built yet. See `docs/BUILD_STATUS.md`
+for the module-by-module state.
+
+## Documents
+
+| Read this | For |
+|---|---|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | How each role uses the app, in plain language |
+| [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Step-by-step test with expected results (for the client) |
+| [docs/HANDOVER.md](docs/HANDOVER.md) | Hosting, domain, email, storage, secrets, accounts, costs, open items, handover steps |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Environments and Render details |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions and open questions |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Every requirement |
 
 ## Layout
 
