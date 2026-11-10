@@ -6,6 +6,7 @@ import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
+import { IconTile } from "../../components/Icon";
 
 const show = (v: unknown) => (v === null || v === undefined ? "" : JSON.stringify(v));
 
@@ -19,7 +20,10 @@ export function AuditPage() {
   );
   return (
     <section aria-labelledby="audit-title" className="stack">
-      <h1 id="audit-title">Audit log</h1>
+      <h1 id="audit-title">
+        <IconTile name="audit" tone="slate" />
+        Audit log
+      </h1>
       <div className="filters">
         <TextField
           label="Action"

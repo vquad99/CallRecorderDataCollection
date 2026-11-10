@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import { Button } from "./form/Button";
 
 export function Pagination({
@@ -15,6 +16,7 @@ export function Pagination({
   return (
     <nav className="pagination" aria-label="Pages">
       <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Icon name="previous" size={14} />
         Previous
       </Button>
       <span aria-live="polite">
@@ -22,6 +24,7 @@ export function Pagination({
       </span>
       <Button variant="secondary" disabled={page >= pages} onClick={() => onPage(page + 1)}>
         Next
+        <Icon name="next" size={14} />
       </Button>
     </nav>
   );

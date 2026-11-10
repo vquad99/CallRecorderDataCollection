@@ -9,7 +9,7 @@ import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
-import { Icon } from "../../components/Icon";
+import { Avatar, Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 
 const PAGE_SIZE = 25;
@@ -34,7 +34,10 @@ export function ProjectsPage() {
   return (
     <section aria-labelledby="projects-title" className="stack">
       <div className="page-header">
-        <h1 id="projects-title">Projects</h1>
+        <h1 id="projects-title">
+          <IconTile name="projects" tone="blue" />
+          Projects
+        </h1>
         {can("projects.create") ? (
           <Link className="button button--primary" to="/projects/new">
             <Icon name="plus" size={18} weight="bold" />
@@ -86,7 +89,10 @@ export function ProjectsPage() {
                 {state.data.items.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <Link to={`/projects/${p.id}`}>{p.code}</Link>
+                      <span className="cell-person">
+                        <Avatar name={p.code} square />
+                        <Link to={`/projects/${p.id}`}>{p.code}</Link>
+                      </span>
                     </td>
                     <td>{p.name}</td>
                     <td>

@@ -11,6 +11,7 @@ its own project and user names, so runs never collide and no clean-up is needed 
 | `password.spec.ts`    | A forgotten password is reset from the email; the old password stops working and the other device's session ends                                                                                                                                                |
 | `network.spec.ts`     | The connection drops for 8 s mid-recording; the page keeps capturing, says parts are waiting, sends them when the connection returns; nothing is lost                                                                                                           |
 | `session.spec.ts`     | An administrator ends the moderator's sessions mid-recording; the page asks for a new sign-in, capture goes on, and after signing in again in another tab the waiting parts are sent; nothing is lost                                                           |
+| `dashboard.spec.ts`   | Client viewer, moderator and administrator each land on their own dashboard view; the period filter changes the request; two-step sign-in refuses to start with a wrong password                                                                                |
 
 ## Run locally
 

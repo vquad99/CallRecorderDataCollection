@@ -9,6 +9,7 @@ import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { IconTile } from "../../components/Icon";
 
 function ChangePassword() {
   const [current, setCurrent] = useState("");
@@ -239,7 +240,10 @@ export function AccountPage() {
   const { user } = useAuth();
   return (
     <section aria-labelledby="account-title" className="stack">
-      <h1 id="account-title">My account</h1>
+      <h1 id="account-title">
+        <IconTile name="user" tone="blue" />
+        My account
+      </h1>
       <p>
         {user?.display_name} ({user?.email})
       </p>

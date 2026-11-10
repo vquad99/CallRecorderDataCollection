@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
-import { Icon } from "./Icon";
+import { EmptyArt } from "./Art";
 
 /** A plain title for what went wrong, so every page names failures the same way. */
 export function errorTitle(error: ApiError): string {
@@ -33,9 +33,7 @@ export function EmptyState({
 }) {
   return (
     <div className="state state--empty">
-      <span className="state__icon">
-        <Icon name="empty" size={26} />
-      </span>
+      <EmptyArt />
       <h2 className="state__title">{title}</h2>
       {message ? <p>{message}</p> : null}
       {action}

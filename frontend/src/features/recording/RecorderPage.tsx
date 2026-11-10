@@ -13,6 +13,8 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { ChunkUploader } from "./uploader";
+import { Icon, IconTile } from "../../components/Icon";
+import { Stepper } from "../../components/Stepper";
 
 const CHUNK_SECONDS = 5;
 // Kept well under the server's MAX_CHUNK_BYTES (8 MB) even for many channels at high rates.
@@ -414,7 +416,28 @@ export function RecorderPage() {
 
   return (
     <section aria-labelledby="rec-title" className="stack">
-      <h1 id="rec-title">Record task {t.task_code}</h1>
+      <h1 id="rec-title">
+        <IconTile name="mic" tone="rose" />
+        Record task {t.task_code}
+      </h1>
+      <div className="card">
+        <Stepper
+          steps={["Mic access", "Sound check", "Capture", "Upload", "Files ready"]}
+          current={
+            {
+              idle: 0,
+              opening: 0,
+              ready: 1,
+              testing: 1,
+              recording: 2,
+              finishing: 3,
+              processing: 3,
+              done: 5,
+            }[phase] ?? 0
+          }
+          label={`Recording steps: ${phase}`}
+        />
+      </div>
       <p>
         <Link to={`/tasks/${t.id}`}>Back to the task</Link>
       </p>
@@ -425,7 +448,8 @@ export function RecorderPage() {
         />
       ) : null}
       {rules ? (
-        <p className="card">
+        <p className="card callout">
+          <Icon name="info" size={18} />
           Project audio rules: delivered as {rules.sample_rate} Hz, {rules.bit_depth}-bit,{" "}
           {rules.channels === 1 ? "mono" : "stereo"}; at most {rules.max_silence_pct}% silence.
           Place the microphone between the two speakers, no more than 2.5 feet from each, and do not
@@ -447,7 +471,10 @@ export function RecorderPage() {
       (phase === "idle" || phase === "opening" || phase === "ready" || phase === "testing") ? (
         <div className="card stack">
           {phase === "idle" ? (
-            <Button onClick={() => void openMicrophone(deviceId)}>Allow microphone</Button>
+            <Button onClick={() => void openMicrophone(deviceId)}>
+              <Icon name="mic" size={16} weight="fill" />
+              Allow microphone
+            </Button>
           ) : null}
           {devices.length > 0 ? (
             <Select
@@ -480,15 +507,19 @@ export function RecorderPage() {
               <Button variant="secondary" onClick={() => void runTest()}>
                 Test ({TEST_SECONDS} s, then play back)
               </Button>
-              <Button onClick={() => void start()}>Start recording</Button>
+              <Button onClick={() => void start()}>
+                <Icon name="record" size={16} weight="fill" />
+                Start recording
+              </Button>
             </div>
           ) : null}
           {phase === "testing" ? <p role="status">Test recording… speak now.</p> : null}
         </div>
       ) : null}
       {phase === "recording" || phase === "finishing" ? (
-        <div className="card stack">
+        <div className="card stack recorder-live">
           <p className="status" role="status" aria-live="off">
+            <span className="rec-dot" aria-hidden="true" />
             {phase === "recording" ? "Recording" : "Finishing upload"} {clock(elapsed)}
           </p>
           <meter aria-label="Input level" min={0} max={1} value={level} />
@@ -497,7 +528,10 @@ export function RecorderPage() {
             and the computer awake.
           </p>
           {phase === "recording" ? (
-            <Button onClick={() => void stop()}>Stop and save</Button>
+            <Button onClick={() => void stop()}>
+              <Icon name="stop" size={16} weight="fill" />
+              Stop and save
+            </Button>
           ) : null}
         </div>
       ) : null}

@@ -11,7 +11,8 @@ import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
-import { Icon } from "../../components/Icon";
+import { Avatar, Icon, IconTile } from "../../components/Icon";
+import { StatusBadge } from "../../components/StatusBadge";
 
 const PAGE_SIZE = 25;
 
@@ -38,7 +39,10 @@ export function UsersPage() {
   return (
     <section aria-labelledby="users-title" className="stack">
       <div className="page-header">
-        <h1 id="users-title">Users</h1>
+        <h1 id="users-title">
+          <IconTile name="users" tone="violet" />
+          Users
+        </h1>
         <div className="actions">
           <Link className="button button--primary" to="/admin/users/new">
             <Icon name="plus" size={18} weight="bold" />
@@ -111,13 +115,24 @@ export function UsersPage() {
                 {state.data.items.map((u) => (
                   <tr key={u.id}>
                     <td>
-                      <Link to={`/admin/users/${u.id}`}>{u.display_name}</Link>
+                      <span className="cell-person">
+                        <Avatar name={u.display_name} />
+                        <Link to={`/admin/users/${u.id}`}>{u.display_name}</Link>
+                      </span>
                     </td>
                     <td>{u.email}</td>
                     <td>{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
                     <td>
-                      {u.status === "ACTIVE" ? "Active" : "Disabled"}
-                      {u.password_set ? "" : " (invitation pending)"}
+                      <StatusBadge
+                        status={
+                          u.status === "ACTIVE"
+                            ? u.password_set
+                              ? "ACTIVE"
+                              : "INVITED"
+                            : "DISABLED"
+                        }
+                        label={`${u.status === "ACTIVE" ? "Active" : "Disabled"}${u.password_set ? "" : " (invitation pending)"}`}
+                      />
                     </td>
                   </tr>
                 ))}

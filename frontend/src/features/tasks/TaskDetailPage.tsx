@@ -12,7 +12,17 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { StatusBadge } from "../../components/StatusBadge";
+import { Icon, IconTile } from "../../components/Icon";
+import { Stepper } from "../../components/Stepper";
 
+const FLOW: readonly string[] = [
+  "DRAFT",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RECORDED",
+  "AUDIO_QC",
+  "APPROVED",
+];
 const label = (s: string) => work.TASK_STATUS_LABELS[s as work.TaskStatus] ?? s;
 const words = (s: string) => s.toLowerCase().replace(/_/g, " ");
 
@@ -221,7 +231,7 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
-        <ol className="list">
+        <ol className="list timeline">
           {state.data.map((e, i) => (
             <li key={`${e.at}-${i}`}>
               <span className="muted">
@@ -270,8 +280,28 @@ export function TaskDetailPage() {
   return (
     <section aria-labelledby="task-title" className="stack">
       <div className="page-header">
-        <h1 id="task-title">Task {task.task_code}</h1>
+        <h1 id="task-title">
+          <IconTile name={task.recording_mode === "TELEPHONY" ? "phone" : "mic"} tone="teal" />
+          Task {task.task_code}
+        </h1>
         <StatusBadge status={task.status} label={label(task.status)} />
+      </div>
+      <div className="card">
+        <Stepper
+          steps={FLOW.map((s) => label(s))}
+          current={
+            task.status === "APPROVED"
+              ? FLOW.length
+              : Math.max(
+                  0,
+                  FLOW.indexOf(
+                    (FLOW.includes(task.status) ? task.status : task.held_from) ?? "DRAFT",
+                  ),
+                )
+          }
+          halted={!FLOW.includes(task.status)}
+          label={`Workflow progress: ${label(task.status)}`}
+        />
       </div>
       <dl className="checks card">
         <div className="checks__row">
@@ -311,6 +341,7 @@ export function TaskDetailPage() {
       task.status === "IN_PROGRESS" ? (
         <p>
           <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
+            <Icon name="mic" size={16} weight="fill" />
             Open the recorder
           </Link>
         </p>

@@ -5,7 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { TASK_STATUS_LABELS, type TaskStatus } from "../../api/work";
 import { getDashboard, type Dashboard, type DayTotals } from "../../api/dashboard";
 import { Select } from "../../components/form/Select";
-import { Icon, type IconName } from "../../components/Icon";
+import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useResource } from "../../hooks/useResource";
@@ -35,35 +35,119 @@ function bytes(n: number): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+type Tone = "blue" | "teal" | "violet" | "amber" | "rose" | "green" | "slate";
+
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values, 0.0001);
+  const step = 100 / Math.max(1, values.length - 1);
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(28 - (v / max) * 24).toFixed(1)}`);
+  return (
+    <svg className="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+      <polygon points={`0,30 ${pts.join(" ")} 100,30`} />
+      <polyline points={pts.join(" ")} />
+    </svg>
+  );
+}
+
+function Ring({ value }: { value: number }) {
+  const r = 20;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="ring" viewBox="0 0 52 52" aria-hidden="true">
+      <circle cx="26" cy="26" r={r} className="ring__track" />
+      <circle
+        cx="26"
+        cy="26"
+        r={r}
+        className="ring__value"
+        strokeDasharray={`${(value / 100) * c} ${c}`}
+        transform="rotate(-90 26 26)"
+      />
+      <text x="26" y="30" textAnchor="middle">
+        {value}%
+      </text>
+    </svg>
+  );
+}
+
 function Stat({
   icon,
+  tone,
   label,
   value,
   note,
-  progress,
+  ring,
+  spark,
 }: {
   icon: IconName;
+  tone: Tone;
   label: string;
   value: string;
   note?: string;
-  progress?: number | undefined;
+  ring?: number | undefined;
+  spark?: number[];
 }) {
   return (
     <div className="stat">
       <div className="stat__head">
-        <span className="stat__icon">
-          <Icon name={icon} size={18} />
-        </span>
+        <IconTile name={icon} tone={tone} size={34} />
         <span className="stat__label">{label}</span>
       </div>
-      <p className="stat__value">{value}</p>
-      {progress !== undefined ? (
-        <div className="progress" aria-hidden="true">
-          <span style={{ width: `${progress}%` }} />
+      <div className="stat__body">
+        <div>
+          <p className="stat__value">{value}</p>
+          {note ? <p className="stat__note">{note}</p> : null}
         </div>
-      ) : null}
-      {note ? <p className="stat__note">{note}</p> : null}
+        {ring !== undefined ? <Ring value={ring} /> : null}
+        {spark ? <Sparkline values={spark} /> : null}
+      </div>
     </div>
+  );
+}
+
+const DONUT: Record<string, string> = {
+  APPROVED: "var(--ok)",
+  AUDIO_QC: "var(--warn)",
+  RECORDED: "var(--series-approved)",
+  IN_PROGRESS: "var(--primary)",
+  ASSIGNED: "var(--violet)",
+  DRAFT: "var(--border-strong)",
+  RETURNED: "var(--series-waiting)",
+  REJECTED: "var(--danger)",
+  ON_HOLD: "var(--amber)",
+  CANCELLED: "var(--muted)",
+};
+
+function Donut({ parts, total }: { parts: [string, number][]; total: number }) {
+  const r = 42;
+  const c = 2 * Math.PI * r;
+  const starts = parts.map((_, i) =>
+    parts.slice(0, i).reduce((sum, [, n]) => sum + (n / total) * c, 0),
+  );
+  return (
+    <svg className="donut" viewBox="0 0 110 110" aria-hidden="true">
+      <circle cx="55" cy="55" r={r} className="donut__track" />
+      {parts.map(([status, n], i) => (
+        <circle
+          key={status}
+          cx="55"
+          cy="55"
+          r={r}
+          fill="none"
+          strokeWidth="14"
+          stroke={DONUT[status] ?? "var(--muted)"}
+          strokeDasharray={`${Math.max(0, (n / total) * c - 2)} ${c}`}
+          strokeDashoffset={-(starts[i] ?? 0)}
+          transform="rotate(-90 55 55)"
+        />
+      ))}
+      <text x="55" y="53" textAnchor="middle" className="donut__total">
+        {total}
+      </text>
+      <text x="55" y="68" textAnchor="middle" className="donut__label">
+        tasks
+      </text>
+    </svg>
   );
 }
 
@@ -241,33 +325,39 @@ function Body({ data }: { data: Dashboard }) {
       <div className="stats">
         <Stat
           icon="mic"
+          tone="blue"
           label="Recorded"
           value={hours(data.recorded_hours)}
           note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}`}
+          spark={data.daily.map((d) => d.recorded_hours)}
         />
         <Stat
           icon="verified"
+          tone="green"
           label="Approved"
           value={hours(data.approved_hours)}
           note={`${percent(data.approved_hours, data.recorded_hours)}% of recorded hours`}
+          spark={data.daily.map((d) => d.approved_hours)}
         />
         <Stat
-          icon="status"
+          icon="target"
+          tone="amber"
           label="Today"
           value={hours(data.today_hours)}
           note={
             data.target_hours_per_day > 0
-              ? `${todayPct}% of the ${data.target_hours_per_day} h daily target`
+              ? `of the ${data.target_hours_per_day} h daily target`
               : "No daily target set"
           }
-          progress={data.target_hours_per_day > 0 ? todayPct : undefined}
+          ring={data.target_hours_per_day > 0 ? todayPct : undefined}
         />
         <Stat
           icon="tasks"
+          tone="violet"
           label="Tasks approved"
           value={`${data.tasks_approved} / ${data.tasks_total}`}
-          note={`${percent(data.tasks_approved, data.tasks_total)}% complete`}
-          progress={percent(data.tasks_approved, data.tasks_total)}
+          note="tasks complete"
+          ring={percent(data.tasks_approved, data.tasks_total)}
         />
       </div>
 
@@ -278,7 +368,14 @@ function Body({ data }: { data: Dashboard }) {
       <div className="split">
         {data.by_mode.map((m) => (
           <div key={m.mode} className="card mode">
-            <h2>{m.mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</h2>
+            <h2 className="with-icon">
+              <IconTile
+                name={m.mode === "TELEPHONY" ? "phone" : "mic"}
+                tone={m.mode === "TELEPHONY" ? "violet" : "teal"}
+                size={28}
+              />
+              {m.mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}
+            </h2>
             <dl className="checks">
               <div className="checks__row">
                 <dt>Recorded</dt>
@@ -304,17 +401,25 @@ function Body({ data }: { data: Dashboard }) {
             {statuses.length === 0 ? (
               <p className="muted">No tasks yet.</p>
             ) : (
-              <ul className="bars">
-                {statuses.map(([s, n]) => (
-                  <li key={s}>
-                    <StatusBadge status={s} label={TASK_STATUS_LABELS[s as TaskStatus] ?? s} />
-                    <span className="bars__track" aria-hidden="true">
-                      <span style={{ width: `${(n / maxStatus) * 100}%` }} />
-                    </span>
-                    <span className="bars__value">{n}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="status-split">
+                <Donut parts={statuses} total={statuses.reduce((n, [, v]) => n + v, 0)} />
+                <ul className="bars">
+                  {statuses.map(([s, n]) => (
+                    <li key={s}>
+                      <StatusBadge status={s} label={TASK_STATUS_LABELS[s as TaskStatus] ?? s} />
+                      <span className="bars__track" aria-hidden="true">
+                        <span
+                          style={{
+                            width: `${(n / maxStatus) * 100}%`,
+                            background: DONUT[s] ?? "var(--muted)",
+                          }}
+                        />
+                      </span>
+                      <span className="bars__value">{n}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
           {data.qc ? (
@@ -379,7 +484,12 @@ function Body({ data }: { data: Dashboard }) {
                 <tbody>
                   {data.team.map((t) => (
                     <tr key={t.name}>
-                      <td>{t.name}</td>
+                      <td>
+                        <span className="cell-person">
+                          <Avatar name={t.name} />
+                          {t.name}
+                        </span>
+                      </td>
                       <td>{t.recordings}</td>
                       <td>{hours(t.recorded_hours)}</td>
                     </tr>
@@ -419,7 +529,10 @@ export function DashboardPage() {
     <section aria-labelledby="dash-title" className="stack">
       <div className="page-header">
         <div className="page-header__text">
-          <h1 id="dash-title">{HEADINGS[view].title}</h1>
+          <h1 id="dash-title">
+            <IconTile name="chart" tone="blue" />
+            {HEADINGS[view].title}
+          </h1>
           <p className="page-header__lead">{HEADINGS[view].lead}</p>
         </div>
         <div className="toolbar">

@@ -12,73 +12,119 @@
   }
 }
 
-/* Key figures: one strip, cells divided by rules. */
+/* Key figures */
 .stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  gap: 16px;
 }
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 14px 18px;
-  border-right: 1px solid var(--border);
-}
-.stat:last-child {
-  border-right: 0;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 .stat__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--muted);
-}
-.stat__icon {
-  display: inline-flex;
+  gap: 10px;
 }
 .stat__label {
-  font-size: 0.6875rem;
+  color: var(--text-2);
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+}
+.stat__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
 }
 .stat__value {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text);
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 .stat__note {
-  margin: 0;
+  margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.75rem;
 }
-.progress {
-  overflow: hidden;
-  height: 4px;
-  margin: 6px 0 2px;
-  border-radius: 2px;
-  background: var(--surface-hover);
+.spark {
+  width: 96px;
+  height: 36px;
 }
-.progress span {
-  display: block;
-  height: 100%;
-  background: var(--primary);
+.spark polyline {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
-@media (max-width: 900px) {
+.spark polygon {
+  fill: var(--primary-soft);
+}
+.ring {
+  width: 56px;
+  height: 56px;
+}
+.ring__track,
+.ring__value {
+  fill: none;
+  stroke-width: 6;
+}
+.ring__track {
+  stroke: var(--surface-hover);
+}
+.ring__value {
+  stroke: var(--primary);
+  stroke-linecap: round;
+}
+.ring text {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-split {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+}
+.donut {
+  width: 140px;
+  height: 140px;
+}
+.donut__track {
+  fill: none;
+  stroke: var(--surface-hover);
+  stroke-width: 14;
+}
+.donut__total {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+}
+.donut__label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+@media (max-width: 1100px) {
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .stat:nth-child(2) {
-    border-right: 0;
-  }
-  .stat:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--border);
+}
+@media (max-width: 560px) {
+  .stats,
+  .status-split {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -255,35 +301,48 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Queues that need someone: a compact list, amber when not empty. */
+/* Queues that need someone */
 .queues {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  gap: 12px;
 }
 .queue {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
   color: var(--muted);
 }
 .queue__label {
   flex: 1;
   color: var(--text-2);
+  font-weight: 500;
 }
 .queue__value {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .queue--active {
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+  background: var(--warn-soft);
   color: var(--warn);
 }
 .queue--active .queue__value {
   color: var(--warn);
+}
+
+.bars .badge {
+  justify-self: start;
+}
+.stat__body > div {
+  min-width: 0;
+}
+.spark {
+  flex: none;
 }

@@ -31,6 +31,48 @@ export function Icon({
   );
 }
 
+type Tone = "blue" | "teal" | "violet" | "amber" | "rose" | "green" | "slate";
+
+/** A coloured tile holding an icon: page titles, figures, list rows. */
+export function IconTile({
+  name,
+  tone = "blue",
+  size = 36,
+}: {
+  name: IconName;
+  tone?: Tone;
+  size?: number;
+}) {
+  return (
+    <span className={`tile tile--${tone}`} style={{ width: size, height: size }} aria-hidden="true">
+      <Icon name={name} size={Math.round(size * 0.55)} weight="fill" />
+    </span>
+  );
+}
+
+const TONES: Tone[] = ["blue", "teal", "violet", "amber", "rose", "green"];
+
+/** Initials on a colour picked from the name, so the same person or project keeps its colour. */
+export function Avatar({ name, square = false }: { name: string; square?: boolean }) {
+  const words = name
+    .trim()
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  const text = (
+    (words[0]?.[0] ?? "?") + (words.length > 1 ? (words[1]?.[0] ?? "") : (words[0]?.[1] ?? ""))
+  ).toUpperCase();
+  let sum = 0;
+  for (const ch of name) sum += ch.charCodeAt(0);
+  return (
+    <span
+      className={`avatar avatar--${TONES[sum % TONES.length]}${square ? " avatar--square" : ""}`}
+      aria-hidden="true"
+    >
+      {text}
+    </span>
+  );
+}
+
 /** The product mark: two voices as two bar groups on a blue tile. */
 export function BrandMark({ size = 26 }: { size?: number }) {
   return (

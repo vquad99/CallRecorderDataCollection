@@ -10,7 +10,7 @@ import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
-import { Icon } from "../../components/Icon";
+import { Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 
 export function TasksPage() {
@@ -51,7 +51,10 @@ export function TasksPage() {
   return (
     <section aria-labelledby="tasks-title" className="stack">
       <div className="page-header">
-        <h1 id="tasks-title">Tasks</h1>
+        <h1 id="tasks-title">
+          <IconTile name="tasks" tone="teal" />
+          Tasks
+        </h1>
         {can("tasks.assign") ? (
           <Link className="button button--primary" to="/tasks/new">
             <Icon name="plus" size={18} weight="bold" />
@@ -134,14 +137,25 @@ export function TasksPage() {
                 {tasks.state.data.items.map((t) => (
                   <tr key={t.id}>
                     <td>
-                      <Link to={`/tasks/${t.id}`}>{t.task_code}</Link>
+                      <Link className="code" to={`/tasks/${t.id}`}>
+                        {t.task_code}
+                      </Link>
                     </td>
                     <td>{codes[t.project_id] ?? "-"}</td>
-                    <td>{t.recording_mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</td>
+                    <td>
+                      <span className="cell-icon">
+                        <Icon name={t.recording_mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
+                        {t.recording_mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}
+                      </span>
+                    </td>
                     <td>
                       <StatusBadge status={t.status} label={TASK_STATUS_LABELS[t.status]} />
                     </td>
-                    <td>{t.priority.toLowerCase()}</td>
+                    <td>
+                      <span className={`priority priority--${t.priority.toLowerCase()}`}>
+                        {t.priority.toLowerCase()}
+                      </span>
+                    </td>
                     <td>{t.due_at ? new Date(t.due_at).toLocaleDateString() : "-"}</td>
                   </tr>
                 ))}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import { getReadiness, getVersion, type Readiness, type VersionInfo } from "../../api/system";
 import { ErrorState, LoadingState } from "../../components/StateViews";
+import { IconTile } from "../../components/Icon";
 
 type LoadState =
   | { kind: "loading" }
@@ -42,7 +43,10 @@ export function StatusPage() {
 
   return (
     <section aria-labelledby="status-title">
-      <h1 id="status-title">System status</h1>
+      <h1 id="status-title">
+        <IconTile name="status" tone="green" />
+        System status
+      </h1>
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}
       {state.kind === "failed" ? (
         <ErrorState title="Server status unavailable" error={state.error} onRetry={retry} />

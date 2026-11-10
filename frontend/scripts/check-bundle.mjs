@@ -5,9 +5,9 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
-// 2026-11-10: about 109 KB (React, router, shell, sign-in, Projects); with the console design
-// (D-063: type face rules, icon paths, top bar) about 113 KB.
-const FIRST_SCREEN_KB = 115;
+// 2026-11-10: about 109 KB (React, router, shell, sign-in, Projects). Raised to 125 KB by D-063
+// for the product design (icon set of 52, icon tiles, avatars, navigation rail): about 123 KB.
+const FIRST_SCREEN_KB = 125;
 const PAGE_KB = 30; // 2026-11-10: largest page (recorder) about 6 KB
 
 const dir = "dist/assets";
