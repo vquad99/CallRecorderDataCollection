@@ -44,6 +44,7 @@ check: check-repo check-backend check-frontend
 
 check-repo:
 	python3 tools/check_repo.py
+	python3 tools/requirements_checklist.py --check
 
 check-backend:
 	cd backend && $(UV) lock --check
