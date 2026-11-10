@@ -6,3 +6,8 @@ Not yet deployed: needs the owner's Render account (dubdesk).
 
 2026-11-11: render.production.yaml validated the same way (Draft 2020-12 validator): 0 errors; a
 copy with a bogus plan and an unknown key gave 3 errors. render.yaml re-checked: 0 errors.
+
+2026-11-10 (D-081): render.production.yaml removed; render.yaml now holds the one hosted copy in
+production shape (web, private API, worker, private Key Value, private Postgres). Validated with the
+Draft 2020-12 validator against the saved schema: 0 errors; a copy with bogus plans and an unknown
+key gave 4 errors. backend/tests/test_render_blueprint.py: 11 passed.

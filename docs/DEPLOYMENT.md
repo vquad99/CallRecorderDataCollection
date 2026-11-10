@@ -45,43 +45,52 @@ starts every service, migrates, and proves data survives a database restart (D-0
   balancer, monitoring, the host). Its access log leaves out query strings, so one-time sign-in
   tokens never reach the log.
 
-### Hosted check copy on Render (D-077)
+### The hosted copy on Render: one copy for testing and real work (D-077, D-081)
 
-`render.yaml` at the repository root describes a staging copy on Render, Singapore region:
-`ccp-web` (public; nginx serving the app and forwarding /api to the API), `ccp-api` (private
-service; only reachable over Render's private network), `ccp-db` (PostgreSQL 16, private network
-only). No Redis or worker: on staging the API processes recordings itself. Before each deploy goes
-live, a pre-deploy step (`python -m app.cli prepare-deploy`) runs the migrations, creates the
-first Super Admin and, only when `ALLOW_DEMO_SEED` is `true`, the demo accounts. It is one command
-with no quotes or `&&`: Render ran a quoted `sh -c "..."` as a single word on the first deploy.
+`render.yaml` at the repository root describes the ONE hosted copy (owner 2026-11-10: "use
+one..both test n prod"), Blueprint `ccp-staging` in the dubdesk Render account (manual sync),
+Singapore region, address `https://dubdesk.live`, `APP_ENV=production`:
 
-Steps in the Render dashboard (owner's account):
+- `ccp-web` (public; nginx serving the app and forwarding /api to the API);
+- `ccp-api` (private service; only reachable over Render's private network);
+- `ccp-worker` (background worker: turns uploads into delivery files and runs the automatic audio
+  check; copies its settings from the API, so the two cannot disagree);
+- `ccp-redis` (private Key Value: the work queue and shared sign-in limits; never evicts a queued
+  job);
+- `ccp-db` (PostgreSQL 16, private network only).
 
-1. Give Render access to the GitHub repository (Account Settings > Git Deployment Credentials, and
-   the Render GitHub app's repository access for `vquad99/CallRecorderDataCollection`).
-2. New > Blueprint > choose the repository, branch `main`, path `render.yaml`.
-3. Enter the values Render asks for:
-   - `DATA_ENCRYPTION_KEY`: the line in `~/.config/ccp/render_data_encryption_key` on the
-     development server (keep a copy: without it stored phone numbers and emails cannot be read).
-   - `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`: Wasabi keys (files go under `staging/`).
-   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (12+ characters): the first Super Admin.
-   - `PUBLIC_APP_URL`: `https://ccp-web.onrender.com` (if Render shows a different address for
-     ccp-web after creation, change this value to it, without a trailing slash).
-   - `DEMO_PASSWORD`: 16+ characters if demo accounts are wanted (then set `ALLOW_DEMO_SEED` to
-     `true` on ccp-api and redeploy); otherwise leave any value.
-4. Deploy Blueprint. Cost at Render's published prices (2026-11-11): two `starter` services at
-   USD 7 each, Postgres `basic-256mb` USD 6 plus storage (USD 0.30 per GB).
+`APP_ENV=production` makes the application refuse to start without real email (SMTP), Redis, an
+https address and storage keys; demo accounts are never created. Files stay under `staging/` in the
+Wasabi bucket: every file stored before the copy became the only one lives there, and the prefix is
+applied when a file is read. Before each deploy goes live, a pre-deploy step
+(`python -m app.cli prepare-deploy`) runs the migrations and creates the first Super Admin. It is
+one command with no quotes or `&&`: Render ran a quoted `sh -c "..."` as a single word on the first
+deploy.
 
-Known limits of the check copy:
+Values marked `sync: false` are entered in the dashboard on `ccp-api`, never in `render.yaml`;
+Render asks for them only when a Blueprint is first created and ignores them on later syncs:
 
-- Email (B-13) goes through Resend's SMTP service from the domain `dubdesk.live` (verified in
-  Resend on 2026-11-10, records at GoDaddy). Set on `ccp-api` in the dashboard, never in
-  `render.yaml`: `EMAIL_BACKEND=smtp`, `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`,
+- `DATA_ENCRYPTION_KEY`: the line in `~/.config/ccp/render_data_encryption_key` on the development
+  server (keep a copy: without it stored phone numbers and emails cannot be read).
+- `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`: Wasabi keys.
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` (12+ characters): the first Super Admin.
+- `PUBLIC_APP_URL`: `https://dubdesk.live` (links in emails are built from it).
+- Email (B-13), Resend's SMTP service from `dubdesk.live` (domain verified in Resend on 2026-11-10,
+  records at GoDaddy): `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`,
   `SMTP_PASSWORD=<Resend API key>`, `EMAIL_FROM=Conversation Collection <no-reply@dubdesk.live>`.
-  With `EMAIL_BACKEND=file` emails are written inside the container instead of sent.
-- Address: `https://dubdesk.live` (custom domain on `ccp-web`; `www.dubdesk.live` redirects to it;
-  GoDaddy `A @ 216.24.57.1`, `CNAME www ccp-web-5mws.onrender.com`). `PUBLIC_APP_URL` on `ccp-api`
-  is `https://dubdesk.live`, so links in emails use it.
+
+To apply a change to `render.yaml`: Render dashboard > Blueprints > `ccp-staging` > Manual sync.
+Code changes deploy by themselves on every push to `main`.
+
+Address: custom domain on `ccp-web`; `www.dubdesk.live` redirects to it; GoDaddy `A @ 216.24.57.1`,
+`CNAME www ccp-web-5mws.onrender.com`.
+
+Cost at Render's published prices (read 2026-11-11): three `starter` services at USD 7 each, Key
+Value `starter` (256 MB) USD 10, Postgres `basic-256mb` USD 6 plus storage (USD 0.30 per GB):
+about USD 37 a month, plus Wasabi storage. Approved by the owner on 2026-11-10.
+
+Notes:
+
 - How Render passes the visitor's address is not documented by Render. Tested on the live copy
   (2026-11-10): the address reached the API correctly, but a false `X-Forwarded-For` sent by the
   visitor dodged the per-address sign-in limit (the per-account limit held). Fixed: on Render,
@@ -92,38 +101,6 @@ Known limits of the check copy:
   refused by Cloudflare before it reaches Render (403, error 1000).
 - Free plans are not used: a free Postgres is deleted after 30 days and private services and
   workers have no free plan.
-
-### Production on Render, Stage 1 (D-080)
-
-`render.production.yaml` describes production: its own services and its own empty database, so the
-check copy above stays as it is. `ccp-prod-web` (public), `ccp-prod-api` (private),
-`ccp-prod-worker` (background worker: turns uploads into delivery files and runs the automatic
-audio check), `ccp-prod-redis` (private Key Value: the work queue and shared sign-in limits; never
-evicts a queued job), `ccp-prod-db` (PostgreSQL 16, private, point-in-time recovery). The worker
-copies its settings from the API, so the two cannot disagree. Files go under `production/` in the
-Wasabi bucket. `APP_ENV=production` makes the application refuse to start without real email
-(SMTP), Redis, an https address and storage keys; there are no demo accounts.
-
-Before creating it, the owner needs: an SMTP mail account (B-13; host, user name, password and a
-sender address on a domain the mail service has verified), and approval of the cost below.
-
-Steps in the Render dashboard:
-
-1. New > Blueprint > the same repository, branch `main`, Blueprint path `render.production.yaml`.
-2. Enter the values Render asks for: `DATA_ENCRYPTION_KEY` (a NEW key, made with
-   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`,
-   kept in the password manager), Wasabi keys, `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
-   `EMAIL_FROM` (for example `Conversation Collection <no-reply@yourdomain>`), `ADMIN_EMAIL`,
-   `ADMIN_PASSWORD` (12+ characters), and `PUBLIC_APP_URL` = the address Render shows for
-   `ccp-prod-web` (or the custom domain), without a trailing slash.
-3. Deploy. If `PUBLIC_APP_URL` was guessed and Render shows another address, correct it on
-   `ccp-prod-api` and redeploy (the worker copies it).
-4. Sign in as the Super Admin, turn on two-step sign-in for that account, then create the team.
-
-Cost at Render's published prices (read 2026-11-11): three `starter` services at USD 7 each, Key
-Value `starter` (256 MB) USD 10, Postgres `basic-256mb` USD 6 plus storage (USD 0.30 per GB):
-about USD 37 a month, plus Wasabi storage. The check copy costs about USD 20 a month on top while
-it is kept.
 
 ## 4. Release procedure (Phase 10)
 

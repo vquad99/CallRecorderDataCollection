@@ -1,11 +1,15 @@
-# Render Blueprint for a hosted CHECK copy (staging) of Conversation Collection (D-077).
-# Written from render.com/docs/blueprint-spec (read 2026-11-11). Create it in the Render dashboard:
-# New > Blueprint > this repository. Values marked `sync: false` are asked for once, at creation;
-# docs/DEPLOYMENT.md lists what to enter. Region Singapore = same region as the Wasabi bucket.
+# Render Blueprint for Conversation Collection: ONE hosted copy, used for testing and for real work
+# (D-081, owner 2026-11-10: "use one..both test n prod"). APP_ENV=production. Blueprint
+# `ccp-staging` in the dubdesk Render account (manual sync); address https://dubdesk.live.
+# Written from render.com/docs/blueprint-spec and validated against render.com/schema/render.yaml.json.
+# Values marked `sync: false` are entered once in the dashboard, never here. Region Singapore = same
+# region as the Wasabi bucket.
 #
-# Shape: one public web service (nginx: the built app + proxy to the API), one PRIVATE service
-# (the API, reachable only over Render's private network), one PostgreSQL database reachable only
-# privately. No Redis and no separate worker: on staging the API processes recordings itself.
+# Shape: a public web service (nginx: the built app + proxy to the API); a PRIVATE API; a background
+# worker that turns uploads into delivery files and runs the automatic audio check; a private Key
+# Value (Redis) instance the API hands work to and keeps sign-in limits in; a private PostgreSQL
+# database. The application refuses to start in production without real email (SMTP), Redis, HTTPS
+# and storage keys (app/core/config.py).
 
 services:
   - type: web
@@ -49,19 +53,24 @@ services:
     buildFilter:
       paths:
         - backend/**
-    # Runs before each deploy goes live: database migrations, the first Super Admin, and - only
-    # when ALLOW_DEMO_SEED is true - the demo accounts.
+    # Runs before each deploy goes live: database migrations and the first Super Admin. Demo
+    # accounts are never created in production.
     # One command, no shell: Render ran a quoted `sh -c "..."` as a single word (first deploy,
-    # 2026-11-10). prepare-deploy runs the three steps itself.
+    # 2026-11-10). prepare-deploy runs the steps itself.
     preDeployCommand: python -m app.cli prepare-deploy
     envVars:
       - key: PORT
         value: "10000"
       - key: APP_ENV
-        value: staging
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: ccp-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ccp-redis
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
@@ -69,7 +78,7 @@ services:
       # so it is entered once by hand. Losing it makes stored phone numbers unreadable.
       - key: DATA_ENCRYPTION_KEY
         sync: false
-      # The public address of ccp-web; personal links and emails are built from it.
+      # https://dubdesk.live; personal links and emails are built from it.
       - key: PUBLIC_APP_URL
         sync: false
       # Only nginx can reach this private service, and nginx sends exactly one address (the
@@ -82,6 +91,8 @@ services:
         value: ap-southeast-1
       - key: STORAGE_BUCKET
         value: callrec57
+      # Kept as `staging/` when this copy became the only one (D-081): every file stored so far
+      # lives under it, and the prefix is applied when a file is read.
       - key: STORAGE_KEY_PREFIX
         value: staging/
       - key: STORAGE_ACCESS_KEY_ID
@@ -90,13 +101,10 @@ services:
         sync: false
       - key: MEDIA_WORK_DIR
         value: /tmp/media
-      # Mail (B-13): set in the dashboard, never here, so a Blueprint sync cannot switch real email
-      # back off. smtp + Resend (domain dubdesk.live, verified 2026-11-10); "file" writes emails
-      # inside the container instead of sending them.
+      # Mail (B-13): Resend SMTP from dubdesk.live; host, user, password and sender are entered in
+      # the dashboard.
       - key: EMAIL_BACKEND
-        sync: false
-      - key: EMAIL_FILE_DIR
-        value: /tmp/outbox
+        value: smtp
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -113,8 +121,100 @@ services:
         sync: false
       - key: ALLOW_DEMO_SEED
         value: "false"
-      - key: DEMO_PASSWORD
-        sync: false
+
+  # Processing and the automatic audio check. The same image as the API; settings are copied from
+  # the API so the two can never disagree.
+  - type: worker
+    name: ccp-worker
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: celery -A app.worker worker --loglevel=INFO --concurrency=2
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ccp-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ccp-redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: SECRET_KEY
+      - key: DATA_ENCRYPTION_KEY
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: DATA_ENCRYPTION_KEY
+      - key: PUBLIC_APP_URL
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: PUBLIC_APP_URL
+      - key: STORAGE_ENDPOINT_URL
+        value: https://s3.ap-southeast-1.wasabisys.com
+      - key: STORAGE_REGION
+        value: ap-southeast-1
+      - key: STORAGE_BUCKET
+        value: callrec57
+      - key: STORAGE_KEY_PREFIX
+        value: staging/
+      - key: STORAGE_ACCESS_KEY_ID
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: STORAGE_ACCESS_KEY_ID
+      - key: STORAGE_SECRET_ACCESS_KEY
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: STORAGE_SECRET_ACCESS_KEY
+      - key: MEDIA_WORK_DIR
+        value: /tmp/media
+      - key: EMAIL_BACKEND
+        value: smtp
+      - key: SMTP_HOST
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: SMTP_HOST
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: SMTP_USERNAME
+      - key: SMTP_PASSWORD
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: SMTP_PASSWORD
+      - key: EMAIL_FROM
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: EMAIL_FROM
+
+  # Work queue and shared sign-in limits. Private network only; never evicts a queued job.
+  - type: keyvalue
+    name: ccp-redis
+    region: singapore
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
 
 databases:
   - name: ccp-db

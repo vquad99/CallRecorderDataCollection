@@ -1,4 +1,6 @@
-"""The Render Blueprint (render.yaml, D-077) keeps the safety properties of the local stack.
+"""The Render Blueprint (render.yaml, D-077 / D-081) keeps the safety properties of the local stack.
+
+One hosted copy, used for testing and for real work, runs with APP_ENV=production (D-081).
 
 It was validated once against Render's published schema (render.com/schema/render.yaml.json,
 2026-11-11, 0 errors); these tests pin what matters to this app so a later edit cannot quietly
@@ -26,7 +28,9 @@ SECRETS = {
     "STORAGE_ACCESS_KEY_ID",
     "STORAGE_SECRET_ACCESS_KEY",
     "ADMIN_PASSWORD",
-    "DEMO_PASSWORD",
+    "SMTP_HOST",
+    "SMTP_USERNAME",
+    "SMTP_PASSWORD",
 }
 
 
@@ -54,8 +58,9 @@ def test_no_secret_is_written_in_the_repository() -> None:
         assert env[key] == {"key": key, "sync": False}, f"{key} must be entered in Render"
     assert env["SECRET_KEY"] == {"key": "SECRET_KEY", "generateValue": True}
     assert env["DATABASE_URL"]["fromDatabase"]["property"] == "connectionString"
-    assert env["APP_ENV"]["value"] == "staging"
-    assert env["ALLOW_DEMO_SEED"]["value"] == "false", "demo accounts only when switched on"
+    assert env["APP_ENV"]["value"] == "production"
+    assert env["ALLOW_DEMO_SEED"]["value"] == "false", "no demo accounts"
+    assert "DEMO_PASSWORD" not in env
 
 
 def test_the_web_server_reaches_the_api_on_the_port_it_listens_on() -> None:
@@ -111,29 +116,23 @@ def test_the_deploy_step_migrates_creates_the_admin_once_and_skips_demo_data(
     assert "owner@example.org exists" in capsys.readouterr().out
 
 
-# ------------------------------------------------------------- production (render.production.yaml)
-
-PRODUCTION = yaml.safe_load((ROOT / "render.production.yaml").read_text())
-
-
-def _prod(name: str) -> dict[str, Any]:
-    return next(s for s in PRODUCTION["services"] if s["name"] == name)
+# ---------------------------------------------------- production rules (the one hosted copy, D-081)
 
 
 def _filled(service: dict[str, Any], entered: dict[str, str]) -> dict[str, str]:
     """The environment Render would give the service: values, generated values, references to the
     database / Redis / another service, and what the owner enters once."""
     env: dict[str, str] = {}
-    api = _env(_prod("ccp-prod-api"))
+    api = _env(_service("ccp-api"))
     for key, spec in _env(service).items():
         if "value" in spec:
             env[key] = str(spec["value"])
         elif spec.get("generateValue"):
             env[key] = "generated-" + "x" * 40
         elif "fromDatabase" in spec:
-            env[key] = "postgresql://ccp:pw@ccp-prod-db:5432/ccp"
+            env[key] = "postgresql://ccp:pw@ccp-db:5432/ccp"
         elif spec.get("fromService", {}).get("type") == "keyvalue":
-            env[key] = "redis://ccp-prod-redis:6379"
+            env[key] = "redis://ccp-redis:6379"
         elif "envVarKey" in spec.get("fromService", {}):
             source = spec["fromService"]["envVarKey"]
             assert source in api, f"{key} copies {source}, which the API does not have"
@@ -157,55 +156,37 @@ ENTERED = {
 }
 
 
-def test_production_is_private_except_the_web_server_and_in_one_region() -> None:
-    assert _prod("ccp-prod-web")["type"] == "web"
-    assert _prod("ccp-prod-api")["type"] == "pserv"
-    assert _prod("ccp-prod-worker")["type"] == "worker"
-    redis = _prod("ccp-prod-redis")
+def test_only_the_web_server_is_public_redis_is_private_and_never_evicts() -> None:
+    assert _service("ccp-worker")["type"] == "worker"
+    redis = _service("ccp-redis")
     assert redis["ipAllowList"] == [], "Redis: private network only"
     assert redis["maxmemoryPolicy"] == "noeviction", "a queued job is never evicted"
-    assert PRODUCTION["databases"][0]["ipAllowList"] == []
-    regions = {s["region"] for s in PRODUCTION["services"]} | {
-        d["region"] for d in PRODUCTION["databases"]
-    }
-    assert regions == {"singapore"}
-    names = {s["name"] for s in PRODUCTION["services"]} | {
-        d["name"] for d in PRODUCTION["databases"]
-    }
-    staging = {s["name"] for s in BLUEPRINT["services"]} | {
-        d["name"] for d in BLUEPRINT["databases"]
-    }
-    assert not names & staging, "production never shares a service or database with staging"
+    public = {s["name"] for s in BLUEPRINT["services"] if s["type"] == "web"}
+    assert public == {"ccp-web"}
 
 
-def test_production_writes_no_secret_and_never_seeds_demo_accounts() -> None:
-    api = _env(_prod("ccp-prod-api"))
-    for key in SECRETS - {"DEMO_PASSWORD"} | {"SMTP_PASSWORD", "SMTP_USERNAME", "SMTP_HOST"}:
-        assert api[key] == {"key": key, "sync": False}, f"{key} must be entered in Render"
-    assert "DEMO_PASSWORD" not in api
-    assert api["ALLOW_DEMO_SEED"]["value"] == "false"
-    assert api["APP_ENV"]["value"] == "production"
-    assert api["STORAGE_KEY_PREFIX"]["value"] == "production/", "kept apart from staging/"
+def test_there_is_one_hosted_copy() -> None:
+    assert not (ROOT / "render.production.yaml").exists(), "one copy for testing and real work"
 
 
-@pytest.mark.parametrize("name", ["ccp-prod-api", "ccp-prod-worker"])
-def test_production_settings_pass_the_production_rules(
+@pytest.mark.parametrize("name", ["ccp-api", "ccp-worker"])
+def test_the_hosted_settings_pass_the_production_rules(
     name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.core.config import Settings
 
-    env = _filled(_prod(name), ENTERED)
+    env = _filled(_service(name), ENTERED)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     settings = Settings()  # values come from the environment
     assert settings.app_env == "production"
     assert settings.email_backend == "smtp"
     assert settings.redis_url is not None
-    assert settings.storage_key_prefix == "production/"
+    assert settings.storage_key_prefix == "staging/", "where every stored file already lives"
 
 
 def test_the_worker_runs_the_same_code_with_the_api_settings() -> None:
-    api, worker = _prod("ccp-prod-api"), _prod("ccp-prod-worker")
+    api, worker = _service("ccp-api"), _service("ccp-worker")
     assert worker["dockerfilePath"] == api["dockerfilePath"]
     assert worker["dockerCommand"].startswith("celery -A app.worker worker")
     api_keys = set(_env(api)) - {
