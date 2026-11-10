@@ -60,14 +60,19 @@ def _check_storage(storage: Any) -> str:
     return "ok"
 
 
-@router.get("/ready")
-def ready(request: Request) -> JSONResponse:
-    settings: Settings = request.app.state.settings
+def readiness(app: Any) -> tuple[dict[str, Any], bool]:
+    """The component checks, shared by /health/ready and the Super Admin's status page."""
+    settings: Settings = app.state.settings
     checks: dict[str, Any] = {
-        "database": _check_database(request.app.state.engine),
+        "database": _check_database(app.state.engine),
         "redis": _check_redis(settings),
-        "storage": _check_storage(request.app.state.storage),
+        "storage": _check_storage(app.state.storage),
     }
     is_ready = all(value in ("ok", "not_configured") for value in checks.values())
-    body = {"status": "ready" if is_ready else "not_ready", "checks": checks}
+    return {"status": "ready" if is_ready else "not_ready", "checks": checks}, is_ready
+
+
+@router.get("/ready")
+def ready(request: Request) -> JSONResponse:
+    body, is_ready = readiness(request.app)
     return JSONResponse(body, status_code=200 if is_ready else 503)

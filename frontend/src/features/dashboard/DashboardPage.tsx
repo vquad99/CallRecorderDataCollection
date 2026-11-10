@@ -13,7 +13,7 @@ import "./dashboard.css";
 
 const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
   client: { title: "Collection progress", lead: "Hours collected and approved for your projects." },
-  worker: { title: "My work", lead: "Your tasks and the recordings you made." },
+  worker: { title: "My work", lead: "Your own tasks and recordings only." },
   manager: { title: "Dashboard", lead: "Progress against targets and what needs attention." },
 };
 
@@ -345,9 +345,11 @@ function Body({ data }: { data: Dashboard }) {
           label="Today"
           value={hours(data.today_hours)}
           note={
-            data.target_hours_per_day > 0
-              ? `of the ${data.target_hours_per_day} h daily target`
-              : "No daily target set"
+            data.view === "worker"
+              ? "recorded by you today"
+              : data.target_hours_per_day > 0
+                ? `of the ${data.target_hours_per_day} h daily target`
+                : "No daily target set"
           }
           ring={data.target_hours_per_day > 0 ? todayPct : undefined}
         />
@@ -385,10 +387,12 @@ function Body({ data }: { data: Dashboard }) {
                 <dt>Approved</dt>
                 <dd>{hours(m.approved_hours)}</dd>
               </div>
-              <div className="checks__row">
-                <dt>Daily target</dt>
-                <dd>{m.target_hours_per_day > 0 ? `${m.target_hours_per_day} h` : "Not set"}</dd>
-              </div>
+              {data.view === "worker" ? null : (
+                <div className="checks__row">
+                  <dt>Daily target</dt>
+                  <dd>{m.target_hours_per_day > 0 ? `${m.target_hours_per_day} h` : "Not set"}</dd>
+                </div>
+              )}
             </dl>
           </div>
         ))}

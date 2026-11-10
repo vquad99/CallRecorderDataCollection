@@ -793,6 +793,15 @@ CASES: list[Case] = [
         Perm.DASHBOARD_VIEW,
         foreign=False,
     ),
+    # System status: the Super Admin only (owner 2026-11-11).
+    case(
+        "GET",
+        "/api/v1/system/status",
+        lambda e, s: "/api/v1/system/status",
+        {SA},
+        Perm.SETTINGS_MANAGE,
+        foreign=False,
+    ),
     # Dashboard: every role sees its own project's numbers; a foreign project answers like a
     # missing one (the view each role gets is checked in test_dashboard.py).
     case(

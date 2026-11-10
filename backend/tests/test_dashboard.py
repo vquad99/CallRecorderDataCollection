@@ -98,8 +98,13 @@ def test_a_client_sees_progress_only_and_only_for_its_projects(world: dict[str, 
 
 def test_staff_see_their_own_work_without_the_operations_view(world: dict[str, Any]) -> None:
     _record(world, chunks(2, 0))
+    db, project = world["db"], world["project"]
+    project.target_face_to_face_hours_per_day = 2.5
+    db.commit()
     mine = world["mod"].get("/api/v1/dashboard").json()
     assert mine["view"] == "worker"
+    assert mine["target_hours_per_day"] == 0, "no project targets in someone's own work"
+    assert all(m["target_hours_per_day"] == 0 for m in mine["by_mode"])
     assert mine["recordings"] == 1
     assert mine["tasks_by_status"] == {"RECORDED": 1}
     for key in MANAGER_ONLY:
@@ -124,3 +129,12 @@ def test_the_window_is_bounded(world: dict[str, Any]) -> None:
     pa = world["pa"]
     assert len(pa.get("/api/v1/dashboard", params={"days": 7}).json()["daily"]) == 7
     assert pa.get("/api/v1/dashboard", params={"days": 365}).status_code == 422
+
+
+def test_a_client_sees_only_projects_it_belongs_to_everywhere(world: dict[str, Any]) -> None:
+    extra = _users(world)
+    client = world["api"]("cv@example.org")
+    listed = [p["code"] for p in client.get("/api/v1/projects").json()["items"]]
+    assert listed == ["VOICE"]
+    assert client.get(f"/api/v1/projects/{extra['other'].id}").status_code == 404
+    assert [p["code"] for p in client.get("/api/v1/dashboard").json()["projects"]] == ["VOICE"]

@@ -42,7 +42,9 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "System",
-    items: [{ to: "/status", label: "System status", permission: null, icon: "status" }],
+    items: [
+      { to: "/status", label: "System status", permission: "settings.manage", icon: "status" },
+    ],
   },
 ];
 

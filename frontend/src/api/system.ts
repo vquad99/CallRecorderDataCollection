@@ -23,3 +23,12 @@ export function getReadiness(signal?: AbortSignal): Promise<Readiness> {
 export function getVersion(signal?: AbortSignal): Promise<VersionInfo> {
   return apiRequest<VersionInfo>("/api/v1/version", signal ? { signal } : {});
 }
+
+export interface SystemStatus extends Readiness {
+  version: VersionInfo;
+}
+
+/** The Super Admin's System status page (owner 2026-11-11: nobody else sees it). */
+export function getSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
+  return apiRequest<SystemStatus>("/api/v1/system/status", signal ? { signal } : {});
+}

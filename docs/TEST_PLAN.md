@@ -427,6 +427,7 @@ output saved to evidence.
 |---|---|---|---|---|
 | TA-DASH-01 | Automated | 9 | Every listed metric returned (incl. storage usage). | STOR-010, DASH-001 |
 | TA-DASH-07 | Automated (browser) | 7 (D-066) | `frontend/journeys/dashboard.spec.ts`: each role lands on its own dashboard view in a real browser against the real backend; the client answer carries no operations fields; two-step sign-in needs the right password. | DASH-001, DASH-004, ROLE-007, AUTH-008 |
+| TA-DASH-08 | Automated | 7 (D-075) | `test_dashboard.py`: a moderator's dashboard carries no project target; a client lists, opens and charts only its own projects. `test_security_access.py`: only the Super Admin reaches `/system/status`. `navigation.test.tsx` and the boundaries journey: System status is in no other role's menu and its address shows No access. | DASH-004, ROLE-007, ROLE-011 |
 | TA-DASH-06 | Automated | 7 (D-065) | `tests/test_dashboard.py`: hours counted once per recording against daily targets; approved hours follow the task; a client sees progress only for its own projects (foreign project = 404 like a missing one); moderators and QC see only their own work; a Super Admin sees every project; the window is bounded. Frontend: the page in every state, for every role's menu. | DASH-001, DASH-002, DASH-004, DASH-005, ROLE-007 |
 | TA-DASH-02 | Automated | 9 | Each filter changes results correctly. | DASH-002 |
 | TA-DASH-03 | Automated | 9 | Each metric equals an independent SQL query, incl. date boundaries and timezone. | DASH-003 |

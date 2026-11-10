@@ -36,8 +36,7 @@ export const PAGES: Record<string, PageSpec> = {
   "/status": {
     url: "/status",
     shows: /1\.0\.0/,
-    data: "GET /health/ready",
-    normal: ["service not configured"], // a 503 from /health/ready means "not ready", shown as such
+    data: "GET /api/v1/system/status",
   },
   "/account": { url: "/account", shows: /This device/i, data: "GET /api/v1/auth/sessions" },
   "/projects": { url: "/projects", shows: /Hindi conversations/, data: "GET /api/v1/projects" },

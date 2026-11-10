@@ -26,11 +26,12 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
   await test.step("a moderator sees only moderator pages", async () => {
     const page = await (await browser.newContext()).newPage();
     await signIn(page, SEEDED.moderator, SEEDED_PASSWORD);
-    expect(await menu(page)).toEqual(["Dashboard", "Projects", "Tasks", "System status"]);
+    expect(await menu(page)).toEqual(["Dashboard", "Projects", "Tasks"]);
     for (const path of [
       "/admin/users",
       "/admin/audit",
       "/admin/settings",
+      "/status",
       "/projects/new",
       "/tasks/new",
     ]) {
@@ -66,7 +67,7 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
   await test.step("a client viewer has no task pages at all", async () => {
     const page = await (await browser.newContext()).newPage();
     await signIn(page, SEEDED.clientViewer, SEEDED_PASSWORD);
-    expect(await menu(page)).toEqual(["Dashboard", "Projects", "System status"]);
+    expect(await menu(page)).toEqual(["Dashboard", "Projects"]);
     await page.goto("/tasks");
     await expect(page.getByRole("heading", { name: "No access" })).toBeVisible();
     await page.goto(`/projects/${setup.projectId}`);

@@ -239,6 +239,11 @@ export function worldHandlers(): Record<string, Handler> {
   return {
     "GET /api/v1/version": ok({ name: "ccp", version: "1.0.0", environment: "test" }),
     "GET /health/ready": ok({ status: "ready", checks: { database: "ok", redis: "ok" } }),
+    "GET /api/v1/system/status": ok({
+      status: "ready",
+      checks: { database: "ok", redis: "ok" },
+      version: { name: "ccp", version: "1.0.0", environment: "test" },
+    }),
     "GET /api/v1/projects": ok(page([PROJECT])),
     "GET /api/v1/projects/p1": ok(PROJECT),
     "GET /api/v1/projects/p1/members": ok([MEMBER, MEMBER_2]),

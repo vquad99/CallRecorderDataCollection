@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from app import __version__
+from app.api.health import readiness
+from app.core.permissions import Perm
 from app.core.ratelimit import rate_limit
 from app.modules.audit.router import router as audit_router
-from app.modules.auth.deps import csrf_protect
+from app.modules.auth.deps import csrf_protect, require
 from app.modules.auth.router import router as auth_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.participants.router import router as participants_router
@@ -38,6 +40,25 @@ def version(request: Request) -> VersionInfo:
         version=__version__,
         environment=request.app.state.settings.app_env,
     )
+
+
+class SystemStatus(BaseModel):
+    status: str
+    checks: dict[str, str]
+    version: VersionInfo
+
+
+@api_router.get(
+    "/system/status",
+    response_model=SystemStatus,
+    tags=["meta"],
+    dependencies=[Depends(require(Perm.SETTINGS_MANAGE))],
+)
+def system_status(request: Request) -> SystemStatus:
+    """Component health for the Super Admin's System status page (owner 2026-11-11: only the
+    Super Admin sees it). /health/ready stays for the load balancer, private networks only."""
+    body, _ = readiness(request.app)
+    return SystemStatus(status=body["status"], checks=body["checks"], version=version(request))
 
 
 api_router.include_router(auth_router)

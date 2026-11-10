@@ -64,8 +64,14 @@ export const routes: RouteObject[] = [
             ],
           },
           {
-            path: "status",
-            element: page(() => import("../features/status/StatusPage"), "StatusPage"),
+            // The Super Admin only (owner 2026-11-11).
+            element: <RequirePermission permission="settings.manage" />,
+            children: [
+              {
+                path: "status",
+                element: page(() => import("../features/status/StatusPage"), "StatusPage"),
+              },
+            ],
           },
           {
             path: "account",

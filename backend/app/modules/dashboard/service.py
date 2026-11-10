@@ -4,8 +4,8 @@ One read-only summary, shaped by who asks:
 
 - client  (no tasks.view, e.g. Client Viewer): progress only - hours collected and approved, against
   the project's daily targets, per mode and per day. No people, no queues, no personal data.
-- worker  (tasks.view without tasks.assign, e.g. Moderator, QC Executive): the same numbers for
-  their own work only (tasks assigned to them and recordings they made).
+- worker  (tasks.view without tasks.assign, e.g. Moderator, QC Executive): their own work only
+  (tasks assigned to them and recordings they made), with no project targets.
 - manager (Super Admin, or tasks.assign in the project, e.g. Project Admin): the whole project plus
   the operational picture - tasks by status, queues that need attention, output per moderator and
   storage used.
@@ -199,8 +199,11 @@ def summary(
     if scope is not None:
         targets_q = targets_q.where(Project.id.in_(scope))
     ftf_target, tel_target = db.execute(targets_q).one()
-    by_mode["FACE_TO_FACE"].target_hours_per_day = float(ftf_target or 0)
-    by_mode["TELEPHONY"].target_hours_per_day = float(tel_target or 0)
+    if view != "worker":
+        # Moderators and QC see their own work only, never the project's targets (owner
+        # 2026-11-11: "QC do not require project progress, only their work progress").
+        by_mode["FACE_TO_FACE"].target_hours_per_day = float(ftf_target or 0)
+        by_mode["TELEPHONY"].target_hours_per_day = float(tel_target or 0)
 
     status_q = in_scope(
         select(Task.status, func.count(func.distinct(Task.id)))

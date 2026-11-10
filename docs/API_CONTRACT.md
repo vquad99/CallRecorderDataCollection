@@ -204,3 +204,4 @@ history, `captured_by` is `null` for the participant's own answers.
 | POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |
 | GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer with review, earlier answers. |
 | GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |
+| GET | /system/status | `settings.manage` (Super Admin only, D-075). `{status, checks, version}` for the System status page. |

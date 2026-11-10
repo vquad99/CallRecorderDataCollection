@@ -75,10 +75,10 @@ const MENU: Record<string, string[]> = {
     "Audit log",
     "System status",
   ],
-  "Project Admin": ["Dashboard", "Projects", "Tasks", "Participants", "Audit log", "System status"],
-  Moderator: ["Dashboard", "Projects", "Tasks", "System status"],
-  "QC Executive": ["Dashboard", "Projects", "Tasks", "System status"],
-  "Client Viewer": ["Dashboard", "Projects", "System status"],
+  "Project Admin": ["Dashboard", "Projects", "Tasks", "Participants", "Audit log"],
+  Moderator: ["Dashboard", "Projects", "Tasks"],
+  "QC Executive": ["Dashboard", "Projects", "Tasks"],
+  "Client Viewer": ["Dashboard", "Projects"],
 };
 
 const HEADING: Record<string, string> = {

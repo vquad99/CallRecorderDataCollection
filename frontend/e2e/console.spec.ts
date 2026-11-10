@@ -29,8 +29,18 @@ async function backend(page: Page, signedIn: { value: boolean }) {
   await page.route("**/api/v1/projects?*", (route) =>
     route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 25 } }),
   );
-  await page.route("**/health/ready", (route) =>
-    route.fulfill({ json: { status: "ready", checks: { database: "ok", redis: "ok" } } }),
+  await page.route("**/api/v1/system/status", (route) =>
+    route.fulfill({
+      json: {
+        status: "ready",
+        checks: { database: "ok", redis: "ok" },
+        version: {
+          name: "conversation-collection-platform",
+          version: "0.1.0",
+          environment: "test",
+        },
+      },
+    }),
   );
   await page.route("**/api/v1/version", (route) =>
     route.fulfill({

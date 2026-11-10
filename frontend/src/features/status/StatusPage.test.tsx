@@ -16,11 +16,13 @@ describe("StatusPage", () => {
   it("shows ready state and version", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string) =>
+      vi.fn(() =>
         Promise.resolve(
-          url === "/health/ready"
-            ? json(200, { status: "ready", checks: { database: "ok", redis: "not_configured" } })
-            : json(200, version),
+          json(200, {
+            status: "ready",
+            checks: { database: "ok", redis: "not_configured" },
+            version,
+          }),
         ),
       ),
     );
@@ -33,11 +35,9 @@ describe("StatusPage", () => {
   it("shows not-ready from a 503 readiness answer", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string) =>
+      vi.fn(() =>
         Promise.resolve(
-          url === "/health/ready"
-            ? json(503, { status: "not_ready", checks: { database: "error", redis: "ok" } })
-            : json(200, version),
+          json(200, { status: "not_ready", checks: { database: "error", redis: "ok" }, version }),
         ),
       ),
     );
@@ -51,10 +51,8 @@ describe("StatusPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<StatusPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Cannot reach the server");
-    fetchMock.mockImplementation((url: string) =>
-      Promise.resolve(
-        url === "/health/ready" ? json(200, { status: "ready", checks: {} }) : json(200, version),
-      ),
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json(200, { status: "ready", checks: {}, version })),
     );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Ready")).toBeInTheDocument();

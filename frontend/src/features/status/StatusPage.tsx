@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "../../api/client";
-import { getReadiness, getVersion, type Readiness, type VersionInfo } from "../../api/system";
+import { type Readiness, type VersionInfo, getSystemStatus } from "../../api/system";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { IconTile } from "../../components/Icon";
 
@@ -23,8 +23,8 @@ export function StatusPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([getReadiness(controller.signal), getVersion(controller.signal)])
-      .then(([readiness, version]) => setState({ kind: "loaded", readiness, version }))
+    getSystemStatus(controller.signal)
+      .then((s) => setState({ kind: "loaded", readiness: s, version: s.version }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const apiError =
