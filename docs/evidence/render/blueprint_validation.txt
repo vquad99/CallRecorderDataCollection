@@ -1,0 +1,5 @@
+render.yaml validated against Render's published Blueprint schema
+(https://render.com/schema/render.yaml.json, downloaded 2026-11-11, JSON Schema draft 2020-12)
+with python jsonschema: 0 errors. A deliberately broken copy (unknown key, bogus plan) gave 3
+errors, so the check is live. Repository tests: backend/tests/test_render_blueprint.py.
+Not yet deployed: needs the owner's Render account (dubdesk).

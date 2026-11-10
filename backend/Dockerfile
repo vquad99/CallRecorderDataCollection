@@ -18,4 +18,5 @@ RUN useradd --system --uid 10001 --no-create-home app
 USER app
 EXPOSE 8000
 # Web processes: uvicorn reads WEB_CONCURRENCY (default 1); set it per environment to scale (O10).
-CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Port from PORT when the host sets one (Render, render.yaml); 8000 otherwise.
+CMD ["sh", "-c", "exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers"]

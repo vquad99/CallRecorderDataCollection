@@ -1,7 +1,9 @@
 """Command-line tasks.  python -m app.cli seed-dev
 
 seed-dev (FND-027): one demo account per role plus a DEMO project, for local development only.
-It refuses to run unless APP_ENV is development or test, and needs DEMO_PASSWORD (>= 12 characters).
+It refuses to run unless APP_ENV is development or test (or staging with ALLOW_DEMO_SEED=true, for a
+hosted check copy), and needs DEMO_PASSWORD (>= 12 characters; >= 16 on staging).
+create-admin: the first Super Admin of a new deployment, from ADMIN_EMAIL and ADMIN_PASSWORD.
 """
 
 from __future__ import annotations
@@ -32,8 +34,13 @@ class SeedRefused(RuntimeError):
 
 
 def seed_dev(settings: Settings, password: str) -> list[str]:
-    if settings.app_env not in ("development", "test"):
+    hosted_check = (
+        settings.app_env == "staging" and os.environ.get("ALLOW_DEMO_SEED", "").lower() == "true"
+    )
+    if settings.app_env not in ("development", "test") and not hosted_check:
         raise SeedRefused(f"seed-dev refuses to run with APP_ENV={settings.app_env}")
+    if hosted_check and len(password) < 16:
+        raise SeedRefused("DEMO_PASSWORD must be at least 16 characters on a hosted copy")
     if len(password) < settings.password_min_length:
         raise SeedRefused(
             f"DEMO_PASSWORD must be at least {settings.password_min_length} characters"
@@ -87,6 +94,57 @@ def seed_dev(settings: Settings, password: str) -> list[str]:
         db.commit()
     engine.dispose()
     return created
+
+
+def create_admin(settings: Settings, email: str, password: str, *, reset: bool) -> str:
+    """Bootstrap the first Super Admin in any environment (a new deployment has no users and no
+    way to invite one before someone can sign in). Creates the account if it is missing; changes
+    an existing account's password only with reset. Audited."""
+    from email_validator import EmailNotValidError, validate_email
+
+    from app.modules.audit import service as audit
+
+    try:
+        email = validate_email(email.strip(), check_deliverability=False).normalized.lower()
+    except EmailNotValidError:
+        raise SeedRefused("ADMIN_EMAIL is not a valid email address") from None
+    if len(password) < max(settings.password_min_length, 12):
+        raise SeedRefused(
+            f"ADMIN_PASSWORD must be at least {max(settings.password_min_length, 12)} characters"
+        )
+    engine = create_db_engine(settings)
+    try:
+        with make_session_factory(engine)() as db:
+            user = db.scalar(select(User).where(User.email == email))
+            if user is not None and not reset:
+                return "exists"
+            if user is None:
+                role = db.scalar(
+                    select(RoleRecord).where(RoleRecord.code == Role.SUPER_ADMIN.value)
+                )
+                user = User(id=uuid.uuid4(), email=email, display_name="Administrator")
+                if role is None:
+                    raise SeedRefused("the database has no Super Admin role: run migrations")
+                user.roles = [role]
+                db.add(user)
+                outcome = "created"
+            else:
+                outcome = "password reset"
+            user.password_hash = hash_password(password)
+            user.status = "ACTIVE"
+            db.flush()
+            audit.record(
+                db,
+                action="user.bootstrap_admin",
+                entity_type="user",
+                entity_id=user.id,
+                actor_id=None,
+                after={"outcome": outcome},
+            )
+            db.commit()
+            return outcome
+    finally:
+        engine.dispose()
 
 
 def run_retention(settings: Settings) -> int:
@@ -248,7 +306,21 @@ def run_backup_prune(settings: Settings, keep_days: int) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("seed-dev", help="create demo accounts and a DEMO project (development only)")
+    seed = sub.add_parser(
+        "seed-dev", help="create demo accounts and a DEMO project (development only)"
+    )
+    seed.add_argument(
+        "--if-allowed",
+        action="store_true",
+        help="do nothing (and succeed) where seeding is not allowed, e.g. in a deploy step",
+    )
+    admin = sub.add_parser(
+        "create-admin",
+        help="create the first Super Admin from ADMIN_EMAIL and ADMIN_PASSWORD (any environment)",
+    )
+    admin.add_argument(
+        "--reset-password", action="store_true", help="also set the password of an existing account"
+    )
     sub.add_parser(
         "retention", help="delete stored files older than each project's retention rules"
     )
@@ -276,8 +348,24 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = load_settings()
         if args.command == "seed-dev":
+            allowed = settings.app_env in ("development", "test") or (
+                settings.app_env == "staging"
+                and os.environ.get("ALLOW_DEMO_SEED", "").lower() == "true"
+            )
+            if args.if_allowed and not allowed:
+                print("seed-dev: not allowed here, skipped")
+                return 0
             created = seed_dev(settings, os.environ.get("DEMO_PASSWORD", ""))
             print(f"seed-dev: {len(created)} account(s) created; passwords from DEMO_PASSWORD")
+        elif args.command == "create-admin":
+            email = os.environ.get("ADMIN_EMAIL", "")
+            if not email:
+                print("create-admin: ADMIN_EMAIL not set, nothing to do")
+                return 0
+            outcome = create_admin(
+                settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=args.reset_password
+            )
+            print(f"create-admin: {email} {outcome}")
         elif args.command == "retention":
             print(f"retention: {run_retention(settings)} file(s) deleted")
         elif args.command == "recover-recordings":

@@ -145,6 +145,17 @@ class Settings(BaseSettings):
             raise ValueError("must be at least 32 characters")
         return value
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _db_driver(cls, value: object) -> object:
+        # Hosting platforms hand out postgres:// or postgresql:// URLs; the app talks psycopg 3.
+        text = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if isinstance(text, str):
+            for prefix in ("postgres://", "postgresql://"):
+                if text.startswith(prefix):
+                    return _DB_SCHEME + text[len(prefix) :]
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _db_scheme(cls, value: SecretStr) -> SecretStr:

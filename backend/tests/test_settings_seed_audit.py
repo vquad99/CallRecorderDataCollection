@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from sqlalchemy import select, text
 
-from app.cli import SeedRefused, seed_dev
+from app.cli import SeedRefused, create_admin, seed_dev
 from app.modules.auth.models import User
 from tests.conftest import Api, build_settings, make_user
 
@@ -72,6 +72,41 @@ def test_seed_refuses_outside_development(migrated_db: str) -> None:
         seed_dev(
             build_settings(app_env="staging", database_url=migrated_db), "long-enough-password"
         )
+
+
+def test_a_hosted_check_copy_may_seed_only_when_asked_and_with_a_long_password(
+    migrated_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staging = build_settings(app_env="staging", database_url=migrated_db)
+    monkeypatch.setenv("ALLOW_DEMO_SEED", "true")
+    with pytest.raises(SeedRefused, match="16 characters"):
+        seed_dev(staging, "twelve-chars")
+    assert len(seed_dev(staging, "a-much-longer-demo-password")) == 5
+
+
+def test_the_first_admin_is_created_once_in_any_environment(migrated_db: str, new_api: Any) -> None:
+    settings = build_settings(app_env="staging", database_url=migrated_db)
+    with pytest.raises(SeedRefused, match="valid email"):
+        create_admin(settings, "not an email", "long-enough-password", reset=False)
+    with pytest.raises(SeedRefused, match="at least"):
+        create_admin(settings, "boss@example.org", "short", reset=False)
+    assert (
+        create_admin(settings, "Boss@Example.org", "first-password-123", reset=False) == "created"
+    )
+    assert create_admin(settings, "boss@example.org", "other-password-456", reset=False) == "exists"
+    api: Api = new_api()
+    assert api.login("boss@example.org", "first-password-123").status_code == 200, "kept"
+    assert (
+        create_admin(settings, "boss@example.org", "other-password-456", reset=True)
+        == "password reset"
+    )
+    assert new_api().login("boss@example.org", "other-password-456").status_code == 200
+
+
+def test_platform_database_urls_are_accepted() -> None:
+    for given in ("postgres://u:p@h:5432/d", "postgresql://u:p@h:5432/d"):
+        url = build_settings(database_url=given).database_url.get_secret_value()
+        assert url == "postgresql+psycopg://u:p@h:5432/d"
 
 
 def test_seed_creates_one_account_per_role_and_is_idempotent(

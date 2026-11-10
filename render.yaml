@@ -1,0 +1,109 @@
+# Render Blueprint for a hosted CHECK copy (staging) of Conversation Collection (D-077).
+# Written from render.com/docs/blueprint-spec (read 2026-11-11). Create it in the Render dashboard:
+# New > Blueprint > this repository. Values marked `sync: false` are asked for once, at creation;
+# docs/DEPLOYMENT.md lists what to enter. Region Singapore = same region as the Wasabi bucket.
+#
+# Shape: one public web service (nginx: the built app + proxy to the API), one PRIVATE service
+# (the API, reachable only over Render's private network), one PostgreSQL database reachable only
+# privately. No Redis and no separate worker: on staging the API processes recordings itself.
+
+services:
+  - type: web
+    name: ccp-web
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - frontend/**
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: BACKEND_HOSTPORT
+        fromService:
+          type: pserv
+          name: ccp-api
+          property: hostport
+      - key: MEDIA_ORIGINS
+        value: https://*.wasabisys.com
+
+  - type: pserv
+    name: ccp-api
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - backend/**
+    # Runs before each deploy goes live: database migrations, the first Super Admin, and - only
+    # when ALLOW_DEMO_SEED is true - the demo accounts.
+    # Wrapped in sh -c because whether Render runs it through a shell is NOT DOCUMENTED.
+    preDeployCommand: >-
+      sh -c "alembic upgrade head
+      && python -m app.cli create-admin
+      && python -m app.cli seed-dev --if-allowed"
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: APP_ENV
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ccp-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # A Fernet key (32 bytes, URL-safe base64); Render's generated values may not be URL-safe,
+      # so it is entered once by hand. Losing it makes stored phone numbers unreadable.
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      # The public address of ccp-web; personal links and emails are built from it.
+      - key: PUBLIC_APP_URL
+        sync: false
+      # Only nginx can reach this private service, so forwarded headers come through it.
+      # How Render passes the visitor's address is NOT DOCUMENTED (see docs/DEPLOYMENT.md).
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: STORAGE_ENDPOINT_URL
+        value: https://s3.ap-southeast-1.wasabisys.com
+      - key: STORAGE_REGION
+        value: ap-southeast-1
+      - key: STORAGE_BUCKET
+        value: callrec57
+      - key: STORAGE_KEY_PREFIX
+        value: staging/
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: MEDIA_WORK_DIR
+        value: /tmp/media
+      # No mail service yet (B-13): emails are written inside the container and are not sent.
+      - key: EMAIL_BACKEND
+        value: file
+      - key: EMAIL_FILE_DIR
+        value: /tmp/outbox
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ALLOW_DEMO_SEED
+        value: "false"
+      - key: DEMO_PASSWORD
+        sync: false
+
+databases:
+  - name: ccp-db
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    databaseName: ccp
+    user: ccp
+    ipAllowList: []

@@ -45,6 +45,45 @@ starts every service, migrates, and proves data survives a database restart (D-0
   balancer, monitoring, the host). Its access log leaves out query strings, so one-time sign-in
   tokens never reach the log.
 
+### Hosted check copy on Render (D-077)
+
+`render.yaml` at the repository root describes a staging copy on Render, Singapore region:
+`ccp-web` (public; nginx serving the app and forwarding /api to the API), `ccp-api` (private
+service; only reachable over Render's private network), `ccp-db` (PostgreSQL 16, private network
+only). No Redis or worker: on staging the API processes recordings itself. Before each deploy goes
+live, a pre-deploy step runs the migrations, creates the first Super Admin (`create-admin`) and,
+only when `ALLOW_DEMO_SEED` is `true`, the demo accounts.
+
+Steps in the Render dashboard (owner's account):
+
+1. Give Render access to the GitHub repository (Account Settings > Git Deployment Credentials, and
+   the Render GitHub app's repository access for `vquad99/CallRecorderDataCollection`).
+2. New > Blueprint > choose the repository, branch `main`, path `render.yaml`.
+3. Enter the values Render asks for:
+   - `DATA_ENCRYPTION_KEY`: the line in `~/.config/ccp/render_data_encryption_key` on the
+     development server (keep a copy: without it stored phone numbers and emails cannot be read).
+   - `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`: Wasabi keys (files go under `staging/`).
+   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (12+ characters): the first Super Admin.
+   - `PUBLIC_APP_URL`: `https://ccp-web.onrender.com` (if Render shows a different address for
+     ccp-web after creation, change this value to it, without a trailing slash).
+   - `DEMO_PASSWORD`: 16+ characters if demo accounts are wanted (then set `ALLOW_DEMO_SEED` to
+     `true` on ccp-api and redeploy); otherwise leave any value.
+4. Deploy Blueprint. Cost at Render's published prices (2026-11-11): two `starter` services at
+   USD 7 each, Postgres `basic-256mb` USD 6 plus storage (USD 0.30 per GB).
+
+Known limits of the check copy:
+
+- Emails (invitations, password resets, consent links) are written inside the container and not
+  sent until a mail service is configured (B-13). Personal links can be copied from the
+  Participants page instead.
+- How Render passes the visitor's address to the service is NOT DOCUMENTED by Render. The API
+  trusts the address chain that arrives through nginx (`FORWARDED_ALLOW_IPS=*`, safe only because
+  the API is private); a visitor could put a false address in the chain, which affects the per-
+  address sign-in limit and the address in the audit log, not the per-account limit. To be checked
+  with a test request once deployed, before real use.
+- Free plans are not used: a free Postgres is deleted after 30 days and private services and
+  workers have no free plan.
+
 ## 4. Release procedure (Phase 10)
 
 1. CI green on the release commit (lint, types, tests, secret and dependency scans).
