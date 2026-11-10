@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.auth.router import AppSettings
+from app.modules.auth.router import AppSettings, Cipher
 from app.modules.portal import service
 
 public_router = APIRouter(prefix="/portal", tags=["participant page"])
@@ -79,6 +79,34 @@ def create_link(
         db, settings, principal, project_id, participant_id, client_ip(request)
     )
     return LinkOut(url=url, expires_at=expires)
+
+
+class EmailedOut(BaseModel):
+    sent: bool
+    expires_at: datetime
+
+
+@staff_router.post("/email", response_model=EmailedOut)
+def email_link(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    cipher: Cipher,
+) -> EmailedOut:
+    sent, expires = service.email_link(
+        db,
+        settings,
+        cipher,
+        request.app.state.email_sender,
+        principal,
+        project_id,
+        participant_id,
+        client_ip(request),
+    )
+    return EmailedOut(sent=sent, expires_at=expires)
 
 
 @staff_router.delete("", status_code=204)

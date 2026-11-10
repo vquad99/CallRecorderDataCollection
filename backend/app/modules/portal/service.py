@@ -19,11 +19,12 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.email import EmailSender, EmailSendError, OutgoingEmail
 from app.core.errors import AppError
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
-from app.modules.auth.security import hash_token, new_token
+from app.modules.auth.security import FieldCipher, hash_token, new_token
 from app.modules.participants import service as participants
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
@@ -92,6 +93,54 @@ def create_link(
     db.commit()
     # The secret sits after "#": browsers never send that part to a server.
     return f"{settings.public_app_url}/portal#{token}", expires
+
+
+def email_link(
+    db: Session,
+    settings: Settings,
+    cipher: FieldCipher,
+    sender: EmailSender,
+    principal: Principal,
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    ip: str | None,
+) -> tuple[bool, datetime]:
+    """Create a fresh personal link and email it to the participant (the link is not shown to
+    staff). Returns (sent, expires_at)."""
+    project, participant = participants.get_in_project(db, principal, project_id, participant_id)
+    if participant.email_enc is None:
+        raise AppError("This participant has no email address", code="NO_EMAIL", status_code=409)
+    url, expires = create_link(db, settings, principal, project_id, participant_id, ip)
+    body = (
+        "Hello,\n\n"
+        f'You are taking part in the project "{project.name}". Please read the consent form '
+        "and give your answer on your private page:\n\n"
+        f"{url}\n\n"
+        "On the same page you can see your recording sessions and withdraw your consent at any "
+        f"time. The link is personal - do not share it. It works until {expires:%d %B %Y}.\n\n"
+        "If you did not expect this message, you can ignore it.\n"
+    )
+    try:
+        sender.send(
+            OutgoingEmail(
+                to=cipher.decrypt(participant.email_enc),
+                subject=f"Consent form for {project.name}",
+                body=body,
+            )
+        )
+    except EmailSendError:
+        return False, expires
+    audit.record(
+        db,
+        action="participant.portal_link_emailed",
+        entity_type="participant",
+        entity_id=participant.id,
+        project_id=project.id,
+        actor_id=principal.user_id,
+        ip=ip,
+    )
+    db.commit()
+    return True, expires
 
 
 def _revoke(db: Session, project_id: uuid.UUID, participant_id: uuid.UUID) -> int:

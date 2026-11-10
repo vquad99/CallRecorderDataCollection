@@ -12,6 +12,8 @@ export interface Participant {
   has_phone: boolean;
   /** Whether this user may open the person's consent history (managers, assigned moderator). */
   consent_visible: boolean;
+  email: string | null; // only for people who may see contact details
+  has_email: boolean;
   notes: string | null;
   deleted: boolean;
   created_at: string;
@@ -23,6 +25,8 @@ export interface ParticipantFields {
   language_code: string;
   dialect: string;
   notes: string;
+  /** Not sent = keep the stored address; empty = remove it. */
+  email?: string | undefined;
 }
 
 export interface Consent {
@@ -165,3 +169,8 @@ export const createPortalLink = (projectId: string, participantId: string) =>
   apiRequest<{ url: string; expires_at: string }>(`${pp(projectId)}/${participantId}/portal-link`, {
     method: "POST",
   });
+export const emailPortalLink = (projectId: string, participantId: string) =>
+  apiRequest<{ sent: boolean; expires_at: string }>(
+    `${pp(projectId)}/${participantId}/portal-link/email`,
+    { method: "POST" },
+  );

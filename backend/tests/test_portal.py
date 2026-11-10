@@ -221,3 +221,53 @@ def test_the_consent_record_downloads_with_the_recording(world: dict[str, Any]) 
     assert (
         world["pa"].get("/api/v1/recordings/00000000-0000-0000-0000-000000000001/consent-form")
     ).status_code == 404
+
+
+def test_the_consent_link_is_emailed_to_the_participant(
+    world: dict[str, Any], tmp_path: Any
+) -> None:
+    from pathlib import Path
+
+    pid = str(world["project"].id)
+    pa = world["pa"]
+    a = world["task"]["participant_a"]["id"]
+    no_email = pa.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link/email")
+    assert (no_email.status_code, no_email.json()["error"]["code"]) == (409, "NO_EMAIL")
+    bad = pa.patch(
+        f"/api/v1/projects/{pid}/participants/{a}",
+        json={"display_label": "Asha", "language_code": "hi", "email": "not-an-email"},
+    )
+    assert bad.json()["error"]["code"] == "INVALID_EMAIL"
+    saved = pa.patch(
+        f"/api/v1/projects/{pid}/participants/{a}",
+        json={"display_label": "Asha", "language_code": "hi", "email": "Asha@Example.org"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert (saved.json()["email"], saved.json()["has_email"]) == ("Asha@example.org", True)
+    # A correction that does not mention the email keeps it.
+    kept = pa.patch(
+        f"/api/v1/projects/{pid}/participants/{a}",
+        json={"display_label": "Asha K", "language_code": "hi"},
+    )
+    assert kept.json()["has_email"] is True
+    # The moderator sees that there is an address, never the address itself.
+    seen = world["mod"].get(f"/api/v1/projects/{pid}/participants/{a}").json()
+    assert (seen["email"], seen["has_email"]) == (None, True)
+    sent = pa.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link/email")
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["sent"] is True
+    outbox = Path(world["app"].state.settings.email_file_dir)
+    mails = sorted(outbox.glob("*.eml"), key=lambda f: f.stat().st_mtime)
+    text = mails[-1].read_text()
+    assert "To: Asha@example.org" in text
+    assert "/portal#" in text.replace("=\n", "")
+    token = text.replace("=\n", "").split("/portal#", 1)[1].split()[0]
+    api, _ = _visitor(world, token)
+    assert api.get("/api/v1/portal/me", headers={"X-Portal-Token": token}).status_code == 200
+    # Removing the address stops further emails.
+    pa.patch(
+        f"/api/v1/projects/{pid}/participants/{a}",
+        json={"display_label": "Asha K", "language_code": "hi", "email": ""},
+    )
+    again = pa.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link/email")
+    assert again.json()["error"]["code"] == "NO_EMAIL"

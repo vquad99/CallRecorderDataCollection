@@ -1,27 +1,27 @@
 /*
  * Conversation Collection - product design system.
- * Palette from the owner's reference (2026-11-10): terracotta, white and grey.
- * Terracotta navigation rail, white top bar with page context, elevated cards, coloured icon tiles,
+ * Palette (owner 2026-11-10): near-black navigation, white, grey and one light blue; flat and
+ * square, small capital labels. Dark navigation rail, white top bar with page context, elevated cards, coloured icon tiles,
  * status chips, steppers and charts. Type: IBM Plex Sans. Icons: Phosphor. Light and dark follow
  * the system setting. Tokens first, then components.
  */
 
 :root {
-  --bg: #f7f5f3;
+  --bg: #f6f8fb;
   --surface: #ffffff;
-  --surface-2: #faf8f6;
-  --surface-hover: #f4f0ed;
-  --text: #2b2b2b;
-  --text-2: #4a4a4a;
-  --muted: #737373;
-  --border: #e8e3df;
-  --border-strong: #d5cec8;
+  --surface-2: #f9fafc;
+  --surface-hover: #f1f4f8;
+  --text: #0f1728;
+  --text-2: #344054;
+  --muted: #667085;
+  --border: #e4e8ee;
+  --border-strong: #cfd5de;
 
-  --primary: #9a5b49;
-  --primary-hover: #814a3a;
-  --primary-soft: #f6ece8;
+  --primary: #2a73d9;
+  --primary-hover: #1f5fbb;
+  --primary-soft: #eaf3ff;
   --primary-text: #ffffff;
-  --focus-ring: 0 0 0 3px rgb(154 91 73 / 0.22);
+  --focus-ring: 0 0 0 3px rgb(42 115 217 / 0.2);
 
   --ok: #12805c;
   --ok-soft: #e3f6ee;
@@ -29,38 +29,38 @@
   --warn-soft: #fdf1dc;
   --danger: #c0262d;
   --danger-soft: #fdeaeb;
-  --info: #9a5b49;
-  --info-soft: #f6ece8;
+  --info: #2a73d9;
+  --info-soft: #eaf3ff;
   --progress: #0b7285;
   --progress-soft: #e0f4f7;
   --neutral: #475467;
   --neutral-soft: #eef0f5;
 
-  --blue: #9a5b49;
-  --blue-soft: #f5eae6;
-  --teal: #0c8f86;
-  --teal-soft: #dcf5f2;
-  --violet: #7044e0;
-  --violet-soft: #eee8ff;
-  --amber: #b76a06;
-  --amber-soft: #fdf0d6;
-  --rose: #d62657;
-  --rose-soft: #ffe5ec;
-  --green: #12805c;
-  --green-soft: #e3f6ee;
+  --blue: #2a73d9;
+  --blue-soft: #eaf3ff;
+  --teal: #2a73d9;
+  --teal-soft: #eaf3ff;
+  --violet: #2a73d9;
+  --violet-soft: #eaf3ff;
+  --amber: #2a73d9;
+  --amber-soft: #eaf3ff;
+  --rose: #2a73d9;
+  --rose-soft: #eaf3ff;
+  --green: #2a73d9;
+  --green-soft: #eaf3ff;
   --slate: #475467;
-  --slate-soft: #eaedf3;
+  --slate-soft: #eef1f5;
 
-  --nav-bg: #a2634f;
-  --nav-bg-2: #935644;
-  --nav-text: #fdeee9;
-  --nav-muted: #ecd0c7;
-  --nav-line: rgb(255 255 255 / 0.16);
-  --brand-ink: #9a5b49;
-  --accent: #ffffff;
+  --nav-bg: #0b1020;
+  --nav-bg-2: #0b1020;
+  --nav-text: #c3cbdb;
+  --nav-muted: #727d94;
+  --nav-line: rgb(255 255 255 / 0.08);
+  --brand-ink: #2a73d9;
+  --accent: #8ec0ff;
 
-  --radius: 12px;
-  --radius-sm: 8px;
+  --radius: 6px;
+  --radius-sm: 4px;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.04);
   --shadow-lg: 0 12px 32px rgb(16 24 40 / 0.12);
   --gutter: 16px;
@@ -86,21 +86,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171311;
-    --surface: #201b18;
-    --surface-2: #1c1715;
-    --surface-hover: #2a2320;
-    --text: #ece6e2;
-    --text-2: #cfc6c0;
-    --muted: #9c918a;
-    --border: #342c28;
-    --border-strong: #463c37;
+    --bg: #0b0f18;
+    --surface: #121824;
+    --surface-2: #0f141e;
+    --surface-hover: #19202e;
+    --text: #e7eaf1;
+    --text-2: #c5cbd8;
+    --muted: #8e98ab;
+    --border: #222b3a;
+    --border-strong: #334052;
 
-    --primary: #e38d79;
-    --primary-hover: #eda594;
-    --primary-soft: #3a1d17;
-    --primary-text: #1a0f0c;
-    --focus-ring: 0 0 0 3px rgb(227 141 121 / 0.3);
+    --primary: #6fb0ff;
+    --primary-hover: #8fc2ff;
+    --primary-soft: #13233b;
+    --primary-text: #0b0f18;
+    --focus-ring: 0 0 0 3px rgb(111 176 255 / 0.3);
 
     --ok: #4cc79a;
     --ok-soft: #0f2a21;
@@ -108,30 +108,30 @@
     --warn-soft: #2b2110;
     --danger: #f2767c;
     --danger-soft: #2e1518;
-    --info: #e38d79;
-    --info-soft: #3a1d17;
+    --info: #6fb0ff;
+    --info-soft: #13233b;
     --progress: #55bfd2;
     --progress-soft: #0f272c;
     --neutral: #a9b2c3;
     --neutral-soft: #1d2535;
 
-    --blue: #e38d79;
-    --blue-soft: #3a1d17;
-    --teal: #47c4b9;
-    --teal-soft: #0e2a28;
-    --violet: #a78bfa;
-    --violet-soft: #221a3d;
-    --amber: #e8a94f;
-    --amber-soft: #2b2110;
-    --rose: #f77f9f;
-    --rose-soft: #32141e;
-    --green: #4cc79a;
-    --green-soft: #0f2a21;
+    --blue: #6fb0ff;
+    --blue-soft: #13233b;
+    --teal: #6fb0ff;
+    --teal-soft: #13233b;
+    --violet: #6fb0ff;
+    --violet-soft: #13233b;
+    --amber: #6fb0ff;
+    --amber-soft: #13233b;
+    --rose: #6fb0ff;
+    --rose-soft: #13233b;
+    --green: #6fb0ff;
+    --green-soft: #13233b;
     --slate: #a9b2c3;
     --slate-soft: #1d2535;
 
-    --nav-bg: #6b2a1e;
-    --nav-bg-2: #55211a;
+    --nav-bg: #070a13;
+    --nav-bg-2: #070a13;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
     color-scheme: dark;
@@ -332,9 +332,7 @@ summary:focus-visible {
 .sidenav__brand .brand {
   color: #fff;
 }
-.sidenav__brand .brand__mark rect {
-  fill: rgb(255 255 255 / 0.2);
-}
+
 .sidenav__nav {
   flex: 1;
   overflow-y: auto;
@@ -562,7 +560,7 @@ summary:focus-visible {
 /* ---------- Signed-out pages: form + product panel ---------- */
 .public {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   min-height: 100vh;
   background: var(--surface);
 }
@@ -570,7 +568,7 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  order: 1;
+  order: 3;
   padding: 40px 28px;
 }
 .public__content {
@@ -578,7 +576,13 @@ summary:focus-visible {
   max-width: 380px;
 }
 .public__brand {
+  display: none;
   margin-bottom: 40px;
+}
+@media (max-width: 900px) {
+  .public__brand {
+    display: block;
+  }
 }
 .public__brand .brand {
   color: var(--text);
@@ -594,65 +598,114 @@ summary:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 28px;
   order: 2;
   overflow: hidden;
-  padding: 48px 56px;
-  background:
-    radial-gradient(60% 50% at 85% 10%, rgb(255 255 255 / 0.14), transparent 70%),
-    radial-gradient(50% 45% at 10% 95%, rgb(0 0 0 / 0.14), transparent 70%),
-    linear-gradient(160deg, #a66651 0%, #915442 100%);
-  color: #fdeee9;
+  margin: 12px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: #0b1020;
+  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: #aab4c8;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
-.public__panel::before {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px);
-  background-size: 36px 36px;
-  content: "";
-  mask-image: radial-gradient(70% 70% at 50% 40%, #000, transparent);
-}
-.public__panel > * {
-  position: relative;
-}
-.public__panel .brand {
-  display: none;
-}
-.public__art {
-  max-width: 520px;
-  min-height: 200px;
-}
-.public__headline {
-  max-width: 18ch;
-  margin: 0 0 18px;
-  color: #fff;
-  font-size: 1.875rem;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-.public__points {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.public__points li {
+.public__top,
+.public__bottom {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px;
 }
-.public__points .icon {
-  box-sizing: content-box;
-  padding: 7px;
-  border-radius: 9px;
-  background: rgb(255 255 255 / 0.1);
+.public__top .brand {
   color: #fff;
+  font-family: "IBM Plex Sans", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.public__top .brand__mark rect {
+  fill: transparent;
+}
+.public__fig span,
+.public__bottom span + span {
+  color: #8ec0ff;
+}
+.public__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+}
+.public__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  border-right: 1px solid rgb(255 255 255 / 0.1);
+  color: #727d94;
+  font-size: 0.625rem;
+}
+.public__stats div:last-child {
+  border-right: 0;
+}
+.public__stats strong {
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.public__stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  padding: 24px;
+}
+.public__art {
+  position: absolute;
+  inset: 2% 2%;
+  display: flex;
+  align-items: center;
+}
+.public__headline {
+  position: relative;
+  max-width: 14ch;
+  margin: 0;
+  color: #fff;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 2.5rem;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-transform: none;
+}
+.public__bottom {
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  color: #727d94;
+}
+/* Corner marks, like a technical drawing. */
+.public__panel::before,
+.public__panel::after {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid rgb(255 255 255 / 0.5);
+  content: "";
+}
+.public__panel::before {
+  top: 10px;
+  left: 10px;
+  border-width: 1px 0 0 1px;
+}
+.public__panel::after {
+  right: 10px;
+  bottom: 10px;
+  border-width: 0 1px 1px 0;
 }
 .public--checking {
   grid-template-columns: minmax(0, 1fr);
@@ -679,8 +732,22 @@ summary:focus-visible {
 }
 .auth-page .button--primary[type="submit"] {
   width: 100%;
-  min-height: 42px;
+  min-height: 46px;
   margin-top: 6px;
+  background: #0b1020;
+  box-shadow: none;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.auth-page .button--primary[type="submit"]:hover:not(:disabled) {
+  background: #1b2440;
+}
+.auth-page .field__input {
+  min-height: 46px;
+  background-color: var(--primary-soft);
+  border-color: transparent;
 }
 .auth-page > p {
   margin-top: 16px;
@@ -693,61 +760,9 @@ summary:focus-visible {
   width: 100%;
   height: auto;
 }
-.art--login .art__card {
-  fill: rgb(255 255 255 / 0.07);
-  stroke: rgb(255 255 255 / 0.14);
-}
-.art--login .art__card--raised {
-  fill: rgb(120 66 51 / 0.92);
-}
-.art--login .art__line {
-  fill: rgb(255 255 255 / 0.5);
-}
-.art--login .art__line--soft {
-  fill: rgb(255 255 255 / 0.22);
-}
-.art--login .art__a {
-  fill: #ffffff;
-}
-.art--login .art__b {
-  fill: #f6c3b6;
-}
-.art--login .art__chip {
-  fill: rgb(255 255 255 / 0.18);
-}
-.art--login .art__dot {
-  fill: #ffffff;
-}
-.art--login .art__trend {
-  fill: none;
-  stroke: #ffffff;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.art--login .art__area {
-  fill: rgb(255 255 255 / 0.14);
-}
-.art--login .art__ring {
-  fill: none;
-  stroke: rgb(255 255 255 / 0.14);
-  stroke-width: 7;
-}
-.art--login .art__ring-fill {
-  fill: none;
-  stroke: #ffffff;
-  stroke-width: 7;
-  stroke-linecap: round;
-}
-.art--login .art__badge {
-  fill: #ffffff;
-}
-.art--login .art__tick {
-  fill: none;
-  stroke: #9a5b49;
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.art--login path {
+  fill: #5b9cf5;
+  opacity: 0.75;
 }
 .art--empty {
   width: 150px;
@@ -904,7 +919,7 @@ fieldset.card legend,
   color: var(--primary-text);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.16),
-    0 1px 2px rgb(154 91 73 / 0.35);
+    0 1px 2px rgb(42 115 217 / 0.3);
 }
 .button--primary:hover:not(:disabled) {
   background: var(--primary-hover);
@@ -983,6 +998,23 @@ input[type="search"].field__input {
 }
 textarea.field__input {
   resize: vertical;
+}
+/* Read-only: a field the user may not change must look it. */
+.field__input:disabled,
+fieldset:disabled .field__input {
+  border-color: var(--border);
+  background-color: var(--surface-hover);
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+fieldset:disabled .checkbox,
+fieldset:disabled label {
+  cursor: not-allowed;
+}
+.readonly-note {
+  margin-bottom: 16px;
 }
 .field--invalid .field__input {
   border-color: var(--danger);

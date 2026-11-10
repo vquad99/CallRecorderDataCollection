@@ -35,6 +35,8 @@ class ParticipantOut(BaseModel):
     display_label: str | None
     phone: str | None
     has_phone: bool
+    email: str | None  # only for people who may see contact details
+    has_email: bool
     notes: str | None
     deleted: bool
     consent_visible: bool  # whether this caller may open the person's consent history
@@ -64,6 +66,8 @@ def present(
         display_label=p.display_label if v.profile else None,
         phone=phone if v.profile or v.contact else None,
         has_phone=p.phone_e164_enc is not None,
+        email=cipher.decrypt(p.email_enc) if p.email_enc and v.contact else None,
+        has_email=p.email_enc is not None,
         notes=p.notes if v.notes else None,
         deleted=p.deleted_at is not None,
         consent_visible=v.profile and principal.can_in_project(Perm.CONSENT_VIEW, project.id),
@@ -103,6 +107,7 @@ def list_participants(
 class ParticipantBody(BaseModel):
     display_label: str = Field(min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=320)
     language_code: str = Field(
         min_length=2, max_length=35, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
     )

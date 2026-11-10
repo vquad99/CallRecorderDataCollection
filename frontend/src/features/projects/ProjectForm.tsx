@@ -44,6 +44,11 @@ export function ProjectForm({
 
   return (
     <form onSubmit={submit} noValidate className="card">
+      {disabled ? (
+        <p className="notice notice--info readonly-note">
+          Read only. Only a project administrator can change these settings.
+        </p>
+      ) : null}
       <fieldset disabled={disabled} className="plain-fieldset">
         {extra}
         <TextField
@@ -137,9 +142,11 @@ export function ProjectForm({
             onChange={(e) => set("consent_text", e.target.value)}
           />
         </div>
-        <Button type="submit" busy={busy}>
-          {submitLabel}
-        </Button>
+        {disabled ? null : (
+          <Button type="submit" busy={busy}>
+            {submitLabel}
+          </Button>
+        )}
       </fieldset>
     </form>
   );

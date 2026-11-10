@@ -202,6 +202,7 @@ class ParticipantInput:
     language_code: str
     dialect: str
     notes: str
+    email: str | None = None
 
 
 def _check_language(project: Project, language_code: str, dialect: str) -> None:
@@ -255,6 +256,17 @@ def _duplicate(
     )
 
 
+def clean_email(raw: str) -> str:
+    from email_validator import EmailNotValidError, validate_email
+
+    try:
+        return validate_email(raw.strip(), check_deliverability=False).normalized
+    except EmailNotValidError:
+        raise AppError(
+            "Enter a valid email address", code="INVALID_EMAIL", status_code=422
+        ) from None
+
+
 def _apply_phone(
     p: Participant, settings: Settings, cipher: FieldCipher, phone: str | None
 ) -> None:
@@ -292,6 +304,9 @@ def create_participant(
         created_by=principal.user_id,
     )
     _apply_phone(participant, settings, cipher, phone)
+    participant.email_enc = (
+        cipher.encrypt(clean_email(data.email)) if data.email and data.email.strip() else None
+    )
     db.add(participant)
     db.add(ParticipantProjectLink(participant_id=participant.id, project_id=project.id))
     audit.record(
@@ -306,6 +321,7 @@ def create_participant(
             "participant_code": code,
             "language_code": data.language_code,
             "has_phone": phone is not None,
+            "has_email": bool(data.email),
         },
     )
     db.commit()
@@ -380,6 +396,14 @@ def correct_participant(
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
+    # Email: not sent = keep; empty = remove; otherwise replace.
+    email_changed = False
+    if data.email is not None:
+        new_email = clean_email(data.email) if data.email.strip() else None
+        old_email = cipher.decrypt(participant.email_enc) if participant.email_enc else None
+        email_changed = new_email != old_email
+        if email_changed:
+            participant.email_enc = cipher.encrypt(new_email) if new_email else None
     audit.record(
         db,
         action="participant.corrected",
@@ -394,6 +418,7 @@ def correct_participant(
             "language_code": participant.language_code,
             "dialect": participant.dialect,
             "phone_changed": phone_changed,
+            "email_changed": email_changed,
         },
     )
     db.commit()
@@ -436,6 +461,7 @@ def delete_participant(
     participant.display_label = f"Deleted participant {participant.participant_code}"
     participant.notes = ""
     participant.phone_e164_enc = participant.phone_hash = participant.phone_hint = None
+    participant.email_enc = None
     participant.deleted_at = datetime.now(UTC)
     participant.deleted_by = principal.user_id
     participant.deletion_reason = reason.strip()

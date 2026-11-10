@@ -1,14 +1,14 @@
 // Responsive application shell (FND-020): skip link, dark side navigation grouped and filtered by
 // permission, a top bar with the page context and the signed-in user, and a two-panel layout for
 // the signed-out pages. On narrow screens the side navigation folds behind a menu button.
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { ROLE_LABELS } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
 import { BrandMark, Icon, type IconName } from "../components/Icon";
 
-const LoginArt = lazy(() => import("../components/Art").then((m) => ({ default: m.LoginArt })));
+import { LoginArt } from "../components/Art";
 
 interface NavItem {
   to: string;
@@ -80,26 +80,33 @@ export function AppShell() {
       <div className={status === "loading" ? "public public--checking" : "public"}>
         {skip}
         <div className="public__panel" aria-hidden="true">
-          <Brand />
-          <div className="public__art">
-            <Suspense fallback={null}>{status === "loading" ? null : <LoginArt />}</Suspense>
+          <div className="public__top">
+            <Brand />
+            <span className="public__fig">
+              <span>Fig. 01</span> / Speech data
+            </span>
           </div>
-          <div className="public__pitch">
-            <p className="public__headline">Speech data collection, managed end to end.</p>
-            <ul className="public__points">
-              <li>
-                <Icon name="mic" weight="fill" size={18} />
-                <span>Lossless face-to-face and telephony capture</span>
-              </li>
-              <li>
-                <Icon name="verified" weight="fill" size={18} />
-                <span>Every recording quality checked before delivery</span>
-              </li>
-              <li>
-                <Icon name="lock" weight="fill" size={18} />
-                <span>Consent on record, private storage, full audit trail</span>
-              </li>
-            </ul>
+          <div className="public__stats">
+            <div>
+              <strong>2 speakers</strong>per conversation
+            </div>
+            <div>
+              <strong>16 kHz</strong>delivery audio
+            </div>
+            <div>
+              <strong>Lossless</strong>capture
+            </div>
+            <div>
+              <strong>Consent</strong>on record
+            </div>
+          </div>
+          <div className="public__stage">
+            <div className="public__art">{status === "loading" ? null : <LoginArt />}</div>
+            <p className="public__headline">Collect real conversations, with consent.</p>
+          </div>
+          <div className="public__bottom">
+            <span>Private workspace</span>
+            <span>Every action audited</span>
           </div>
         </div>
         <main id="main" className="public__main" tabIndex={-1}>

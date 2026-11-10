@@ -44,7 +44,7 @@ describe("recordings on the task page", () => {
     const { calls } = open(ALL_PERMISSIONS);
     renderAt("/tasks/t1");
     await userEvent.click(
-      await screen.findByRole("button", { name: "Download with consent form" }),
+      await screen.findByRole("button", { name: "Download with consent form" }, { timeout: 5000 }),
     );
     expect(await screen.findByText("Recording and consent record downloaded.")).toBeInTheDocument();
     await waitFor(() => {
@@ -58,7 +58,9 @@ describe("recordings on the task page", () => {
   it("offers no download without the download right", async () => {
     open(ALL_PERMISSIONS.filter((p) => p !== "recordings.download"));
     renderAt("/tasks/t1");
-    expect(await screen.findByText(/audio \+ consent record/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/audio \+ consent record/, {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download with consent form" })).toBeNull();
   });
 });

@@ -1,14 +1,15 @@
 /* Dashboard page styles, loaded with the page (not part of the first screen). */
 
-/* Chart colours validated for colour-vision deficiency and contrast (light and dark surfaces). */
+/* Two blues, validated for colour-vision deficiency (light and dark). The lighter one is under
+   3:1 against white, so the legend and the table view carry the same information. */
 :root {
-  --series-approved: #008b9d;
-  --series-waiting: #d9643f;
+  --series-approved: #1f5fbb;
+  --series-waiting: #6aa8f0;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --series-approved: #1f9aa8;
-    --series-waiting: #d9714c;
+    --series-approved: #3a74d4;
+    --series-waiting: #27a3b3;
   }
 }
 

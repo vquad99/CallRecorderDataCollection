@@ -38,7 +38,7 @@ function ParticipantForm({
       className="card"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ ...f, phone: f.phone?.trim() ? f.phone : null });
+        onSubmit({ ...f, phone: f.phone?.trim() ? f.phone : null, email: f.email?.trim() });
       }}
     >
       <TextField
@@ -52,6 +52,13 @@ function ParticipantForm({
         hint="International format, e.g. +91 98765 43210. Needed for telephony tasks."
         value={f.phone ?? ""}
         onChange={(e) => setF({ ...f, phone: e.target.value })}
+      />
+      <TextField
+        label="Email address"
+        type="email"
+        hint="Optional. Used to send the participant their consent form link."
+        value={f.email ?? ""}
+        onChange={(e) => setF({ ...f, email: e.target.value })}
       />
       <TextField
         label="Language code"
@@ -187,6 +194,7 @@ export function ParticipantsTab() {
             language_code: editing.language_code,
             dialect: editing.dialect,
             notes: editing.notes ?? "",
+            email: editing.email ?? (editing.has_email ? undefined : ""),
           }}
           submitLabel={`Save ${editing.participant_code}`}
           busy={busy}
@@ -267,6 +275,22 @@ export function ParticipantsTab() {
                           >
                             Personal link
                           </Button>
+                          {p.has_email ? (
+                            <Button
+                              variant="secondary"
+                              busy={busy}
+                              onClick={() => {
+                                setLink(null);
+                                void run(async () => {
+                                  const r = await work.emailPortalLink(project.id, p.id);
+                                  if (!r.sent) throw new Error("The email could not be sent.");
+                                  return `Consent form link emailed to ${p.participant_code}.`;
+                                });
+                              }}
+                            >
+                              Email consent link
+                            </Button>
+                          ) : null}
                           <Button
                             variant="secondary"
                             onClick={() => {

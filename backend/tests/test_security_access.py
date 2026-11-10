@@ -580,6 +580,14 @@ CASES: list[Case] = [
         Perm.PARTICIPANTS_MANAGE,
     ),
     case(
+        "POST",
+        PP + "/portal-link/email",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link/email",
+        {SA, PA},
+        Perm.PARTICIPANTS_MANAGE,
+        before=lambda e: None,
+    ),
+    case(
         "DELETE",
         PP + "/portal-link",
         lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link",

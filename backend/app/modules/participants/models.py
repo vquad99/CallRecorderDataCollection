@@ -27,6 +27,8 @@ class Participant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     phone_e164_enc: Mapped[str | None] = mapped_column(Text)
     phone_hash: Mapped[str | None] = mapped_column(String(64))
     phone_hint: Mapped[str | None] = mapped_column(String(2))
+    # Optional email address, encrypted; used to send the participant their personal link.
+    email_enc: Mapped[str | None] = mapped_column(Text)
     language_code: Mapped[str] = mapped_column(String(35), nullable=False)
     dialect: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
     notes: Mapped[str] = mapped_column(Text, nullable=False, server_default="")

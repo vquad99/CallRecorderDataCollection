@@ -43,6 +43,8 @@ export const PARTICIPANT = {
   display_label: "Asha",
   phone: "+919876543210",
   has_phone: true,
+  email: "asha@example.org",
+  has_email: true,
   consent_visible: true,
   notes: "",
   deleted: false,
