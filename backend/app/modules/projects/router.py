@@ -241,45 +241,9 @@ def set_retention(
     return detail(service.set_retention(db, principal, project_id, rules, client_ip(request)))
 
 
-class GuidelineOut(BaseModel):
-    version: int
-    guideline_text: str
-    verbatim: bool
-    created_at: datetime
-
-
-class GuidelineBody(BaseModel):
-    guideline_text: str = Field(min_length=1, max_length=100_000)
-    verbatim: bool
-
-
-@router.get("/{project_id}/guidelines", response_model=list[GuidelineOut])
-def list_guidelines(
-    project_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
-) -> list[GuidelineOut]:
-    return [
-        GuidelineOut.model_validate(g, from_attributes=True)
-        for g in service.list_guidelines(db, principal, project_id)
-    ]
-
-
-@router.post("/{project_id}/guidelines", response_model=GuidelineOut, status_code=201)
-def add_guideline(
-    project_id: uuid.UUID,
-    body: GuidelineBody,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DbSession,
-) -> GuidelineOut:
-    g = service.add_guideline(
-        db, principal, project_id, body.guideline_text, body.verbatim, client_ip(request)
-    )
-    return GuidelineOut.model_validate(g, from_attributes=True)
-
-
 class MemberOut(BaseModel):
     user_id: uuid.UUID
-    email: str
+    email: str | None  # only for people who manage the team (security review 2026-11-10)
     display_name: str
     roles: list[str]
     status: str
@@ -290,10 +254,11 @@ class MemberOut(BaseModel):
 def list_members(
     project_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> list[MemberOut]:
+    show_email = principal.can_in_project(Perm.PROJECTS_MEMBERS, project_id)
     return [
         MemberOut(
             user_id=u.id,
-            email=u.email,
+            email=u.email if show_email else None,
             display_name=u.display_name,
             roles=sorted(r.code for r in u.roles),
             status=u.status,

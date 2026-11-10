@@ -9,6 +9,8 @@ import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
+import { Icon } from "../../components/Icon";
+import { StatusBadge } from "../../components/StatusBadge";
 
 const PAGE_SIZE = 25;
 export const STATUS_LABELS: Record<string, string> = {
@@ -35,6 +37,7 @@ export function ProjectsPage() {
         <h1 id="projects-title">Projects</h1>
         {can("projects.create") ? (
           <Link className="button button--primary" to="/projects/new">
+            <Icon name="plus" size={18} weight="bold" />
             New project
           </Link>
         ) : null}
@@ -86,7 +89,9 @@ export function ProjectsPage() {
                       <Link to={`/projects/${p.id}`}>{p.code}</Link>
                     </td>
                     <td>{p.name}</td>
-                    <td>{STATUS_LABELS[p.status]}</td>
+                    <td>
+                      <StatusBadge status={p.status} label={STATUS_LABELS[p.status] ?? p.status} />
+                    </td>
                     <td>
                       {[
                         p.allows_telephony ? "Telephony" : "",

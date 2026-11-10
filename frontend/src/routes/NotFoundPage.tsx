@@ -7,7 +7,7 @@ export function NotFoundPage() {
     <EmptyState
       title="Page not found"
       message="The address does not match any page."
-      action={<Link to="/">Go to projects</Link>}
+      action={<Link to="/projects">Go to projects</Link>}
     />
   );
 }

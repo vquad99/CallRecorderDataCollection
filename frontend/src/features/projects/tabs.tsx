@@ -145,7 +145,7 @@ export function TeamTab() {
             {members.state.data.map((m) => (
               <tr key={m.user_id}>
                 <td>
-                  {m.display_name} <span className="muted">{m.email}</span>
+                  {m.display_name} {m.email ? <span className="muted">{m.email}</span> : null}
                 </td>
                 <td>{m.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
                 {canEdit ? (
@@ -157,7 +157,7 @@ export function TeamTab() {
                         void run(async () => {
                           await api.removeMember(project.id, m.user_id);
                           members.reload();
-                          return `${m.email} removed.`;
+                          return `${m.display_name} removed.`;
                         })
                       }
                     >
@@ -179,12 +179,22 @@ export function TeamTab() {
           }}
         >
           <h2>Add people</h2>
-          <TextField
-            label="Find by name or email"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          {can("users.manage") ? (
+            <TextField
+              label="Find by name or email"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          ) : (
+            <TextField
+              label="Email address"
+              hint="Type the person's full email address."
+              type="email"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          )}
           <Button type="submit" variant="secondary" busy={busy}>
             Search
           </Button>
@@ -462,80 +472,5 @@ export function RetentionTab() {
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
     </form>
-  );
-}
-
-export function GuidelinesTab() {
-  const { project } = useProject();
-  const { can } = useAuth();
-  const canManage = can("projects.manage");
-  const guidelines = useResource(() => api.listGuidelines(project.id), [project.id]);
-  const [text, setText] = useState("");
-  const [verbatim, setVerbatim] = useState(true);
-  const { busy, error, message, run } = useAction();
-
-  return (
-    <div className="stack">
-      {guidelines.state.status === "loading" ? <LoadingState /> : null}
-      {guidelines.state.status === "failed" ? (
-        <ErrorState error={guidelines.state.error} onRetry={guidelines.reload} />
-      ) : null}
-      {guidelines.state.status === "loaded" && guidelines.state.data.length === 0 ? (
-        <EmptyState title="No guidelines yet" />
-      ) : null}
-      {guidelines.state.status === "loaded"
-        ? guidelines.state.data.map((g) => (
-            <article key={g.version} className="card">
-              <h2>
-                Version {g.version} {g.verbatim ? "(verbatim)" : ""}
-              </h2>
-              <p className="muted">{new Date(g.created_at).toLocaleString()}</p>
-              <p className="pre">{g.guideline_text}</p>
-            </article>
-          ))
-        : null}
-      {canManage ? (
-        <form
-          className="card"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run(async () => {
-              const g = await api.addGuideline(project.id, text, verbatim);
-              setText("");
-              guidelines.reload();
-              return `Version ${g.version} published.`;
-            });
-          }}
-        >
-          <h2>Publish a new version</h2>
-          <div className="field">
-            <label htmlFor="guideline-text" className="field__label">
-              Guideline text
-            </label>
-            <textarea
-              id="guideline-text"
-              className="field__input"
-              rows={6}
-              required
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </div>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={verbatim}
-              onChange={(e) => setVerbatim(e.target.checked)}
-            />
-            Verbatim transcription
-          </label>
-          <Button type="submit" busy={busy} disabled={!text.trim()}>
-            Publish version
-          </Button>
-        </form>
-      ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </div>
   );
 }

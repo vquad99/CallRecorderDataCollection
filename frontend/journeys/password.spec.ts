@@ -23,7 +23,7 @@ test("a forgotten password is reset by email and old sessions end", async ({ bro
   await api(admin, "POST", "/api/v1/users", {
     email,
     display_name: `Reset ${code}`,
-    roles: ["TRANSCRIBER"],
+    roles: ["QC_EXECUTIVE"],
   });
 
   const laptop = await (await browser.newContext()).newPage();

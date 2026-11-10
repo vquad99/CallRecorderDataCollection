@@ -77,17 +77,6 @@ describe("project detail", () => {
       signedInAs(["projects.view", "projects.manage", "projects.members"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/members": () => [200, []],
-        "GET /api/v1/projects/p1/guidelines": () => [
-          200,
-          [
-            {
-              version: 2,
-              guideline_text: "Mark [noise].",
-              verbatim: true,
-              created_at: "2026-11-09T00:00:00Z",
-            },
-          ],
-        ],
       }),
     );
     renderAt("/projects/p1/team");
@@ -98,7 +87,5 @@ describe("project detail", () => {
     expect(await screen.findByText(/hi \(Awadhi\)/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("link", { name: "Guidelines" }));
-    expect(await screen.findByText("Mark [noise].")).toBeInTheDocument();
   });
 });

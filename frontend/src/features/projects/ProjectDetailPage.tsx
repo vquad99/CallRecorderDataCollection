@@ -1,10 +1,11 @@
-// One project with tabs: overview, team, audio rules, languages, retention, guidelines (PROJ-*).
+// One project with tabs: overview, team, audio rules, languages, retention (PROJ-*).
 import { NavLink, Outlet, useOutletContext, useParams } from "react-router";
 
 import { getProject, type Project } from "../../api/projects";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
 import { STATUS_LABELS } from "./ProjectsPage";
+import { StatusBadge } from "../../components/StatusBadge";
 
 export interface ProjectContext {
   project: Project;
@@ -22,7 +23,6 @@ const TABS = [
   { to: "audio", label: "Audio rules", end: false },
   { to: "languages", label: "Languages", end: false },
   { to: "retention", label: "Retention", end: false },
-  { to: "guidelines", label: "Guidelines", end: false },
 ];
 
 export function ProjectDetailPage() {
@@ -37,9 +37,10 @@ export function ProjectDetailPage() {
         <h1 id="project-title">
           {project.code} · {project.name}
         </h1>
-        <span className={`badge badge--${project.status.toLowerCase()}`}>
-          {STATUS_LABELS[project.status]}
-        </span>
+        <StatusBadge
+          status={project.status}
+          label={STATUS_LABELS[project.status] ?? project.status}
+        />
       </div>
       <nav aria-label="Project sections" className="tabs">
         {TABS.map((t) => (

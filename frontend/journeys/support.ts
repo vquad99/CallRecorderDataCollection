@@ -166,6 +166,6 @@ export async function setUpTask(
 
 export const SEEDED = {
   moderator: "demo.moderator@example.org",
-  transcriber: "demo.transcriber@example.org",
+  qcExecutive: "demo.qc-executive@example.org",
   clientViewer: "demo.client-viewer@example.org",
 };

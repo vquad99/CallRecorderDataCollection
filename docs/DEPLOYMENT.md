@@ -34,6 +34,17 @@ Docker, bound to 127.0.0.1), `make migrate`, `make backend`, `make frontend`, `m
 seed arrives with the users table in Phase 2 (D-025). CI runs the same checks plus a container job that
 starts every service, migrates, and proves data survives a database restart (D-026).
 
+### Proxy addresses, report time zone, health checks (D-064, D-065)
+
+- `FORWARDED_ALLOW_IPS`: the address (or subnet) of the proxy in front of the backend - in the local
+  stack the web container's fixed address `172.30.57.10`. With a cloud load balancer in front of
+  nginx, configure nginx's real-IP module for the balancer and keep this pointing at nginx. Never
+  `*`: anyone could choose the address they are counted under (login limits, rate limits, audit).
+- `REPORT_TIMEZONE` (default `Asia/Kolkata`): calendar days for dashboards.
+- nginx answers `/health/live` to anyone and `/health/ready` only to private networks (load
+  balancer, monitoring, the host). Its access log leaves out query strings, so one-time sign-in
+  tokens never reach the log.
+
 ## 4. Release procedure (Phase 10)
 
 1. CI green on the release commit (lint, types, tests, secret and dependency scans).

@@ -36,7 +36,7 @@ def test_create_user_sends_invitation_that_sets_a_password(
         json={
             "email": "New.Person@Example.org",
             "display_name": "New Person",
-            "roles": ["TRANSCRIBER"],
+            "roles": ["QC_EXECUTIVE"],
         },
     )
     assert response.status_code == 201
@@ -76,9 +76,9 @@ def test_edit_user_and_role_change_is_audited(admin: Api, db: Any) -> None:
         == "Edited Name"
     )
     response = admin.put(
-        f"/api/v1/users/{user.id}/roles", json={"roles": ["QC_EXECUTIVE", "TRANSCRIBER"]}
+        f"/api/v1/users/{user.id}/roles", json={"roles": ["CLIENT_VIEWER", "QC_EXECUTIVE"]}
     )
-    assert response.json()["roles"] == ["QC_EXECUTIVE", "TRANSCRIBER"]
+    assert response.json()["roles"] == ["CLIENT_VIEWER", "QC_EXECUTIVE"]
     entry = _audit(db, "user.roles_changed")[-1]
     assert '"MODERATOR"' in (entry.before_summary or "")
     assert '"QC_EXECUTIVE"' in (entry.after_summary or "")
@@ -115,7 +115,7 @@ def test_admin_cannot_lock_themselves_out(admin: Api) -> None:
 
 def test_search_filter_and_paginate(admin: Api, db: Any) -> None:
     for i in range(7):
-        make_user(db, f"page{i}@example.org", ["TRANSCRIBER" if i % 2 else "MODERATOR"])
+        make_user(db, f"page{i}@example.org", ["QC_EXECUTIVE" if i % 2 else "MODERATOR"])
     page = admin.get("/api/v1/users", params={"search": "page", "page_size": 3, "page": 2}).json()
     assert page["total"] == 7
     assert [u["email"] for u in page["items"]] == [
@@ -123,8 +123,8 @@ def test_search_filter_and_paginate(admin: Api, db: Any) -> None:
         "page4@example.org",
         "page5@example.org",
     ]
-    transcribers = admin.get("/api/v1/users", params={"role": "TRANSCRIBER"}).json()
-    assert transcribers["total"] == 3
+    qc_staff = admin.get("/api/v1/users", params={"role": "QC_EXECUTIVE"}).json()
+    assert qc_staff["total"] == 3
     assert admin.get("/api/v1/users", params={"status": "DISABLED"}).json()["total"] == 0
 
 
@@ -133,7 +133,7 @@ def test_csv_import_preview_then_confirm_imports_only_valid_rows(admin: Api, db:
     csv_text = (
         "email,display_name,roles\n"
         "ok1@example.org,Okay One,MODERATOR\n"
-        "ok2@example.org,Okay Two,TRANSCRIBER;QC_EXECUTIVE\n"
+        "ok2@example.org,Okay Two,CLIENT_VIEWER;QC_EXECUTIVE\n"
         "not-an-email,Bad Email,MODERATOR\n"
         "exists@example.org,Already There,MODERATOR\n"
         "norole@example.org,No Role,\n"
@@ -178,7 +178,7 @@ def test_export_is_admin_only_and_escapes_formulas(admin: Api, db: Any, new_api:
 
 
 def test_each_role_sees_only_permitted_admin_pages(db: Any, new_api: Any) -> None:
-    for role in ["PROJECT_ADMIN", "MODERATOR", "TRANSCRIBER", "QC_EXECUTIVE", "CLIENT_VIEWER"]:
+    for role in ["PROJECT_ADMIN", "MODERATOR", "QC_EXECUTIVE", "CLIENT_VIEWER"]:
         make_user(db, f"{role.lower()}@example.org", [role])
         api = new_api()
         api.login(f"{role.lower()}@example.org")

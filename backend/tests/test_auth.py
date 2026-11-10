@@ -233,7 +233,7 @@ def test_mfa_enrol_confirm_login_and_disable(
     user = make_user(db, "mfa@example.org", ["MODERATOR"])
     api = new_api()
     api.login(user.email)
-    secret = api.post("/api/v1/auth/mfa/enroll").json()["secret"]
+    secret = api.post("/api/v1/auth/mfa/enroll", json={"password": TEST_PASSWORD}).json()["secret"]
     assert api.post("/api/v1/auth/mfa/confirm", json={"code": "000000"}).status_code == 400
     assert api.post("/api/v1/auth/mfa/confirm", json={"code": code(-1, secret)}).status_code == 204
     db.expire_all()

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings
@@ -141,13 +141,17 @@ class ForgotBody(BaseModel):
     email: str = Field(min_length=3, max_length=320)
 
 
+def _reset_in_background(app: object, email: str, ip: str | None) -> None:
+    state = app.state  # type: ignore[attr-defined]
+    with state.session_factory() as db:
+        service.request_password_reset(db, state.settings, state.email_sender, email, ip)
+
+
 @router.post("/password/forgot", status_code=202)
-def forgot(
-    body: ForgotBody, request: Request, db: DbSession, settings: AppSettings
-) -> dict[str, str]:
-    service.request_password_reset(
-        db, settings, request.app.state.email_sender, body.email, client_ip(request)
-    )
+def forgot(body: ForgotBody, request: Request, background: BackgroundTasks) -> dict[str, str]:
+    # The lookup, the token and the email all happen after the answer is sent, so the answer takes
+    # the same time for every address and cannot tell an attacker which accounts exist.
+    background.add_task(_reset_in_background, request.app, body.email, client_ip(request))
     return {"status": "If the address belongs to an active account, a reset link has been sent."}
 
 
@@ -223,9 +227,22 @@ class MfaEnrollOut(BaseModel):
     otpauth_uri: str
 
 
+class MfaEnrollBody(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+
+
 @router.post("/mfa/enroll", response_model=MfaEnrollOut)
-def mfa_enroll(principal: CurrentPrincipal, db: DbSession, cipher: Cipher) -> MfaEnrollOut:
-    secret, uri = service.mfa_enroll(db, cipher, principal.user_id)
+def mfa_enroll(
+    body: MfaEnrollBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    cipher: Cipher,
+) -> MfaEnrollOut:
+    secret, uri = service.mfa_enroll(
+        db, settings, cipher, principal.user_id, body.password, client_ip(request)
+    )
     return MfaEnrollOut(secret=secret, otpauth_uri=uri)
 
 

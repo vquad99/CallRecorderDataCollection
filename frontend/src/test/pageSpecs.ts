@@ -23,7 +23,8 @@ export const PAGES: Record<string, PageSpec> = {
     shows: /Set a new password/,
     anonymous: true,
   },
-  "/": { url: "/", shows: /Hindi conversations/, data: "GET /api/v1/projects" },
+  "/": { url: "/", shows: /Hours per day/, data: "GET /api/v1/dashboard" },
+  "/dashboard": { url: "/dashboard", shows: /Hours per day/, data: "GET /api/v1/dashboard" },
   "/status": {
     url: "/status",
     shows: /1\.0\.0/,
@@ -52,11 +53,6 @@ export const PAGES: Record<string, PageSpec> = {
   "/projects/:projectId/retention": {
     url: "/projects/p1/retention",
     shows: /Days to keep each kind of file/,
-  },
-  "/projects/:projectId/guidelines": {
-    url: "/projects/p1/guidelines",
-    shows: /Speak clearly/,
-    data: "GET /api/v1/projects/p1/guidelines",
   },
   "/tasks": { url: "/tasks", shows: /T000001/, data: "GET /api/v1/tasks" },
   "/tasks/:taskId": { url: "/tasks/t1", shows: /Task T000001/, data: "GET /api/v1/tasks/t1" },

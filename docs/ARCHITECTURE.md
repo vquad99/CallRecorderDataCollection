@@ -17,8 +17,8 @@ A modular monolith: one backend application, one worker image, one web frontend,
                v
   FastAPI application  /api/v1  ---------------------------------+
   | auth | users | projects | participants | tasks | telephony    |
-  | recording | storage | audio_qc | asr | transcription           |
-  | transcript_qc | exports | dashboard | audit | settings         |
+  | recording | storage | audio_qc | asr (optional) | exports      |
+  | dashboard | audit | settings                                   |
   +------+-------------------+------------------+-----------------+
          |                   |                  |
      PostgreSQL            Redis           Private S3-compatible storage
@@ -78,34 +78,31 @@ Legend: **F** full, **O** own (member) projects only, **A** items assigned to th
 **S** read-only on explicitly shared project results, **R** read, **-** none.
 TA-ROLE-01 is generated from this table.
 
-| Capability (permission code) | Super Admin | Project Admin | Moderator | Transcriber | QC Executive | Client Viewer |
-|---|---|---|---|---|---|---|
-| System settings, integrations, provider accounts (`settings.manage`) | F | - | - | - | - | - |
-| Create/disable users, assign roles (`users.manage`) | F | - | - | - | - | - |
-| Project membership (`projects.members`) | F | O | - | - | - | - |
-| Create projects (`projects.create`) | F | - | - | - | - | - |
-| Edit project settings (`projects.manage`) | F | O | - | - | - | - |
-| Participant IDs, language, dialect (`participants.view`) | F | O | A | A (IDs) | A (IDs) | S (IDs) |
-| Participant phone number (`participants.contact`) | F | O | A, if project policy allows | - | - | - |
-| Participant contact export (`participants.export`) | F | O, explicit grant | - | - | - | - |
-| Consent records (`consent.capture`, `consent.view`) | F | O (R) | A | - | - | - |
-| Create / assign / reassign tasks (`tasks.assign`) | F | O | - | - | - | - |
-| See tasks (`tasks.view`) | F | O | A | A | A | - |
-| Start / control calls (`calls.start`) | - | - | A | - | - | - |
-| End participant conference (`calls.end`) | F | O | A | - | - | - |
-| Face-to-face recording (`recordings.create`) | - | - | A | - | - | - |
-| Play audio (`recordings.view`) | F | O | A | A | A | S (final assets) |
-| Download audio (`recordings.download`) | F | O | - | - | - | S (final assets) |
-| Audio QC decision (`audio_qc.review`) | F | O (R) | - | - | A | - |
-| Edit transcripts (`transcripts.edit`) | F | O (R) | - | A | A (annotate if granted) | - |
-| Transcript QC decision (`transcripts.review`) | F | O (R) | - | - | A | - |
-| Reopen approved transcript (`transcripts.reopen`) | F | O (reason + audit) | - | - | - | - |
-| Exports (`exports.create`) | F | O | - | - | - | S (no personal data) |
-| Dashboards (`dashboard.view`) | F | O | own work | own work | own work | S |
-| Audit log (`audit.view`) | F | O | - | - | - | - |
-| Webhook event viewer (`webhooks.view`) | F | - | - | - | - | - |
-| Delete assets (`assets.delete`) | F | O (request only) | - | - | - | - |
-| Internal staff notes (`notes.view`) | F | O | A | A | A | - |
+| Capability (permission code) | Super Admin | Project Admin | Moderator | QC Executive | Client Viewer |
+|---|---|---|---|---|---|
+| System settings, integrations, provider accounts (`settings.manage`) | F | - | - | - | - |
+| Create/disable users, assign roles (`users.manage`) | F | - | - | - | - |
+| Project membership (`projects.members`) | F | O | - | - | - |
+| Create projects (`projects.create`) | F | - | - | - | - |
+| Edit project settings (`projects.manage`) | F | O | - | - | - |
+| Participant IDs, language, dialect (`participants.view`) | F | O | A | A (IDs) | S (IDs) |
+| Participant phone number (`participants.contact`) | F | O | A, if project policy allows | - | - |
+| Participant contact export (`participants.export`) | F | O, explicit grant | - | - | - |
+| Consent records (`consent.capture`, `consent.view`) | F | O (R) | A | - | - |
+| Create / assign / reassign tasks (`tasks.assign`) | F | O | - | - | - |
+| See tasks (`tasks.view`) | F | O | A | A | - |
+| Start / control calls (`calls.start`) | - | - | A | - | - |
+| End participant conference (`calls.end`) | F | O | A | - | - |
+| Face-to-face recording (`recordings.create`) | - | - | A | - | - |
+| Play audio (`recordings.view`) | F | O | A | A | S (final assets) |
+| Download audio (`recordings.download`) | F | O | - | - | S (final assets) |
+| Audio QC decision (`audio_qc.review`) | F | O (R) | - | A | - |
+| Exports (`exports.create`) | F | O | - | - | S (no personal data) |
+| Dashboards (`dashboard.view`) | F | O | own work | own work | S |
+| Audit log (`audit.view`) | F | O | - | - | - |
+| Webhook event viewer (`webhooks.view`) | F | - | - | - | - |
+| Delete assets (`assets.delete`) | F | O (request only) | - | - | - |
+| Internal staff notes (`notes.view`) | F | O | A | A | - |
 
 Proposed, not stated by the sources: only Super Admin creates users and projects (D-010).
 

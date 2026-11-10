@@ -11,17 +11,16 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.permissions import Perm
+from app.core.permissions import Perm, Role
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
-from app.modules.auth.models import User
+from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.projects.models import (
     Project,
     ProjectAudioRule,
     ProjectLanguage,
     ProjectMembership,
     ProjectRetentionRule,
-    ProjectTranscriptionGuideline,
 )
 
 # Allowed lifecycle moves (PROJ-009). Reopening a completed or archived project needs a reason.
@@ -372,55 +371,6 @@ def set_audio_rules(
     return project
 
 
-def list_guidelines(
-    db: Session, principal: Principal, project_id: uuid.UUID
-) -> list[ProjectTranscriptionGuideline]:
-    project = get_visible(db, principal, project_id)
-    return list(
-        db.scalars(
-            select(ProjectTranscriptionGuideline)
-            .where(ProjectTranscriptionGuideline.project_id == project.id)
-            .order_by(ProjectTranscriptionGuideline.version.desc())
-        ).all()
-    )
-
-
-def add_guideline(
-    db: Session,
-    principal: Principal,
-    project_id: uuid.UUID,
-    text: str,
-    verbatim: bool,
-    ip: str | None,
-) -> ProjectTranscriptionGuideline:
-    project = get_manageable(db, principal, project_id)
-    current = db.scalar(
-        select(func.max(ProjectTranscriptionGuideline.version)).where(
-            ProjectTranscriptionGuideline.project_id == project.id
-        )
-    )
-    guideline = ProjectTranscriptionGuideline(
-        project_id=project.id,
-        version=(current or 0) + 1,
-        guideline_text=text,
-        verbatim=verbatim,
-        created_by=principal.user_id,
-    )
-    db.add(guideline)
-    audit.record(
-        db,
-        action="project.guideline_added",
-        entity_type="project",
-        entity_id=project.id,
-        project_id=project.id,
-        actor_id=principal.user_id,
-        ip=ip,
-        after={"version": guideline.version},
-    )
-    db.commit()
-    return guideline
-
-
 def set_retention(
     db: Session,
     principal: Principal,
@@ -526,7 +476,12 @@ def remove_member(
 def member_candidates(
     db: Session, principal: Principal, project_id: uuid.UUID, search: str | None, limit: int = 20
 ) -> list[User]:
-    """Active users who are not yet members, for the team picker (needs projects.members)."""
+    """Active users who are not yet members, for the team picker (needs projects.members).
+
+    A Super Admin may search by part of a name or email. Anyone else must type the person's full
+    email address, so the picker cannot be used to list every account on the platform (security
+    review 2026-11-10), and Super Admins are never offered (they see every project already).
+    """
     project = get_manageable(db, principal, project_id, Perm.PROJECTS_MEMBERS)
     query = select(User).where(
         User.status == "ACTIVE",
@@ -534,7 +489,20 @@ def member_candidates(
             select(ProjectMembership.user_id).where(ProjectMembership.project_id == project.id)
         ),
     )
-    if search:
-        like = f"%{search.strip().lower()}%"
-        query = query.where(or_(User.email.like(like), func.lower(User.display_name).like(like)))
+    if principal.is_super_admin:
+        if search:
+            like = f"%{search.strip().lower()}%"
+            query = query.where(
+                or_(User.email.like(like), func.lower(User.display_name).like(like))
+            )
+    else:
+        wanted = (search or "").strip().lower()
+        if "@" not in wanted:
+            return []
+        super_admins = (
+            select(UserRole.user_id)
+            .join(RoleRecord)
+            .where(RoleRecord.code == Role.SUPER_ADMIN.value)
+        )
+        query = query.where(User.email == wanted, User.id.not_in(super_admins))
     return list(db.scalars(query.order_by(User.email).limit(limit)).all())

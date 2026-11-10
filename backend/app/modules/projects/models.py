@@ -138,24 +138,6 @@ class ProjectAudioRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     max_duration_seconds: Mapped[int | None] = mapped_column(Integer)
 
 
-class ProjectTranscriptionGuideline(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    __tablename__ = "project_transcription_guidelines"
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id", "version", name="uq_project_transcription_guidelines_version"
-        ),
-    )
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
-    guideline_text: Mapped[str] = mapped_column(Text, nullable=False)
-    verbatim: Mapped[bool] = mapped_column(nullable=False)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT")
-    )
-
-
 class ProjectRetentionRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "project_retention_rules"
     __table_args__ = (

@@ -10,6 +10,7 @@ from app.core.ratelimit import rate_limit
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.deps import csrf_protect
 from app.modules.auth.router import router as auth_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.participants.router import router as participants_router
 from app.modules.projects.router import router as projects_router
 from app.modules.recordings.router import router as recordings_router
@@ -46,3 +47,4 @@ api_router.include_router(tasks_router)
 api_router.include_router(audit_router)
 api_router.include_router(recordings_router)
 api_router.include_router(storage_usage_router)
+api_router.include_router(dashboard_router)

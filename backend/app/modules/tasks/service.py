@@ -209,7 +209,7 @@ def transition(
 def system_transition(
     db: Session, task: Task, target: str, *, comment: str = "", reason_code: str | None = None
 ) -> Task:
-    """For the platform's own modules (recording, QC, transcription) in later phases."""
+    """For the platform's own modules (recording, audio QC)."""
     return transition(
         db, task, target, workflow.SYSTEM, actor_id=None, reason_code=reason_code, comment=comment
     )

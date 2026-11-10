@@ -34,10 +34,10 @@ describe("users admin", () => {
     expect(screen.getByText(/invitation pending/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByRole("link", { name: "Person 2" })).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText("Role"), "TRANSCRIBER");
+    await userEvent.selectOptions(screen.getByLabelText("Role"), "QC_EXECUTIVE");
     await waitFor(() =>
       expect(
-        calls.some((c) => c.path.includes("role=TRANSCRIBER") && c.path.includes("page=1")),
+        calls.some((c) => c.path.includes("role=QC_EXECUTIVE") && c.path.includes("page=1")),
       ).toBe(true),
     );
   });

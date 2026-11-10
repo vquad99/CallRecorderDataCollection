@@ -131,6 +131,53 @@ export const SETTINGS = [
 ];
 
 /** Every permission the interface checks; tests narrow this per role. */
+export const DASHBOARD = {
+  view: "manager",
+  timezone: "Asia/Kolkata",
+  project_id: null,
+  projects: [{ id: "p1", code: "HINDI", name: "Hindi conversations" }],
+  recorded_hours: 12.5,
+  approved_hours: 8,
+  recordings: 30,
+  target_hours_per_day: 4,
+  today_hours: 1.5,
+  by_mode: [
+    {
+      mode: "FACE_TO_FACE",
+      recorded_hours: 7.5,
+      approved_hours: 5,
+      recordings: 18,
+      target_hours_per_day: 2,
+    },
+    {
+      mode: "TELEPHONY",
+      recorded_hours: 5,
+      approved_hours: 3,
+      recordings: 12,
+      target_hours_per_day: 2,
+    },
+  ],
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    day: `2026-10-${String(i + 1).padStart(2, "0")}`,
+    recorded_hours: (i % 5) * 0.4,
+    approved_hours: (i % 5) * 0.25,
+  })),
+  tasks_total: 40,
+  tasks_approved: 22,
+  tasks_by_status: { APPROVED: 22, AUDIO_QC: 6, IN_PROGRESS: 4, ASSIGNED: 8 },
+  qc: { passed: 22, rejected: 1, returned: 2, waiting: 6 },
+  queues: {
+    waiting_for_qc: 6,
+    processing: 0,
+    failed_processing: 1,
+    interrupted: 0,
+    stale_uploads: 0,
+    on_hold: 0,
+  },
+  team: [{ name: "Max Moderator", recordings: 30, recorded_hours: 12.5 }],
+  storage_bytes: 3_200_000_000,
+};
+
 export const ALL_PERMISSIONS = [
   "settings.manage",
   "users.manage",
@@ -167,19 +214,12 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects/p1": ok(PROJECT),
     "GET /api/v1/projects/p1/members": ok([MEMBER, MEMBER_2]),
     "GET /api/v1/projects/p1/member-candidates": ok([
-      { user_id: "u3", email: "tara@example.org", display_name: "Tara", roles: ["TRANSCRIBER"] },
-    ]),
-    "GET /api/v1/projects/p1/guidelines": ok([
-      {
-        version: 1,
-        guideline_text: "Speak clearly.",
-        verbatim: true,
-        created_at: "2026-11-09T00:00:00Z",
-      },
+      { user_id: "u3", email: "tara@example.org", display_name: "Tara", roles: ["QC_EXECUTIVE"] },
     ]),
     "GET /api/v1/projects/p1/participants": ok(page([PARTICIPANT, PARTICIPANT_B])),
     "GET /api/v1/projects/p1/participants/a1/consent": ok([]),
     "GET /api/v1/tasks": ok(page([TASK])),
+    "GET /api/v1/dashboard": ok(DASHBOARD),
     "GET /api/v1/tasks/t1": ok(TASK),
     "GET /api/v1/tasks/t1/timeline": ok([
       { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },

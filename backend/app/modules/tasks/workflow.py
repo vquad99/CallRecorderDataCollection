@@ -5,8 +5,8 @@ Requirements: TASK-002..004, TASK-009.
 Kinds of actor:
 - "assign": a user holding tasks.assign in the task's project (Project Admin, Super Admin)
 - "moderator": the task's active moderator assignee
-- "system": only the platform's own modules (recording, audio QC, transcription, transcript QC);
-  never reachable through the generic transition API, so a status cannot be faked by hand.
+- "system": only the platform's own modules (recording, audio QC); never reachable through the
+  generic transition API, so a status cannot be faked by hand.
 """
 
 from __future__ import annotations
@@ -25,9 +25,7 @@ REASONS: dict[str, frozenset[str]] = {
     "CANCELLED": frozenset(
         {"PARTICIPANT_UNAVAILABLE", "CONSENT_REFUSED", "DUPLICATE_TASK", "CLIENT_REQUEST", "OTHER"}
     ),
-    "REJECTED": frozenset(
-        {"AUDIO_QUALITY", "CONSENT_PROBLEM", "WRONG_SPEAKERS", "TRANSCRIPT_QUALITY", "OTHER"}
-    ),
+    "REJECTED": frozenset({"AUDIO_QUALITY", "CONSENT_PROBLEM", "WRONG_SPEAKERS", "OTHER"}),
     "RETURNED": frozenset({"RE_RECORD", "NEEDS_CORRECTION", "OTHER"}),
 }
 
@@ -36,19 +34,10 @@ _T: dict[str, dict[str, str]] = {
     "ASSIGNED": {"IN_PROGRESS": "moderator", "ON_HOLD": "assign", "CANCELLED": "assign"},
     "IN_PROGRESS": {"RECORDED": "system", "ON_HOLD": "assign", "CANCELLED": "assign"},
     "RECORDED": {"AUDIO_QC": "system", "CANCELLED": "assign"},
-    "AUDIO_QC": {"TRANSCRIPTION_PENDING": "system", "REJECTED": "system", "RETURNED": "system"},
-    "TRANSCRIPTION_PENDING": {
-        "TRANSCRIPTION_IN_PROGRESS": "system",
-        "ON_HOLD": "assign",
-        "CANCELLED": "assign",
-    },
-    "TRANSCRIPTION_IN_PROGRESS": {"TRANSCRIPT_QC": "system", "ON_HOLD": "assign"},
-    "TRANSCRIPT_QC": {"APPROVED": "system", "REJECTED": "system", "RETURNED": "system"},
-    "RETURNED": {
-        "ASSIGNED": "assign",
-        "TRANSCRIPTION_IN_PROGRESS": "system",
-        "CANCELLED": "assign",
-    },
+    # Audio QC is the last step (D-062: no manual transcription); AI transcription, when a project
+    # turns it on, runs beside the recording and never holds up the task.
+    "AUDIO_QC": {"APPROVED": "system", "REJECTED": "system", "RETURNED": "system"},
+    "RETURNED": {"ASSIGNED": "assign", "CANCELLED": "assign"},
     "ON_HOLD": {"CANCELLED": "assign"},  # resuming to the held status is handled below
 }
 
@@ -58,9 +47,6 @@ FORWARD_PATH = (
     "IN_PROGRESS",
     "RECORDED",
     "AUDIO_QC",
-    "TRANSCRIPTION_PENDING",
-    "TRANSCRIPTION_IN_PROGRESS",
-    "TRANSCRIPT_QC",
     "APPROVED",
 )
 

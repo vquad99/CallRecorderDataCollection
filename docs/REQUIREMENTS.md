@@ -16,8 +16,8 @@ conversation recordings in two modes. Telephony: a moderator starts a provider c
 Participants A and B, gets consent, leaves; A and B keep talking; the output is one stereo 16 kHz
 16-bit PCM WAV with A left and B right, plus the provider's original files. Face-to-face: a computer
 browser records two people near one microphone; the browser original is kept and a mono 16 kHz
-16-bit PCM WAV is derived. Recordings go through audio QC, AI transcription, human transcription,
-transcript QC and export, under six server-enforced roles, with dashboards, audit and privacy controls.
+16-bit PCM WAV is derived. Recordings go through audio QC and export (AI transcription is an optional per-project add-on;
+nobody transcribes by hand, D-062), under five server-enforced roles, with dashboards, audit and privacy controls.
 Targets: 50 staff, 50 concurrent conferences, 250 recording hours/day split 125/125.
 
 ## 2. Fixed constraints
@@ -168,7 +168,7 @@ Phase: 1-9 | Requirements: 6
 
 | ID | Requirement | Source |
 |---|---|---|
-| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | S8; R N, R E4, R F1, R I1 |
+| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, exports, audit_logs, system_settings. | S8; R N, R E4, R F1, R I1 |
 | DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | S8; R N |
 | DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | S8; R N |
 | DB-004 | Workflow state stored in the database, never only in frontend state. | S8; R N |
@@ -183,16 +183,16 @@ Phase: 2 | Requirements: 12
 |---|---|---|
 | ROLE-001 | Authorization enforced on the backend for every protected API; hidden controls are not security. | S5, S12.12; R B3, R E2.6 |
 | ROLE-002 | Super Admin: full access, system settings and integrations, all users and projects. | S5 |
-| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators, transcribers and QC staff; view project reports and recordings. | S5 |
+| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators and QC staff; view project reports and recordings. | S5 |
 | ROLE-004 | Moderator: assigned tasks only; participant details per project policy; start/control assigned calls; record face-to-face; record consent; submit sessions. | S5 |
-| ROLE-005 | Transcriber: assigned transcription tasks only; play permitted audio; create, edit, submit transcripts. | S5 |
-| ROLE-006 | QC Executive: assigned QC tasks only; review audio and transcripts; pass, fail or return with reason codes and comments. | S5 |
+| ROLE-005 | WITHDRAWN (D-062, owner 2026-11-10): no Transcriber role - this is a data collection tool and nobody transcribes by hand. Was: assigned transcription tasks; create, edit, submit transcripts. | S5 |
+| ROLE-006 | QC Executive: assigned QC tasks only; review recordings (and the AI transcript, read-only, when the project has it on); pass, fail or return with reason codes and comments. | S5 |
 | ROLE-007 | Client Viewer: read-only, explicitly shared project results only; no internal notes or restricted participant data. | S5 |
 | ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | S5 |
-| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | R E2.1 |
+| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, audio_qc.review, asr.manage, exports.create, audit.view. | R E2.1 |
 | ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | R E2.2-4 |
 | ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | R E2.5 |
-| ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | R E2 |
+| ROLE-012 | Direct API tests per role: moderator cannot call user management; QC Executive cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | R E2 |
 
 ### AUTH - Module 1 - Authentication and account security
 
@@ -244,7 +244,7 @@ Phase: 2 | Requirements: 13
 | PROJ-003 | Allowed recording modes. | S6 M3; R E4.4 |
 | PROJ-004 | Daily recording targets. | S6 M3; R E4.5 |
 | PROJ-005 | Audio specification fields. | S6 M3; R E4.6 |
-| PROJ-006 | Transcription guidelines with version. | S6 M3; R E4.7 |
+| PROJ-006 | WITHDRAWN (D-062): transcription guidelines with version (only manual transcribers used them). | S6 M3; R E4.7 |
 | PROJ-007 | QC rules per project. | S6 M3 |
 | PROJ-008 | Retention policy. | S6 M3; R E4.8 |
 | PROJ-009 | Lifecycle status: draft, active, paused, completed, archived. | S6 M3; R E4.9 |
@@ -279,7 +279,7 @@ Phase: 3 | Requirements: 12
 | ID | Requirement | Source |
 |---|---|---|
 | TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | S6 M5; R F2.3-5 |
-| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> TRANSCRIPTION_PENDING -> TRANSCRIPTION_IN_PROGRESS -> TRANSCRIPT_QC -> APPROVED. | S6 M5; R F2 |
+| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> APPROVED (D-062: the transcription and transcript QC states were removed). | S6 M5; R F2 |
 | TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | S6 M5; R F2 |
 | TASK-004 | Invalid or arbitrary state jumps rejected at API level (and in the UI). | S6 M5; R F2.11 |
 | TASK-005 | Only the assigned moderator sees and starts the task. | S6 M5; R F2 |
@@ -439,8 +439,8 @@ Phase: 7 | Requirements: 10
 | ASR-005 | Stored per job: provider/model name, exact version, language, settings, source asset ID, status, start/end times, raw response, normalized transcript, error details. | S6 M10; R J2, J3.6 |
 | ASR-006 | Timestamps, speaker labels and confidence stored only when the model returns them; otherwise null. | S6 M10; R J2 |
 | ASR-007 | Bounded retries; permanent failure visible to admin. | S6 M10; R J3.8-9 |
-| ASR-008 | Worker fetches audio through an authorized service; human review task created; AI and human transcripts compared. | S6 M10; R J3.4, J3.10 |
-| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent and human transcription starts from an empty transcript; when on but the Deepgram key is missing, the UI and API show Not configured and work falls back to human transcription. | Owner 2026-11-09 |
+| ASR-008 | Worker fetches audio through an authorized service; the AI transcript is stored beside the recording and never holds up the task (D-062). | S6 M10; R J3.4, J3.10 |
+| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent; when on but the Deepgram key is missing, the UI and API show Not configured; the recording and QC workflow is the same either way (D-062). | Owner 2026-11-09 |
 | ASR-009 | Labelled reference set per launch language/dialect; WER/CER, speaker-label accuracy if supported, timestamp error, processing time, cost per audio hour; dataset size and method recorded; no claims from tiny samples. | S6 M10; R J4 |
 
 ### TRN - Module 11 - Human transcription workspace
@@ -449,18 +449,18 @@ Phase: 8 | Requirements: 12
 
 | ID | Requirement | Source |
 |---|---|---|
-| TRN-001 | Assigned task queue; a transcriber cannot open or edit another person's task. | S6 M11; R K1 |
-| TRN-002 | Audio player with playback speed, seek and segment navigation. | S6 M11; R K1 |
-| TRN-003 | Transcript editor with speaker labels and timestamp editing. | S6 M11; R K1 |
-| TRN-004 | Draft status, save draft and autosave endpoints; visible save status; draft survives refresh. | S6 M11; R K1 |
-| TRN-005 | Submit endpoint; submission locks the submitted version and moves the task to transcript QC. | S6 M11; R K1 |
-| TRN-006 | Revision history endpoint; prior versions available. | S6 M11; R K1 |
-| TRN-007 | Keyboard shortcuts. | S6 M11; R K1 |
-| TRN-008 | Project transcription rules; verbatim transcription; language-specific scripts. | S6 M11 |
-| TRN-009 | A returned task shows the transcriber the reason and revision request. | S6 M11; R K2 |
-| TRN-010 | Concurrent edits detected. | R K1 |
-| TRN-011 | Autosave failure visible to the user. | R K1 |
-| TRN-012 | Assignment endpoint. | R K1 |
+| TRN-001 | WITHDRAWN (D-062): Assigned task queue; a transcriber cannot open or edit another person's task. | S6 M11; R K1 |
+| TRN-002 | WITHDRAWN (D-062): Audio player with playback speed, seek and segment navigation. | S6 M11; R K1 |
+| TRN-003 | WITHDRAWN (D-062): Transcript editor with speaker labels and timestamp editing. | S6 M11; R K1 |
+| TRN-004 | WITHDRAWN (D-062): Draft status, save draft and autosave endpoints; visible save status; draft survives refresh. | S6 M11; R K1 |
+| TRN-005 | WITHDRAWN (D-062): Submit endpoint; submission locks the submitted version and moves the task to transcript QC. | S6 M11; R K1 |
+| TRN-006 | WITHDRAWN (D-062): Revision history endpoint; prior versions available. | S6 M11; R K1 |
+| TRN-007 | WITHDRAWN (D-062): Keyboard shortcuts. | S6 M11; R K1 |
+| TRN-008 | WITHDRAWN (D-062): Project transcription rules; verbatim transcription; language-specific scripts. | S6 M11 |
+| TRN-009 | WITHDRAWN (D-062): A returned task shows the transcriber the reason and revision request. | S6 M11; R K2 |
+| TRN-010 | WITHDRAWN (D-062): Concurrent edits detected. | R K1 |
+| TRN-011 | WITHDRAWN (D-062): Autosave failure visible to the user. | R K1 |
+| TRN-012 | WITHDRAWN (D-062): Assignment endpoint. | R K1 |
 
 ### TQC - Module 12 - Transcript quality control
 
@@ -468,12 +468,12 @@ Phase: 8 | Requirements: 6
 
 | ID | Requirement | Source |
 |---|---|---|
-| TQC-001 | Audio and transcript side by side; segment playback. | S6 M12; R K2 |
-| TQC-002 | Edit or annotate if permission allows. | S6 M12 |
-| TQC-003 | Approve, reject, return for correction; a revised transcript creates a new version. | S6 M12; R K2 |
-| TQC-004 | Error categories, reviewer comments, QC history. | S6 M12; R K2 |
-| TQC-005 | Final lock after approval; reopening needs permission, reason and audit entry. | S6 M12; R K2 |
-| TQC-006 | One task completed end to end (recording, audio QC, ASR, human correction, transcript QC, approval) with evidence for each transition. | S11 Gate8; R K3 |
+| TQC-001 | WITHDRAWN (D-062): Audio and transcript side by side; segment playback. | S6 M12; R K2 |
+| TQC-002 | WITHDRAWN (D-062): Edit or annotate if permission allows. | S6 M12 |
+| TQC-003 | WITHDRAWN (D-062): Approve, reject, return for correction; a revised transcript creates a new version. | S6 M12; R K2 |
+| TQC-004 | WITHDRAWN (D-062): Error categories, reviewer comments, QC history. | S6 M12; R K2 |
+| TQC-005 | WITHDRAWN (D-062): Final lock after approval; reopening needs permission, reason and audit entry. | S6 M12; R K2 |
+| TQC-006 | WITHDRAWN (D-062): One task completed end to end (recording, audio QC, ASR, human correction, transcript QC, approval) with evidence for each transition. | S11 Gate8; R K3 |
 
 ### EXP - Module 13 - Metadata and exports
 
@@ -481,7 +481,7 @@ Phase: 9 | Requirements: 10
 
 | ID | Requirement | Source |
 |---|---|---|
-| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, transcript QC, processing/model provenance. | S6 M13; R L1 |
+| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. | S6 M13; R L1 |
 | EXP-002 | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. | S6 M13; R L1 |
 | EXP-003 | JSON matches its schema. | S6 M13; R L1 |
 | EXP-004 | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. | S6 M13; R L1.6 |
@@ -498,7 +498,7 @@ Phase: 9 | Requirements: 6
 
 | ID | Requirement | Source |
 |---|---|---|
-| DASH-001 | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator and transcriber output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | S6 M14; R L2 |
+| DASH-001 | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | S6 M14; R L2 |
 | DASH-002 | Filters: project, date range, language, dialect, mode, staff, status. | S6 M14; R L2 |
 | DASH-003 | Every metric reconciles with an independent SQL query, including date boundaries and timezone handling. | S6 M14; R L2 |
 | DASH-004 | Role and project visibility enforced. | S6 M14; R L2 |

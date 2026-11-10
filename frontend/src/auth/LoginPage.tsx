@@ -11,7 +11,14 @@ import { useAuth } from "./AuthContext";
 
 function safeNext(raw: string | null): string {
   // Only same-site paths, so a crafted link cannot send the user elsewhere after sign-in.
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  // Browsers read a backslash as "/", so "/\\evil.example" is refused too (review 2026-11-10).
+  if (!raw || !raw.startsWith("/") || raw.includes("\\")) return "/";
+  try {
+    const url = new URL(raw, window.location.origin);
+    return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : "/";
+  } catch {
+    return "/";
+  }
 }
 
 export function LoginPage() {

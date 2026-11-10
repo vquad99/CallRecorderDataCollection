@@ -1,7 +1,8 @@
 // Route table (FND-015). Pages need sign-in; admin pages also need a permission (usability only).
 import { lazy, Suspense, type ComponentType, type ReactElement } from "react";
-import type { RouteObject } from "react-router";
+import { Navigate, type RouteObject } from "react-router";
 
+import { useAuth } from "../auth/AuthContext";
 import { RequireAuth, RequirePermission } from "../auth/guards";
 import { LoadingState } from "../components/StateViews";
 import { LoginPage } from "../auth/LoginPage";
@@ -24,6 +25,12 @@ function page<K extends string>(
 
 const tabs = () => import("../features/projects/tabs");
 
+/** The start page: the dashboard for everyone who has one, otherwise the project list. */
+function Home(): ReactElement {
+  const { can } = useAuth();
+  return <Navigate to={can("dashboard.view") ? "/dashboard" : "/projects"} replace />;
+}
+
 export const routes: RouteObject[] = [
   {
     path: "/",
@@ -41,7 +48,16 @@ export const routes: RouteObject[] = [
       {
         element: <RequireAuth />,
         children: [
-          { index: true, element: <ProjectsPage /> },
+          { index: true, element: <Home /> },
+          {
+            element: <RequirePermission permission="dashboard.view" />,
+            children: [
+              {
+                path: "dashboard",
+                element: page(() => import("../features/dashboard/DashboardPage"), "DashboardPage"),
+              },
+            ],
+          },
           {
             path: "status",
             element: page(() => import("../features/status/StatusPage"), "StatusPage"),
@@ -73,7 +89,6 @@ export const routes: RouteObject[] = [
                   { path: "audio", element: page(tabs, "AudioRulesTab") },
                   { path: "languages", element: page(tabs, "LanguagesTab") },
                   { path: "retention", element: page(tabs, "RetentionTab") },
-                  { path: "guidelines", element: page(tabs, "GuidelinesTab") },
                 ],
               },
             ],

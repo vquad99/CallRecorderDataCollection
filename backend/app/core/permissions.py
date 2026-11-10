@@ -14,7 +14,6 @@ class Role(StrEnum):
     SUPER_ADMIN = "SUPER_ADMIN"
     PROJECT_ADMIN = "PROJECT_ADMIN"
     MODERATOR = "MODERATOR"
-    TRANSCRIBER = "TRANSCRIBER"
     QC_EXECUTIVE = "QC_EXECUTIVE"
     CLIENT_VIEWER = "CLIENT_VIEWER"
 
@@ -42,9 +41,6 @@ class Perm(StrEnum):
     RECORDINGS_VIEW = "recordings.view"
     RECORDINGS_DOWNLOAD = "recordings.download"
     AUDIO_QC_REVIEW = "audio_qc.review"
-    TRANSCRIPTS_EDIT = "transcripts.edit"
-    TRANSCRIPTS_REVIEW = "transcripts.review"
-    TRANSCRIPTS_REOPEN = "transcripts.reopen"
     ASR_VIEW = "asr.view"
     ASR_MANAGE = "asr.manage"
     EXPORTS_CREATE = "exports.create"
@@ -57,7 +53,6 @@ ROLE_LABELS: dict[Role, str] = {
     Role.SUPER_ADMIN: "Super Admin",
     Role.PROJECT_ADMIN: "Project Admin",
     Role.MODERATOR: "Moderator",
-    Role.TRANSCRIBER: "Transcriber",
     Role.QC_EXECUTIVE: "QC Executive",
     Role.CLIENT_VIEWER: "Client Viewer",
 }
@@ -81,7 +76,6 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Perm]] = {
             Perm.CALLS_END,
             Perm.RECORDINGS_VIEW,
             Perm.RECORDINGS_DOWNLOAD,
-            Perm.TRANSCRIPTS_REOPEN,
             Perm.EXPORTS_CREATE,
             Perm.DASHBOARD_VIEW,
             Perm.AUDIT_VIEW,
@@ -105,17 +99,6 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Perm]] = {
             Perm.NOTES_VIEW,
         }
     ),
-    Role.TRANSCRIBER: frozenset(
-        {
-            Perm.PROJECTS_VIEW,
-            Perm.PARTICIPANTS_VIEW,
-            Perm.TASKS_VIEW,
-            Perm.RECORDINGS_VIEW,
-            Perm.TRANSCRIPTS_EDIT,
-            Perm.DASHBOARD_VIEW,
-            Perm.NOTES_VIEW,
-        }
-    ),
     Role.QC_EXECUTIVE: frozenset(
         {
             Perm.PROJECTS_VIEW,
@@ -123,7 +106,6 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Perm]] = {
             Perm.TASKS_VIEW,
             Perm.RECORDINGS_VIEW,
             Perm.AUDIO_QC_REVIEW,
-            Perm.TRANSCRIPTS_REVIEW,
             Perm.DASHBOARD_VIEW,
             Perm.NOTES_VIEW,
         }

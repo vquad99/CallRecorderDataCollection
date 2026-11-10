@@ -1,7 +1,8 @@
 # Build status
 
 Status vocabulary (runbook A3): NOT STARTED, IN PROGRESS, BLOCKED, IMPLEMENTED — TESTS FAILING,
-IMPLEMENTED — AUTOMATED TESTS PASS, VERIFIED, ACCEPTED. VERIFIED needs automated and manual
+IMPLEMENTED — AUTOMATED TESTS PASS, VERIFIED, ACCEPTED, WITHDRAWN (removed by an owner decision,
+which the row names). VERIFIED needs automated and manual
 verification; ACCEPTED needs the phase gate approved. A box is checked only with a real evidence path.
 
 ## Modules
@@ -23,10 +24,10 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Audio rules and conversion | AUDIO | 24 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Telephony parts in Phases 5-6 |
 | Audio QC | AQC | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | AI transcription | ASR | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Human transcription | TRN | 12 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Transcript QC | TQC | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Human transcription | TRN | 12 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
+| Transcript QC | TQC | 6 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
 | Exports | EXP | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
-| Dashboard | DASH | 6 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Dashboard | DASH | 6 | Yes | Yes | n/a | Yes | Yes | No | IN PROGRESS | Built 2026-11-10 (D-065); Phase 9 completes it |
 | Security and audit | SEC | 15 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | Remaining items in Phases 4 and 10 |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 approved; FND-027 done in Phase 2 |
@@ -51,8 +52,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 4 Storage, face-to-face recording | ACCEPTED | 4 | Approved by owner 2026-11-09 (CI run 42652152398 green; Option A fix D-048) |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
-| 7 Audio QC, AI transcription | NOT STARTED | 7 | - |
-| 8 Human transcription, transcript QC | NOT STARTED | 8 | - |
+| 7 Audio QC, optional AI transcription | NOT STARTED | 7 | - |
+| 8 Human transcription, transcript QC | WITHDRAWN | 8 | D-062: owner 2026-11-10, no manual transcription |
 | 9 Exports, dashboards | NOT STARTED | 9 | - |
 | 10 Security, PWA, deployment, operations | NOT STARTED | 10 | - |
 
@@ -139,7 +140,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FND-027 | Development-only seed command for demo accounts; it cannot run in production. | 1 | [x] | n/a | [ ] | [x] TA-FND-16 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | FND-028 | One automated test command; CI runs the same lint, type-check and test commands. | 1 | [ ] | n/a | [ ] | [x] TA-GEN-02 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | FND-029 | Clean setup documented; backend and frontend start from a clean checkout. | 1 | [ ] | n/a | [ ] | n/a | [x] TM-ARCH-03 | docs/evidence/phase1/ci_run.txt | VERIFIED | - |
-| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_transcription_guidelines, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, transcription_assignments, transcript_revisions, transcript_qc_results, exports, audit_logs, system_settings. | 1-9 | n/a | [x] | n/a | [ ] TA-DB-01 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Tables arrive phase by phase |
+| DB-001 | Migrations create at least: users, roles, permissions, role_permissions, sessions, password_reset_tokens, projects, project_languages, project_memberships, project_audio_rules, project_retention_rules, participants, participant_project_links, consent_records, tasks, task_assignments, task_status_history, task_comments, provider_accounts, call_sessions, call_participants, call_events, provider_webhook_events, recordings, recording_channels, audio_assets, audio_qc_results, transcription_jobs, transcripts, transcript_segments, exports, audit_logs, system_settings. | 1-9 | n/a | [x] | n/a | [ ] TA-DB-01 | n/a | docs/evidence/phase2/make_check.txt | IN PROGRESS | Tables arrive phase by phase |
 | DB-002 | Every table: primary key, foreign keys, unique constraints, indexes from real query patterns, created/updated timestamps, defined deletion behaviour, constrained status values; soft deletion only where appropriate. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-02 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | DB-003 | Schema changes only through migrations; migration tests apply them to an empty database. | 1-9 | n/a | [x] | n/a | [x] TA-DB-03 | n/a | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | DB-004 | Workflow state stored in the database, never only in frontend state. | 1-9 | n/a | [ ] | n/a | [ ] TA-TASK-02 | n/a | - | NOT STARTED | - |
@@ -147,16 +148,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | DB-006 | No binary audio in PostgreSQL; only object-storage keys and metadata. | 1-9 | n/a | [ ] | n/a | [ ] TA-DB-04 | n/a | docs/evidence/phase1/make_check.txt | IN PROGRESS | Ongoing every phase |
 | ROLE-001 | Authorization enforced on the backend for every protected API; hidden controls are not security. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | ROLE-002 | Super Admin: full access, system settings and integrations, all users and projects. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators, transcribers and QC staff; view project reports and recordings. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-003 | Project Admin: assigned projects; create tasks; assign moderators and QC staff; view project reports and recordings. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-004 | Moderator: assigned tasks only; participant details per project policy; start/control assigned calls; record face-to-face; record consent; submit sessions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
-| ROLE-005 | Transcriber: assigned transcription tasks only; play permitted audio; create, edit, submit transcripts. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| ROLE-006 | QC Executive: assigned QC tasks only; review audio and transcripts; pass, fail or return with reason codes and comments. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-005 | WITHDRAWN (D-062, owner 2026-11-10): no Transcriber role - this is a data collection tool and nobody transcribes by hand. Was: assigned transcription tasks; create, edit, submit transcripts. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | WITHDRAWN | D-062 owner 2026-11-10 |
+| ROLE-006 | QC Executive: assigned QC tasks only; review recordings (and the AI transcript, read-only, when the project has it on); pass, fail or return with reason codes and comments. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-007 | Client Viewer: read-only, explicitly shared project results only; no internal notes or restricted participant data. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01, TA-ROLE-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-008 | Permission matrix documented and used as the source of the every-role-against-every-API test. | 2 | [x] | [x] | [x] | [x] TA-SEC-10 | [x] TM-ROLE-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
-| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, transcripts.edit, transcripts.review, exports.create, audit.view. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| ROLE-009 | Role and permission constants defined centrally, including users.manage, projects.manage, tasks.assign, calls.start, recordings.view, recordings.download, audio_qc.review, asr.manage, exports.create, audit.view. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-010 | A backend permission dependency is applied to every protected API, with project membership checks. | 2 | [x] | [x] | [x] | [x] TA-ROLE-03, TA-ROLE-01, TA-SEC-10, TA-AUTH-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | ROLE-011 | Frontend route and navigation filtering for usability only; changing the route manually does not bypass permissions. | 2 | [x] | [x] | [x] | [x] TA-ROLE-04, TA-FND-17, TA-FND-18 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_c/make_check_frontend.txt | VERIFIED | - |
-| ROLE-012 | Direct API tests per role: moderator cannot call user management; transcriber cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
+| ROLE-012 | Direct API tests per role: moderator cannot call user management; QC Executive cannot download an unassigned recording; QC Executive reaches assigned items only; Client Viewer is read-only. | 2 | [x] | [x] | [x] | [x] TA-ROLE-01 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | AUTH-001 | Login with correct credentials succeeds (POST /api/v1/auth/login). | 2 | [x] | [x] | [x] | [x] TA-AUTH-01 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt | VERIFIED | - |
 | AUTH-002 | Wrong credentials fail. | 2 | [x] | [x] | [x] | [x] TA-AUTH-02, TA-AUTH-20 | [x] TM-AUTH-01 | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
 | AUTH-003 | Logout revokes the session on the server (POST /api/v1/auth/logout). | 2 | [x] | [x] | [x] | [x] TA-AUTH-03, TA-AUTH-17 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/phase2/walkthrough.txt; docs/evidence/option_b/make_check.txt | VERIFIED | - |
@@ -187,7 +188,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PROJ-003 | Allowed recording modes. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-004 | Daily recording targets. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-005 | Audio specification fields. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| PROJ-006 | Transcription guidelines with version. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PROJ-006 | WITHDRAWN (D-062): transcription guidelines with version (only manual transcribers used them). | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | WITHDRAWN | D-062 owner 2026-11-10 |
 | PROJ-007 | QC rules per project. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03, TA-AQC-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-008 | Retention policy. | 2 | [x] | [x] | [x] | [x] TA-PROJ-03 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROJ-009 | Lifecycle status: draft, active, paused, completed, archived. | 2 | [x] | [x] | [x] | [x] TA-PROJ-04 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -208,7 +209,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PART-011 | Unauthorized users cannot export participant contact details. | 3 | [x] | [x] | [x] | [x] TA-PART-07 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PART-012 | Participant correction workflow. | 3 | [x] | [x] | [x] | [x] TA-PART-08 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | 3 | [x] | [x] | [x] | [x] TA-TASK-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
-| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> TRANSCRIPTION_PENDING -> TRANSCRIPTION_IN_PROGRESS -> TRANSCRIPT_QC -> APPROVED. | 3 | [x] | [x] | [x] | [x] TA-TASK-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
+| TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> APPROVED (D-062: the transcription and transcript QC states were removed). | 3 | [x] | [x] | [x] | [x] TA-TASK-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | 3 | [x] | [x] | [x] | [x] TA-TASK-03, TA-FND-20 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt; docs/evidence/option_d/journeys.txt | VERIFIED | - |
 | TASK-004 | Invalid or arbitrary state jumps rejected at API level (and in the UI). | 3 | [x] | [x] | [x] | [x] TA-TASK-04 | [x] TM-TASK-01 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-005 | Only the assigned moderator sees and starts the task. | 3 | [x] | [x] | [x] | [x] TA-TASK-05 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
@@ -326,28 +327,28 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | ASR-005 | Stored per job: provider/model name, exact version, language, settings, source asset ID, status, start/end times, raw response, normalized transcript, error details. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-03 | n/a | - | NOT STARTED | - |
 | ASR-006 | Timestamps, speaker labels and confidence stored only when the model returns them; otherwise null. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-04 | n/a | - | NOT STARTED | - |
 | ASR-007 | Bounded retries; permanent failure visible to admin. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-05 | n/a | - | NOT STARTED | - |
-| ASR-008 | Worker fetches audio through an authorized service; human review task created; AI and human transcripts compared. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-06, TA-ASR-07 | n/a | - | NOT STARTED | - |
-| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent and human transcription starts from an empty transcript; when on but the Deepgram key is missing, the UI and API show Not configured and work falls back to human transcription. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-08, TA-GEN-04 | n/a | - | NOT STARTED | - |
+| ASR-008 | Worker fetches audio through an authorized service; the AI transcript is stored beside the recording and never holds up the task (D-062). | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-06, TA-ASR-07 | n/a | - | NOT STARTED | - |
+| ASR-010 | AI transcription is optional: an on/off setting per project (default off); when off, no ASR job is created or sent; when on but the Deepgram key is missing, the UI and API show Not configured; the recording and QC workflow is the same either way (D-062). | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-08, TA-GEN-04 | n/a | - | NOT STARTED | - |
 | ASR-009 | Labelled reference set per launch language/dialect; WER/CER, speaker-label accuracy if supported, timestamp error, processing time, cost per audio hour; dataset size and method recorded; no claims from tiny samples. | 7 | [ ] | [ ] | [ ] | n/a | [ ] TM-ASR-02 | - | NOT STARTED | - |
-| TRN-001 | Assigned task queue; a transcriber cannot open or edit another person's task. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-01 | n/a | - | NOT STARTED | - |
-| TRN-002 | Audio player with playback speed, seek and segment navigation. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TRN-01 | - | NOT STARTED | - |
-| TRN-003 | Transcript editor with speaker labels and timestamp editing. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-02 | n/a | - | NOT STARTED | - |
-| TRN-004 | Draft status, save draft and autosave endpoints; visible save status; draft survives refresh. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-03 | [ ] TM-TRN-01 | - | NOT STARTED | - |
-| TRN-005 | Submit endpoint; submission locks the submitted version and moves the task to transcript QC. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-04 | n/a | - | NOT STARTED | - |
-| TRN-006 | Revision history endpoint; prior versions available. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-05 | n/a | - | NOT STARTED | - |
-| TRN-007 | Keyboard shortcuts. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TRN-01 | - | NOT STARTED | - |
-| TRN-008 | Project transcription rules; verbatim transcription; language-specific scripts. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-06 | n/a | - | NOT STARTED | - |
-| TRN-009 | A returned task shows the transcriber the reason and revision request. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-07 | n/a | - | NOT STARTED | - |
-| TRN-010 | Concurrent edits detected. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-08 | n/a | - | NOT STARTED | - |
-| TRN-011 | Autosave failure visible to the user. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-09 | n/a | - | NOT STARTED | - |
-| TRN-012 | Assignment endpoint. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-01 | n/a | - | NOT STARTED | - |
-| TQC-001 | Audio and transcript side by side; segment playback. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TQC-01 | - | NOT STARTED | - |
-| TQC-002 | Edit or annotate if permission allows. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-01 | n/a | - | NOT STARTED | - |
-| TQC-003 | Approve, reject, return for correction; a revised transcript creates a new version. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-02 | n/a | - | NOT STARTED | - |
-| TQC-004 | Error categories, reviewer comments, QC history. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-03 | n/a | - | NOT STARTED | - |
-| TQC-005 | Final lock after approval; reopening needs permission, reason and audit entry. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-04 | n/a | - | NOT STARTED | - |
-| TQC-006 | One task completed end to end (recording, audio QC, ASR, human correction, transcript QC, approval) with evidence for each transition. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TQC-02 | - | NOT STARTED | - |
-| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, transcript QC, processing/model provenance. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-01 | n/a | - | NOT STARTED | - |
+| TRN-001 | WITHDRAWN (D-062): Assigned task queue; a transcriber cannot open or edit another person's task. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-01 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-002 | WITHDRAWN (D-062): Audio player with playback speed, seek and segment navigation. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TRN-01 | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-003 | WITHDRAWN (D-062): Transcript editor with speaker labels and timestamp editing. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-02 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-004 | WITHDRAWN (D-062): Draft status, save draft and autosave endpoints; visible save status; draft survives refresh. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-03 | [ ] TM-TRN-01 | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-005 | WITHDRAWN (D-062): Submit endpoint; submission locks the submitted version and moves the task to transcript QC. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-04 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-006 | WITHDRAWN (D-062): Revision history endpoint; prior versions available. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-05 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-007 | WITHDRAWN (D-062): Keyboard shortcuts. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TRN-01 | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-008 | WITHDRAWN (D-062): Project transcription rules; verbatim transcription; language-specific scripts. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-06 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-009 | WITHDRAWN (D-062): A returned task shows the transcriber the reason and revision request. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-07 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-010 | WITHDRAWN (D-062): Concurrent edits detected. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-08 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-011 | WITHDRAWN (D-062): Autosave failure visible to the user. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-09 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TRN-012 | WITHDRAWN (D-062): Assignment endpoint. | 8 | [ ] | [ ] | [ ] | [ ] TA-TRN-01 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-001 | WITHDRAWN (D-062): Audio and transcript side by side; segment playback. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TQC-01 | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-002 | WITHDRAWN (D-062): Edit or annotate if permission allows. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-01 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-003 | WITHDRAWN (D-062): Approve, reject, return for correction; a revised transcript creates a new version. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-02 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-004 | WITHDRAWN (D-062): Error categories, reviewer comments, QC history. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-03 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-005 | WITHDRAWN (D-062): Final lock after approval; reopening needs permission, reason and audit entry. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-04 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| TQC-006 | WITHDRAWN (D-062): One task completed end to end (recording, audio QC, ASR, human correction, transcript QC, approval) with evidence for each transition. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TQC-02 | - | WITHDRAWN | D-062 owner 2026-11-10 |
+| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-01 | n/a | - | NOT STARTED | - |
 | EXP-002 | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-02 | n/a | - | NOT STARTED | - |
 | EXP-003 | JSON matches its schema. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-03 | n/a | - | NOT STARTED | - |
 | EXP-004 | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-04 | n/a | - | NOT STARTED | - |
@@ -357,7 +358,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | EXP-008 | Export filters validated and export permissions checked. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-07 | n/a | - | NOT STARTED | - |
 | EXP-009 | Large exports generated asynchronously; export status stored. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-08 | n/a | - | NOT STARTED | - |
 | EXP-010 | Short-lived download link; export creation and download audited; temporary bundles expire. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-09 | n/a | - | NOT STARTED | - |
-| DASH-001 | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator and transcriber output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-01 | n/a | - | NOT STARTED | - |
+| DASH-001 | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-01 | n/a | - | NOT STARTED | - |
 | DASH-002 | Filters: project, date range, language, dialect, mode, staff, status. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-02 | n/a | - | NOT STARTED | - |
 | DASH-003 | Every metric reconciles with an independent SQL query, including date boundaries and timezone handling. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-03 | n/a | - | NOT STARTED | - |
 | DASH-004 | Role and project visibility enforced. | 9 | [ ] | [ ] | [ ] | [ ] TA-DASH-04 | n/a | - | NOT STARTED | - |
@@ -698,3 +699,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
   deleted data, restored it and found it again, and confirmed compression and one-year caching on the
   web server (docs/evidence/option_o/ci_run.txt).
 - Optimisation items done; waiting for the owner's next choice.
+
+### Session 12 - 2026-11-10 - Scope change, console design, dashboard, security review
+
+- Owner: no manual transcription (D-062). Transcriber role, transcript permissions, three task
+  states and project guidelines removed (migration 0008); TRN and TQC modules and Phase 8 withdrawn;
+  a task now ends at audio QC; AI transcription stays optional.
+- Console design (D-063): top bar, grouped side navigation, IBM Plex Sans, Phosphor icons generated
+  as path data, status chips, plain sign-in card; first screen 114 KB (budget 115 KB).
+- Dashboard (D-065): progress for clients, own work for moderators and QC, operations for
+  managers; chart colours validated for colour-blind readers.
+- Independent security review: 13 findings, 11 fixed with tests (D-064), 2 open owner decisions
+  (B-14, B-15). Kathbath / AI4Bharat research saved (docs/integrations/kathbath/RESEARCH.md).
+

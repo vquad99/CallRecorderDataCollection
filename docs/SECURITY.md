@@ -113,6 +113,17 @@ Each fix was checked by removing it and watching its test fail.
 Not covered here: browser-side XSS and a web vulnerability scan (Phase 10, TM-SEC-02); TLS,
 encryption at rest and cloud permissions (Phase 10).
 
+## 9a. Independent review, 2026-11-10 (D-064)
+
+A second, independent review of roles, sessions, the web server and operations found one high
+issue (behind nginx every visitor shared nginx's address, so one person could block sign-in for
+everyone), one medium (forgot-password timing showed which addresses have accounts) and eleven
+low ones. All are fixed except two open owner decisions (B-14 backups in a separate, locked bucket
+with an encryption key off the web servers; B-15 mandatory two-step sign-in for administrators).
+Each fix has a test in `backend/tests/test_security_review.py` that fails without it. One item is
+accepted as is: a duplicate phone number across projects is refused (one person keeps one
+participant ID), which tells the caller the number exists; the refusal is audited.
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

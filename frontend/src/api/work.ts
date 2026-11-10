@@ -42,9 +42,6 @@ export type TaskStatus =
   | "IN_PROGRESS"
   | "RECORDED"
   | "AUDIO_QC"
-  | "TRANSCRIPTION_PENDING"
-  | "TRANSCRIPTION_IN_PROGRESS"
-  | "TRANSCRIPT_QC"
   | "APPROVED"
   | "REJECTED"
   | "RETURNED"
@@ -57,9 +54,6 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   IN_PROGRESS: "In progress",
   RECORDED: "Recorded",
   AUDIO_QC: "Audio QC",
-  TRANSCRIPTION_PENDING: "Waiting for transcription",
-  TRANSCRIPTION_IN_PROGRESS: "Transcribing",
-  TRANSCRIPT_QC: "Transcript QC",
   APPROVED: "Approved",
   REJECTED: "Rejected",
   RETURNED: "Returned",

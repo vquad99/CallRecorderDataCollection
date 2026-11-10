@@ -63,7 +63,7 @@ def test_mode_and_target_validation(admin: Api) -> None:
     assert mismatch.json()["error"]["code"] == "MODE_NOT_ALLOWED"
 
 
-def test_languages_audio_rules_guidelines_retention(admin: Api) -> None:
+def test_languages_audio_rules_retention(admin: Api) -> None:
     pid = admin.post("/api/v1/projects", json=NEW_PROJECT).json()["id"]
     langs = admin.put(
         f"/api/v1/projects/{pid}/languages",
@@ -105,15 +105,6 @@ def test_languages_audio_rules_guidelines_retention(admin: Api) -> None:
         json={"rules": [{**rule, "mode": "TELEPHONY", "channels": 2}]},
     )
     assert missing_mode.json()["error"]["code"] == "MODE_NOT_ALLOWED"
-    first = admin.post(
-        f"/api/v1/projects/{pid}/guidelines",
-        json={"guideline_text": "Verbatim, mark [noise].", "verbatim": True},
-    ).json()
-    second = admin.post(
-        f"/api/v1/projects/{pid}/guidelines", json={"guideline_text": "v2", "verbatim": True}
-    ).json()
-    assert (first["version"], second["version"]) == (1, 2)
-    assert [g["version"] for g in admin.get(f"/api/v1/projects/{pid}/guidelines").json()] == [2, 1]
     retention = admin.put(
         f"/api/v1/projects/{pid}/retention",
         json={"rules": [{"asset_kind": "BROWSER_ORIGINAL", "retain_days": 90}]},
@@ -195,8 +186,8 @@ def test_members_add_remove_and_disabled_users(admin: Api, db: Any) -> None:
 def test_member_candidates_lists_active_non_members_only(admin: Api, db: Any, new_api: Any) -> None:
     project = make_project(db, "PICK")
     member = make_user(db, "member@example.org", ["MODERATOR"], projects=[project])
-    make_user(db, "free@example.org", ["TRANSCRIBER"])
-    make_user(db, "off@example.org", ["TRANSCRIBER"], status="DISABLED")
+    make_user(db, "free@example.org", ["QC_EXECUTIVE"])
+    make_user(db, "off@example.org", ["QC_EXECUTIVE"], status="DISABLED")
     emails = [
         c["email"] for c in admin.get(f"/api/v1/projects/{project.id}/member-candidates").json()
     ]

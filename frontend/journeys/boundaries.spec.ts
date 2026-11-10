@@ -21,12 +21,12 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
   const admin = await (await browser.newContext()).newPage();
   await signIn(admin, ADMIN_EMAIL, SEEDED_PASSWORD);
   // A task in a project the moderator belongs to, but assigned to nobody.
-  const setup = await setUpTask(admin, runCode(info), [SEEDED.moderator, SEEDED.transcriber]);
+  const setup = await setUpTask(admin, runCode(info), [SEEDED.moderator, SEEDED.qcExecutive]);
 
   await test.step("a moderator sees only moderator pages", async () => {
     const page = await (await browser.newContext()).newPage();
     await signIn(page, SEEDED.moderator, SEEDED_PASSWORD);
-    expect(await menu(page)).toEqual(["Projects", "Tasks", "System status"]);
+    expect(await menu(page)).toEqual(["Dashboard", "Projects", "Tasks", "System status"]);
     for (const path of [
       "/admin/users",
       "/admin/audit",
@@ -53,9 +53,9 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
     });
   });
 
-  await test.step("a transcriber sees no tasks before any is assigned", async () => {
+  await test.step("a QC executive sees no tasks before any is assigned", async () => {
     const page = await (await browser.newContext()).newPage();
-    await signIn(page, SEEDED.transcriber, SEEDED_PASSWORD);
+    await signIn(page, SEEDED.qcExecutive, SEEDED_PASSWORD);
     await page.goto(`/tasks/${setup.taskId}`);
     await expect(page.getByRole("heading", { name: "Not found" })).toBeVisible();
     await page.goto(`/projects/${setup.projectId}/participants`);
@@ -66,7 +66,7 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
   await test.step("a client viewer has no task pages at all", async () => {
     const page = await (await browser.newContext()).newPage();
     await signIn(page, SEEDED.clientViewer, SEEDED_PASSWORD);
-    expect(await menu(page)).toEqual(["Projects", "System status"]);
+    expect(await menu(page)).toEqual(["Dashboard", "Projects", "System status"]);
     await page.goto("/tasks");
     await expect(page.getByRole("heading", { name: "No access" })).toBeVisible();
     await page.goto(`/projects/${setup.projectId}`);

@@ -419,6 +419,7 @@ output saved to evidence.
 | Test ID | Type | Phase | What it proves | Covers |
 |---|---|---|---|---|
 | TA-DASH-01 | Automated | 9 | Every listed metric returned (incl. storage usage). | STOR-010, DASH-001 |
+| TA-DASH-06 | Automated | 7 (D-065) | `tests/test_dashboard.py`: hours counted once per recording against daily targets; approved hours follow the task; a client sees progress only for its own projects (foreign project = 404 like a missing one); moderators and QC see only their own work; a Super Admin sees every project; the window is bounded. Frontend: the page in every state, for every role's menu. | DASH-001, DASH-002, DASH-004, DASH-005, ROLE-007 |
 | TA-DASH-02 | Automated | 9 | Each filter changes results correctly. | DASH-002 |
 | TA-DASH-03 | Automated | 9 | Each metric equals an independent SQL query, incl. date boundaries and timezone. | DASH-003 |
 | TA-DASH-04 | Automated | 9 | Dashboard data scoped to permitted projects. | DASH-004 |
@@ -444,6 +445,7 @@ output saved to evidence.
 | TA-SEC-13 | Automated | 4 (Option B) | No response carries a password, secret, token or encrypted field, or echoes the session token; errors never echo submitted values. | AUTH-015, SEC-013 |
 | TA-SEC-14 | Automated | 4 (Option B) | Bodies over the limits get 413 (declared and streamed; audio chunks their own limit); NUL characters get 422, signed in or not. | SEC-006 |
 | TA-SEC-15 | Automated | 4 (Option B) | Fields owned by the server (id, status, task and participant codes, roles, project code) cannot be set by a client. | SEC-011, TASK-002, PART-002 |
+| TA-SEC-17 | Automated | 7 (D-064) | `tests/test_security_review.py`: trusted proxy address only; nginx hides its version, sends HSTS, logs no query strings and sets its own request id; forgot-password works after answering; fake session cookies share one allowance per address; two-step enrolment needs the password; an email change voids old links; removing the Moderator role ends assignments; team emails and the people picker are limited. Each test fails with its fix removed. | SEC-006, SEC-007, AUTH-008, AUTH-012, ROLE-001, ROLE-007, USER-004 |
 | TA-SEC-16 | Automated | 4 (Option B) | API answers of every kind (200, 401, 403, 404, 413, 422) carry nosniff, frame denial, no-referrer, no-store, a deny-all content policy and a request ID. | SEC-013 |
 | TM-SEC-01 | Manual | 10 | TLS on all endpoints; encryption at rest for database, storage, backups. | SEC-002, SEC-003, OPS-005 |
 | TM-SEC-02 | Manual | 10 | Web vulnerability scan; findings resolved or recorded. | SEC-007 |

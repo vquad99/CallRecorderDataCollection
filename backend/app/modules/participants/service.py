@@ -235,6 +235,18 @@ def _duplicate(
             )
         )
     )
+    if not visible:
+        # One person keeps one participant ID across projects, so a duplicate has to be refused;
+        # every refusal that touches another project is audited, so probing numbers is visible.
+        audit.record(
+            db,
+            action="participant.duplicate_refused",
+            entity_type="participant",
+            entity_id=existing.id,
+            actor_id=principal.user_id,
+            ip=None,
+        )
+        db.commit()
     raise AppError(
         "A participant with this phone number already exists",
         code="DUPLICATE_PARTICIPANT",
@@ -403,15 +415,21 @@ def delete_participant(
         raise AppError(
             "This participant was already deleted", code="PARTICIPANT_DELETED", status_code=409
         )
-    busy = db.scalar(
-        select(Task.task_code).where(
+    busy = db.execute(
+        select(Task.task_code, Task.project_id).where(
             Task.status.not_in(TERMINAL),
             or_(Task.participant_a_id == participant.id, Task.participant_b_id == participant.id),
         )
-    )
+    ).first()
     if busy:
+        # Name the task only when the caller can see it (no other project's codes leak).
+        where = (
+            f"open task {busy.task_code}"
+            if principal.is_super_admin or busy.project_id in principal.project_ids
+            else "an open task in another project"
+        )
         raise AppError(
-            f"Participant is on open task {busy}; cancel or finish it first",
+            f"Participant is on {where}; cancel or finish it first",
             code="PARTICIPANT_IN_OPEN_TASK",
             status_code=409,
         )

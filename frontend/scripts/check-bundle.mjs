@@ -5,7 +5,9 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
-const FIRST_SCREEN_KB = 115; // 2026-11-10: about 109 KB (React, router, shell, sign-in, Projects)
+// 2026-11-10: about 109 KB (React, router, shell, sign-in, Projects); with the console design
+// (D-063: type face rules, icon paths, top bar) about 113 KB.
+const FIRST_SCREEN_KB = 115;
 const PAGE_KB = 30; // 2026-11-10: largest page (recorder) about 6 KB
 
 const dir = "dist/assets";
@@ -25,11 +27,13 @@ const visit = (file) => {
 visit(entry);
 
 const firstKb = [...first].reduce((n, f) => n + kb(f), 0);
-const css = readdirSync(dir)
-  .filter((f) => f.endsWith(".css"))
-  .reduce((n, f) => n + kb(f), 0);
+// Stylesheets the page itself links; a page's own stylesheet loads with that page.
+const firstCss = [...html.matchAll(/href="\/assets\/([^"]+\.css)"/g)].map((m) => m[1]);
+const css = firstCss.reduce((n, f) => n + kb(f), 0);
 const pages = readdirSync(dir)
-  .filter((f) => f.endsWith(".js") && !first.has(f))
+  .filter(
+    (f) => (f.endsWith(".js") || f.endsWith(".css")) && !first.has(f) && !firstCss.includes(f),
+  )
   .map((f) => [f, kb(f)])
   .sort((a, b) => b[1] - a[1]);
 const [largest, largestKb] = pages[0] ?? ["none", 0];

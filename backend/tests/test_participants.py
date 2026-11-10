@@ -24,10 +24,10 @@ def world(db: Any, new_api: Any) -> dict[str, Any]:
     make_user(db, "root@example.org", ["SUPER_ADMIN"])
     make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[project])
     mod = make_user(db, "mod@example.org", ["MODERATOR"], projects=[project])
-    make_user(db, "trn@example.org", ["TRANSCRIBER"], projects=[project])
+    make_user(db, "qc@example.org", ["QC_EXECUTIVE"], projects=[project])
     make_user(db, "cv@example.org", ["CLIENT_VIEWER"], projects=[project])
     apis = {}
-    for name in ("root", "pa", "mod", "trn", "cv"):
+    for name in ("root", "pa", "mod", "qc", "cv"):
         apis[name] = new_api()
         assert apis[name].login(f"{name}@example.org").status_code == 200
     return {"project": project, "other": other, "mod_user": mod, **apis}
@@ -82,7 +82,7 @@ def test_fields_shown_per_role_and_assignment(world: dict[str, Any], db: Any) ->
     pid = world["project"].id
     a = make_participant(world["pa"], pid, "Asha", "+919876543210")
     b = make_participant(world["pa"], pid, "Bina", "+919876543211")
-    for name in ("trn", "cv"):
+    for name in ("qc", "cv"):
         seen = _view(world[name], pid, a["id"])
         assert (seen["display_label"], seen["phone"], seen["notes"]) == (None, None, None), name
         assert seen["participant_code"] == a["participant_code"]
@@ -218,8 +218,7 @@ def test_consent_is_separate_history_and_access_controlled(world: dict[str, Any]
     assert history[0]["policy_version"] == "1"
     assert history[0]["captured_by"] == str(world["mod_user"].id)
     assert (
-        world["trn"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent").status_code
-        == 403
+        world["qc"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent").status_code == 403
     )
     assert (
         world["cv"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent").status_code == 403

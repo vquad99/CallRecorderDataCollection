@@ -6,9 +6,10 @@ import csv
 import io
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from email_validator import EmailNotValidError, validate_email
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -17,7 +18,8 @@ from app.core.errors import AppError
 from app.core.permissions import Role
 from app.modules.audit import service as audit
 from app.modules.auth import service as auth_service
-from app.modules.auth.models import RoleRecord, User, UserRole
+from app.modules.auth.models import PasswordResetToken, RoleRecord, User, UserRole
+from app.modules.tasks.models import ASSIGNMENT_ROLES, TaskAssignment
 
 MAX_IMPORT_ROWS = 1000
 IMPORT_COLUMNS = ("email", "display_name", "roles")
@@ -161,6 +163,13 @@ def update_user(
             raise AppError(
                 "A user with this email already exists", code="EMAIL_TAKEN", status_code=409
             )
+        if new_email != user.email:
+            # Links already mailed to the old address must not work any more (review 2026-11-10).
+            db.execute(
+                update(PasswordResetToken)
+                .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+                .values(used_at=datetime.now(UTC))
+            )
         user.email = new_email
     if display_name is not None:
         user.display_name = display_name.strip()
@@ -228,6 +237,23 @@ def set_roles(
         )
     if new_codes != old_codes:
         user.roles = role_records
+        # Task assignments belong to a role: a moderator moved to another role stops seeing the
+        # tasks (and participant details) they were assigned (security review 2026-11-10).
+        dropped = [c for c in ASSIGNMENT_ROLES if c in old_codes and c not in new_codes]
+        ended = 0
+        if dropped:
+            ended = len(
+                db.execute(
+                    update(TaskAssignment)
+                    .where(
+                        TaskAssignment.user_id == user.id,
+                        TaskAssignment.role_code.in_(dropped),
+                        TaskAssignment.active.is_(True),
+                    )
+                    .values(active=False, ended_at=datetime.now(UTC), reason="Role removed")
+                    .returning(TaskAssignment.id)
+                ).all()
+            )
         audit.record(
             db,
             action="user.roles_changed",
@@ -236,7 +262,7 @@ def set_roles(
             actor_id=actor_id,
             ip=ip,
             before={"roles": old_codes},
-            after={"roles": new_codes},
+            after={"roles": new_codes, "assignments_ended": ended},
         )
     db.commit()
     return user

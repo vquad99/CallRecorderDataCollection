@@ -29,6 +29,7 @@ ALLOWED_STATUSES = {
     "IMPLEMENTED — AUTOMATED TESTS PASS",
     "VERIFIED",
     "ACCEPTED",
+    "WITHDRAWN",  # removed by an owner decision named in the row (D-062)
 }
 REQUIRED_DOCS = [
     "REQUIREMENTS.md",

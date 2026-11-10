@@ -47,33 +47,41 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "dashboard.view",
     "notes.view",
   ],
-  Transcriber: [
-    "projects.view",
-    "participants.view",
-    "tasks.view",
-    "recordings.view",
-    "notes.view",
-  ],
   "QC Executive": [
     "projects.view",
     "participants.view",
     "tasks.view",
     "recordings.view",
+    "dashboard.view",
     "notes.view",
   ],
-  "Client Viewer": ["projects.view", "participants.view", "recordings.view", "recordings.download"],
+  "Client Viewer": [
+    "projects.view",
+    "participants.view",
+    "recordings.view",
+    "recordings.download",
+    "dashboard.view",
+  ],
 };
 
 const MENU: Record<string, string[]> = {
-  "Super Admin": ["Projects", "Tasks", "Users", "Settings", "Audit log", "System status"],
-  "Project Admin": ["Projects", "Tasks", "Audit log", "System status"],
-  Moderator: ["Projects", "Tasks", "System status"],
-  Transcriber: ["Projects", "Tasks", "System status"],
-  "QC Executive": ["Projects", "Tasks", "System status"],
-  "Client Viewer": ["Projects", "System status"],
+  "Super Admin": [
+    "Dashboard",
+    "Projects",
+    "Tasks",
+    "Users",
+    "Settings",
+    "Audit log",
+    "System status",
+  ],
+  "Project Admin": ["Dashboard", "Projects", "Tasks", "Audit log", "System status"],
+  Moderator: ["Dashboard", "Projects", "Tasks", "System status"],
+  "QC Executive": ["Dashboard", "Projects", "Tasks", "System status"],
+  "Client Viewer": ["Dashboard", "Projects", "System status"],
 };
 
 const HEADING: Record<string, string> = {
+  Dashboard: "Dashboard|My work|Collection progress",
   Projects: "Projects",
   Tasks: "Tasks",
   Users: "Users",
@@ -95,7 +103,10 @@ describe.each(Object.keys(MENU))("%s", (role) => {
     for (const entry of MENU[role] ?? []) {
       await userEvent.click(nav.getByRole("link", { name: entry }));
       expect(
-        await screen.findByRole("heading", { level: 1, name: HEADING[entry] ?? entry }),
+        await screen.findByRole("heading", {
+          level: 1,
+          name: new RegExp(`^(${HEADING[entry] ?? entry})$`),
+        }),
       ).toBeInTheDocument();
       const current = nav.getAllByRole("link").filter((a) => a.getAttribute("aria-current"));
       expect(current.map((a) => a.textContent)).toEqual([entry]);

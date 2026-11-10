@@ -33,7 +33,7 @@ def _estate(db: Any, new_api: Any, size: int, tag: str) -> dict[str, Any]:
     make_user(db, f"sa.{tag}@example.org", ["SUPER_ADMIN"])
     mod = make_user(db, f"mod.{tag}@example.org", ["MODERATOR"], projects=[project])
     for i in range(size):
-        make_user(db, f"u{i}.{tag}@example.org", ["MODERATOR", "TRANSCRIBER"], projects=[project])
+        make_user(db, f"u{i}.{tag}@example.org", ["MODERATOR", "QC_EXECUTIVE"], projects=[project])
     sa: Api = new_api()
     sa.login(f"sa.{tag}@example.org")
     people = [make_participant(sa, project.id, f"P{i} {tag}") for i in range(size + 1)]

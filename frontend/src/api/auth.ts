@@ -46,9 +46,10 @@ export const changePassword = (current: string, next: string) =>
 export const listSessions = () => apiRequest<SessionInfo[]>("/api/v1/auth/sessions");
 export const revokeSession = (id: string) =>
   apiRequest<null>(`/api/v1/auth/sessions/${id}`, { method: "DELETE" });
-export const mfaEnroll = () =>
+export const mfaEnroll = (password: string) =>
   apiRequest<{ secret: string; otpauth_uri: string }>("/api/v1/auth/mfa/enroll", {
     method: "POST",
+    body: { password },
   });
 export const mfaConfirm = (code: string) =>
   apiRequest<null>("/api/v1/auth/mfa/confirm", { method: "POST", body: { code } });

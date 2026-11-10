@@ -10,6 +10,8 @@ import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
+import { Icon } from "../../components/Icon";
+import { StatusBadge } from "../../components/StatusBadge";
 
 export function TasksPage() {
   const { can } = useAuth();
@@ -52,6 +54,7 @@ export function TasksPage() {
         <h1 id="tasks-title">Tasks</h1>
         {can("tasks.assign") ? (
           <Link className="button button--primary" to="/tasks/new">
+            <Icon name="plus" size={18} weight="bold" />
             New task
           </Link>
         ) : null}
@@ -135,7 +138,9 @@ export function TasksPage() {
                     </td>
                     <td>{codes[t.project_id] ?? "-"}</td>
                     <td>{t.recording_mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</td>
-                    <td>{TASK_STATUS_LABELS[t.status]}</td>
+                    <td>
+                      <StatusBadge status={t.status} label={TASK_STATUS_LABELS[t.status]} />
+                    </td>
                     <td>{t.priority.toLowerCase()}</td>
                     <td>{t.due_at ? new Date(t.due_at).toLocaleDateString() : "-"}</td>
                   </tr>

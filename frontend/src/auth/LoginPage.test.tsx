@@ -57,6 +57,14 @@ describe("LoginPage", () => {
     const router = renderAt("/login?next=%2F%2Fevil.example");
     await fill("admin@example.org", "secret-password");
     await screen.findByRole("heading", { name: "Projects" });
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/projects"); // "/" opens the start page
+  });
+
+  it("ignores a next parameter that a browser would read as another site", async () => {
+    fakeApi({ ...anonymous, "POST /api/v1/auth/login": () => [200, ME] });
+    const router = renderAt("/login?next=%2F%5Cevil.example");
+    await fill("admin@example.org", "secret-password");
+    await screen.findByRole("heading", { name: "Projects" });
+    expect(router.state.location.pathname).toBe("/projects");
   });
 });

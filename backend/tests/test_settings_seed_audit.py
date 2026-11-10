@@ -81,9 +81,9 @@ def test_seed_creates_one_account_per_role_and_is_idempotent(
     with pytest.raises(SeedRefused, match="DEMO_PASSWORD"):
         seed_dev(settings, "short")
     created = seed_dev(settings, "demo-password-123")
-    assert len(created) == 6
+    assert len(created) == 5
     assert seed_dev(settings, "demo-password-123") == []
-    assert len(db.scalars(select(User)).all()) == 6
+    assert len(db.scalars(select(User)).all()) == 5
     api: Api = new_api()
     assert api.login("demo.moderator@example.org", "demo-password-123").status_code == 200
     assert [p["code"] for p in api.get("/api/v1/projects").json()["items"]] == ["DEMO"]

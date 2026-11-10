@@ -23,7 +23,6 @@ MATRIX_ROLES = [
     Role.SUPER_ADMIN,
     Role.PROJECT_ADMIN,
     Role.MODERATOR,
-    Role.TRANSCRIBER,
     Role.QC_EXECUTIVE,
     Role.CLIENT_VIEWER,
 ]
@@ -205,14 +204,6 @@ def _endpoints(p1: str, p2: str, other_user: str, n: int) -> list[tuple[str, str
             f"/api/v1/projects/{p1}/members",
             {"user_id": other_user},
             Perm.PROJECTS_MEMBERS,
-            "member",
-        ),
-        ("GET", f"/api/v1/projects/{p1}/guidelines", None, Perm.PROJECTS_VIEW, "member"),
-        (
-            "POST",
-            f"/api/v1/projects/{p1}/guidelines",
-            {"guideline_text": "t", "verbatim": True},
-            Perm.PROJECTS_MANAGE,
             "member",
         ),
     ]

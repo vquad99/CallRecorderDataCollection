@@ -64,22 +64,33 @@ def build_limiter(settings: Settings) -> Limiter:
     )
 
 
+# A per-address ceiling on top of the per-session limit: a made-up session cookie on every request
+# would otherwise get a fresh allowance each time (security review 2026-11-10). Generous, because
+# an office of staff can share one address.
+ADDRESS_MULTIPLIER = 10
+
+
 def rate_limit(request: Request) -> None:
     settings: Settings = request.app.state.settings
     limiter: Limiter = request.app.state.rate_limiter
     write = request.method in _UNSAFE
     limit = settings.rate_limit_writes_per_minute if write else settings.rate_limit_reads_per_minute
+    kind = "w" if write else "r"
+    address = request.client.host if request.client else "-"
     session = request.cookies.get("ccp_session")
-    who = (
-        hashlib.sha256(session.encode()).hexdigest()[:24]
-        if session
-        else (request.client.host if request.client else "-")
-    )
-    retry = limiter.hit(f"rl:{'w' if write else 'r'}:{who}", limit)
-    if retry is not None:
-        raise AppError(
-            "Too many requests. Try again shortly.",
-            code="RATE_LIMITED",
-            status_code=429,
-            headers={"Retry-After": str(retry)},
-        )
+    if session:
+        keys = [
+            (f"rl:{kind}:{hashlib.sha256(session.encode()).hexdigest()[:24]}", limit),
+            (f"rl:{kind}:ip:{address}", limit * ADDRESS_MULTIPLIER),
+        ]
+    else:
+        keys = [(f"rl:{kind}:{address}", limit)]
+    for key, allowed in keys:
+        retry = limiter.hit(key, allowed)
+        if retry is not None:
+            raise AppError(
+                "Too many requests. Try again shortly.",
+                code="RATE_LIMITED",
+                status_code=429,
+                headers={"Retry-After": str(retry)},
+            )

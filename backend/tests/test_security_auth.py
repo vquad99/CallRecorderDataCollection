@@ -20,6 +20,7 @@ from sqlalchemy import text
 from app.modules.auth import security
 from tests.conftest import (
     TEST_FERNET_KEY,
+    TEST_PASSWORD,
     Api,
     link_token,
     make_project,
@@ -179,7 +180,7 @@ def test_an_authenticator_code_is_accepted_only_once(
     _frozen_clock(monkeypatch, now)
     api: Api = new_api()
     api.login("otp@example.org")
-    secret = api.post("/api/v1/auth/mfa/enroll").json()["secret"]
+    secret = api.post("/api/v1/auth/mfa/enroll", json={"password": TEST_PASSWORD}).json()["secret"]
     confirm_code = security._totp_at(secret, step - 1)
     assert api.post("/api/v1/auth/mfa/confirm", json={"code": confirm_code}).status_code == 204
 

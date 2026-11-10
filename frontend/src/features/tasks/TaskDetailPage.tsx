@@ -11,6 +11,7 @@ import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { StatusBadge } from "../../components/StatusBadge";
 
 const label = (s: string) => work.TASK_STATUS_LABELS[s as work.TaskStatus] ?? s;
 const words = (s: string) => s.toLowerCase().replace(/_/g, " ");
@@ -270,7 +271,7 @@ export function TaskDetailPage() {
     <section aria-labelledby="task-title" className="stack">
       <div className="page-header">
         <h1 id="task-title">Task {task.task_code}</h1>
-        <span className="badge">{label(task.status)}</span>
+        <StatusBadge status={task.status} label={label(task.status)} />
       </div>
       <dl className="checks card">
         <div className="checks__row">

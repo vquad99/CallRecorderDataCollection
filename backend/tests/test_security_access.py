@@ -47,11 +47,11 @@ BUCKET = "ccp-security"
 RATE = 16000
 FOREIGN_CODE = "QZFOREIGN"
 
-# Callers: the six roles, plus a moderator who is a member of OWN but assigned to none of its tasks.
-SA, PA, MO, MO2, TR, QC, CV = "SA", "PA", "MO", "MO2", "TR", "QC", "CV"
-CALLERS = [SA, PA, MO, MO2, TR, QC, CV]
+# Callers: the five roles, plus a moderator who is a member of OWN but assigned to none of its tasks.
+SA, PA, MO, MO2, QC, CV = "SA", "PA", "MO", "MO2", "QC", "CV"
+CALLERS = [SA, PA, MO, MO2, QC, CV]
 EVERY_MEMBER = set(CALLERS)
-TASK_VIEWERS = {SA, PA, MO}  # TR and QC have no transcription / QC assignments before Phase 7-8
+TASK_VIEWERS = {SA, PA, MO}  # QC has no audio QC assignments before Phase 7
 
 
 def _one_second_chunk() -> bytes:
@@ -217,7 +217,6 @@ def estate(migrated_db: str, tmp_path: Path) -> Iterator[Estate]:
             make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[own])
             make_user(db, "mo@example.org", ["MODERATOR"], projects=[own])
             make_user(db, "mo2@example.org", ["MODERATOR"], projects=[own])
-            make_user(db, "tr@example.org", ["TRANSCRIBER"], projects=[own])
             make_user(db, "qc@example.org", ["QC_EXECUTIVE"], projects=[own])
             make_user(db, "cv@example.org", ["CLIENT_VIEWER"], projects=[own])
             spare = make_user(db, "spare@example.org", ["MODERATOR"], projects=[own])
@@ -232,7 +231,6 @@ def estate(migrated_db: str, tmp_path: Path) -> Iterator[Estate]:
                 PA: api("pa@example.org"),
                 MO: api("mo@example.org"),
                 MO2: api("mo2@example.org"),
-                TR: api("tr@example.org"),
                 QC: api("qc@example.org"),
                 CV: api("cv@example.org"),
             }
@@ -480,21 +478,6 @@ CASES: list[Case] = [
     ),
     case(
         "GET",
-        P + "/guidelines",
-        lambda e, s: f"/api/v1/projects/{s.project}/guidelines",
-        EVERY_MEMBER,
-        Perm.PROJECTS_VIEW,
-    ),
-    case(
-        "POST",
-        P + "/guidelines",
-        lambda e, s: f"/api/v1/projects/{s.project}/guidelines",
-        {SA, PA},
-        Perm.PROJECTS_VIEW,
-        lambda e, s, who: {"guideline_text": "Speak clearly", "verbatim": True},
-    ),
-    case(
-        "GET",
         P + "/members",
         lambda e, s: f"/api/v1/projects/{s.project}/members",
         EVERY_MEMBER,
@@ -593,7 +576,7 @@ CASES: list[Case] = [
         "GET",
         "/api/v1/tasks",
         lambda e, s: "/api/v1/tasks",
-        {SA, PA, MO, MO2, TR, QC},
+        {SA, PA, MO, MO2, QC},
         Perm.TASKS_VIEW,
         foreign=False,
     ),
@@ -742,6 +725,15 @@ CASES: list[Case] = [
         Perm.DASHBOARD_VIEW,
         foreign=False,
     ),
+    # Dashboard: every role sees its own project's numbers; a foreign project answers like a
+    # missing one (the view each role gets is checked in test_dashboard.py).
+    case(
+        "GET",
+        "/api/v1/dashboard",
+        lambda e, s: f"/api/v1/dashboard?project_id={s.project}",
+        EVERY_MEMBER,
+        Perm.DASHBOARD_VIEW,
+    ),
 ]
 # Same route, different purpose: a download link needs recordings.download (no moderator).
 DOWNLOAD = case(
@@ -820,7 +812,7 @@ def test_every_role_against_every_route(estate: Estate) -> None:
                         f" for a missing object {ghost} (must be equal, and 403/404)"
                     )
     # Filters naming the foreign project must not return its data either.
-    for who in (PA, MO, MO2, TR, QC):
+    for who in (PA, MO, MO2, QC):
         for path in (
             f"/api/v1/tasks?project_id={estate.foreign.project}",
             f"/api/v1/audit-logs?project_id={estate.foreign.project}",

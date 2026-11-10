@@ -19,9 +19,8 @@ from tests.test_permissions import _route_contexts
 # pages its results or earns a line here.
 NATURALLY_BOUNDED = {
     "/api/v1/auth/sessions": "the caller's own unexpired sessions",
-    "/api/v1/roles": "the six fixed roles",
+    "/api/v1/roles": "the five fixed roles",
     "/api/v1/settings": "the fixed set of capacity settings",
-    "/api/v1/projects/{project_id}/guidelines": "one row per published version of one project",
     "/api/v1/projects/{project_id}/members": "a project's staff (capacity: 50 accounts)",
     "/api/v1/projects/{project_id}/member-candidates": "capped at 20 by the service",
     "/api/v1/projects/{project_id}/participants/{participant_id}/consent": "one person's consent history",

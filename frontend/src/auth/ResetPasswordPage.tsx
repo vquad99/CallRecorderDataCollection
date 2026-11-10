@@ -1,5 +1,5 @@
 // Set a new password from an emailed link (reset or invitation) (AUTH-004).
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { resetPassword } from "../api/auth";
@@ -11,7 +11,15 @@ import { toApiError } from "../hooks/useResource";
 
 export function ResetPasswordPage() {
   const [params] = useSearchParams();
-  const token = params.get("token") ?? "";
+  // Keep the one-time token in memory and take it out of the address bar, so it does not stay in
+  // the browser history or reach a screenshot (security review 2026-11-10). The router is not told,
+  // so the page does not reload.
+  const [token] = useState(() => params.get("token") ?? "");
+  useEffect(() => {
+    if (window.location.search.includes("token=")) {
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+    }
+  }, []);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);

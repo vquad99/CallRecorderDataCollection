@@ -62,7 +62,7 @@ export interface ProjectFields {
 
 export interface Member {
   user_id: string;
-  email: string;
+  email: string | null; // shown only to people who manage the team
   display_name: string;
   roles: string[];
   status: string;
@@ -74,13 +74,6 @@ export interface Candidate {
   email: string;
   display_name: string;
   roles: string[];
-}
-
-export interface Guideline {
-  version: number;
-  guideline_text: string;
-  verbatim: boolean;
-  created_at: string;
 }
 
 export const ASSET_KINDS = [
@@ -123,12 +116,6 @@ export const setAudioRules = (id: string, rules: AudioRule[]) =>
   apiRequest<Project>(`${base(id)}/audio-rules`, { method: "PUT", body: { rules } });
 export const setRetention = (id: string, rules: RetentionRule[]) =>
   apiRequest<Project>(`${base(id)}/retention`, { method: "PUT", body: { rules } });
-export const listGuidelines = (id: string) => apiRequest<Guideline[]>(`${base(id)}/guidelines`);
-export const addGuideline = (id: string, guideline_text: string, verbatim: boolean) =>
-  apiRequest<Guideline>(`${base(id)}/guidelines`, {
-    method: "POST",
-    body: { guideline_text, verbatim },
-  });
 export const listMembers = (id: string) => apiRequest<Member[]>(`${base(id)}/members`);
 export const listCandidates = (id: string, search: string) =>
   apiRequest<Candidate[]>(`${base(id)}/member-candidates${query({ search })}`);

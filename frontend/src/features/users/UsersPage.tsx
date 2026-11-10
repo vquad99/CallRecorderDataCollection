@@ -11,6 +11,7 @@ import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { Icon } from "../../components/Icon";
 
 const PAGE_SIZE = 25;
 
@@ -40,9 +41,11 @@ export function UsersPage() {
         <h1 id="users-title">Users</h1>
         <div className="actions">
           <Link className="button button--primary" to="/admin/users/new">
+            <Icon name="plus" size={18} weight="bold" />
             Add user
           </Link>
           <Link className="button button--secondary" to="/admin/users/import">
+            <Icon name="upload" size={18} />
             Import CSV
           </Link>
           <Button variant="secondary" onClick={() => void exportCsv()}>

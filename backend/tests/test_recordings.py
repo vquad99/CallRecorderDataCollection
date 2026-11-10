@@ -67,7 +67,7 @@ def world(app: Any) -> Iterator[dict[str, Any]]:
         mod = make_user(db, "mod@example.org", ["MODERATOR"], projects=[project])
         make_user(db, "mod2@example.org", ["MODERATOR"], projects=[project])
         make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[project])
-        make_user(db, "trn@example.org", ["TRANSCRIBER"], projects=[project])
+        make_user(db, "qc@example.org", ["QC_EXECUTIVE"], projects=[project])
         pa, moderator = api("pa@example.org"), api("mod@example.org")
         a = make_participant(pa, project.id, "Asha")
         b = make_participant(pa, project.id, "Bina")
@@ -395,9 +395,9 @@ def test_links_are_signed_short_lived_and_permission_checked(world: dict[str, An
         world["pa"].post(f"/api/v1/assets/{derived['id']}/url", json={"purpose": "download"}).json()
     )
     assert "response-content-disposition=attachment" in download["url"]
-    transcriber = world["api"]("trn@example.org")
+    qc_unassigned = world["api"]("qc@example.org")
     assert (
-        transcriber.post(
+        qc_unassigned.post(
             f"/api/v1/assets/{derived['id']}/url", json={"purpose": "play"}
         ).status_code
         == 404

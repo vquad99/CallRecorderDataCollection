@@ -400,12 +400,26 @@ def change_password(
 # ---------------------------------------------------------------- MFA (AUTH-008)
 
 
-def mfa_enroll(db: Session, cipher: FieldCipher, user_id: uuid.UUID) -> tuple[str, str]:
+def mfa_enroll(
+    db: Session,
+    settings: Settings,
+    cipher: FieldCipher,
+    user_id: uuid.UUID,
+    password: str,
+    ip: str | None,
+) -> tuple[str, str]:
+    """Start enrolment. Needs the account password, so someone holding only a borrowed session
+    cannot bind their own authenticator and lock the owner out (security review 2026-11-10)."""
     user = _user(db, user_id)
     if user.mfa_enabled:
         raise AppError(
             "Two-step sign-in is already on", code="MFA_ALREADY_ENABLED", status_code=409
         )
+    ensure_not_throttled(db, settings, user.email, ip)
+    if not verify_password(user.password_hash, password):
+        _record_attempt(db, user.email, ip, succeeded=False)
+        db.commit()
+        raise AppError("Password is not correct", code="INVALID_CREDENTIALS", status_code=400)
     secret = new_totp_secret()
     user.mfa_secret_enc = cipher.encrypt(secret)
     db.commit()

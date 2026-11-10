@@ -80,7 +80,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects | `projects.create` |
 | GET, PATCH | /projects/{id} | member / `projects.manage` |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
-| GET, PUT | /projects/{id}/languages, /audio-rules, /guidelines, /retention | member / `projects.manage` |
+| GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
 | GET, POST, DELETE | /projects/{id}/members | GET: `projects.view`; POST/DELETE: `projects.members` |
 | GET | /projects/{id}/member-candidates | `projects.members` (D-032) |
@@ -152,19 +152,10 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /transcription-jobs | `asr.view` (admin) |
 | POST | /transcription-jobs/{id}/retry, /cancel | `asr.manage` |
 
-## Human transcription and transcript QC (TRN-*, TQC-*)
+## Human transcription and transcript QC (TRN-*, TQC-*) - WITHDRAWN (D-062)
 
-| Method | Path | Permission |
-|---|---|---|
-| GET | /transcription/queue | `transcripts.edit` |
-| POST | /transcription/assignments | `tasks.assign` |
-| GET | /transcripts/{task_id} | `transcripts.edit` / `transcripts.review` |
-| PUT | /transcripts/{task_id}/draft | `transcripts.edit` (version check -> 409 on concurrent edit) |
-| POST | /transcripts/{task_id}/autosave | `transcripts.edit` |
-| POST | /transcripts/{task_id}/submit | `transcripts.edit` |
-| GET | /transcripts/{task_id}/revisions | `transcripts.edit` / `transcripts.review` |
-| POST | /transcript-qc/{task_id}/decision | `transcripts.review` |
-| POST | /transcripts/{task_id}/reopen | `transcripts.reopen` (reason required) |
+No endpoints: nobody transcribes or reviews transcripts by hand. AI transcripts (when a project turns
+them on) are read with the recording.
 
 ## Exports (EXP-*)
 
@@ -178,10 +169,18 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | /dashboard/summary, /dashboard/productivity, /dashboard/qc, /dashboard/failures, /dashboard/storage, /dashboard/provider-usage | `dashboard.view`; filters: project, date range, language, dialect, mode, staff, status |
+| GET | /dashboard?project_id=&days=7..90 | `dashboard.view` (built 2026-11-10, D-065). Answer shaped by role: `view` = `client` (progress only: hours recorded / approved, daily targets, per mode, per day), `worker` (the same for the caller's own tasks and recordings, plus tasks by status and QC counts) or `manager` (whole projects, plus `queues`, `team` output per moderator and `storage_bytes`). Fields a view does not get are `null`. A project the caller cannot see answers 404 like a missing one. Days are calendar days in `REPORT_TIMEZONE`. |
+| GET | /dashboard/productivity, /dashboard/failures, /dashboard/provider-usage | Phase 9: `dashboard.view`; filters: date range, language, dialect, mode, staff, status |
 
 ## Audit (SEC-*)
 
 | Method | Path | Permission |
 |---|---|---|
 | GET | /audit-logs | `audit.view` |
+
+## Security review changes (D-064)
+
+- `POST /auth/mfa/enroll` takes `{"password": "..."}`; a wrong password answers 400 `INVALID_CREDENTIALS` and counts as a failed sign-in.
+- `POST /auth/password/forgot` answers 202 at once for every address; the lookup and email happen afterwards.
+- `GET /projects/{id}/members`: `email` is `null` unless the caller manages the team (`projects.members` in that project).
+- `GET /projects/{id}/member-candidates?search=`: a Super Admin may search part of a name or email; anyone else gets a match only for a full email address, and Super Admins are never offered.

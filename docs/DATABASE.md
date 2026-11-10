@@ -19,7 +19,7 @@ Status: proposed (Phase 0). No migration exists yet. PostgreSQL + Alembic (DB-00
 
 | Enum | Values |
 |---|---|
-| role_code | SUPER_ADMIN, PROJECT_ADMIN, MODERATOR, TRANSCRIBER, QC_EXECUTIVE, CLIENT_VIEWER |
+| role_code | SUPER_ADMIN, PROJECT_ADMIN, MODERATOR, QC_EXECUTIVE, CLIENT_VIEWER (TRANSCRIBER removed by migration 0008, D-062) |
 | user_status | ACTIVE, DISABLED |
 | project_status | DRAFT, ACTIVE, PAUSED, COMPLETED, ARCHIVED |
 | recording_mode | TELEPHONY, FACE_TO_FACE |
@@ -48,7 +48,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | user_roles | user_id, role_id | primary key (user_id, role_id) | cascade with user |
 | login_attempts | email, ip, succeeded | index (email, created_at), (ip, created_at) | kept for throttling |
 | project_audio_rules | project_id, mode, sample_rate, bit_depth, channels, qc thresholds (silence %, clipping %, min/max duration, leakage) | unique (project_id, mode) | cascade |
-| project_transcription_guidelines | project_id, version, guideline_text, verbatim_rules | unique (project_id, version) | restrict |
+| project_transcription_guidelines | dropped by migration 0008 (D-062) | - | - |
 | project_retention_rules | project_id, asset_kind, retain_days, delete_action | unique (project_id, asset_kind) | cascade |
 | participants | participant_code (P + 6 digits, from `participant_code_seq`), display_label (S), phone_e164_enc (S), phone_hash (S), phone_hint (last 2 digits), language_code, dialect, notes (S), created_by, deleted_at, deleted_by, deletion_reason | unique participant_code; index phone_hash (duplicate detection) | soft delete |
 | participant_project_links | participant_id, project_id | unique pair | restrict |

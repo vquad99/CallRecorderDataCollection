@@ -148,8 +148,8 @@ def test_platform_only_steps_cannot_be_set_through_the_api(world: dict[str, Any]
         ("DRAFT", "ASSIGNED"),
         ("IN_PROGRESS", "RECORDED"),
         ("RECORDED", "AUDIO_QC"),
-        ("AUDIO_QC", "TRANSCRIPTION_PENDING"),
-        ("TRANSCRIPT_QC", "APPROVED"),
+        ("AUDIO_QC", "APPROVED"),
+        ("AUDIO_QC", "RETURNED"),
     ]:
         set_status(db, tid, status)
         response = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": target})

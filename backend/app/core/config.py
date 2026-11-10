@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     # 2.5 MB covers the largest JSON field (user CSV import, 2 000 000 characters) plus encoding.
     max_request_bytes: int = Field(default=2_500_000, ge=10_000, le=64_000_000)
     max_recording_seconds: int = Field(default=4 * 3600, ge=60, le=24 * 3600)
+    # Dashboards count calendar days in this time zone (IANA name).
+    report_timezone: str = "Asia/Kolkata"
 
     email_backend: Literal["smtp", "file"] = "file"
     email_from: str = "Conversation Collection <no-reply@localhost>"
@@ -97,6 +99,17 @@ class Settings(BaseSettings):
             Fernet(value.get_secret_value().encode())
         except (ValueError, TypeError):
             raise ValueError("must be a Fernet key (32 url-safe base64-encoded bytes)") from None
+        return value
+
+    @field_validator("report_timezone")
+    @classmethod
+    def _timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("must be an IANA time zone such as Asia/Kolkata") from None
         return value
 
     @field_validator("public_app_url")

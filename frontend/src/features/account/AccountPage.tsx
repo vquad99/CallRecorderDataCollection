@@ -123,6 +123,7 @@ function TwoStep() {
   const { user, refresh } = useAuth();
   const [enrolment, setEnrolment] = useState<{ secret: string; otpauth_uri: string } | null>(null);
   const [code, setCode] = useState("");
+  const [enrolPassword, setEnrolPassword] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -145,12 +146,28 @@ function TwoStep() {
       <h2 id="mfa-title">Two-step sign-in</h2>
       <p>Status: {enabled ? "On" : "Off"}</p>
       {!enabled && !enrolment ? (
-        <Button
-          busy={busy}
-          onClick={() => void run(async () => setEnrolment(await authApi.mfaEnroll()))}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              setEnrolment(await authApi.mfaEnroll(enrolPassword));
+              setEnrolPassword("");
+            });
+          }}
         >
-          Turn on two-step sign-in
-        </Button>
+          <TextField
+            label="Your password"
+            hint="Needed to turn on two-step sign-in."
+            type="password"
+            autoComplete="current-password"
+            required
+            value={enrolPassword}
+            onChange={(e) => setEnrolPassword(e.target.value)}
+          />
+          <Button type="submit" busy={busy} disabled={!enrolPassword}>
+            Turn on two-step sign-in
+          </Button>
+        </form>
       ) : null}
       {!enabled && enrolment ? (
         <form

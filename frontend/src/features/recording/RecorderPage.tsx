@@ -159,7 +159,7 @@ function Result({ recording }: { recording: rec.Recording }) {
         </Button>
       ) : null}
       {src ? (
-        // Raw recording for review: no captions exist before transcription.
+        // Raw recording for review: there are no captions for it.
         // eslint-disable-next-line jsx-a11y/media-has-caption
         <audio controls src={src} aria-label="Recorded conversation" />
       ) : null}
