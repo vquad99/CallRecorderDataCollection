@@ -1,36 +1,28 @@
 // Route table (FND-015). Pages need sign-in; admin pages also need a permission (usability only).
+import { lazy, Suspense, type ComponentType, type ReactElement } from "react";
 import type { RouteObject } from "react-router";
 
-import { ForgotPasswordPage } from "../auth/ForgotPasswordPage";
 import { RequireAuth, RequirePermission } from "../auth/guards";
+import { LoadingState } from "../components/StateViews";
 import { LoginPage } from "../auth/LoginPage";
-import { ResetPasswordPage } from "../auth/ResetPasswordPage";
-import { AccountPage } from "../features/account/AccountPage";
-import { AuditPage } from "../features/audit/AuditPage";
-import { ParticipantsTab } from "../features/projects/ParticipantsTab";
-import { ProjectCreatePage } from "../features/projects/ProjectCreatePage";
-import { ProjectDetailPage } from "../features/projects/ProjectDetailPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
-import {
-  AudioRulesTab,
-  GuidelinesTab,
-  LanguagesTab,
-  OverviewTab,
-  RetentionTab,
-  TeamTab,
-} from "../features/projects/tabs";
-import { SettingsPage } from "../features/settings/SettingsPage";
-import { StatusPage } from "../features/status/StatusPage";
-import { UserCreatePage } from "../features/users/UserCreatePage";
-import { UserDetailPage } from "../features/users/UserDetailPage";
-import { UserImportPage } from "../features/users/UserImportPage";
-import { TaskCreatePage } from "../features/tasks/TaskCreatePage";
-import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
-import { TasksPage } from "../features/tasks/TasksPage";
-import { UsersPage } from "../features/users/UsersPage";
-import { RecorderPage } from "../features/recording/RecorderPage";
 import { AppShell } from "../layouts/AppShell";
 import { NotFoundPage } from "../routes/NotFoundPage";
+
+/** A page loaded on first visit, so the first screen does not wait for every page (O11). */
+function page<K extends string>(
+  load: () => Promise<Record<K, ComponentType>>,
+  name: K,
+): ReactElement {
+  const Page = lazy(() => load().then((m) => ({ default: m[name] as ComponentType })));
+  return (
+    <Suspense fallback={<LoadingState label="Loading page" />}>
+      <Page />
+    </Suspense>
+  );
+}
+
+const tabs = () => import("../features/projects/tabs");
 
 export const routes: RouteObject[] = [
   {
@@ -38,29 +30,50 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { path: "login", element: <LoginPage /> },
-      { path: "forgot-password", element: <ForgotPasswordPage /> },
-      { path: "reset-password", element: <ResetPasswordPage /> },
+      {
+        path: "forgot-password",
+        element: page(() => import("../auth/ForgotPasswordPage"), "ForgotPasswordPage"),
+      },
+      {
+        path: "reset-password",
+        element: page(() => import("../auth/ResetPasswordPage"), "ResetPasswordPage"),
+      },
       {
         element: <RequireAuth />,
         children: [
           { index: true, element: <ProjectsPage /> },
-          { path: "status", element: <StatusPage /> },
-          { path: "account", element: <AccountPage /> },
+          {
+            path: "status",
+            element: page(() => import("../features/status/StatusPage"), "StatusPage"),
+          },
+          {
+            path: "account",
+            element: page(() => import("../features/account/AccountPage"), "AccountPage"),
+          },
           {
             element: <RequirePermission permission="projects.view" />,
             children: [
               { path: "projects", element: <ProjectsPage /> },
               {
                 path: "projects/:projectId",
-                element: <ProjectDetailPage />,
+                element: page(
+                  () => import("../features/projects/ProjectDetailPage"),
+                  "ProjectDetailPage",
+                ),
                 children: [
-                  { index: true, element: <OverviewTab /> },
-                  { path: "team", element: <TeamTab /> },
-                  { path: "participants", element: <ParticipantsTab /> },
-                  { path: "audio", element: <AudioRulesTab /> },
-                  { path: "languages", element: <LanguagesTab /> },
-                  { path: "retention", element: <RetentionTab /> },
-                  { path: "guidelines", element: <GuidelinesTab /> },
+                  { index: true, element: page(tabs, "OverviewTab") },
+                  { path: "team", element: page(tabs, "TeamTab") },
+                  {
+                    path: "participants",
+                    element: page(
+                      () => import("../features/projects/ParticipantsTab"),
+                      "ParticipantsTab",
+                    ),
+                  },
+                  { path: "audio", element: page(tabs, "AudioRulesTab") },
+                  { path: "languages", element: page(tabs, "LanguagesTab") },
+                  { path: "retention", element: page(tabs, "RetentionTab") },
+                  { path: "guidelines", element: page(tabs, "GuidelinesTab") },
                 ],
               },
             ],
@@ -68,35 +81,79 @@ export const routes: RouteObject[] = [
           {
             element: <RequirePermission permission="tasks.view" />,
             children: [
-              { path: "tasks", element: <TasksPage /> },
-              { path: "tasks/:taskId", element: <TaskDetailPage /> },
-              { path: "tasks/:taskId/record", element: <RecorderPage /> },
+              {
+                path: "tasks",
+                element: page(() => import("../features/tasks/TasksPage"), "TasksPage"),
+              },
+              {
+                path: "tasks/:taskId",
+                element: page(() => import("../features/tasks/TaskDetailPage"), "TaskDetailPage"),
+              },
+              {
+                path: "tasks/:taskId/record",
+                element: page(() => import("../features/recording/RecorderPage"), "RecorderPage"),
+              },
             ],
           },
           {
             element: <RequirePermission permission="tasks.assign" />,
-            children: [{ path: "tasks/new", element: <TaskCreatePage /> }],
+            children: [
+              {
+                path: "tasks/new",
+                element: page(() => import("../features/tasks/TaskCreatePage"), "TaskCreatePage"),
+              },
+            ],
           },
           {
             element: <RequirePermission permission="audit.view" />,
-            children: [{ path: "admin/audit", element: <AuditPage /> }],
+            children: [
+              {
+                path: "admin/audit",
+                element: page(() => import("../features/audit/AuditPage"), "AuditPage"),
+              },
+            ],
           },
           {
             element: <RequirePermission permission="projects.create" />,
-            children: [{ path: "projects/new", element: <ProjectCreatePage /> }],
+            children: [
+              {
+                path: "projects/new",
+                element: page(
+                  () => import("../features/projects/ProjectCreatePage"),
+                  "ProjectCreatePage",
+                ),
+              },
+            ],
           },
           {
             element: <RequirePermission permission="users.manage" />,
             children: [
-              { path: "admin/users", element: <UsersPage /> },
-              { path: "admin/users/new", element: <UserCreatePage /> },
-              { path: "admin/users/import", element: <UserImportPage /> },
-              { path: "admin/users/:userId", element: <UserDetailPage /> },
+              {
+                path: "admin/users",
+                element: page(() => import("../features/users/UsersPage"), "UsersPage"),
+              },
+              {
+                path: "admin/users/new",
+                element: page(() => import("../features/users/UserCreatePage"), "UserCreatePage"),
+              },
+              {
+                path: "admin/users/import",
+                element: page(() => import("../features/users/UserImportPage"), "UserImportPage"),
+              },
+              {
+                path: "admin/users/:userId",
+                element: page(() => import("../features/users/UserDetailPage"), "UserDetailPage"),
+              },
             ],
           },
           {
             element: <RequirePermission permission="settings.manage" />,
-            children: [{ path: "admin/settings", element: <SettingsPage /> }],
+            children: [
+              {
+                path: "admin/settings",
+                element: page(() => import("../features/settings/SettingsPage"), "SettingsPage"),
+              },
+            ],
           },
           { path: "*", element: <NotFoundPage /> },
         ],

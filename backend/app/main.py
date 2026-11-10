@@ -89,5 +89,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.app_env == "production")
-    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(RequestContextMiddleware, slow_request_ms=settings.slow_request_ms)
     return app

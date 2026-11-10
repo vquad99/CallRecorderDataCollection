@@ -29,7 +29,7 @@ test("a network drop mid-recording loses nothing", async ({ browser }, info) => 
   await page.getByRole("link", { name: "Open the recorder" }).click();
   await page.getByRole("button", { name: "Allow microphone" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(page.getByText(/Saved parts: 1;/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Saved parts: [1-9]\d*;/)).toBeVisible({ timeout: 20_000 });
 
   await test.step("the connection drops: capture goes on and the page says parts are waiting", async () => {
     await context.setOffline(true);

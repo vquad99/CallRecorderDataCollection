@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, func, select, text
+from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -88,6 +88,7 @@ class TaskFilter:
     status: str | None = None
     mode: str | None = None
     mine: bool = False
+    search: str | None = None  # a task code or a participant code, or part of one (O7)
 
 
 def list_tasks(
@@ -115,6 +116,21 @@ def list_tasks(
         query = query.where(Task.status == f.status)
     if f.mode:
         query = query.where(Task.recording_mode == f.mode)
+    if f.search and f.search.strip():
+        # Codes only (T000123, P000045): never names or phone numbers, so no personal data is
+        # searchable here. LIKE wildcards in the input are matched literally.
+        term = (
+            f.search.strip().upper().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        like = f"%{term}%"
+        people = select(Participant.id).where(Participant.participant_code.like(like, escape="\\"))
+        query = query.where(
+            or_(
+                Task.task_code.like(like, escape="\\"),
+                Task.participant_a_id.in_(people),
+                Task.participant_b_id.in_(people),
+            )
+        )
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     items = db.scalars(
         query.order_by(Task.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
@@ -470,11 +486,19 @@ class TimelineEntry:
 
 def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[TimelineEntry]:
     task = get_task(db, principal, task_id)
-    names = {u.id: u.display_name for u in db.scalars(select(User)).all()}
-    entries: list[TimelineEntry] = []
-    for h in db.scalars(
+    history = db.scalars(
         select(TaskStatusHistory).where(TaskStatusHistory.task_id == task.id)
-    ).all():
+    ).all()
+    assignments = db.scalars(select(TaskAssignment).where(TaskAssignment.task_id == task.id)).all()
+    comments = db.scalars(select(TaskComment).where(TaskComment.task_id == task.id)).all()
+    # Names of the people this task's history mentions, not of every account (O5).
+    people = {h.actor_id for h in history} | {c.author_id for c in comments}
+    people |= {a.user_id for a in assignments} | {a.assigned_by for a in assignments}
+    people.discard(None)
+    rows = db.execute(select(User.id, User.display_name).where(User.id.in_(people))).all()
+    names = {user_id: name for user_id, name in rows}
+    entries: list[TimelineEntry] = []
+    for h in history:
         label = f"{h.from_status or 'created'} -> {h.to_status}"
         extra = " ".join(x for x in (h.reason_code or "", h.comment) if x)
         entries.append(
@@ -485,7 +509,7 @@ def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[Time
                 f"{label} {extra}".strip(),
             )
         )
-    for a in db.scalars(select(TaskAssignment).where(TaskAssignment.task_id == task.id)).all():
+    for a in assignments:
         reason = f" ({a.reason})" if a.reason else ""
         entries.append(
             TimelineEntry(
@@ -495,6 +519,6 @@ def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[Time
                 f"{a.role_code.title()} assigned: {names.get(a.user_id, a.user_id)}{reason}",
             )
         )
-    for c in db.scalars(select(TaskComment).where(TaskComment.task_id == task.id)).all():
+    for c in comments:
         entries.append(TimelineEntry(c.created_at, "comment", names.get(c.author_id), c.body))
     return sorted(entries, key=lambda e: e.at)

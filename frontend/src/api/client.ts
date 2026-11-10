@@ -6,6 +6,8 @@ export interface ApiErrorInit {
   message: string;
   requestId?: string | null;
   details?: unknown;
+  /** Seconds the server asked to wait before trying again (Retry-After), when it said. */
+  retryAfterSeconds?: number | null;
 }
 
 export class ApiError extends Error {
@@ -13,6 +15,7 @@ export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string | null;
   readonly details: unknown;
+  readonly retryAfterSeconds: number | null;
 
   constructor(init: ApiErrorInit) {
     super(init.message);
@@ -21,6 +24,7 @@ export class ApiError extends Error {
     this.code = init.code;
     this.requestId = init.requestId ?? null;
     this.details = init.details;
+    this.retryAfterSeconds = init.retryAfterSeconds ?? null;
   }
 }
 

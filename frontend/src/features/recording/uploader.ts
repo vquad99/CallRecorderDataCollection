@@ -16,6 +16,41 @@ export async function sha256Hex(data: ArrayBuffer): Promise<string> {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const SIGNED_OUT_MESSAGE =
+  "Your session has ended. Sign in again in a new tab: recording goes on here and the waiting " +
+  "parts are sent as soon as you are signed in.";
+export const CONNECTION_MESSAGE =
+  "Connection problem. Saved parts are kept and sending is retried.";
+
+/** Answers that end the upload: the part itself is wrong, so sending it again cannot help. */
+export function isPermanent(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status >= 400 &&
+    err.status < 500 &&
+    err.status !== 401 && // signed out: waits for a new sign-in (O1)
+    err.status !== 408 &&
+    err.status !== 429
+  );
+}
+
+/**
+ * How long to wait before the next try (O1): the server's Retry-After when it gave one,
+ * otherwise doubling from `baseMs` up to 30 s; a signed-out pause re-checks every 10 s. A spread
+ * of +/-20 % keeps many recorders from retrying at the same instant after an outage.
+ */
+export function retryDelay(
+  attempt: number,
+  err: unknown,
+  baseMs: number,
+  random: () => number = Math.random,
+): number {
+  let ms = Math.min(baseMs * 2 ** attempt, 30_000);
+  if (err instanceof ApiError && err.status === 401) ms = Math.min(10 * baseMs, 10_000);
+  if (err instanceof ApiError && err.retryAfterSeconds) ms = err.retryAfterSeconds * 1000;
+  return Math.round(ms * (0.8 + 0.4 * random()));
+}
+
 export class ChunkUploader {
   private buffer: Float32Array;
   private filled = 0;
@@ -77,18 +112,15 @@ export class ChunkUploader {
           this.events.onProblem?.(null);
           break;
         } catch (err) {
-          const permanent =
-            err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429;
-          if (permanent) {
-            this.fatal = err;
+          if (isPermanent(err)) {
+            this.fatal = err as ApiError;
             this.queue = [];
-            this.events.onProblem?.(err.message);
+            this.events.onProblem?.((err as ApiError).message);
             return;
           }
-          this.events.onProblem?.(
-            "Connection problem. Saved parts are kept and sending is retried.",
-          );
-          await wait(Math.min(this.retryBaseMs * 2 ** attempt, 30_000));
+          const signedOut = err instanceof ApiError && err.status === 401;
+          this.events.onProblem?.(signedOut ? SIGNED_OUT_MESSAGE : CONNECTION_MESSAGE);
+          await wait(retryDelay(attempt, err, this.retryBaseMs));
         }
       }
       this.queue.shift();

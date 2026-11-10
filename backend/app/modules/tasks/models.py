@@ -42,6 +42,7 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("task_code ~ '^T[0-9]{6,}$'", name="code_format"),
         Index("ix_tasks_project_status", "project_id", "status"),
         Index("ix_tasks_due_at", "due_at"),
+        Index("ix_tasks_project_created", "project_id", "created_at"),  # task lists, newest first
     )
     task_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(

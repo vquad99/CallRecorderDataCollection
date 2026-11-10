@@ -100,8 +100,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PROD-002 | Installable as a PWA from the browser's install option. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
 | PROD-003 | No native Android or iOS app; participants install nothing; no physical GSM gateway. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PROD-02 | - | NOT STARTED | - |
 | PROD-004 | Two recording modes - telephony and face-to-face - with assets in separate folders/prefixes. | 1, 10 | n/a | n/a | [ ] | [ ] TA-STOR-02 | [ ] TM-PROD-02 | - | NOT STARTED | - |
-| CAP-001 | Capacity settings (50 staff, 50 concurrent conferences, 2 participants, 250 h/day, 125 h/day each mode, cloud, web + PWA) stored as editable configuration, not source constants. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-01 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| CAP-002 | An administrator changes targets without a code deployment. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-02 | [ ] TM-CAP-01 | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| CAP-001 | Capacity settings (50 staff, 50 concurrent conferences, 2 participants, 250 h/day, 125 h/day each mode, cloud, web + PWA) stored as editable configuration, not source constants. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-01, TA-USER-09 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_o/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| CAP-002 | An administrator changes targets without a code deployment. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-02, TA-USER-09 | [ ] TM-CAP-01 | docs/evidence/phase2/make_check.txt; docs/evidence/option_o/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | CAP-003 | Languages configurable per project. | 2, 10 | [x] | [x] | [x] | [x] TA-PROJ-02 | n/a | docs/evidence/phase2/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | CAP-004 | Capacity is proven only by a load test plus provider-side concurrency confirmation; never from a local or mock test. | 2, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-LOAD-01, TM-LOAD-03, TM-TEL-03 | - | NOT STARTED | - |
 | CAP-005 | Storage sizing: 115.2 MB/h mono, 230.4 MB/h stereo, 43.2 GB/day at target, 1.296 TB/30 days, about 15.77 TB/year, excluding originals, backups, replicas, metadata and derived copies; retention confirmed before final sizing. | 2, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-CAP-02 | - | NOT STARTED | - |
@@ -224,11 +224,11 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | STOR-003 | Secure upload. | 4 | [x] | [x] | [ ] | [x] TA-STOR-03, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-004 | Multipart/resumable upload; interrupted upload resumes or restarts safely. | 4 | [x] | [x] | [ ] | [x] TA-STOR-04, TA-STOR-12, TM-STOR-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-005 | Download authorization with short-lived signed URLs; no predictable public URLs; expired URL stops working. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-SEC-10, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_b/make_check.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
-| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
+| STOR-006 | Upload completion verified; SHA-256 calculated; source and stored checksums compared. | 4 | [x] | [x] | [ ] | [x] TA-STOR-06, TA-STOR-10, TA-STOR-13 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt; docs/evidence/option_o/make_check.txt | VERIFIED | - |
 | STOR-007 | Version tracking. | 4 | [x] | [x] | [ ] | [x] TA-STOR-07 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-008 | Original and derived assets linked; asset metadata saved in the database. | 4 | [x] | [x] | [ ] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-009 | Retention rules, backup policy, retention and deletion jobs, deletion workflow with audit log. | 4 | [x] | [x] | [ ] | [x] TA-STOR-09, TA-STOR-12 | [ ] TM-STOR-02 | docs/evidence/phase4/make_check.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
-| STOR-010 | Storage usage reporting/dashboard. | 4 | [x] | [x] | [ ] | [x] TA-DASH-01 | n/a | docs/evidence/phase4/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| STOR-010 | Storage usage reporting/dashboard. | 4 | [x] | [x] | [ ] | [x] TA-DASH-01, TA-STOR-13 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_o/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-011 | Unauthorized user cannot download a recording. | 4 | [x] | [x] | [ ] | [x] TA-STOR-05, TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/option_f/storage_contract.txt | VERIFIED | - |
 | STOR-012 | Storage abstraction interface. | 4 | [x] | [x] | [ ] | [x] TA-STOR-10 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_f/storage_contract.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | STOR-013 | Server-side encryption configured. | 4 | [ ] | [ ] | [ ] | n/a | [ ] TM-STOR-01 | - | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED (docs check pending) |
@@ -241,7 +241,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | FTF-007 | Start and stop controls; resume; pause only if technically safe. | 4 | [x] | [x] | [x] | [x] TA-FTF-03 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-008 | Recording duration and state displayed. | 4 | [x] | [x] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-009 | Interruption/error events captured; recoverable data preserved where safely possible; accurate recovery message after refresh, tab close or network loss; no claim that recording continues after tab closure or device sleep. | 4 | [x] | [x] | [x] | [x] TA-FND-20, TA-STOR-12 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | VERIFIED | - |
-| FTF-010 | Resumable upload with progress and retry. | 4 | [x] | [x] | [x] | [x] TA-STOR-04, TA-FND-20, TA-STOR-12 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt | VERIFIED | - |
+| FTF-010 | Resumable upload with progress and retry. | 4 | [x] | [x] | [x] | [x] TA-STOR-04, TA-FND-20, TA-STOR-12, TA-FTF-11 | [x] TM-FTF-03 | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt; docs/evidence/option_d/journeys.txt; docs/evidence/option_h/make_check.txt; docs/evidence/option_h/database_restart.txt; docs/evidence/option_h/journeys.txt; docs/evidence/option_o/journeys.txt | VERIFIED | - |
 | FTF-011 | Browser capture stored as the original asset. | 4 | [x] | [x] | [x] | [x] TA-STOR-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-012 | Browser echo cancellation, noise suppression and auto gain requested off; applied settings recorded. | 4 | [x] | [x] | [x] | [x] TA-FTF-04 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | FTF-013 | Derived PCM WAV generated and validated. | 4 | [x] | [x] | [x] | [x] TA-FTF-05 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/e2e.txt; docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
@@ -370,7 +370,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-005 | Rate limits. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-03 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-006 | Input validation. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-04, TA-SEC-12, TA-SEC-14 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-007 | Protection against common web vulnerabilities, including CSRF where cookie auth is used. | 3, 10 | [x] | [x] | [ ] | [ ] TA-SEC-05, TA-SEC-10, TA-SEC-11, TA-SEC-12 | [ ] TM-SEC-02 | docs/evidence/phase2/make_check.txt; docs/evidence/option_b/make_check.txt | IN PROGRESS | Automated CSRF, SQL-injection and cross-project checks done (Option B); browser XSS and web scan in Phase 10 |
-| SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-03 | - | NOT STARTED | - |
+| SEC-008 | Backup and restore; restore tested into a test environment. | 3, 10 | [ ] | [ ] | [ ] | [x] TA-STOR-14 | [ ] TM-SEC-03 | docs/evidence/option_o/make_check.txt | NOT STARTED | - |
 | SEC-009 | Data retention and deletion enforced. | 3, 10 | [ ] | [ ] | [ ] | [ ] TA-STOR-09, TA-PART-06 | n/a | - | NOT STARTED | - |
 | SEC-010 | Consent record access controls. | 3, 10 | [x] | [x] | [ ] | [x] TA-SEC-06, TA-SEC-10 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-011 | Role escalation attempts and unauthorized recording downloads fail. | 3, 10 | [x] | [ ] | [ ] | [x] TA-SEC-07, TA-STOR-05, TA-SEC-10, TA-SEC-15 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -390,9 +390,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | OPS-001 | Separate local, test/staging and production environments. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-01 | - | NOT STARTED | - |
 | OPS-002 | Deployed components: frontend, backend, PostgreSQL, Redis, workers, private object storage, reverse proxy/ingress, monitoring and logs; infrastructure configuration in the repository. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-01 | - | NOT STARTED | - |
 | OPS-003 | Secrets created in a cloud secret manager. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-02 | - | NOT STARTED | - |
-| OPS-004 | Database backups and object storage lifecycle configured. | 10 | n/a | n/a | n/a | n/a | [ ] TM-SEC-03, TM-STOR-02 | - | NOT STARTED | - |
+| OPS-004 | Database backups and object storage lifecycle configured. | 10 | n/a | n/a | n/a | [x] TA-STOR-14 | [ ] TM-SEC-03, TM-STOR-02 | docs/evidence/option_o/make_check.txt | NOT STARTED | - |
 | OPS-005 | Health checks, TLS, domain and DNS configured. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-02, TM-SEC-01 | - | NOT STARTED | - |
-| OPS-006 | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | 10 | n/a | n/a | n/a | n/a | [ ] TM-SEC-04, TM-OPS-02 | - | NOT STARTED | - |
+| OPS-006 | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | 10 | n/a | n/a | n/a | [x] TA-FND-22 | [ ] TM-SEC-04, TM-OPS-02 | docs/evidence/option_o/make_check.txt | NOT STARTED | - |
 | OPS-007 | Database migrations run as a controlled release step. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-03 | - | NOT STARTED | - |
 | OPS-008 | Rollback procedure, disaster recovery runbook and incident runbook exist. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-04 | - | NOT STARTED | - |
 | OPS-009 | Clean deployment reproduced from docs/DEPLOYMENT.md; backup restore tested. | 10 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-03, TM-SEC-03 | - | NOT STARTED | - |
@@ -671,3 +671,25 @@ test in TEST_PLAN.md. It does not mean anything is built.
   included), frontend 319, browser tests 4, journeys 10 (5 in Chromium, 5 in Edge), storage contract
   against SeaweedFS 8 passed; no known dependency vulnerabilities (docs/evidence/option_h/ci_run.txt).
 - Options E, F, G and H done; waiting for the owner's next choice.
+
+### Session 11 - 2026-11-10 - Optimisation items O1-O12
+
+- Owner asked to complete the optimisation list.
+- O1 uploads (D-060): a session ended mid-recording pauses sending instead of losing the rest;
+  Retry-After honoured; retries spread. O2 background processing and O6 Redis job queues: already in
+  place since Phase 4 (D-043), now covered by the recovery tests and the container job. O3 large files
+  and O4 checksums (D-056): one copy on disk, block-wise conversion, 16 MB transfer parts, size and
+  SHA-256 checked after both uploads, `verify-assets`. O5 database (D-057): 3 fewer queries on every
+  request, per-row query removed from the moderator's participant list, project details loaded only
+  when read, four indexes (migration 0007; busy project's audit page 20.5 ms -> 0.14 ms). O7 lists:
+  every list endpoint paged or explained; task search by code. O8 monitoring: query count and time on
+  every request log line, slow request and slow query warnings, storage in readiness. O9 backups
+  (D-058): backup and restore scripts, pruning; CI backs up, deletes, restores. O10 capacity (D-059):
+  process and pool counts from configuration; staff-account limit enforced. O11 frontend (D-061):
+  pages load on first visit (first screen 107 KB, was 120 KB), compression and caching, bundle budget;
+  fixed the web server's content policy, which would have blocked recording playback from Wasabi.
+  O12 lifecycle (D-056): orphaned files and leftover scratch folders cleaned.
+- Results: backend 239 passed + 13 NOT RUN locally (4 ffprobe, 9 live storage: ran on Wasabi
+  separately); frontend 323; browser tests 2; journeys 6/6 in Chrome; storage contract 9/9 on Wasabi
+  (docs/evidence/option_o/). Test objects deleted from Wasabi. The development database's
+  staff-account limit was raised to 1000 in Settings because it holds the 150 load-test accounts.

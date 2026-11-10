@@ -19,6 +19,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
   `VALIDATION_ERROR`. Every /api response carries `Cache-Control: no-store` and
   `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
 - An object in a project the caller cannot see answers exactly like an object that does not exist.
+- Capacity (D-059): creating, importing or re-enabling an account beyond the staff-account capacity
+  setting answers 409 `CAPACITY_REACHED` (details: limit, active, adding).
 - Temporary outages (D-055): 503 `STORAGE_UNAVAILABLE` or `DATABASE_UNAVAILABLE` with `Retry-After: 5`;
   clients keep their data and try again (the recorder's uploader retries every 5xx).
 
@@ -99,7 +101,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /tasks | `tasks.view` / `tasks.assign` |
+| GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100) |
 | GET | /tasks/{id} | `tasks.view` |
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment) |

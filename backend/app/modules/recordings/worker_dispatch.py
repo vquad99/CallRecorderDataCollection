@@ -52,6 +52,9 @@ def recover(app: FastAPI) -> int:
     """Hand every stalled recording to processing again; returns how many were found."""
     if app.state.storage is None:
         return 0
+    removed = service.clean_work_dir(app.state.settings)
+    if removed:
+        logger.info("work_dir_cleaned", extra={"removed": removed})
     with app.state.session_factory() as db:
         stalled = service.stalled_recordings(db, app.state.settings)
     celery: Any = getattr(app.state, "celery", None)

@@ -23,7 +23,7 @@ def test_ready_fails_clearly_when_database_is_down(make_client: MakeClient) -> N
     assert response.status_code == 503
     assert response.json() == {
         "status": "not_ready",
-        "checks": {"database": "error", "redis": "not_configured"},
+        "checks": {"database": "error", "redis": "not_configured", "storage": "not_configured"},
     }
     assert "unit-test-db-password" not in response.text
 
@@ -34,7 +34,7 @@ def test_ready_is_ok_with_database(test_database_url: str, make_client: MakeClie
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "checks": {"database": "ok", "redis": "not_configured"},
+        "checks": {"database": "ok", "redis": "not_configured", "storage": "not_configured"},
     }
 
 
@@ -46,7 +46,11 @@ def test_ready_fails_when_configured_redis_is_down(
         "/health/ready"
     )
     assert response.status_code == 503
-    assert response.json()["checks"] == {"database": "ok", "redis": "error"}
+    assert response.json()["checks"] == {
+        "database": "ok",
+        "redis": "error",
+        "storage": "not_configured",
+    }
 
 
 def test_settings_used_for_ready_are_the_app_settings() -> None:

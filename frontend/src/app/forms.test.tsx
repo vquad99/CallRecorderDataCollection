@@ -189,7 +189,7 @@ const FORMS: Record<string, FormSpec> = {
   "edit project": {
     source: "src/features/projects/ProjectForm.tsx",
     url: "/projects/p1",
-    ready: /HINDI · Hindi conversations/,
+    ready: /This project accepts new work/, // the Overview tab itself has loaded
     fill: [type("Name", "Renamed")],
     submit: "Save project",
     write: "PATCH /api/v1/projects/p1",
@@ -200,7 +200,7 @@ const FORMS: Record<string, FormSpec> = {
   "project status": {
     source: "src/features/projects/tabs.tsx",
     url: "/projects/p1",
-    ready: /HINDI · Hindi conversations/,
+    ready: /This project accepts new work/, // the Overview tab itself has loaded
     fill: [type("Reason", "Client asked to pause")],
     submit: "Change status",
     write: "POST /api/v1/projects/p1/status",

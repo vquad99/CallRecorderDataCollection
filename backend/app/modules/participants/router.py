@@ -42,9 +42,14 @@ class ParticipantOut(BaseModel):
 
 
 def present(
-    db: DbSession, principal: Principal, cipher: FieldCipher, project: Project, p: Participant
+    db: DbSession,
+    principal: Principal,
+    cipher: FieldCipher,
+    project: Project,
+    p: Participant,
+    assigned_ids: set[uuid.UUID] | None = None,
 ) -> ParticipantOut:
-    v = service.visibility(db, principal, project, p.id)
+    v = service.visibility(db, principal, project, p.id, assigned_ids)
     if p.phone_e164_enc is None:
         phone = None
     elif v.contact:
@@ -86,8 +91,9 @@ def list_participants(
     project, items, total = service.list_participants(
         db, principal, project_id, search=search, page=page, page_size=page_size
     )
+    assigned = service.assigned_participants(db, principal.user_id, project.id)
     return ParticipantPage(
-        items=[present(db, principal, cipher, project, p) for p in items],
+        items=[present(db, principal, cipher, project, p, assigned) for p in items],
         total=total,
         page=page,
         page_size=page_size,

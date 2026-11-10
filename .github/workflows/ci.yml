@@ -189,6 +189,18 @@ jobs:
           curl -fsS http://127.0.0.1:8080/health/ready | grep -q '"status":"ready"'
           curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
           curl -fsS http://127.0.0.1:8080/api/v1/version | grep -q '"version"'
+      - name: Web server compression, caching and audio policy (O11)
+        run: |
+          ASSET="$(curl -fsS http://127.0.0.1:8080/ | grep -o '/assets/index-[^"]*\.js' | head -1)"
+          test -n "$ASSET"
+          curl -fsS -D /tmp/asset.txt -o /dev/null -H 'Accept-Encoding: gzip' "http://127.0.0.1:8080$ASSET"
+          cat /tmp/asset.txt
+          grep -qi '^cache-control: max-age=31536000' /tmp/asset.txt
+          grep -qi '^content-encoding: gzip' /tmp/asset.txt
+          grep -qi '^x-content-type-options: nosniff' /tmp/asset.txt
+          grep -qi "media-src 'self' https://\*.wasabisys.com" /tmp/asset.txt
+          curl -fsS -D /tmp/page.txt -o /dev/null http://127.0.0.1:8080/tasks
+          grep -qi '^cache-control: no-cache' /tmp/page.txt
       - name: Data survives a database restart
         run: |
           C="docker compose --env-file .env -f infra/docker-compose.yml"
@@ -196,6 +208,18 @@ jobs:
           $C restart db
           $C exec -T db sh -c 'until pg_isready -U ccp -d ccp; do sleep 1; done'
           $C exec -T db psql -U ccp -d ccp -Atc "SELECT value_text FROM system_settings WHERE key = 'ci.persistence'" | grep -qx kept
+      - name: Backup to storage, lose data, restore (O9; TM-SEC-03 locally)
+        run: |
+          C="docker compose --env-file .env -f infra/docker-compose.yml"
+          $C exec -T db psql -U ccp -d ccp -c "INSERT INTO system_settings (key, value_type, value_text) VALUES ('ci.backup', 'text', 'kept')"
+          ENV_FILE=.env infra/backup/backup.sh | tee /tmp/backup.out
+          KEY="$(awk '/^backup-upload:/ {print $2}' /tmp/backup.out)"
+          test -n "$KEY"
+          $C exec -T db psql -U ccp -d ccp -c "DELETE FROM system_settings WHERE key = 'ci.backup'"
+          ENV_FILE=.env infra/backup/restore.sh "$KEY"
+          $C exec -T db psql -U ccp -d ccp -Atc "SELECT value_text FROM system_settings WHERE key = 'ci.backup'" | grep -qx kept
+          $C up -d --wait --wait-timeout 120 backend worker
+          curl -fsS http://127.0.0.1:8000/health/ready | grep -q '"status":"ready"'
       - name: Worker running; storage adapter round trip against SeaweedFS
         run: |
           C="docker compose --env-file .env -f infra/docker-compose.yml"

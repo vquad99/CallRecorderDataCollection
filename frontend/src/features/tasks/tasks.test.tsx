@@ -1,5 +1,5 @@
 // Requirements: TASK-001, TASK-003, TASK-006, TASK-007, TASK-011, PART-006, SEC-001
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +41,23 @@ const timeline = [
 ];
 
 describe("tasks", () => {
+  it("finds tasks by code once typing pauses", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view"], {
+        "GET /api/v1/projects": () => [200, { items: [], total: 0, page: 1, page_size: 100 }],
+        "GET /api/v1/tasks": () => [200, { items: [task], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/tasks");
+    await screen.findByText("T000001");
+    await userEvent.type(screen.getByLabelText("Task or participant code"), "P0001");
+    await waitFor(() => expect(calls.some((c) => c.path.includes("search=P0001"))).toBe(true));
+    const searches = calls.filter(
+      (c) => c.path.startsWith("/api/v1/tasks?") && c.path.includes("search="),
+    );
+    expect(searches).toHaveLength(1);
+  });
+
   it("lists tasks with project codes and filters by status", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "tasks.assign"], {

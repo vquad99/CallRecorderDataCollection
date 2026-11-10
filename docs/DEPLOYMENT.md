@@ -52,6 +52,17 @@ Commands (run where the backend's settings are available):
 | `python -m app.cli retention` | daily (scheduler) | Deletes stored files older than each project's retention rules, with audit entries |
 | `python -m app.cli recover-recordings` | on demand | Sends every recording left half-done by a stopped process to processing again; the web processes also do this at start-up and every `RECOVERY_INTERVAL_SECONDS` (D-055) |
 
+| `python -m app.cli verify-assets [--deep N]` | weekly | Checks every stored file's presence, size and checksum label; with `--deep N` downloads N at random and hashes them again; exit code 1 when anything is wrong (D-056) |
+| `python -m app.cli storage-orphans [--delete]` | monthly | Lists (or deletes) stored files no record points to, older than 24 h; backups are never touched (D-056) |
+| `infra/backup/backup.sh` (`KEEP_DAYS=N` to prune) | daily | Database dump into the private storage under `backups/db/` with its SHA-256 (D-058) |
+| `infra/backup/restore.sh <key>` | when needed | Checks the backup, stops backend and worker, restores, starts them again (D-058) |
+
+Scaling (D-059): `WEB_CONCURRENCY` (web processes), `WORKER_CONCURRENCY` (processing slots per
+worker container), `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` (connections per web process). Monitoring
+(D-057): `SLOW_REQUEST_MS` (1000) and `SLOW_QUERY_MS` (250) turn slow answers into warnings; every
+request log line carries `db_queries` and `db_ms`; `/health/ready` checks database, Redis and
+storage. Web server: `MEDIA_ORIGINS` names where recordings play from (Wasabi by default, D-061).
+
 Recovery settings: `PROCESSING_PICKUP_SECONDS` (60), `PROCESSING_STALE_MINUTES` (15),
 `RECOVERY_INTERVAL_SECONDS` (60; 0 = start-up only).
 

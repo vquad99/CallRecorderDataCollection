@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # Recovery (H): a recording left UPLOADED this long was never picked up; one PROCESSING this
     # long was abandoned by a stopped process. The sweep runs at start-up and every interval.
     processing_pickup_seconds: int = Field(default=60, ge=5, le=3600)
+    # Monitoring (O8): requests and single database queries slower than these are logged as
+    # warnings; 0 turns a warning off.
+    slow_request_ms: int = Field(default=1000, ge=0, le=600_000)
+    slow_query_ms: int = Field(default=250, ge=0, le=600_000)
     processing_stale_minutes: int = Field(default=15, ge=1, le=24 * 60)
     recovery_interval_seconds: int = Field(default=60, ge=0, le=3600)  # 0 = start-up only
     # Largest request body for every other API call (JSON); larger bodies get 413 (SEC-006).

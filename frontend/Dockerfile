@@ -7,6 +7,8 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.28.3-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Origin(s) recordings may play from (Content-Security-Policy media-src); Wasabi by default.
+ENV MEDIA_ORIGINS="https://*.wasabisys.com"
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /src/dist /usr/share/nginx/html
 EXPOSE 8080

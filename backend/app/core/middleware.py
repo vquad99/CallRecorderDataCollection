@@ -17,6 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.errors import error_body
 from app.core.logging import request_id_var
+from app.db.session import db_stats_var
 
 logger = logging.getLogger("app.request")
 
@@ -121,8 +122,9 @@ async def _send_error(send: Send, status: int, code: str, message: str) -> None:
 
 
 class RequestContextMiddleware:
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, *, slow_request_ms: int = 0) -> None:
         self.app = app
+        self.slow_request_ms = slow_request_ms
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -132,6 +134,8 @@ class RequestContextMiddleware:
         incoming = Headers(scope=scope).get(REQUEST_ID_HEADER, "")
         request_id = incoming if _VALID_REQUEST_ID.match(incoming) else uuid.uuid4().hex
         token = request_id_var.set(request_id)
+        stats = {"queries": 0, "ms": 0.0}
+        stats_token = db_stats_var.set(stats)
         started = perf_counter()
         state = {"status": 500, "started": False}
 
@@ -161,13 +165,17 @@ class RequestContextMiddleware:
             )
             await send({"type": "http.response.body", "body": body})
         finally:
-            logger.info(
-                "request",
-                extra={
-                    "method": scope.get("method"),
-                    "path": scope.get("path"),
-                    "status": state["status"],
-                    "duration_ms": round((perf_counter() - started) * 1000, 2),
-                },
-            )
+            duration = round((perf_counter() - started) * 1000, 2)
+            fields = {
+                "method": scope.get("method"),
+                "path": scope.get("path"),
+                "status": state["status"],
+                "duration_ms": duration,
+                "db_queries": int(stats["queries"]),
+                "db_ms": round(stats["ms"], 2),
+            }
+            logger.info("request", extra=fields)
+            if self.slow_request_ms and duration > self.slow_request_ms:
+                logger.warning("slow_request", extra=fields)
+            db_stats_var.reset(stats_token)
             request_id_var.reset(token)

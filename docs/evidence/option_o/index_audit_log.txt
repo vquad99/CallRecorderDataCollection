@@ -1,0 +1,25 @@
+Audit log page for a small project (60 entries, all a month old) among 201528 entries in 18 projects (ccp_dev after migration 0007, 2026-11-10T01:28Z):
+
+-- with ix_audit_logs_project_created (migration 0007):
+  ->  Index Scan Backward using ix_audit_logs_project_created on audit_logs  (cost=0.42..273.23 rows=67 width=232) (actual time=0.034..0.050 rows=50 loops=1)
+        Index Cond: (project_id = 'f2a37223-e088-4c61-9a84-2edff2db284e'::uuid)
+Execution Time: 0.094 ms
+
+-- without it (dropped for the comparison, then recreated):
+  ->  Sort  (cost=244.66..244.83 rows=67 width=232) (actual time=0.109..0.113 rows=50 loops=1)
+        Sort Key: created_at DESC
+        Sort Method: quicksort  Memory: 32kB
+              ->  Bitmap Index Scan on ix_audit_logs_project_id  (cost=0.00..4.80 rows=67 width=0) (actual time=0.030..0.030 rows=60 loops=1)
+                    Index Cond: (project_id = 'f2a37223-e088-4c61-9a84-2edff2db284e'::uuid)
+Execution Time: 0.178 ms
+
+Busy project (12120 entries). For a fair comparison the global created_at index is set aside, as for a Project Admin of several projects the planner cannot use it:
+-- with ix_audit_logs_project_created:
+  ->  Index Scan Backward using ix_audit_logs_project_created on audit_logs  (cost=0.42..11683.74 rows=12025 width=232) (actual time=0.048..0.098 rows=50 loops=1)
+Execution Time: 0.141 ms
+-- without it:
+        Sort Method: top-N heapsort  Memory: 32kB
+        ->  Bitmap Heap Scan on audit_logs  (cost=137.49..3099.80 rows=12025 width=232) (actual time=1.561..17.065 rows=12120 loops=1)
+              ->  Bitmap Index Scan on ix_audit_logs_project_id  (cost=0.00..134.48 rows=12025 width=0) (actual time=1.061..1.061 rows=12120 loops=1)
+Execution Time: 20.496 ms
+(both indexes restored)

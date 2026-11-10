@@ -1,0 +1,9 @@
+$ PW_CHANNEL=chrome npx playwright test  (run 2026-11-10T02:08:41Z on aws-dev after O1-O12; Google Chrome 155; Microsoft Edge runs in CI)
+
+Running 2 tests using 2 workers
+
+  ✓  1 [chromium] › e2e/console.spec.ts:52:1 › sign in, then main pages render with no console errors (5.8s)
+  ✓  2 [chromium] › e2e/recorder.spec.ts:49:1 › records with the fake microphone, uploads whole frames with checksums, and plays back (15.2s)
+
+  2 passed (18.1s)
+exit=0

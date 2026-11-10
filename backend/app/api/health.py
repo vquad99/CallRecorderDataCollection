@@ -49,12 +49,24 @@ def _check_redis(settings: Settings) -> str:
     return "ok"
 
 
+def _check_storage(storage: Any) -> str:
+    if storage is None:
+        return "not_configured"
+    try:
+        storage.ping()
+    except Exception as exc:  # noqa: BLE001 - any failure means "not reachable"
+        logger.warning("readiness_storage_failed", extra={"error_type": type(exc).__name__})
+        return "error"
+    return "ok"
+
+
 @router.get("/ready")
 def ready(request: Request) -> JSONResponse:
     settings: Settings = request.app.state.settings
     checks: dict[str, Any] = {
         "database": _check_database(request.app.state.engine),
         "redis": _check_redis(settings),
+        "storage": _check_storage(request.app.state.storage),
     }
     is_ready = all(value in ("ok", "not_configured") for value in checks.values())
     body = {"status": "ready" if is_ready else "not_ready", "checks": checks}

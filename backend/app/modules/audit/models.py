@@ -15,6 +15,7 @@ class AuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_created_at", "created_at"),
+        Index("ix_audit_logs_project_created", "project_id", "created_at"),  # per-project viewer
     )
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True

@@ -7,6 +7,11 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "playwright-report", "test-results"] },
   {
+    // Build-time scripts run in Node.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { globals: { ...globals.node } },
+  },
+  {
     files: ["public/recorder-worklet.js"],
     languageOptions: {
       globals: { AudioWorkletProcessor: "readonly", registerProcessor: "readonly" },

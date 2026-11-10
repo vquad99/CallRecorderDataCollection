@@ -24,6 +24,8 @@ test("an interrupted recording keeps the saved audio and can be finished", async
 
   const context = await browser.newContext();
   const first = await context.newPage();
+  let parts = 0;
+  let keptSeconds = 0;
   await test.step("the moderator starts recording and the tab closes after the first part is saved", async () => {
     await signIn(first, SEEDED.moderator, SEEDED_PASSWORD);
     await first.goto(`/tasks/${setup.taskId}`);
@@ -32,7 +34,10 @@ test("an interrupted recording keeps the saved audio and can be finished", async
     await first.getByRole("link", { name: "Open the recorder" }).click();
     await first.getByRole("button", { name: "Allow microphone" }).click();
     await first.getByRole("button", { name: "Start recording" }).click();
-    await expect(first.getByText(/Saved parts: 1;/)).toBeVisible({ timeout: 20_000 });
+    // At least one 5-second part is on the server (the count may already be past 1 when seen).
+    const saved = first.getByText(/Saved parts: [1-9]\d*;/);
+    await expect(saved).toBeVisible({ timeout: 20_000 });
+    parts = Number(/Saved parts: (\d+);/.exec((await saved.textContent()) ?? "")?.[1]);
     await first.close({ runBeforeUnload: false });
   });
 
@@ -42,9 +47,15 @@ test("an interrupted recording keeps the saved audio and can be finished", async
     const notice = again
       .getByRole("alert")
       .filter({ hasText: "An earlier recording did not finish" });
-    await expect(notice).toContainText("0:05 of audio reached the server and is kept.");
-    await expect(again.getByRole("button", { name: "Start recording" })).toHaveCount(0);
-    await notice.getByRole("button", { name: "Keep the saved 0:05" }).click();
+    await expect(notice).toContainText("of audio reached the server and is kept.");
+    // What the server kept: the parts seen before the tab closed, or one more that was on its way.
+    const [, minutes, seconds] = /(\d+):(\d\d) of audio reached the server/.exec(
+      (await notice.textContent()) ?? "",
+    ) ?? ["", "0", "0"];
+    keptSeconds = 60 * Number(minutes) + Number(seconds);
+    expect([5 * parts, 5 * (parts + 1)]).toContain(keptSeconds);
+    const kept = `${minutes}:${seconds}`;
+    await notice.getByRole("button", { name: `Keep the saved ${kept}` }).click();
     await expect(notice).toHaveCount(0, { timeout: 30_000 });
   });
 
@@ -64,7 +75,7 @@ test("an interrupted recording keeps the saved audio and can be finished", async
       `/api/v1/tasks/${setup.taskId}/recordings`,
     );
     expect(recording?.interrupted).toBe(true);
-    expect(recording?.saved_seconds).toBe(5);
+    expect(recording?.saved_seconds).toBe(keptSeconds);
     await admin.goto(`/tasks/${setup.taskId}`);
     await expect(admin.getByText(/IN_PROGRESS -> RECORDED/)).toBeVisible();
   });

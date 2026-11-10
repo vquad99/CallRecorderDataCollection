@@ -45,6 +45,12 @@ class Recording(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             unique=True,
             postgresql_where=text("state IN ('RECORDING', 'INTERRUPTED')"),
         ),
+        # The recovery sweep (every minute) reads only unfinished recordings.
+        Index(
+            "ix_recordings_unfinished",
+            "updated_at",
+            postgresql_where=text("state IN ('UPLOADED', 'PROCESSING')"),
+        ),
     )
     task_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -110,6 +116,14 @@ class AudioAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(f"kind IN {ASSET_KINDS}", name="kind_allowed"),
         UniqueConstraint("recording_id", "kind", "version", name="uq_audio_assets_version"),
         Index("ix_audio_assets_sha256", "sha256"),
+        # The retention job's question: live files of one kind in one project, oldest first.
+        Index(
+            "ix_audio_assets_retention",
+            "project_id",
+            "kind",
+            "created_at",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
     recording_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("recordings.id", ondelete="RESTRICT"), nullable=False, index=True

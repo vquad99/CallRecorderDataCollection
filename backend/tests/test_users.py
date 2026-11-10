@@ -184,3 +184,48 @@ def test_each_role_sees_only_permitted_admin_pages(db: Any, new_api: Any) -> Non
         api.login(f"{role.lower()}@example.org")
         assert api.get("/api/v1/users").status_code == 403, role
         assert api.get("/api/v1/settings").status_code == 403, role
+
+
+def test_active_accounts_are_limited_by_the_capacity_setting(admin: Api, db: Any) -> None:
+    """O10: the staff-account capacity setting is a real limit, raised in Settings."""
+    active = admin.get("/api/v1/users?status=ACTIVE&page_size=100").json()["total"]
+    assert (
+        admin.patch(
+            "/api/v1/settings", json={"values": {"capacity.staff_accounts": active + 1}}
+        ).status_code
+        == 200
+    )
+    body = {"email": "last.seat@example.org", "display_name": "Last", "roles": ["MODERATOR"]}
+    assert admin.post("/api/v1/users", json=body).status_code == 201
+    over = admin.post("/api/v1/users", json={**body, "email": "one.too.many@example.org"})
+    assert over.status_code == 409
+    assert over.json()["error"]["code"] == "CAPACITY_REACHED"
+    csv = (
+        "email,display_name,roles\nimp1@example.org,Imp,MODERATOR\nimp2@example.org,Imp,MODERATOR\n"
+    )
+    assert (
+        admin.post("/api/v1/users/import/confirm", json={"csv": csv}).json()["error"]["code"]
+        == "CAPACITY_REACHED"
+    )
+    assert admin.get("/api/v1/users?search=imp1").json()["total"] == 0, (
+        "an import is all or nothing"
+    )
+    seat = admin.get("/api/v1/users?search=last.seat").json()["items"][0]
+    assert admin.post(f"/api/v1/users/{seat['id']}/disable").status_code == 200
+    assert (
+        admin.post("/api/v1/users", json={**body, "email": "one.too.many@example.org"}).status_code
+        == 201
+    )
+    assert (
+        admin.post(f"/api/v1/users/{seat['id']}/enable").json()["error"]["code"]
+        == "CAPACITY_REACHED"
+    )
+    assert (
+        admin.patch(
+            "/api/v1/settings", json={"values": {"capacity.staff_accounts": active + 5}}
+        ).status_code
+        == 200
+    )
+    assert admin.post(f"/api/v1/users/{seat['id']}/enable").status_code == 200, (
+        "raising the setting is enough"
+    )

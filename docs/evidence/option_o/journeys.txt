@@ -1,0 +1,15 @@
+$ npx playwright test --config playwright.journeys.config.ts  (run 2026-11-10T01:47:10Z on aws-dev after the O1-O12 changes; Google Chrome 155; real backend; Wasabi dev prefix dev-aws-dev/journeys/; the development database's staff-account limit raised to 1000 in Settings because it holds the 150 load-test accounts)
+
+Running 6 tests using 1 worker
+
+  ✓  1 [chromium] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (19.5s)
+  ✓  2 [chromium] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (15.4s)
+  ✓  3 [chromium] › journeys/network.spec.ts:17:1 › a network drop mid-recording loses nothing (36.8s)
+  ✓  4 [chromium] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (11.3s)
+  ✓  5 [chromium] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (30.2s)
+  ✓  6 [chromium] › journeys/session.spec.ts:18:1 › a session ended mid-recording loses nothing once the moderator signs in again (29.4s)
+
+  6 passed (2.4m)
+exit=0
+
+clean-up: 20 test object(s) under dev-aws-dev/journeys/ deleted from Wasabi; 0 left

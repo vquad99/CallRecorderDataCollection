@@ -1,0 +1,11 @@
+$ pytest tests/test_storage_contract.py -k real  (run 2026-11-10T01:49:58Z, live Wasabi callrec57, dev-aws-dev/contract/; after O3/O12: tuned large-file transfers and listing)
+tests/test_storage_contract.py::test_bytes_round_trip_with_checksum_and_type[real] PASSED [ 11%]
+tests/test_storage_contract.py::test_large_file_round_trip_uses_multipart_and_stays_intact[real] PASSED [ 22%]
+tests/test_storage_contract.py::test_missing_objects_and_repeated_deletes[real] PASSED [ 33%]
+tests/test_storage_contract.py::test_every_key_lives_under_the_configured_prefix[real] PASSED [ 44%]
+tests/test_storage_contract.py::test_listing_shows_keys_without_the_prefix_with_size_and_time[real] PASSED [ 55%]
+tests/test_storage_contract.py::test_overwrite_replaces_content_and_checksum[real] PASSED [ 66%]
+tests/test_storage_contract.py::test_signed_link_downloads_the_file_with_its_name[real] PASSED [ 77%]
+tests/test_storage_contract.py::test_many_parallel_uploads_and_downloads_stay_intact[real] PASSED [ 88%]
+tests/test_storage_contract.py::test_live_links_expire_and_unsigned_or_altered_requests_are_refused[real] PASSED [100%]
+======================= 9 passed, 9 deselected in 12.07s =======================

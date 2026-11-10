@@ -65,6 +65,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       <<: *storage_env
     ports: ["127.0.0.1:${BACKEND_PORT:-8000}:8000"]
     depends_on:
@@ -80,7 +83,8 @@ services:
   # Processes finished recordings (Celery). Same image as the backend.
   worker:
     build: ../backend
-    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO", "--concurrency=2"]
+    # Processing slots per worker container (O10); add containers or raise this to scale.
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
     environment:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://ccp:${POSTGRES_PASSWORD}@db:5432/ccp
@@ -93,6 +97,8 @@ services:
 
   web:
     build: ../frontend
+    environment:
+      MEDIA_ORIGINS: ${MEDIA_ORIGINS:-https://*.wasabisys.com}
     ports: ["127.0.0.1:${WEB_PORT:-8080}:8080"]
     depends_on:
       backend: { condition: service_healthy }

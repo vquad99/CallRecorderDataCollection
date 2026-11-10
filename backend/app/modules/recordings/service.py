@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import random
+import shutil
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm
-from app.core.storage import ObjectStorage
+from app.core.storage import ListedObject, ObjectStorage
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
 from app.modules.projects.models import Project, ProjectRetentionRule
@@ -361,6 +364,13 @@ def _asset(
     )
 
 
+def _check_stored(storage: ObjectStorage, asset: AudioAsset, label: str) -> None:
+    """The object in storage has the expected size and carries the expected SHA-256 (O4)."""
+    stored = storage.head(asset.storage_key)
+    if stored is None or (stored.size, stored.sha256) != (asset.size_bytes, asset.sha256):
+        raise RuntimeError(f"{label} file did not arrive intact in storage")
+
+
 def process(
     db: Session, settings: Settings, storage: ObjectStorage, recording_id: uuid.UUID
 ) -> Recording:
@@ -404,11 +414,7 @@ def process(
     work.mkdir(parents=True, exist_ok=True)
     try:
         with tempfile.TemporaryDirectory(dir=work) as tmp:
-            raw, original, derived = (
-                Path(tmp) / "raw.f32",
-                Path(tmp) / "original.wav",
-                Path(tmp) / "derived.wav",
-            )
+            original, derived = Path(tmp) / "original.wav", Path(tmp) / "derived.wav"
             chunks = db.scalars(
                 select(RecordingChunk)
                 .where(RecordingChunk.recording_id == rec.id)
@@ -420,11 +426,21 @@ def process(
                 )
             )
             if original_asset is None:
-                with raw.open("wb") as handle:
+                # Header first, then the parts in order: one copy on disk, never the whole file in
+                # memory (Option O3).
+                total = sum(chunk.size_bytes for chunk in chunks)
+                frame_bytes = 4 * rec.channel_count
+                if total % frame_bytes:
+                    raise RuntimeError("stored parts are not whole frames")
+                with original.open("wb") as handle:
+                    handle.write(
+                        media.float_wav_header(
+                            total // frame_bytes, rec.native_sample_rate, rec.channel_count
+                        )
+                    )
                     for chunk in chunks:
                         if storage.append_to(chunk.storage_key, handle) != chunk.size_bytes:
                             raise RuntimeError(f"chunk {chunk.seq} size changed in storage")
-                media.write_float_wav(raw, original, rec.native_sample_rate, rec.channel_count)
                 base = _prefix(project, task, rec.started_at)
                 original_asset = _asset(
                     db,
@@ -453,9 +469,7 @@ def process(
                     content_type="audio/wav",
                     sha256=original_asset.sha256,
                 )
-                stored = storage.head(original_asset.storage_key)
-                if stored is None or stored.size != original_asset.size_bytes:
-                    raise RuntimeError("original file did not arrive intact in storage")
+                _check_stored(storage, original_asset, "original")
                 db.add(original_asset)
                 db.flush()
                 db.add(
@@ -477,12 +491,16 @@ def process(
                 storage.get_to_file(original_asset.storage_key, original)
                 if media.sha256_file(original) != original_asset.sha256:
                     raise RuntimeError("stored original no longer matches its checksum")
-                with original.open("rb") as src, raw.open("wb") as dst:
-                    info = media.inspect_wav(original)
-                    src.seek(info.data_offset)
-                    dst.write(src.read(info.data_bytes))
-            channels = original_asset.channels
-            media.resample_to_pcm16(raw, rec.native_sample_rate, derived, channels)
+            info = media.inspect_wav(original)
+            media.resample_to_pcm16(
+                original,
+                rec.native_sample_rate,
+                derived,
+                info.channels,
+                offset=info.data_offset,
+                length=info.data_bytes,
+            )
+            channels = info.channels
             base = _prefix(project, task, rec.started_at)
             version = (
                 db.scalar(
@@ -513,6 +531,7 @@ def process(
                 content_type="audio/wav",
                 sha256=derived_asset.sha256,
             )
+            _check_stored(storage, derived_asset, "derived")
             db.add(derived_asset)
             db.flush()
             db.add(
@@ -546,6 +565,84 @@ def process(
     if task is not None and task.status == "IN_PROGRESS":
         tasks.system_transition(db, task, "RECORDED", comment="Face-to-face recording ready")
     return rec
+
+
+@dataclass(frozen=True)
+class AssetProblem:
+    asset_id: uuid.UUID
+    storage_key: str
+    problem: str
+
+
+def verify_assets(
+    db: Session, storage: ObjectStorage, *, deep: int = 0, work_dir: Path | None = None
+) -> tuple[int, list[AssetProblem]]:
+    """Every live file is in storage with its size and SHA-256 label; `deep` of them, chosen at
+    random, are downloaded and hashed again (O4). Returns (files checked, problems found)."""
+    assets = db.scalars(select(AudioAsset).where(AudioAsset.deleted_at.is_(None))).all()
+    problems: list[AssetProblem] = []
+    intact: list[AudioAsset] = []
+    for a in assets:
+        info = storage.head(a.storage_key)
+        if info is None:
+            problems.append(AssetProblem(a.id, a.storage_key, "missing from storage"))
+        elif info.size != a.size_bytes:
+            problems.append(
+                AssetProblem(a.id, a.storage_key, f"size {info.size}, expected {a.size_bytes}")
+            )
+        elif info.sha256 != a.sha256:
+            problems.append(
+                AssetProblem(a.id, a.storage_key, "checksum label differs from the record")
+            )
+        else:
+            intact.append(a)
+    for a in random.sample(intact, min(deep, len(intact))):
+        with tempfile.TemporaryDirectory(dir=work_dir) as tmp:
+            path = Path(tmp) / "check.bin"
+            storage.get_to_file(a.storage_key, path)
+            if media.sha256_file(path) != a.sha256:
+                problems.append(
+                    AssetProblem(a.id, a.storage_key, "content does not match its checksum")
+                )
+    return len(assets), problems
+
+
+def storage_orphans(
+    db: Session, storage: ObjectStorage, older_than: timedelta, now: datetime | None = None
+) -> list[ListedObject]:
+    """Objects no record points to (left by a process that stopped between upload and save),
+    older than `older_than` so nothing still being written is touched (O12). Backups are kept."""
+    now = now or datetime.now(UTC)
+    known = set(db.scalars(select(AudioAsset.storage_key).where(AudioAsset.deleted_at.is_(None))))
+    known |= set(
+        db.scalars(
+            select(RecordingChunk.storage_key).where(RecordingChunk.object_deleted.is_(False))
+        )
+    )
+    cutoff = now - older_than
+    return [
+        o
+        for o in storage.list_objects()
+        if o.key not in known and o.modified < cutoff and not o.key.startswith("backups/")
+    ]
+
+
+def clean_work_dir(settings: Settings, now: float | None = None) -> int:
+    """Remove scratch folders a stopped process left in MEDIA_WORK_DIR (O12). Anything younger
+    than twice PROCESSING_STALE_MINUTES may still be in use and is left alone."""
+    work = Path(settings.media_work_dir)
+    if not work.is_dir():
+        return 0
+    cutoff = (now or time.time()) - 2 * 60 * settings.processing_stale_minutes
+    removed = 0
+    for entry in work.iterdir():
+        if entry.stat().st_mtime < cutoff:
+            if entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+            else:
+                entry.unlink(missing_ok=True)
+            removed += 1
+    return removed
 
 
 def stalled_recordings(

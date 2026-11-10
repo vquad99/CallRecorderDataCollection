@@ -1,11 +1,12 @@
 // Tasks the user can see: all in their projects for task managers, only their own otherwise (TASK-005, TASK-011).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { listProjects } from "../../api/projects";
 import { listTasks, TASK_STATUS_LABELS } from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
 import { Select } from "../../components/form/Select";
+import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
@@ -16,10 +17,28 @@ export function TasksPage() {
   const [status, setStatus] = useState("");
   const [mode, setMode] = useState("");
   const [page, setPage] = useState(1);
+  const [typed, setTyped] = useState("");
+  const [search, setSearch] = useState("");
+  // Ask the server once typing pauses, not on every key (O7).
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setSearch(typed.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [typed]);
   const projects = useResource(() => listProjects({ page_size: 100 }), []);
   const tasks = useResource(
-    () => listTasks({ project_id: projectId, status, mode, page, page_size: 25 }),
-    [projectId, status, mode, page],
+    () =>
+      listTasks({
+        project_id: projectId,
+        status,
+        mode,
+        search: search || undefined,
+        page,
+        page_size: 25,
+      }),
+    [projectId, status, mode, search, page],
   );
   const codes =
     projects.state.status === "loaded"
@@ -38,6 +57,12 @@ export function TasksPage() {
         ) : null}
       </div>
       <div className="filters">
+        <TextField
+          label="Task or participant code"
+          type="search"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
         <Select
           label="Project"
           value={projectId}

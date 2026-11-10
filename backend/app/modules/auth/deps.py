@@ -20,7 +20,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
 from app.db.session import get_db_session
-from app.modules.auth.models import Permission, RolePermission, User, UserRole, UserSession
+from app.modules.auth.models import User, UserSession
 from app.modules.auth.security import hash_token, tokens_equal
 from app.modules.projects.models import ProjectMembership
 
@@ -68,16 +68,9 @@ def client_ip(request: Request) -> str | None:
 
 
 def load_principal(db: Session, user: User, session_id: uuid.UUID) -> Principal:
-    roles = frozenset(db.scalars(select(UserRole.role_id).where(UserRole.user_id == user.id)).all())
+    # Roles and their permissions arrive with the user (selectin loading): no extra queries (O5).
     role_codes = frozenset(r.code for r in user.roles)
-    perms = frozenset(
-        db.scalars(
-            select(Permission.code)
-            .join(RolePermission, RolePermission.permission_id == Permission.id)
-            .where(RolePermission.role_id.in_(roles))
-            .distinct()
-        ).all()
-    )
+    perms = frozenset(p.code for r in user.roles for p in r.permissions)
     projects = frozenset(
         db.scalars(
             select(ProjectMembership.project_id).where(ProjectMembership.user_id == user.id)
@@ -99,16 +92,22 @@ def current_principal(request: Request, db: DbSession) -> Principal:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise unauthenticated()
-    session = db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
-    if session is None or session.revoked_at is not None:
+    found = db.execute(
+        select(UserSession, User)
+        .join(User, User.id == UserSession.user_id)
+        .where(UserSession.token_hash == hash_token(token))
+    ).one_or_none()
+    if found is None:
+        raise unauthenticated()
+    session, user = found
+    if session.revoked_at is not None:
         raise unauthenticated()
     settings: Settings = request.app.state.settings
     now = datetime.now(UTC)
     idle_limit = session.last_seen_at + timedelta(minutes=settings.session_idle_minutes)
     if now >= session.expires_at or now >= idle_limit:
         raise unauthenticated("SESSION_EXPIRED", "Your session has expired. Sign in again.")
-    user = db.get(User, session.user_id)
-    if user is None or user.status != "ACTIVE":
+    if user.status != "ACTIVE":
         raise unauthenticated()
     if now - session.last_seen_at >= _LAST_SEEN_WRITE_INTERVAL:
         session.last_seen_at = now

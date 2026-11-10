@@ -86,6 +86,27 @@ def list_users(
     return list(items), int(total)
 
 
+def ensure_staff_capacity(db: Session, adding: int = 1) -> None:
+    """Active accounts may not pass the capacity setting `capacity.staff_accounts` (O10); an
+    administrator raises it in Settings, no deployment needed (CAP-002)."""
+    from app.modules.settings.models import SystemSetting
+
+    limit = db.scalar(
+        select(SystemSetting.value_int).where(SystemSetting.key == "capacity.staff_accounts")
+    )
+    if limit is None:
+        return
+    active = db.scalar(select(func.count()).select_from(User).where(User.status == "ACTIVE")) or 0
+    if active + adding > limit:
+        raise AppError(
+            f"The platform is set for {limit} active accounts and {active} are in use. "
+            "Raise the limit under Settings (capacity targets) or disable an account first.",
+            code="CAPACITY_REACHED",
+            status_code=409,
+            details=[{"limit": limit, "active": active, "adding": adding}],
+        )
+
+
 def create_user(
     db: Session,
     settings: Settings,
@@ -100,6 +121,7 @@ def create_user(
     email = clean_email(email)
     if db.scalar(select(User.id).where(User.email == email)):
         raise AppError("A user with this email already exists", code="EMAIL_TAKEN", status_code=409)
+    ensure_staff_capacity(db)
     role_records = _roles_by_code(db, roles)
     user = User(id=uuid.uuid4(), email=email, display_name=display_name.strip(), status="ACTIVE")
     user.roles = role_records
@@ -167,6 +189,8 @@ def set_status(
             "You cannot disable your own account", code="CANNOT_MODIFY_SELF", status_code=409
         )
     new_status = "ACTIVE" if active else "DISABLED"
+    if active and user.status != "ACTIVE":
+        ensure_staff_capacity(db)
     if user.status != new_status:
         before = user.status
         user.status = new_status
@@ -335,6 +359,7 @@ def confirm_import(
     ip: str | None,
 ) -> tuple[int, list[ImportRow], int]:
     rows = parse_import(db, text)
+    ensure_staff_capacity(db, adding=sum(1 for r in rows if r.valid))  # all or nothing
     created = 0
     invites_failed = 0
     for row in rows:

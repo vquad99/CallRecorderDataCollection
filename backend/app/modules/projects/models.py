@@ -76,14 +76,15 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
 
+    # Loaded when a page reads them, not with every project lookup (O5).
     languages: Mapped[list[ProjectLanguage]] = relationship(
-        lazy="selectin", cascade="all, delete-orphan", order_by="ProjectLanguage.language_code"
+        lazy="select", cascade="all, delete-orphan", order_by="ProjectLanguage.language_code"
     )
     audio_rules: Mapped[list[ProjectAudioRule]] = relationship(
-        lazy="selectin", cascade="all, delete-orphan", order_by="ProjectAudioRule.mode"
+        lazy="select", cascade="all, delete-orphan", order_by="ProjectAudioRule.mode"
     )
     retention_rules: Mapped[list[ProjectRetentionRule]] = relationship(
-        lazy="selectin", cascade="all, delete-orphan", order_by="ProjectRetentionRule.asset_kind"
+        lazy="select", cascade="all, delete-orphan", order_by="ProjectRetentionRule.asset_kind"
     )
 
 

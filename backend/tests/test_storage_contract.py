@@ -157,6 +157,16 @@ def test_every_key_lives_under_the_configured_prefix(store: Store) -> None:
     assert keys == [f"{store.prefix}k/1.bin"]
 
 
+def test_listing_shows_keys_without_the_prefix_with_size_and_time(store: Store) -> None:
+    for name, data in (("l/a.bin", b"aa"), ("l/b/c.bin", b"ccc")):
+        store.storage.put_bytes(
+            name, data, content_type="application/octet-stream", sha256=_sha(data)
+        )
+    listed = {o.key: o.size for o in store.storage.list_objects("l/")}
+    assert listed == {"l/a.bin": 2, "l/b/c.bin": 3}
+    assert all(o.modified.tzinfo is not None for o in store.storage.list_objects("l/"))
+
+
 def test_overwrite_replaces_content_and_checksum(store: Store) -> None:
     for content in (b"first", b"second version"):
         store.storage.put_bytes(

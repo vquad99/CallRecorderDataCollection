@@ -85,6 +85,22 @@ def moderator_assigned(
     )
 
 
+def assigned_participants(db: Session, user_id: uuid.UUID, project_id: uuid.UUID) -> set[uuid.UUID]:
+    """Everyone on this moderator's open tasks in the project, in one query (for lists, O5)."""
+    rows = db.execute(
+        select(Task.participant_a_id, Task.participant_b_id)
+        .join(TaskAssignment, TaskAssignment.task_id == Task.id)
+        .where(
+            TaskAssignment.user_id == user_id,
+            TaskAssignment.role_code == "MODERATOR",
+            TaskAssignment.active.is_(True),
+            Task.project_id == project_id,
+            Task.status.not_in(TERMINAL),
+        )
+    ).all()
+    return {pid for row in rows for pid in row}
+
+
 @dataclass(frozen=True)
 class Visibility:
     profile: bool
@@ -93,12 +109,21 @@ class Visibility:
 
 
 def visibility(
-    db: Session, principal: Principal, project: Project, participant_id: uuid.UUID
+    db: Session,
+    principal: Principal,
+    project: Project,
+    participant_id: uuid.UUID,
+    assigned_ids: set[uuid.UUID] | None = None,
 ) -> Visibility:
+    """`assigned_ids` (from assigned_participants) answers the moderator question for a whole
+    list at once; without it, one query answers it for this person."""
     manager = principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id)
-    assigned = (not manager) and moderator_assigned(
-        db, principal.user_id, participant_id, project.id
-    )
+    if manager:
+        assigned = False
+    elif assigned_ids is not None:
+        assigned = participant_id in assigned_ids
+    else:
+        assigned = moderator_assigned(db, principal.user_id, participant_id, project.id)
     profile = manager or assigned
     contact = principal.can_in_project(Perm.PARTICIPANTS_CONTACT, project.id) and (
         manager or (assigned and project.phone_visibility_policy == "ASSIGNED_MODERATOR")

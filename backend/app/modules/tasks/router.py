@@ -126,10 +126,13 @@ def list_tasks(
     status: Status | None = None,
     mode: Mode | None = None,
     mine: bool = False,
+    search: Annotated[str | None, Query(max_length=40)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> TaskPage:
-    f = service.TaskFilter(project_id=project_id, status=status, mode=mode, mine=mine)
+    f = service.TaskFilter(
+        project_id=project_id, status=status, mode=mode, mine=mine, search=search
+    )
     items, total = service.list_tasks(db, principal, f, page, page_size)
     return TaskPage(items=[summary(t) for t in items], total=total, page=page, page_size=page_size)
 

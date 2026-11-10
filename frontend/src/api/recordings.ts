@@ -105,10 +105,12 @@ export async function putChunk(
     const payload = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };
     } | null;
+    const retryAfter = Number(response.headers.get("Retry-After"));
     throw new ApiError({
       status: response.status,
       code: payload?.error?.code ?? `HTTP_${response.status}`,
       message: payload?.error?.message ?? "Upload failed",
+      retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     });
   }
 }

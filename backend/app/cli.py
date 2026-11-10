@@ -10,6 +10,8 @@ import argparse
 import os
 import sys
 import uuid
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 
@@ -117,6 +119,132 @@ def run_recovery(settings: Settings) -> int:
     return count
 
 
+def _storage_and_db(settings: Settings) -> tuple[Any, Any, Any]:
+    from app.core.storage import build_storage
+
+    storage = build_storage(settings)
+    if storage is None:
+        raise SeedRefused("storage is not configured")
+    engine = create_db_engine(settings)
+    return storage, engine, make_session_factory(engine)()
+
+
+def run_verify_assets(settings: Settings, deep: int) -> int:
+    from app.modules.recordings.service import verify_assets
+
+    storage, engine, db = _storage_and_db(settings)
+    with db:
+        checked, problems = verify_assets(
+            db, storage, deep=deep, work_dir=Path(settings.media_work_dir)
+        )
+    engine.dispose()
+    print(
+        f"verify-assets: {checked} file(s) checked, {deep} downloaded again, "
+        f"{len(problems)} problem(s)"
+    )
+    for p in problems:
+        print(f"  {p.storage_key}: {p.problem}")
+    return 1 if problems else 0
+
+
+def run_storage_orphans(settings: Settings, hours: int, delete: bool) -> int:
+    from datetime import timedelta
+
+    from app.modules.recordings.service import storage_orphans
+
+    storage, engine, db = _storage_and_db(settings)
+    with db:
+        orphans = storage_orphans(db, storage, timedelta(hours=hours))
+    engine.dispose()
+    size = sum(o.size for o in orphans)
+    for o in orphans:
+        print(f"  {o.key} ({o.size} bytes, {o.modified:%Y-%m-%d %H:%M})")
+        if delete:
+            storage.delete(o.key)
+    verb = "deleted" if delete else "found (run with --delete to remove)"
+    print(f"storage-orphans: {len(orphans)} file(s), {size} bytes, {verb}")
+    return 0
+
+
+BACKUP_PREFIX = "backups/db/"
+
+
+def _storage(settings: Settings) -> Any:
+    from app.core.storage import build_storage
+
+    storage = build_storage(settings)
+    if storage is None:
+        raise SeedRefused("storage is not configured")
+    return storage
+
+
+def run_backup_upload(settings: Settings, name: str | None, source: Any) -> str:
+    """Store a database dump read from `source` (stdin) with its SHA-256 (O9)."""
+    import hashlib
+    import tempfile
+    from datetime import UTC, datetime
+
+    storage = _storage(settings)
+    key = BACKUP_PREFIX + (name or f"ccp-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.dump")
+    digest = hashlib.sha256()
+    work = Path(settings.media_work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=work) as tmp:
+        for part in iter(lambda: source.read(1 << 20), b""):
+            digest.update(part)
+            tmp.write(part)
+        tmp.flush()
+        size = tmp.tell()
+        if size == 0:
+            raise SeedRefused("the backup is empty")
+        storage.put_file(
+            key, Path(tmp.name), content_type="application/octet-stream", sha256=digest.hexdigest()
+        )
+    stored = storage.head(key)
+    if stored is None or (stored.size, stored.sha256) != (size, digest.hexdigest()):
+        raise SeedRefused("the backup did not arrive intact in storage")
+    return f"{key} {size} bytes sha256 {digest.hexdigest()}"
+
+
+def run_backup_download(settings: Settings, key: str, sink: Any) -> None:
+    """Write a stored backup to `sink` (stdout) after checking it against its SHA-256 (O9)."""
+    import hashlib
+    import tempfile
+
+    storage = _storage(settings)
+    info = storage.head(key)
+    if info is None:
+        raise SeedRefused(f"no backup at {key}")
+    work = Path(settings.media_work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=work) as tmp:
+        path = Path(tmp) / "backup.dump"
+        storage.get_to_file(key, path)
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for part in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(part)
+        if digest.hexdigest() != info.sha256:
+            raise SeedRefused("the stored backup does not match its checksum")
+        with path.open("rb") as handle:
+            for part in iter(lambda: handle.read(1 << 20), b""):
+                sink.write(part)
+    sink.flush()
+
+
+def run_backup_prune(settings: Settings, keep_days: int) -> list[str]:
+    """Delete backups older than `keep_days`; the newest backup is always kept (O9)."""
+    from datetime import UTC, datetime, timedelta
+
+    storage = _storage(settings)
+    backups = sorted(storage.list_objects(BACKUP_PREFIX), key=lambda o: o.modified)
+    cutoff = datetime.now(UTC) - timedelta(days=keep_days)
+    removed = [o.key for o in backups[:-1] if o.modified < cutoff]
+    for key in removed:
+        storage.delete(key)
+    return removed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -128,6 +256,22 @@ def main(argv: list[str] | None = None) -> int:
         "recover-recordings",
         help="process again every recording left half-done by a stopped process",
     )
+    verify = sub.add_parser(
+        "verify-assets", help="check every stored file's presence, size and checksum label"
+    )
+    verify.add_argument("--deep", type=int, default=0, help="also download and re-hash N files")
+    orphans = sub.add_parser(
+        "storage-orphans", help="list (or delete) stored files that no record points to"
+    )
+    orphans.add_argument("--older-than-hours", type=int, default=24)
+    orphans.add_argument("--delete", action="store_true")
+    up = sub.add_parser("backup-upload", help="store a database dump read from standard input")
+    up.add_argument("--name", default=None)
+    down = sub.add_parser("backup-download", help="write a stored backup to standard output")
+    down.add_argument("key")
+    sub.add_parser("backup-list", help="list stored database backups")
+    prune = sub.add_parser("backup-prune", help="delete stored backups older than N days")
+    prune.add_argument("--keep-days", type=int, required=True)
     args = parser.parse_args(argv)
     try:
         settings = load_settings()
@@ -138,6 +282,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"retention: {run_retention(settings)} file(s) deleted")
         elif args.command == "recover-recordings":
             print(f"recover-recordings: {run_recovery(settings)} recording(s) handed to processing")
+        elif args.command == "verify-assets":
+            return run_verify_assets(settings, args.deep)
+        elif args.command == "storage-orphans":
+            return run_storage_orphans(settings, args.older_than_hours, args.delete)
+        elif args.command == "backup-upload":
+            print(f"backup-upload: {run_backup_upload(settings, args.name, sys.stdin.buffer)}")
+        elif args.command == "backup-download":
+            run_backup_download(settings, args.key, sys.stdout.buffer)
+        elif args.command == "backup-list":
+            for o in sorted(
+                _storage(settings).list_objects(BACKUP_PREFIX), key=lambda o: o.modified
+            ):
+                print(f"{o.key} {o.size} {o.modified:%Y-%m-%dT%H:%M:%SZ}")
+        elif args.command == "backup-prune":
+            removed = run_backup_prune(settings, args.keep_days)
+            print(f"backup-prune: {len(removed)} backup(s) deleted")
     except (ConfigError, SeedRefused) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

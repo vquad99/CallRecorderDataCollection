@@ -54,7 +54,8 @@ describe("project detail", () => {
     expect(
       await screen.findByRole("heading", { name: "HINDI · Hindi conversations" }),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Change status" }));
+    // The Overview tab loads on first visit (O11): wait for it, not just the page heading.
+    await userEvent.click(await screen.findByRole("button", { name: "Change status" }));
     expect(await screen.findByText("Status changed.")).toBeInTheDocument();
     expect(screen.getByText("This project accepts new work.")).toBeInTheDocument();
     expect(calls.find((c) => c.path === "/api/v1/projects/p1/status")?.body).toEqual({
@@ -67,8 +68,8 @@ describe("project detail", () => {
     fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
     renderAt("/projects/p1");
     await screen.findByRole("heading", { name: "HINDI · Hindi conversations" });
+    expect(await screen.findByLabelText(/^Name/)).toBeDisabled(); // the tab has loaded
     expect(screen.queryByRole("button", { name: "Change status" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/^Name/)).toBeDisabled();
   });
 
   it("renders each tab", async () => {
