@@ -11,3 +11,9 @@ copy with a bogus plan and an unknown key gave 3 errors. render.yaml re-checked:
 production shape (web, private API, worker, private Key Value, private Postgres). Validated with the
 Draft 2020-12 validator against the saved schema: 0 errors; a copy with bogus plans and an unknown
 key gave 4 errors. backend/tests/test_render_blueprint.py: 11 passed.
+
+2026-11-10 23:25 IST, live check after the D-081 sync (Render API, read-only plus one one-off job):
+app reports environment=production; ccp-worker log: "Connected to redis://red-..." and "celery@... ready",
+task recordings.process registered; a one-off job on ccp-api ran `celery -A app.worker inspect ping`:
+"celery@srv-dbpkv2uc6qcc73db8qig-...: OK pong", "1 node online" (job succeeded). ccp-api log since the
+switch: 0 WARNING/ERROR lines; prepare-deploy migrated, admin exists.
