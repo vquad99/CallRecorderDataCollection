@@ -16,7 +16,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
-| Participants | PART | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
+| Participants | PART | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
 | Face-to-face recording | FTF | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Edge and by-ear playback checks open |
@@ -39,7 +39,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Product scope | PROD | 4 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Contract and work rules | GEN | 14 | Yes | No | No | No | Yes | No | IN PROGRESS | Ongoing every phase |
 | Build process and tracking | PROC | 9 | Yes | No | No | No | Yes | Yes | IN PROGRESS | Ongoing every phase |
-| **Total** | | **328** | | | | | | | | |
+| **Total** | | **331** | | | | | | | | |
 
 ## Phases and gates
 
@@ -208,6 +208,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PART-010 | Only necessary participant details stored. | 3 | [x] | [x] | [x] | n/a | [x] TM-PART-01 | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | PART-011 | Unauthorized users cannot export participant contact details. | 3 | [x] | [x] | [x] | [x] TA-PART-07 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PART-012 | Participant correction workflow. | 3 | [x] | [x] | [x] | [x] TA-PART-08 | n/a | docs/evidence/phase3/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-013 | Participant personal page (owner 2026-11-10): staff create a private, expiring, replaceable link for one participant in one project; without an account the participant sees only their own participant code, their own sessions (date, type, length, state) and accepted recording time - no names, phone numbers, other speaker or audio; an invalid, expired, replaced or revoked link answers like one that never existed; the link's secret is stored hashed and never travels in an address. | 7 | [x] | [x] | [x] | [x] TA-PART-09 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-014 | Consent form (owner 2026-11-10): each project has a consent form text with a version; the participant reads it on their personal page and answers agree / do not agree, and may withdraw later; every answer is stored with time and version as the participant's own (no staff member), audited, and shown to staff in the consent history. | 7 | [x] | [x] | [x] | [x] TA-PART-10 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-015 | Consent record with every recording (owner 2026-11-10): each recording has a printable consent record - both participants by code, the consent recorded for the session, each participant's own answers with the form text they answered, version and time, and the checksums of the audio files it belongs to - and it downloads together with the recording, under the same download right. | 7 | [x] | [x] | [x] | [x] TA-PART-11 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | 3 | [x] | [x] | [x] | [x] TA-TASK-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> APPROVED (D-062: the transcription and transcript QC states were removed). | 3 | [x] | [x] | [x] | [x] TA-TASK-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | 3 | [x] | [x] | [x] | [x] TA-TASK-03, TA-FND-20 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt; docs/evidence/option_d/journeys.txt | VERIFIED | - |
@@ -711,4 +714,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
   managers; chart colours validated for colour-blind readers.
 - Independent security review: 13 findings, 11 fixed with tests (D-064), 2 open owner decisions
   (B-14, B-15). Kathbath / AI4Bharat research saved (docs/integrations/kathbath/RESEARCH.md).
+
+### Session 13 - 2026-11-10 - Product design second pass, participant page, consent form
+
+- Design (D-066): navigation rail, illustrated sign-in, icon tiles, steppers, dashboard graphics;
+  seven browser journeys pass in Chromium and Edge (CI run for e4190dd green).
+- Participant personal page and consent form (D-067, PART-013/014): private link without an
+  account, own sessions only, agree / do not agree / withdraw, staff see the answers. Migration
+  0009. Tests: backend `tests/test_portal.py` (6), frontend `portal.test.tsx` (3), journey
+  `participant.spec.ts`; evidence docs/evidence/participant_page/journeys.txt.
+- Consent record with every recording (D-068, PART-015): the task page lists finished recordings and
+  "Download with consent form" saves the delivery file and a printable consent record together;
+  the participant's answer keeps the form text they answered (migration 0010).
 

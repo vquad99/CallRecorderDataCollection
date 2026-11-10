@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -15,7 +15,7 @@ from app.core.permissions import Perm
 from app.core.storage import require_storage
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.auth.router import AppSettings
-from app.modules.recordings import service
+from app.modules.recordings import consent_form, service
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import dispatch_processing
 from app.modules.tasks import service as tasks
@@ -222,6 +222,19 @@ class UrlBody(BaseModel):
 class UrlOut(BaseModel):
     url: str
     expires_in: int
+
+
+@router.get("/recordings/{recording_id}/consent-form")
+def consent_form_file(
+    recording_id: uuid.UUID, request: Request, principal: CurrentPrincipal, db: DbSession
+) -> Response:
+    """The consent record that goes with this recording, as a printable file (D-068)."""
+    name, html = consent_form.build(db, principal, recording_id, client_ip(request))
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.post("/assets/{asset_id}/url", response_model=UrlOut)

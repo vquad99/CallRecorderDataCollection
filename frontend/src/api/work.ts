@@ -31,7 +31,7 @@ export interface Consent {
   status: "GIVEN" | "REFUSED" | "WITHDRAWN";
   method: string;
   policy_version: string;
-  captured_by: string;
+  captured_by: string | null; // null: the participant answered the form themselves
   note: string;
   created_at: string;
 }
@@ -160,3 +160,8 @@ export const getTimeline = (id: string) =>
 
 export const listAudit = (params: Params) =>
   apiRequest<Page<AuditEntry>>(`/api/v1/audit-logs${query(params)}`);
+
+export const createPortalLink = (projectId: string, participantId: string) =>
+  apiRequest<{ url: string; expires_at: string }>(`${pp(projectId)}/${participantId}/portal-link`, {
+    method: "POST",
+  });

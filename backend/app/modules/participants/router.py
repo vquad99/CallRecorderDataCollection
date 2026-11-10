@@ -227,7 +227,7 @@ class ConsentOut(BaseModel):
     status: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
     method: str
     policy_version: str
-    captured_by: uuid.UUID
+    captured_by: uuid.UUID | None  # empty: the participant answered the form themselves
     note: str
     created_at: datetime
 

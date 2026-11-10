@@ -41,6 +41,7 @@ export interface Project extends ProjectSummary {
   description: string;
   phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
   consent_policy_version: string;
+  consent_text: string;
   status_reason: string | null;
   status_changed_at: string | null;
   languages: Language[];
@@ -58,6 +59,7 @@ export interface ProjectFields {
   target_face_to_face_hours_per_day: string;
   phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
   consent_policy_version: string;
+  consent_text: string;
 }
 
 export interface Member {

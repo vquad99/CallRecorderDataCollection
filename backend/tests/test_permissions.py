@@ -34,6 +34,9 @@ PUBLIC = {
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/password/forgot"),
     ("POST", "/api/v1/auth/password/reset"),
+    # Participant personal page: the link's secret is the credential (tests/test_portal.py).
+    ("GET", "/api/v1/portal/me"),
+    ("POST", "/api/v1/portal/consent"),
 }
 SELF_SERVICE_PREFIXES = ("/api/v1/auth/",)
 

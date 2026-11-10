@@ -46,3 +46,45 @@ BLOCKED and alternatives are presented.
 ## Result
 
 No result. Telephony requirements TEL-001..038 are BLOCKED (BUILD_STATUS.md).
+
+## Desk research, 2026-11-10 (official pages only; nothing tested yet)
+
+Twelve providers were read against the telephony flow (call A, add B, moderator joins and leaves,
+record, fetch) on 2026-11-10. Every claim below is from the provider's own documentation or pricing
+page on that date; NOT VERIFIED = not found on an official page. No account was opened and no call
+was placed, so nothing here is proven (GEN-005): Gate 5 still needs a working test.
+
+Findings that hold for every provider:
+
+- Phone-network audio is narrowband 8 kHz (G.711). A 16 kHz telephony WAV is an up-sample (B-02).
+- No provider documents a ready "A left, B right" file for a three-party conference. Each
+  participant's leg is recorded separately and the stereo file is built by this platform.
+
+| Provider | Conference by API; moderator can leave | Each speaker separately | Legal India-to-India, Indian caller ID | Signed webhooks | Self-serve trial | Published cost, 30-min conversation |
+|---|---|---|---|---|---|---|
+| Plivo | Yes (`end_mpc_on_exit` false) | Participant-level recording; isolation and sample rate NOT VERIFIED | Yes: India-registered business, KYC, Plivo Indian number; no browser leg in a phone conference | HMAC-SHA256 | NOT VERIFIED | about Rs 24 (Rs 0.38/min) |
+| Telnyx | Yes | Per-leg recording; rate NOT VERIFIED | Yes since 2026-09-17, four districts; caller-ID rules not stated | Ed25519 | Yes | India rate not published |
+| Vonage | Yes | Yes, one channel per leg, 16 kHz 16-bit WAV | No: foreign caller ID advised | JWT | NOT VERIFIED | NOT VERIFIED |
+| Twilio | Yes | Per-leg mono files | No: "only from international (non-Indian) numbers" | HMAC-SHA1 | Yes | about USD 3.25 |
+| Infobip | Yes | One WAV per participant; rate NOT VERIFIED | NOT VERIFIED | NOT VERIFIED | Yes | India rate not published |
+| Sinch | Yes; moderator leaving NOT VERIFIED | No (mix only) | NOT VERIFIED | HMAC-SHA256 | Yes | NOT VERIFIED |
+| Exotel | Partial (Legs API; mute / leave NOT VERIFIED) | Dual-channel for a two-party call only | Yes after KYC; recordings stored in India | Not documented | Yes (7 days) | per-minute rate not published |
+| Ozonetel KOOKOO | Yes (room continues when one leaves) | No (one mixed 8 kHz MP3) | Yes on a paid account; 50 calls/day until raised | Not documented | Yes | NOT VERIFIED |
+| Knowlarity | No conference API | No | Yes | Not documented | Unclear | about Rs 25-38 |
+| Tata Smartflo / Kaleyra | No conference API | No | Yes | Not documented | No (sales) | NOT VERIFIED |
+| Airtel IQ | NOT VERIFIED (no public API reference) | NOT VERIFIED | Yes | NOT VERIFIED | No (sales) | NOT VERIFIED |
+| MyOperator | No conference API | No | Yes | Basic / API-key auth | Plan-gated | inside the plan |
+
+Shortlist for a proof of capability (Gate 5): **Plivo** first (only documented, priced, compliant
+domestic route with a full conference API and signed webhooks), **Exotel** second (Indian storage
+and a trial, but separate speakers are documented for two-party calls only). What the proof must
+show for Plivo: that participant-level recording holds one speaker only, its real sample rate and
+format, that the conference survives the moderator hanging up, and the concurrency an Enterprise
+plan gives (default 50 legs; 50 conferences need 100 to 150).
+
+Sources: plivo.com/docs (multiparty-calls, india-calling, india-concurrency, signature-validation),
+plivo.com/voice/pricing/in; twilio.com/en-us/guidelines/in/voice, twilio.com/docs/voice/api;
+developer.vonage.com (recording, ncco-reference); developers.telnyx.com, telnyx.com/release-notes/
+india-mobile-numbers; developers.sinch.com/docs/voice; infobip.com/docs/voice-and-video;
+developer.exotel.com (legs, call-recording, regions); cpaas.ozonetel.com; developer.knowlarity.com;
+docs.smartflo.tatatelebusiness.com; airtel.in/business/b2b/voice-api; myoperator.com/pricing.

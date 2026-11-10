@@ -15,6 +15,7 @@ export const PROJECT = {
   description: "",
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
+  consent_text: "",
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -131,6 +132,27 @@ export const SETTINGS = [
 ];
 
 /** Every permission the interface checks; tests narrow this per role. */
+export const PORTAL = {
+  participant_code: "P000001",
+  project_name: "Hindi conversations",
+  language_code: "hi",
+  consent_policy_version: "2",
+  consent_text: "I agree that my voice is recorded.",
+  consent_status: null,
+  consent_at: null,
+  sessions: [
+    {
+      task_code: "T000001",
+      mode: "FACE_TO_FACE",
+      day: "2026-11-01T10:00:00Z",
+      state: "Accepted",
+      minutes: 22.5,
+    },
+  ],
+  accepted_minutes: 22.5,
+  link_expires_at: "2026-12-10T00:00:00Z",
+};
+
 export const DASHBOARD = {
   view: "manager",
   timezone: "Asia/Kolkata",
@@ -220,6 +242,7 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects/p1/participants/a1/consent": ok([]),
     "GET /api/v1/tasks": ok(page([TASK])),
     "GET /api/v1/dashboard": ok(DASHBOARD),
+    "GET /api/v1/portal/me": ok(PORTAL),
     "GET /api/v1/tasks/t1": ok(TASK),
     "GET /api/v1/tasks/t1/timeline": ok([
       { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },

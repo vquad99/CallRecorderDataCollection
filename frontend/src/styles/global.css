@@ -1,26 +1,27 @@
 /*
  * Conversation Collection - product design system.
- * Dark navigation rail, white top bar with page context, elevated cards, coloured icon tiles,
+ * Palette from the owner's reference (2026-11-10): terracotta, white and grey.
+ * Terracotta navigation rail, white top bar with page context, elevated cards, coloured icon tiles,
  * status chips, steppers and charts. Type: IBM Plex Sans. Icons: Phosphor. Light and dark follow
  * the system setting. Tokens first, then components.
  */
 
 :root {
-  --bg: #f4f6fb;
+  --bg: #f7f5f3;
   --surface: #ffffff;
-  --surface-2: #f8f9fd;
-  --surface-hover: #f1f4fa;
-  --text: #101828;
-  --text-2: #344054;
-  --muted: #667085;
-  --border: #e4e7ef;
-  --border-strong: #cfd4e0;
+  --surface-2: #faf8f6;
+  --surface-hover: #f4f0ed;
+  --text: #2b2b2b;
+  --text-2: #4a4a4a;
+  --muted: #737373;
+  --border: #e8e3df;
+  --border-strong: #d5cec8;
 
-  --primary: #2457f5;
-  --primary-hover: #1a45d1;
-  --primary-soft: #eaf0ff;
+  --primary: #9a5b49;
+  --primary-hover: #814a3a;
+  --primary-soft: #f6ece8;
   --primary-text: #ffffff;
-  --focus-ring: 0 0 0 3px rgb(36 87 245 / 0.22);
+  --focus-ring: 0 0 0 3px rgb(154 91 73 / 0.22);
 
   --ok: #12805c;
   --ok-soft: #e3f6ee;
@@ -28,15 +29,15 @@
   --warn-soft: #fdf1dc;
   --danger: #c0262d;
   --danger-soft: #fdeaeb;
-  --info: #2457f5;
-  --info-soft: #eaf0ff;
+  --info: #9a5b49;
+  --info-soft: #f6ece8;
   --progress: #0b7285;
   --progress-soft: #e0f4f7;
   --neutral: #475467;
   --neutral-soft: #eef0f5;
 
-  --blue: #2457f5;
-  --blue-soft: #e8eeff;
+  --blue: #9a5b49;
+  --blue-soft: #f5eae6;
   --teal: #0c8f86;
   --teal-soft: #dcf5f2;
   --violet: #7044e0;
@@ -50,13 +51,13 @@
   --slate: #475467;
   --slate-soft: #eaedf3;
 
-  --nav-bg: #0b1222;
-  --nav-bg-2: #111b33;
-  --nav-text: #b4bfd3;
-  --nav-muted: #6f7c96;
-  --nav-line: rgb(255 255 255 / 0.08);
-  --brand-ink: #2457f5;
-  --accent: #8fb0ff;
+  --nav-bg: #a2634f;
+  --nav-bg-2: #935644;
+  --nav-text: #fdeee9;
+  --nav-muted: #ecd0c7;
+  --nav-line: rgb(255 255 255 / 0.16);
+  --brand-ink: #9a5b49;
+  --accent: #ffffff;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -85,21 +86,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0a0f1a;
-    --surface: #131a28;
-    --surface-2: #101622;
-    --surface-hover: #1a2233;
-    --text: #e7eaf1;
-    --text-2: #c5cbd8;
-    --muted: #8e98ab;
-    --border: #232c3d;
-    --border-strong: #344054;
+    --bg: #171311;
+    --surface: #201b18;
+    --surface-2: #1c1715;
+    --surface-hover: #2a2320;
+    --text: #ece6e2;
+    --text-2: #cfc6c0;
+    --muted: #9c918a;
+    --border: #342c28;
+    --border-strong: #463c37;
 
-    --primary: #6c93ff;
-    --primary-hover: #8aa9ff;
-    --primary-soft: #17233f;
-    --primary-text: #0a0f1a;
-    --focus-ring: 0 0 0 3px rgb(108 147 255 / 0.3);
+    --primary: #e38d79;
+    --primary-hover: #eda594;
+    --primary-soft: #3a1d17;
+    --primary-text: #1a0f0c;
+    --focus-ring: 0 0 0 3px rgb(227 141 121 / 0.3);
 
     --ok: #4cc79a;
     --ok-soft: #0f2a21;
@@ -107,15 +108,15 @@
     --warn-soft: #2b2110;
     --danger: #f2767c;
     --danger-soft: #2e1518;
-    --info: #6c93ff;
-    --info-soft: #17233f;
+    --info: #e38d79;
+    --info-soft: #3a1d17;
     --progress: #55bfd2;
     --progress-soft: #0f272c;
     --neutral: #a9b2c3;
     --neutral-soft: #1d2535;
 
-    --blue: #6c93ff;
-    --blue-soft: #17233f;
+    --blue: #e38d79;
+    --blue-soft: #3a1d17;
     --teal: #47c4b9;
     --teal-soft: #0e2a28;
     --violet: #a78bfa;
@@ -129,8 +130,8 @@
     --slate: #a9b2c3;
     --slate-soft: #1d2535;
 
-    --nav-bg: #070b14;
-    --nav-bg-2: #0b1222;
+    --nav-bg: #6b2a1e;
+    --nav-bg-2: #55211a;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
     color-scheme: dark;
@@ -330,6 +331,9 @@ summary:focus-visible {
 }
 .sidenav__brand .brand {
   color: #fff;
+}
+.sidenav__brand .brand__mark rect {
+  fill: rgb(255 255 255 / 0.2);
 }
 .sidenav__nav {
   flex: 1;
@@ -596,10 +600,10 @@ summary:focus-visible {
   overflow: hidden;
   padding: 48px 56px;
   background:
-    radial-gradient(60% 50% at 85% 10%, rgb(36 87 245 / 0.45), transparent 70%),
-    radial-gradient(50% 45% at 10% 95%, rgb(12 143 134 / 0.35), transparent 70%),
-    linear-gradient(160deg, #0b1222 0%, #111b33 100%);
-  color: #c9d3e6;
+    radial-gradient(60% 50% at 85% 10%, rgb(255 255 255 / 0.14), transparent 70%),
+    radial-gradient(50% 45% at 10% 95%, rgb(0 0 0 / 0.14), transparent 70%),
+    linear-gradient(160deg, #a66651 0%, #915442 100%);
+  color: #fdeee9;
 }
 .public__panel::before {
   position: absolute;
@@ -694,7 +698,7 @@ summary:focus-visible {
   stroke: rgb(255 255 255 / 0.14);
 }
 .art--login .art__card--raised {
-  fill: rgb(20 31 58 / 0.92);
+  fill: rgb(120 66 51 / 0.92);
 }
 .art--login .art__line {
   fill: rgb(255 255 255 / 0.5);
@@ -703,26 +707,26 @@ summary:focus-visible {
   fill: rgb(255 255 255 / 0.22);
 }
 .art--login .art__a {
-  fill: #7ea2ff;
+  fill: #ffffff;
 }
 .art--login .art__b {
-  fill: #4fd1c5;
+  fill: #f6c3b6;
 }
 .art--login .art__chip {
-  fill: rgb(79 209 197 / 0.18);
+  fill: rgb(255 255 255 / 0.18);
 }
 .art--login .art__dot {
-  fill: #4fd1c5;
+  fill: #ffffff;
 }
 .art--login .art__trend {
   fill: none;
-  stroke: #7ea2ff;
+  stroke: #ffffff;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .art--login .art__area {
-  fill: rgb(126 162 255 / 0.14);
+  fill: rgb(255 255 255 / 0.14);
 }
 .art--login .art__ring {
   fill: none;
@@ -731,16 +735,16 @@ summary:focus-visible {
 }
 .art--login .art__ring-fill {
   fill: none;
-  stroke: #4fd1c5;
+  stroke: #ffffff;
   stroke-width: 7;
   stroke-linecap: round;
 }
 .art--login .art__badge {
-  fill: #2457f5;
+  fill: #ffffff;
 }
 .art--login .art__tick {
   fill: none;
-  stroke: #fff;
+  stroke: #9a5b49;
   stroke-width: 6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -900,7 +904,7 @@ fieldset.card legend,
   color: var(--primary-text);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.16),
-    0 1px 2px rgb(36 87 245 / 0.35);
+    0 1px 2px rgb(154 91 73 / 0.35);
 }
 .button--primary:hover:not(:disabled) {
   background: var(--primary-hover);

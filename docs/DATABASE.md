@@ -115,3 +115,11 @@ Not in those figures, needed by this design, sized by the retention decision (B-
 
 Keeping full browser originals for the whole retention period roughly triples storage. Backups,
 replicas and export bundles are extra.
+
+## Participant personal page (migration 0009, D-067)
+
+- `participant_portal_links`: participant_id, project_id, token_hash (unique), expires_at,
+  revoked_at, last_used_at, created_by.
+- `projects.consent_text`: the consent form participants answer.
+- `consent_records.captured_by` may be empty: the participant's own answer (method DIGITAL).
+

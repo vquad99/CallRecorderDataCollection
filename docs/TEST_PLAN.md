@@ -230,6 +230,9 @@ output saved to evidence.
 | TA-PART-06 | Automated | 3 | Deletion workflow follows retention policy and is audited. | PART-009, SEC-009 |
 | TA-PART-07 | Automated | 3 | Contact export 403 for unauthorized roles. | PART-011 |
 | TA-PART-08 | Automated | 3 | Correction workflow updates a participant with audit trail. | PART-012 |
+| TA-PART-09 | Automated + browser | 7 (D-067) | `tests/test_portal.py`, `portal.test.tsx`, `journeys/participant.spec.ts`: a personal link shows only that participant's sessions and no names, phone, other speaker or storage data; wrong, expired, replaced and revoked links answer identically; only a hash is stored; the secret never appears in a request address; only people who manage participants create links. | PART-013 |
+| TA-PART-10 | Automated + browser | 7 (D-067) | Same files: the participant agrees only after ticking that they read the form, can refuse, can withdraw only after agreeing; answers are stored as the participant's own (DIGITAL, no staff member) and staff see them in the consent history; no form text = no answer; no CSRF token = no change. | PART-014, PART-006 |
+| TA-PART-11 | Automated | 7 (D-068) | `tests/test_portal.py::test_the_consent_record_downloads_with_the_recording`, `recordings.test.tsx`: the consent record names both participants by code, holds the form text that was answered even after the project form changes, lists the audio checksums, needs the download right (a moderator gets 403), and the task page downloads it together with the delivery file. | PART-015 |
 | TM-PART-01 | Manual | 3 | Participant fields limited to what the project needs. | PART-010 |
 
 ### TASK - Module 5 - Task assignment and workflow

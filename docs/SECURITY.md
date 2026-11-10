@@ -124,6 +124,14 @@ Each fix has a test in `backend/tests/test_security_review.py` that fails withou
 accepted as is: a duplicate phone number across projects is refused (one person keeps one
 participant ID), which tells the caller the number exists; the refusal is audited.
 
+## 9b. Participant personal page (D-067)
+
+Public by design, so the limits are in the link: 256-bit secret, stored hashed, 30-day life,
+replaceable and revocable, carried after `#` in the address and in a header to the API (so it is
+in no access log), same answer for every link that does not work, rate limited per address, CSRF
+checked on the consent answer. The page returns no names, phone numbers, staff, other speakers,
+storage keys or audio. Creating and revoking links is audited.
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

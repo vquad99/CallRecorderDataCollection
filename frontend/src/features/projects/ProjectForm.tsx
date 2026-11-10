@@ -15,6 +15,7 @@ export const EMPTY_FIELDS: ProjectFields = {
   target_face_to_face_hours_per_day: "0",
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
+  consent_text: "",
 };
 
 export function ProjectForm({
@@ -118,6 +119,24 @@ export function ProjectForm({
           value={f.consent_policy_version}
           onChange={(e) => set("consent_policy_version", e.target.value)}
         />
+        <div className="field">
+          <label htmlFor="consent-text" className="field__label">
+            Consent form text
+          </label>
+          <p id="consent-text-hint" className="field__hint">
+            Participants read and answer this on their personal page. Change the version above when
+            you change the text.
+          </p>
+          <textarea
+            id="consent-text"
+            className="field__input"
+            rows={8}
+            maxLength={20000}
+            aria-describedby="consent-text-hint"
+            value={f.consent_text}
+            onChange={(e) => set("consent_text", e.target.value)}
+          />
+        </div>
         <Button type="submit" busy={busy}>
           {submitLabel}
         </Button>

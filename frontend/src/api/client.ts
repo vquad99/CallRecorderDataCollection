@@ -34,6 +34,8 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Non-2xx statuses whose JSON body is a normal answer (e.g. 503 from /health/ready). */
   acceptStatuses?: readonly number[];
+  /** Extra request headers (the participant page sends its link secret this way). */
+  headers?: Record<string, string>;
 }
 
 export const UNAUTHENTICATED_EVENT = "ccp:unauthenticated";
@@ -85,7 +87,7 @@ function errorFromBody(response: Response, body: unknown): ApiError {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET") {
     const csrf = readCookie(CSRF_COOKIE);

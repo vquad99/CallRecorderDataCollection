@@ -32,6 +32,11 @@ function Home(): ReactElement {
 }
 
 export const routes: RouteObject[] = [
+  // A participant's personal page: opened from a private link, outside the staff application.
+  {
+    path: "/portal",
+    element: page(() => import("../features/portal/PortalPage"), "PortalPage"),
+  },
   {
     path: "/",
     element: <AppShell />,

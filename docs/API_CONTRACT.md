@@ -184,3 +184,17 @@ them on) are read with the recording.
 - `POST /auth/password/forgot` answers 202 at once for every address; the lookup and email happen afterwards.
 - `GET /projects/{id}/members`: `email` is `null` unless the caller manages the team (`projects.members` in that project).
 - `GET /projects/{id}/member-candidates?search=`: a Super Admin may search part of a name or email; anyone else gets a match only for a full email address, and Super Admins are never offered.
+
+## Participant personal page (PART-013, PART-014, D-067)
+
+| Method | Path | Access |
+|---|---|---|
+| POST | /projects/{id}/participants/{id}/portal-link | `participants.manage` in the project. Answers `{url, expires_at}` once; ends any earlier link. |
+| DELETE | /projects/{id}/participants/{id}/portal-link | `participants.manage`. Ends the link. |
+| GET | /portal/me | Public; header `X-Portal-Token`. The participant's code, project name, consent form and answer, own sessions, accepted minutes. 404 `LINK_INVALID` for any link that does not work. |
+| POST | /portal/consent | Public; header `X-Portal-Token` and the CSRF token. Body `{decision: GIVEN / REFUSED / WITHDRAWN}`. 409 `NOTHING_TO_WITHDRAW`, 409 `CONSENT_FORM_MISSING`. |
+
+Projects carry `consent_text` (up to 20 000 characters) beside `consent_policy_version`. In consent
+history, `captured_by` is `null` for the participant's own answers.
+
+| GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |

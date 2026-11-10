@@ -4,7 +4,9 @@ import { Link, useParams } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { listMembers } from "../../api/projects";
+import * as rec from "../../api/recordings";
 import * as work from "../../api/work";
+import { useAuth } from "../../auth/AuthContext";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
@@ -269,6 +271,77 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
   );
 }
 
+const HAS_RECORDINGS = ["RECORDED", "AUDIO_QC", "APPROVED", "REJECTED", "RETURNED"];
+
+/** The task's finished recordings; a download brings the consent record with the audio. */
+function Recordings({ task }: { task: work.TaskDetail }) {
+  const { can } = useAuth();
+  const { state, reload } = useResource(() => rec.listRecordings(task.id), [task.id]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const ready = state.status === "loaded" ? state.data.filter((r) => r.state === "READY") : [];
+  return (
+    <section className="card" aria-labelledby="recordings-title">
+      <h2 id="recordings-title">Recordings</h2>
+      {state.status === "loading" ? <LoadingState /> : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+      {state.status === "loaded" && ready.length === 0 ? (
+        <p className="muted">No finished recording yet.</p>
+      ) : null}
+      {ready.length > 0 ? (
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col">Recording</th>
+              <th scope="col">Length</th>
+              <th scope="col">Files</th>
+              {can("recordings.download") ? <th scope="col">Download</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {ready.map((r, i) => (
+              <tr key={r.id}>
+                <td>
+                  <span className="cell-icon">
+                    <Icon name="waveform" size={15} />
+                    Recording {ready.length - i}
+                  </span>
+                </td>
+                <td>{Math.round(r.saved_seconds / 60)} min</td>
+                <td>{r.assets.length} audio + consent record</td>
+                {can("recordings.download") ? (
+                  <td>
+                    <Button
+                      variant="secondary"
+                      busy={busy === r.id}
+                      onClick={() => {
+                        setBusy(r.id);
+                        setError(null);
+                        setMessage(null);
+                        rec
+                          .downloadWithConsent(r, task.task_code)
+                          .then(() => setMessage("Recording and consent record downloaded."))
+                          .catch((err: unknown) => setError(toApiError(err)))
+                          .finally(() => setBusy(null));
+                      }}
+                    >
+                      <Icon name="upload" size={15} />
+                      Download with consent form
+                    </Button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </section>
+  );
+}
+
 export function TaskDetailPage() {
   const { taskId = "" } = useParams();
   const { state, reload, replace } = useResource(() => work.getTask(taskId), [taskId]);
@@ -346,6 +419,7 @@ export function TaskDetailPage() {
           </Link>
         </p>
       ) : null}
+      {HAS_RECORDINGS.includes(task.status) ? <Recordings task={task} /> : null}
       <Actions task={task} onChange={replace} />
       <Timeline
         taskId={task.id}

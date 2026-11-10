@@ -168,6 +168,11 @@ describe("links", () => {
     );
     renderAt(spec.url);
     await screen.findAllByText(spec.shows, {}, { timeout: 3000 });
+    if (spec.noLinks) {
+      // The participant page must not lead into the staff application.
+      expect(document.querySelectorAll("a[href]").length).toBe(0);
+      return;
+    }
     await waitFor(() => expect(document.querySelectorAll("a[href]").length).toBeGreaterThan(0));
     const dead = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))
       .map((a) => a.getAttribute("href") ?? "")

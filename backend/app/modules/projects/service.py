@@ -123,6 +123,7 @@ class ProjectInput:
     target_face_to_face_hours_per_day: Decimal
     phone_visibility_policy: str
     consent_policy_version: str
+    consent_text: str = ""
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -150,6 +151,7 @@ def _snapshot(p: Project) -> dict[str, object]:
         "target_face_to_face_hours_per_day": str(p.target_face_to_face_hours_per_day),
         "phone_visibility_policy": p.phone_visibility_policy,
         "consent_policy_version": p.consent_policy_version,
+        "consent_text": p.consent_text,
     }
 
 

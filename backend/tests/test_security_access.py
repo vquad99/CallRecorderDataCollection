@@ -361,6 +361,14 @@ CASES: list[Case] = [
         Perm.USERS_MANAGE,
         foreign=False,
     ),
+    # The consent record goes with a download, so it needs the download right (no moderator).
+    case(
+        "GET",
+        "/api/v1/recordings/{recording_id}/consent-form",
+        lambda e, s: f"/api/v1/recordings/{s.recording_done}/consent-form",
+        {SA, PA},
+        Perm.RECORDINGS_VIEW,
+    ),
     case(
         "PUT",
         "/api/v1/users/{user_id}/roles",
@@ -563,6 +571,20 @@ CASES: list[Case] = [
         {SA, PA},
         Perm.PARTICIPANTS_VIEW,
         lambda e, s, who: {"reason": "security test"},
+    ),
+    case(
+        "POST",
+        PP + "/portal-link",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link",
+        {SA, PA},
+        Perm.PARTICIPANTS_MANAGE,
+    ),
+    case(
+        "DELETE",
+        PP + "/portal-link",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link",
+        {SA, PA},
+        Perm.PARTICIPANTS_MANAGE,
     ),
     case(
         "GET",

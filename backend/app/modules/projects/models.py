@@ -70,6 +70,8 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     consent_policy_version: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="1"
     )
+    # The consent form participants read and answer on their personal page (D-067).
+    consent_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

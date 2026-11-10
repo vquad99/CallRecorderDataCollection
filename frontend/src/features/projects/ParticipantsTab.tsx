@@ -95,6 +95,7 @@ function ConsentList({ projectId, participantId }: { projectId: string; particip
         <li key={c.id}>
           {c.status} ({c.method.toLowerCase().replace(/_/g, " ")}), policy v{c.policy_version},{" "}
           {new Date(c.created_at).toLocaleString()}
+          {c.captured_by === null ? " · answered by the participant" : ""}
         </li>
       ))}
     </ul>
@@ -110,6 +111,7 @@ export function ParticipantsTab() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<work.Participant | null>(null);
   const [consentFor, setConsentFor] = useState<string | null>(null);
+  const [link, setLink] = useState<{ code: string; url: string; expires_at: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -253,6 +255,20 @@ export function ParticipantsTab() {
                         <>
                           <Button
                             variant="secondary"
+                            busy={busy}
+                            onClick={() => {
+                              setLink(null);
+                              void run(async () => {
+                                const made = await work.createPortalLink(project.id, p.id);
+                                setLink({ code: p.participant_code, ...made });
+                                return `Personal link created for ${p.participant_code}.`;
+                              });
+                            }}
+                          >
+                            Personal link
+                          </Button>
+                          <Button
+                            variant="secondary"
                             onClick={() => {
                               setEditing(p);
                               setAdding(false);
@@ -284,6 +300,28 @@ export function ParticipantsTab() {
               </tbody>
             </table>
           </div>
+          {link ? (
+            <section className="card stack stack--tight" aria-label="Personal link">
+              <h2>Personal link for {link.code}</h2>
+              <p className="muted">
+                Give this link to the participant only. It opens their consent form and their own
+                sessions, works until {new Date(link.expires_at).toLocaleDateString()}, and is shown
+                once: creating a new link ends this one.
+              </p>
+              <p className="mono break">{link.url}</p>
+              <div className="actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => void navigator.clipboard.writeText(link.url)}
+                >
+                  Copy link
+                </Button>
+                <Button variant="secondary" onClick={() => setLink(null)}>
+                  Hide
+                </Button>
+              </div>
+            </section>
+          ) : null}
           {consentFor ? (
             <section className="card" aria-label="Consent history">
               <h2>Consent history</h2>

@@ -13,9 +13,17 @@ export interface PageSpec {
   shows: RegExp; // text that appears only once the page's data is loaded
   data?: string; // the request whose failure the page must report
   anonymous?: boolean; // a page for signed-out visitors
+  noLinks?: boolean; // a page that deliberately links nowhere (the participant page)
 }
 
 export const PAGES: Record<string, PageSpec> = {
+  "/portal": {
+    url: "/portal#secret-link-token-0123456789",
+    shows: /Your participation/,
+    data: "GET /api/v1/portal/me",
+    anonymous: true,
+    noLinks: true,
+  },
   "/login": { url: "/login", shows: /^Sign in$/, anonymous: true },
   "/forgot-password": { url: "/forgot-password", shows: /Reset your password/, anonymous: true },
   "/reset-password": {

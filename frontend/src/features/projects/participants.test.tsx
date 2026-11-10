@@ -20,6 +20,7 @@ const project = {
   description: "",
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
+  consent_text: "",
   status_reason: null,
   status_changed_at: null,
   languages: [],

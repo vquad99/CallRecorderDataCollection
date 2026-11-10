@@ -67,6 +67,7 @@ export function OverviewTab() {
           target_face_to_face_hours_per_day: project.target_face_to_face_hours_per_day,
           phone_visibility_policy: project.phone_visibility_policy,
           consent_policy_version: project.consent_policy_version,
+          consent_text: project.consent_text,
         }}
         submitLabel="Save project"
         busy={busy}

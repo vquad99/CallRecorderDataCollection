@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     # 2.5 MB covers the largest JSON field (user CSV import, 2 000 000 characters) plus encoding.
     max_request_bytes: int = Field(default=2_500_000, ge=10_000, le=64_000_000)
     max_recording_seconds: int = Field(default=4 * 3600, ge=60, le=24 * 3600)
+    # A participant's personal page link works this many days, then staff issue a new one.
+    portal_link_days: int = Field(default=30, ge=1, le=365)
     # Dashboards count calendar days in this time zone (IANA name).
     report_timezone: str = "Asia/Kolkata"
 

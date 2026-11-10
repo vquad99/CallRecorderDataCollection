@@ -1,4 +1,4 @@
-import { apiRequest, ApiError } from "./client";
+import { apiDownload, apiRequest, ApiError } from "./client";
 
 export interface Asset {
   id: string;
@@ -113,4 +113,21 @@ export async function putChunk(
       retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     });
   }
+}
+
+/** Saves the delivery file and, with it, the consent record for that recording (D-068). */
+export async function downloadWithConsent(recording: Recording, taskCode: string): Promise<void> {
+  const final = recording.assets.find(
+    (a) => a.kind === "FTF_DERIVED_PCM" || a.kind === "TELEPHONY_FINAL_STEREO",
+  );
+  if (!final) throw new ApiError({ status: 404, code: "NOT_FOUND", message: "File not found" });
+  const { url } = await assetUrl(final.id, "download");
+  const link = document.createElement("a");
+  link.href = url;
+  link.rel = "noopener";
+  link.click();
+  await apiDownload(
+    `/api/v1/recordings/${recording.id}/consent-form`,
+    `consent_${taskCode}_${recording.id}.html`,
+  );
 }
