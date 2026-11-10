@@ -214,12 +214,16 @@ class PortalView:
     consent_text: str
     consent_status: str | None
     consent_at: datetime | None
+    consent_review: str | None
+    consent_review_note: str
     sessions: list[SessionRow]
     accepted_minutes: float
     link_expires_at: datetime
 
 
-def _consent(db: Session, participant_id: uuid.UUID, project_id: uuid.UUID) -> ConsentRecord | None:
+def own_consent(
+    db: Session, participant_id: uuid.UUID, project_id: uuid.UUID
+) -> ConsentRecord | None:
     """The participant's own latest answer on the form (project-wide, not tied to one task)."""
     return db.scalar(
         select(ConsentRecord)
@@ -265,7 +269,7 @@ def view(db: Session, token: str) -> PortalView:
         for r in rows
     ]
     accepted = sum(s.minutes or 0 for s in sessions if s.state == "Accepted")
-    answer = _consent(db, participant.id, project.id)
+    answer = own_consent(db, participant.id, project.id)
     link.last_used_at = datetime.now(UTC)
     db.commit()
     return PortalView(
@@ -276,6 +280,10 @@ def view(db: Session, token: str) -> PortalView:
         consent_text=project.consent_text,
         consent_status=answer.status if answer else None,
         consent_at=answer.created_at if answer else None,
+        consent_review=answer.review_status if answer else None,
+        consent_review_note=answer.review_note
+        if answer and answer.review_status == "REJECTED"
+        else "",
         sessions=sessions,
         accepted_minutes=round(accepted, 1),
         link_expires_at=link.expires_at,
@@ -291,12 +299,13 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             code="CONSENT_FORM_MISSING",
             status_code=409,
         )
-    current = _consent(db, participant.id, project.id)
+    current = own_consent(db, participant.id, project.id)
     if decision == "WITHDRAWN" and (current is None or current.status != "GIVEN"):
         raise AppError(
             "There is no consent to withdraw", code="NOTHING_TO_WITHDRAW", status_code=409
         )
-    if current is not None and current.status == decision:
+    rejected = current is not None and current.review_status == "REJECTED"
+    if current is not None and current.status == decision and not rejected:
         return  # the same answer again changes nothing
     db.add(
         ConsentRecord(
@@ -309,6 +318,7 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             captured_by=None,
             note="Answered by the participant on their personal page",
             form_text=project.consent_text,
+            review_status="PENDING" if decision == "GIVEN" else None,
         )
     )
     audit.record(

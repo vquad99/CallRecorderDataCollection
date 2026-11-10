@@ -41,6 +41,8 @@ class PortalOut(BaseModel):
     consent_text: str
     consent_status: Literal["GIVEN", "REFUSED", "WITHDRAWN"] | None
     consent_at: datetime | None
+    consent_review: Literal["PENDING", "APPROVED", "REJECTED"] | None
+    consent_review_note: str
     sessions: list[SessionOut]
     accepted_minutes: float
     link_expires_at: datetime

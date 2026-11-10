@@ -101,7 +101,10 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .getByRole("button", { name: "Add" })
       .click();
     await expect(admin.getByText(`${moderatorEmail} added.`)).toBeVisible();
-    await admin.getByRole("link", { name: "Participants" }).click();
+    await admin
+      .getByRole("navigation", { name: "Project sections" })
+      .getByRole("link", { name: "Participants" })
+      .click();
     for (const person of ["Asha", "Bina"]) {
       await admin.getByRole("button", { name: "Add participant" }).first().click();
       await admin.getByLabel(/^Name or label/).fill(`${person} ${code}`);

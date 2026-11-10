@@ -14,7 +14,7 @@ from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.router import AppSettings, Cipher
 from app.modules.auth.security import FieldCipher
-from app.modules.participants import service
+from app.modules.participants import manage, service
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 
@@ -37,6 +37,11 @@ class ParticipantOut(BaseModel):
     has_phone: bool
     email: str | None  # only for people who may see contact details
     has_email: bool
+    # The participant's own answer on the consent form in this project, its staff review, and
+    # whether they hold a working personal link. Empty when the caller may not see consent.
+    consent_status: str | None = None
+    consent_review: str | None = None
+    link_active: bool | None = None
     notes: str | None
     deleted: bool
     consent_visible: bool  # whether this caller may open the person's consent history
@@ -50,6 +55,7 @@ def present(
     project: Project,
     p: Participant,
     assigned_ids: set[uuid.UUID] | None = None,
+    overview: dict[uuid.UUID, tuple[str, str | None, bool]] | None = None,
 ) -> ParticipantOut:
     v = service.visibility(db, principal, project, p.id, assigned_ids)
     if p.phone_e164_enc is None:
@@ -70,7 +76,12 @@ def present(
         has_email=p.email_enc is not None,
         notes=p.notes if v.notes else None,
         deleted=p.deleted_at is not None,
-        consent_visible=v.profile and principal.can_in_project(Perm.CONSENT_VIEW, project.id),
+        consent_visible=(
+            sees := v.profile and principal.can_in_project(Perm.CONSENT_VIEW, project.id)
+        ),
+        consent_status=(overview or {}).get(p.id, (None, None, None))[0] if sees else None,
+        consent_review=(overview or {}).get(p.id, (None, None, None))[1] if sees else None,
+        link_active=(overview or {}).get(p.id, (None, None, None))[2] if sees else None,
         created_at=p.created_at,
     )
 
@@ -96,8 +107,9 @@ def list_participants(
         db, principal, project_id, search=search, page=page, page_size=page_size
     )
     assigned = service.assigned_participants(db, principal.user_id, project.id)
+    overview = manage.consent_overview(db, project, [p.id for p in items])
     return ParticipantPage(
-        items=[present(db, principal, cipher, project, p, assigned) for p in items],
+        items=[present(db, principal, cipher, project, p, assigned, overview) for p in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -234,6 +246,8 @@ class ConsentOut(BaseModel):
     policy_version: str
     captured_by: uuid.UUID | None  # empty: the participant answered the form themselves
     note: str
+    review_status: str | None = None
+    review_note: str = ""
     created_at: datetime
 
 
@@ -245,3 +259,115 @@ def consent_history(
         ConsentOut.model_validate(r, from_attributes=True)
         for r in service.consent_history(db, principal, project_id, participant_id)
     ]
+
+
+# ---------------------------------------------------------------- bulk work (D-073)
+
+
+class ImportBody(BaseModel):
+    csv: str = Field(min_length=1, max_length=500_000)
+    confirm: bool = False
+
+
+class ImportRow(BaseModel):
+    line: int
+    name: str
+    ok: bool
+    message: str
+    participant_code: str | None
+
+
+class ImportOut(BaseModel):
+    rows: list[ImportRow]
+    ready: int
+    created: int
+
+
+@router.post("/import", response_model=ImportOut)
+def import_participants(
+    project_id: uuid.UUID,
+    body: ImportBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    cipher: Cipher,
+) -> ImportOut:
+    rows = manage.import_csv(
+        db, settings, cipher, principal, project_id, body.csv, body.confirm, client_ip(request)
+    )
+    return ImportOut(
+        rows=[ImportRow.model_validate(r, from_attributes=True) for r in rows],
+        ready=sum(1 for r in rows if r.ok),
+        created=sum(1 for r in rows if r.participant_code),
+    )
+
+
+class BulkBody(BaseModel):
+    action: Literal["assign", "remove", "send_consent"]
+    participant_ids: list[uuid.UUID] = Field(min_length=1, max_length=manage.MAX_BULK)
+    target_project_id: uuid.UUID | None = None
+    reason: str = Field(default="", max_length=1000)
+
+
+class BulkRow(BaseModel):
+    participant_id: uuid.UUID
+    participant_code: str
+    ok: bool
+    message: str
+
+
+class BulkOut(BaseModel):
+    results: list[BulkRow]
+    done: int
+    failed: int
+
+
+@router.post("/bulk", response_model=BulkOut)
+def bulk_action(
+    project_id: uuid.UUID,
+    body: BulkBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    cipher: Cipher,
+) -> BulkOut:
+    results = manage.bulk(
+        db,
+        settings,
+        cipher,
+        request.app.state.email_sender,
+        principal,
+        project_id,
+        body.action,
+        body.participant_ids,
+        body.target_project_id,
+        body.reason,
+        client_ip(request),
+    )
+    return BulkOut(
+        results=[BulkRow.model_validate(r, from_attributes=True) for r in results],
+        done=sum(1 for r in results if r.ok),
+        failed=sum(1 for r in results if not r.ok),
+    )
+
+
+class ReviewBody(BaseModel):
+    decision: Literal["APPROVED", "REJECTED"]
+    note: str = Field(default="", max_length=1000)
+
+
+@router.post("/{participant_id}/consent-review", response_model=ConsentOut)
+def review_consent(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    body: ReviewBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+) -> ConsentOut:
+    record = manage.review_consent(
+        db, principal, project_id, participant_id, body.decision, body.note, client_ip(request)
+    )
+    return ConsentOut.model_validate(record, from_attributes=True)

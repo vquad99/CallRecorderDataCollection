@@ -199,3 +199,6 @@ history, `captured_by` is `null` for the participant's own answers.
 
 | GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |
 | POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`. Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
+| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; answers each row's result, `ready`, `created`. |
+| POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove / send_consent, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result. |
+| POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |

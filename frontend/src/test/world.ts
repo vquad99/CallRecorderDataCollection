@@ -45,6 +45,9 @@ export const PARTICIPANT = {
   has_phone: true,
   email: "asha@example.org",
   has_email: true,
+  consent_status: "GIVEN",
+  consent_review: "PENDING",
+  link_active: true,
   consent_visible: true,
   notes: "",
   deleted: false,
@@ -142,6 +145,8 @@ export const PORTAL = {
   consent_text: "I agree that my voice is recorded.",
   consent_status: null,
   consent_at: null,
+  consent_review: null,
+  consent_review_note: "",
   sessions: [
     {
       task_code: "T000001",

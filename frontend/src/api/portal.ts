@@ -17,6 +17,8 @@ export interface PortalView {
   consent_text: string;
   consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | null;
   consent_at: string | null;
+  consent_review: "PENDING" | "APPROVED" | "REJECTED" | null;
+  consent_review_note: string;
   sessions: PortalSession[];
   accepted_minutes: number;
   link_expires_at: string;

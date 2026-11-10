@@ -255,7 +255,7 @@ Phase: 2 | Requirements: 13
 
 ### PART - Module 4 - Participant management
 
-Phase: 3 | Requirements: 15
+Phase: 3 | Requirements: 17
 
 | ID | Requirement | Source |
 |---|---|---|
@@ -274,6 +274,8 @@ Phase: 3 | Requirements: 15
 | PART-013 | Participant personal page (owner 2026-11-10): staff create a private, expiring, replaceable link for one participant in one project; without an account the participant sees only their own participant code, their own sessions (date, type, length, state) and accepted recording time - no names, phone numbers, other speaker or audio; an invalid, expired, replaced or revoked link answers like one that never existed; the link's secret is stored hashed and never travels in an address. | Owner 2026-11-10 |
 | PART-014 | Consent form (owner 2026-11-10): each project has a consent form text with a version; the participant reads it on their personal page and answers agree / do not agree, and may withdraw later; every answer is stored with time and version as the participant's own (no staff member), audited, and shown to staff in the consent history. | Owner 2026-11-10 |
 | PART-015 | Consent record with every recording (owner 2026-11-10): each recording has a printable consent record - both participants by code, the consent recorded for the session, each participant's own answers with the form text they answered, version and time, and the checksums of the audio files it belongs to - and it downloads together with the recording, under the same download right. | Owner 2026-11-10 |
+| PART-016 | Participants section (owner 2026-11-10): a menu entry of its own for people who manage participants, listing a project's participants with contact and consent state; add one or add many from a CSV file (rows are checked first, only rows without a problem are added); on a selection: assign to another project, send the consent form by email, remove (with a reason). Every bulk action reports each participant's result and applies the same permissions, limits and audit entries as the single action. | Owner 2026-11-10 |
+| PART-017 | Consent review (owner 2026-11-10): a participant's own 'agree' answer waits for review; a person who manages participants approves it or rejects it with a note; the participant sees the note on their page and can answer again; the form can be sent again at any time. Reviews are audited. | Owner 2026-11-10 |
 
 ### TASK - Module 5 - Task assignment and workflow
 

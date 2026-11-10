@@ -41,7 +41,14 @@ function Consent({
   const [read, setRead] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const answer = view.consent_status ? ANSWER[view.consent_status] : undefined;
+  const sentBack = view.consent_status === "GIVEN" && view.consent_review === "REJECTED";
+  const answer = sentBack
+    ? { label: "Please answer again", tone: "RETURNED" }
+    : view.consent_status === "GIVEN" && view.consent_review === "APPROVED"
+      ? { label: "You agreed · confirmed by the team", tone: "APPROVED" }
+      : view.consent_status
+        ? ANSWER[view.consent_status]
+        : undefined;
 
   function send(decision: "GIVEN" | "REFUSED" | "WITHDRAWN") {
     setBusy(true);
@@ -72,7 +79,13 @@ function Consent({
             Version {view.consent_policy_version}
             {view.consent_at ? ` · your answer was saved on ${day(view.consent_at)}` : ""}
           </p>
-          {view.consent_status === "GIVEN" ? (
+          {sentBack ? (
+            <p className="notice notice--error" role="status">
+              The project team could not accept your answer: {view.consent_review_note} Please read
+              the form and answer again.
+            </p>
+          ) : null}
+          {view.consent_status === "GIVEN" && !sentBack ? (
             <div className="actions">
               <Button variant="secondary" busy={busy} onClick={() => send("WITHDRAWN")}>
                 Withdraw my consent

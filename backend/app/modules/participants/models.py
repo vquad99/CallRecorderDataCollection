@@ -83,6 +83,14 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # The consent form text the participant answered (their own answers only, D-068), kept so a
     # later change of the project's form cannot change what they agreed to.
     form_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # Staff review of a participant's own "agree" answer (D-073): PENDING until someone who
+    # manages participants approves or rejects it; a rejection carries a note the participant sees.
+    review_status: Mapped[str | None] = mapped_column(String(20))
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ParticipantPortalLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -16,7 +16,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | User management | USER | 9 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Roles and permissions | ROLE | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 2 approved |
 | Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
-| Participants | PART | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
+| Participants | PART | 17 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
 | Face-to-face recording | FTF | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Edge and by-ear playback checks open |
@@ -39,7 +39,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Product scope | PROD | 4 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Contract and work rules | GEN | 14 | Yes | No | No | No | Yes | No | IN PROGRESS | Ongoing every phase |
 | Build process and tracking | PROC | 9 | Yes | No | No | No | Yes | Yes | IN PROGRESS | Ongoing every phase |
-| **Total** | | **331** | | | | | | | | |
+| **Total** | | **333** | | | | | | | | |
 
 ## Phases and gates
 
@@ -211,6 +211,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PART-013 | Participant personal page (owner 2026-11-10): staff create a private, expiring, replaceable link for one participant in one project; without an account the participant sees only their own participant code, their own sessions (date, type, length, state) and accepted recording time - no names, phone numbers, other speaker or audio; an invalid, expired, replaced or revoked link answers like one that never existed; the link's secret is stored hashed and never travels in an address. | 7 | [x] | [x] | [x] | [x] TA-PART-09 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PART-014 | Consent form (owner 2026-11-10): each project has a consent form text with a version; the participant reads it on their personal page and answers agree / do not agree, and may withdraw later; every answer is stored with time and version as the participant's own (no staff member), audited, and shown to staff in the consent history. | 7 | [x] | [x] | [x] | [x] TA-PART-10 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PART-015 | Consent record with every recording (owner 2026-11-10): each recording has a printable consent record - both participants by code, the consent recorded for the session, each participant's own answers with the form text they answered, version and time, and the checksums of the audio files it belongs to - and it downloads together with the recording, under the same download right. | 7 | [x] | [x] | [x] | [x] TA-PART-11 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-016 | Participants section (owner 2026-11-10): a menu entry of its own for people who manage participants, listing a project's participants with contact and consent state; add one or add many from a CSV file (rows are checked first, only rows without a problem are added); on a selection: assign to another project, send the consent form by email, remove (with a reason). Every bulk action reports each participant's result and applies the same permissions, limits and audit entries as the single action. | 7 | [x] | [x] | [x] | [x] TA-PART-13 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PART-017 | Consent review (owner 2026-11-10): a participant's own 'agree' answer waits for review; a person who manages participants approves it or rejects it with a note; the participant sees the note on their page and can answer again; the form can be sent again at any time. Reviews are audited. | 7 | [x] | [x] | [x] | [x] TA-PART-14 | n/a | docs/evidence/participant_page/journeys.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | TASK-001 | Create task with project, mode, Participant A, Participant B, target/due date, priority; assign moderator. | 3 | [x] | [x] | [x] | [x] TA-TASK-01 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-002 | Lifecycle DRAFT -> ASSIGNED -> IN_PROGRESS -> RECORDED -> AUDIO_QC -> APPROVED (D-062: the transcription and transcript QC states were removed). | 3 | [x] | [x] | [x] | [x] TA-TASK-02 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt | VERIFIED | - |
 | TASK-003 | Exception states REJECTED, RETURNED, CANCELLED, ON_HOLD with reason codes. | 3 | [x] | [x] | [x] | [x] TA-TASK-03, TA-FND-20 | n/a | docs/evidence/phase3/make_check.txt; docs/evidence/phase3/walkthrough.txt; docs/evidence/option_d/journeys.txt | VERIFIED | - |
@@ -726,4 +728,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 - Consent record with every recording (D-068, PART-015): the task page lists finished recordings and
   "Download with consent form" saves the delivery file and a printable consent record together;
   the participant's answer keeps the form text they answered (migration 0010).
+- Participants section (D-073, PART-016/017): own menu entry; add many from a CSV, bulk assign,
+  bulk send of consent forms, bulk remove; approve / reject / resend on each consent answer.
+  Migration 0012. Email consent link (D-071), read-only project settings and the light-blue
+  design (D-072) shipped in ea14178.
 

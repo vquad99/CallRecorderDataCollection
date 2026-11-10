@@ -62,6 +62,11 @@ export const PAGES: Record<string, PageSpec> = {
     url: "/projects/p1/retention",
     shows: /Days to keep each kind of file/,
   },
+  "/participants": {
+    url: "/participants",
+    shows: /P000002/,
+    data: "GET /api/v1/projects/p1/participants",
+  },
   "/tasks": { url: "/tasks", shows: /T000001/, data: "GET /api/v1/tasks" },
   "/tasks/:taskId": { url: "/tasks/t1", shows: /Task T000001/, data: "GET /api/v1/tasks/t1" },
   "/tasks/:taskId/record": {

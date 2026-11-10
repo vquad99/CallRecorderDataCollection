@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { toApiError, useResource } from "../../hooks/useResource";
 import { useProject } from "./ProjectDetailPage";
 
-const EMPTY: work.ParticipantFields = {
+export const EMPTY: work.ParticipantFields = {
   display_label: "",
   phone: null,
   language_code: "",
@@ -21,7 +21,7 @@ const EMPTY: work.ParticipantFields = {
   notes: "",
 };
 
-function ParticipantForm({
+export function ParticipantForm({
   initial,
   submitLabel,
   onSubmit,
@@ -88,7 +88,13 @@ function ParticipantForm({
   );
 }
 
-function ConsentList({ projectId, participantId }: { projectId: string; participantId: string }) {
+export function ConsentList({
+  projectId,
+  participantId,
+}: {
+  projectId: string;
+  participantId: string;
+}) {
   const { state, reload } = useResource(
     () => work.consentHistory(projectId, participantId),
     [projectId, participantId],

@@ -1169,6 +1169,23 @@ a.code {
   font-size: 0.8125rem;
 }
 
+.bulkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.bulkbar strong {
+  align-self: center;
+  margin-right: 6px;
+}
+.bulkbar .field {
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
 /* ---------- Tabs ---------- */
 .tabs {
   display: flex;

@@ -14,6 +14,10 @@ export interface Participant {
   consent_visible: boolean;
   email: string | null; // only for people who may see contact details
   has_email: boolean;
+  /** The participant's own answer on the consent form; "NONE" = not answered yet. */
+  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "NONE" | null;
+  consent_review: "PENDING" | "APPROVED" | "REJECTED" | null;
+  link_active: boolean | null;
   notes: string | null;
   deleted: boolean;
   created_at: string;
@@ -174,3 +178,42 @@ export const emailPortalLink = (projectId: string, participantId: string) =>
     `${pp(projectId)}/${participantId}/portal-link/email`,
     { method: "POST" },
   );
+
+export interface ImportResult {
+  rows: {
+    line: number;
+    name: string;
+    ok: boolean;
+    message: string;
+    participant_code: string | null;
+  }[];
+  ready: number;
+  created: number;
+}
+export const importParticipants = (projectId: string, csv: string, confirm: boolean) =>
+  apiRequest<ImportResult>(`${pp(projectId)}/import`, { method: "POST", body: { csv, confirm } });
+
+export interface BulkResult {
+  results: { participant_id: string; participant_code: string; ok: boolean; message: string }[];
+  done: number;
+  failed: number;
+}
+export const bulkParticipants = (
+  projectId: string,
+  body: {
+    action: "assign" | "remove" | "send_consent";
+    participant_ids: string[];
+    target_project_id?: string;
+    reason?: string;
+  },
+) => apiRequest<BulkResult>(`${pp(projectId)}/bulk`, { method: "POST", body });
+export const reviewConsent = (
+  projectId: string,
+  participantId: string,
+  decision: "APPROVED" | "REJECTED",
+  note = "",
+) =>
+  apiRequest<Consent>(`${pp(projectId)}/${participantId}/consent-review`, {
+    method: "POST",
+    body: { decision, note },
+  });

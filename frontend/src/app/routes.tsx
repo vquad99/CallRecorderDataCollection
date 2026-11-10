@@ -99,6 +99,18 @@ export const routes: RouteObject[] = [
             ],
           },
           {
+            element: <RequirePermission permission="participants.manage" />,
+            children: [
+              {
+                path: "participants",
+                element: page(
+                  () => import("../features/participants/ParticipantsPage"),
+                  "ParticipantsPage",
+                ),
+              },
+            ],
+          },
+          {
             element: <RequirePermission permission="tasks.view" />,
             children: [
               {
