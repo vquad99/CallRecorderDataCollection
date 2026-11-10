@@ -22,6 +22,8 @@ TARGET_RATE = 16_000
 BLOCK = 1 << 20
 SILENCE_DBFS = -50.0
 FRAME_SECONDS = 0.02
+# The two sample formats this platform writes: browser originals and delivery files.
+MEASURABLE_CODECS = ("pcm_s16le", "pcm_f32le")
 SOXR_VERSION = getattr(soxr, "__version__", "unknown")
 
 
@@ -195,6 +197,12 @@ class Levels:
     clip_count: int
     clip_pct: float
     silence_pct: float
+    # Loud speech minus the noise floor: 95th minus 10th percentile of the 20 ms window levels
+    # (AQC-003). None for an empty file.
+    dynamic_range_db: float | None = None
+    # SHA-256 of the per-second level pattern (whole dB): the same conversation stored twice gives
+    # the same value even when the files' bytes differ (AQC-007). None for an empty file.
+    content_fingerprint: str | None = None
 
 
 def _db(value: float) -> float | None:
@@ -204,6 +212,8 @@ def _db(value: float) -> float | None:
 def measure(path: Path) -> Levels:
     """Peak, RMS, clipping and silence over the whole file; read-only (AUDIO-018)."""
     info = inspect_wav(path)
+    if info.codec not in MEASURABLE_CODECS:
+        raise ValueError(f"levels cannot be measured for {info.codec}")
     dtype, scale, clip_at = (
         ("<i2", 32768.0, 32767) if info.codec == "pcm_s16le" else ("<f4", 1.0, 1.0)
     )
@@ -220,6 +230,7 @@ def measure(path: Path) -> Levels:
     sum_sq = 0.0
     clips = 0
     silent = frames = 0
+    window_levels: list[np.ndarray] = []
     step = BLOCK - BLOCK % frame  # blocks hold whole windows, so no window is split
     for start in range(0, len(data), step):
         block = np.asarray(data[start : start + step], dtype=np.float64) / scale
@@ -237,12 +248,25 @@ def measure(path: Path) -> Levels:
             rms = np.sqrt(np.mean(block[:usable].reshape(-1, frame) ** 2, axis=1))
             silent += int(np.count_nonzero(rms < 10 ** (SILENCE_DBFS / 20)))
             frames += len(rms)
+            window_levels.append(20 * np.log10(np.maximum(rms, 1e-5)))  # floor -100 dBFS
     total = len(data)
     del data
+    dynamic_range = fingerprint = None
+    if window_levels:
+        levels_db = np.concatenate(window_levels)
+        low, high = np.percentile(levels_db, [10, 95])
+        dynamic_range = round(float(high - low), 2)
+        per_second = round(1 / FRAME_SECONDS)
+        whole = len(levels_db) - len(levels_db) % per_second
+        seconds = levels_db[:whole].reshape(-1, per_second).mean(axis=1) if whole else levels_db[:1]
+        pattern = np.clip(np.round(seconds), -100, 0).astype(np.int8)
+        fingerprint = hashlib.sha256(pattern.tobytes()).hexdigest()
     return Levels(
         peak_dbfs=_db(peak),
         rms_dbfs=_db(float(np.sqrt(sum_sq / total))) if total else None,
         clip_count=clips,
         clip_pct=round(100 * clips / total, 4) if total else 0.0,
         silence_pct=round(100 * silent / frames, 2) if frames else 100.0,
+        dynamic_range_db=dynamic_range,
+        content_fingerprint=fingerprint,
     )

@@ -28,6 +28,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm
 from app.core.storage import ListedObject, ObjectStorage
+from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
 from app.modules.projects.models import Project, ProjectRetentionRule
@@ -361,6 +362,8 @@ def _asset(
         clip_count=levels.clip_count,
         clip_pct=levels.clip_pct,
         silence_pct=levels.silence_pct,
+        dynamic_range_db=levels.dynamic_range_db,
+        content_fingerprint=levels.content_fingerprint,
     )
 
 
@@ -564,6 +567,13 @@ def process(
     task = db.get(Task, rec.task_id)
     if task is not None and task.status == "IN_PROGRESS":
         tasks.system_transition(db, task, "RECORDED", comment="Face-to-face recording ready")
+    if task is not None and task.status == "RECORDED":
+        try:
+            audio_qc.run_automatic(db, rec.id)
+        except Exception:
+            # The recording itself is safe; the recovery sweep runs the check again (D-079).
+            db.rollback()
+            logger.exception("automatic_audio_qc_failed", extra={"recording_id": str(rec.id)})
     return rec
 
 

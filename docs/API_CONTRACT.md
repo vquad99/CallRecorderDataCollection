@@ -141,9 +141,15 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | /audio-qc/queue | `audio_qc.review` |
-| GET | /audio-qc/{asset_id} | `audio_qc.review` |
-| POST | /audio-qc/{asset_id}/decision | `audio_qc.review` |
+Built 2026-11-10 (D-079). The QC Executive's queue is the task list (`mine=true`, status AUDIO_QC).
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | /tasks/{id}/audio-qc | `tasks.view` and the task visible. Every automatic result with its checks, every decision, the assigned QC Executive and what the caller may do. |
+| POST | /tasks/{id}/assign-qc | `tasks.assign` in the project. Body `user_id`, `reason` (required when reassigning). 422 NOT_PROJECT_MEMBER, NOT_A_QC_EXECUTIVE, SAME_PERSON; 409 TASK_LOCKED. |
+| POST | /tasks/{id}/audio-qc/decision | `audio_qc.review` and the task's assigned QC Executive (Super Admin: any). Body `outcome` PASS / FAIL / RETURN, `reason_code`, `comment`. 409 TASK_NOT_IN_QC, NO_AUTOMATIC_CHECK; 422 REASON_REQUIRED, COMMENT_REQUIRED. |
+| POST | /tasks/{id}/audio-qc/recheck | Manager of the project or the assigned QC Executive. Downloads the delivery file and checks its bytes. 503 STORAGE_UNAVAILABLE. |
+| GET | /recordings/{id}/metadata | `recordings.download` in the project and the task visible. The details file (JSON attachment, format `ccp.recording-metadata/1`), audited. |
 
 ## AI transcription (ASR-*)
 

@@ -9,6 +9,8 @@ from app import __version__
 from app.api.health import readiness
 from app.core.permissions import Perm
 from app.core.ratelimit import rate_limit
+from app.modules.audio_qc.router import metadata_router as recording_metadata_router
+from app.modules.audio_qc.router import router as audio_qc_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.deps import csrf_protect, require
 from app.modules.auth.router import router as auth_router
@@ -69,6 +71,8 @@ api_router.include_router(participants_router)
 api_router.include_router(tasks_router)
 api_router.include_router(audit_router)
 api_router.include_router(recordings_router)
+api_router.include_router(audio_qc_router)
+api_router.include_router(recording_metadata_router)
 api_router.include_router(storage_usage_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(portal_public_router)

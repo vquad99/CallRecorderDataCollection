@@ -33,7 +33,15 @@ export interface Dashboard {
   tasks_total: number;
   tasks_approved: number;
   tasks_by_status: Record<string, number> | null;
-  qc: { passed: number; rejected: number; returned: number; waiting: number } | null;
+  qc: {
+    passed: number;
+    rejected: number;
+    returned: number;
+    waiting: number;
+    auto_pass: number;
+    auto_review: number;
+    auto_fail: number;
+  } | null;
   queues: Record<string, number> | null;
   team: { name: string; recordings: number; recorded_hours: number }[] | null;
   storage_bytes: number | null;

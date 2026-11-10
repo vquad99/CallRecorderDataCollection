@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI
 
+from app.modules.audio_qc import service as audio_qc
 from app.modules.recordings import service
 
 logger = logging.getLogger("app.recordings")
@@ -66,7 +67,24 @@ def recover(app: FastAPI) -> int:
             run_inline(app, recording_id)
     if stalled:
         logger.info("recovery_dispatched", extra={"count": len(stalled)})
+    check_pending_audio(app)
     return len(stalled)
+
+
+def check_pending_audio(app: FastAPI) -> int:
+    """Run the automatic audio check for finished recordings that missed it (D-079)."""
+    done = 0
+    with app.state.session_factory() as db:
+        for recording_id in audio_qc.pending_automatic(db):
+            try:
+                audio_qc.run_automatic(db, recording_id)
+                done += 1
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "audio_qc_recovery_failed", extra={"recording_id": str(recording_id)}
+                )
+    return done
 
 
 def start_recovery_loop(app: FastAPI) -> threading.Event:

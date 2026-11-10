@@ -63,6 +63,35 @@ interface FormSpec {
 
 const MFA_ME = { ...ME, permissions: ALL_PERMISSIONS, mfa_enabled: true };
 
+const QC_VIEW = {
+  task_status: "AUDIO_QC",
+  qc_user_id: "q8",
+  qc_name: "Old QC",
+  can_decide: true,
+  can_assign: true,
+  can_recheck: true,
+  reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"], RETURN: ["OTHER", "RE_RECORD"] },
+  results: [],
+};
+const QC_PAGE: Record<string, Handler> = {
+  "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC" }],
+  "GET /api/v1/tasks/t1/recordings": () => [200, []],
+  "GET /api/v1/tasks/t1/audio-qc": () => [200, QC_VIEW],
+  "GET /api/v1/projects/p1/members": () => [
+    200,
+    [
+      {
+        user_id: "q9",
+        email: "quinn@example.org",
+        display_name: "Quinn QC",
+        roles: ["QC_EXECUTIVE"],
+        status: "ACTIVE",
+        added_at: "2026-11-09T00:00:00Z",
+      },
+    ],
+  ],
+};
+
 const FORMS: Record<string, FormSpec> = {
   "sign in": {
     source: "src/auth/LoginPage.tsx",
@@ -320,6 +349,33 @@ const FORMS: Record<string, FormSpec> = {
     reply: [200, TASK],
     body: { user_id: "u4", reason: "Mona is away" },
     kept: "Reason for reassigning",
+  },
+  "assign qc executive": {
+    source: "src/features/tasks/AudioQcPanel.tsx",
+    url: "/tasks/t1",
+    ready: /Audio quality/,
+    fill: [
+      choose("Hand to another QC Executive", "q9"),
+      type("Reason for reassigning", "On leave"),
+    ],
+    submit: "Reassign QC",
+    write: "POST /api/v1/tasks/t1/assign-qc",
+    reply: [200, QC_VIEW],
+    body: { user_id: "q9", reason: "On leave" },
+    kept: "Reason for reassigning",
+    handlers: QC_PAGE,
+  },
+  "audio qc decision": {
+    source: "src/features/tasks/AudioQcPanel.tsx",
+    url: "/tasks/t1",
+    ready: /Your decision/,
+    fill: [choose("Decision", "RETURN"), choose("Reason", "RE_RECORD"), type("Comment", "Traffic")],
+    submit: "Save decision",
+    write: "POST /api/v1/tasks/t1/audio-qc/decision",
+    reply: [200, QC_VIEW],
+    body: { outcome: "RETURN", reason_code: "RE_RECORD", comment: "Traffic" },
+    kept: "Comment",
+    handlers: QC_PAGE,
   },
   "task comment": {
     source: "src/features/tasks/TaskDetailPage.tsx",

@@ -152,6 +152,8 @@ class AudioAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     clip_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     clip_pct: Mapped[float] = mapped_column(Float, nullable=False)
     silence_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    dynamic_range_db: Mapped[float | None] = mapped_column(Float)
+    content_fingerprint: Mapped[str | None] = mapped_column(String(64), index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

@@ -1,0 +1,217 @@
+# Render Blueprint for PRODUCTION (Stage 1: face-to-face collection) of Conversation Collection.
+# A separate set of services and a separate, empty database: the staging check copy (render.yaml)
+# stays as it is. Create it in the Render dashboard: New > Blueprint > this repository, and set
+# "Blueprint path" to render.production.yaml. docs/DEPLOYMENT.md lists every value to enter.
+#
+# Written from render.com/docs/blueprint-spec and validated against render.com/schema/render.yaml.json
+# (read 2026-11-11). Region Singapore = same region as the Wasabi bucket.
+#
+# Shape (D-080): a public web service (nginx: the built app + proxy to the API); a PRIVATE API; a
+# background worker that turns uploads into delivery files and runs the automatic audio check;
+# a private Key Value (Redis) instance the API hands work to and keeps sign-in limits in; a private
+# PostgreSQL database with point-in-time recovery. The application refuses to start in production
+# without real email (SMTP), Redis, HTTPS and storage keys (app/core/config.py).
+
+services:
+  - type: web
+    name: ccp-prod-web
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - frontend/**
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: BACKEND_HOSTPORT
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          property: hostport
+      - key: MEDIA_ORIGINS
+        value: https://*.wasabisys.com
+      # The visitor's address comes from Cloudflare, in front of every Render service; a request
+      # that sets CF-Connecting-IP itself is refused by Cloudflare (error 1000, tested 2026-11-10).
+      - key: REAL_IP_FROM
+        value: 0.0.0.0/0
+      - key: REAL_IP_HEADER
+        value: CF-Connecting-IP
+
+  - type: pserv
+    name: ccp-prod-api
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - backend/**
+    # Migrations and the first Super Admin before each deploy goes live. No demo accounts here.
+    preDeployCommand: python -m app.cli prepare-deploy
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ccp-prod-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ccp-prod-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # A Fernet key, entered once by hand (see DEPLOYMENT.md). Losing it makes stored phone
+      # numbers and email addresses unreadable: keep a copy in the password manager.
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      # The public https address of ccp-prod-web (or the custom domain).
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: STORAGE_ENDPOINT_URL
+        value: https://s3.ap-southeast-1.wasabisys.com
+      - key: STORAGE_REGION
+        value: ap-southeast-1
+      - key: STORAGE_BUCKET
+        value: callrec57
+      - key: STORAGE_KEY_PREFIX
+        value: production/
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: MEDIA_WORK_DIR
+        value: /tmp/media
+      - key: EMAIL_BACKEND
+        value: smtp
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ALLOW_DEMO_SEED
+        value: "false"
+
+  # Processing and the automatic audio check. The same image as the API; settings are copied
+  # from the API so the two can never disagree.
+  - type: worker
+    name: ccp-prod-worker
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: celery -A app.worker worker --loglevel=INFO --concurrency=2
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ccp-prod-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ccp-prod-redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: SECRET_KEY
+      - key: DATA_ENCRYPTION_KEY
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: DATA_ENCRYPTION_KEY
+      - key: PUBLIC_APP_URL
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: PUBLIC_APP_URL
+      - key: STORAGE_ENDPOINT_URL
+        value: https://s3.ap-southeast-1.wasabisys.com
+      - key: STORAGE_REGION
+        value: ap-southeast-1
+      - key: STORAGE_BUCKET
+        value: callrec57
+      - key: STORAGE_KEY_PREFIX
+        value: production/
+      - key: STORAGE_ACCESS_KEY_ID
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: STORAGE_ACCESS_KEY_ID
+      - key: STORAGE_SECRET_ACCESS_KEY
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: STORAGE_SECRET_ACCESS_KEY
+      - key: MEDIA_WORK_DIR
+        value: /tmp/media
+      - key: EMAIL_BACKEND
+        value: smtp
+      - key: SMTP_HOST
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: SMTP_HOST
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: SMTP_USERNAME
+      - key: SMTP_PASSWORD
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: SMTP_PASSWORD
+      - key: EMAIL_FROM
+        fromService:
+          type: pserv
+          name: ccp-prod-api
+          envVarKey: EMAIL_FROM
+
+  # Work queue and shared sign-in limits. Private network only; never evicts a queued job.
+  - type: keyvalue
+    name: ccp-prod-redis
+    region: singapore
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: ccp-prod-db
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    databaseName: ccp
+    user: ccp
+    ipAllowList: []

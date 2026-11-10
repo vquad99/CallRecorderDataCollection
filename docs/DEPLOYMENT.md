@@ -81,9 +81,44 @@ Known limits of the check copy:
   (2026-11-10): the address reached the API correctly, but a false `X-Forwarded-For` sent by the
   visitor dodged the per-address sign-in limit (the per-account limit held). Fixed: on Render,
   nginx takes the address from `CF-Connecting-IP` (`REAL_IP_FROM` / `REAL_IP_HEADER`) and sends the
-  API exactly one address. Re-tested after the change (see BUILD_STATUS session notes).
+  API exactly one address. Re-tested after the change on 2026-11-10 at 19:19 IST: 22 sign-in
+  attempts with a different false address in `X-Forwarded-For`, `X-Real-IP` and `True-Client-IP`
+  each time gave 401 twenty times, then 429. A request that sets `CF-Connecting-IP` itself is
+  refused by Cloudflare before it reaches Render (403, error 1000).
 - Free plans are not used: a free Postgres is deleted after 30 days and private services and
   workers have no free plan.
+
+### Production on Render, Stage 1 (D-080)
+
+`render.production.yaml` describes production: its own services and its own empty database, so the
+check copy above stays as it is. `ccp-prod-web` (public), `ccp-prod-api` (private),
+`ccp-prod-worker` (background worker: turns uploads into delivery files and runs the automatic
+audio check), `ccp-prod-redis` (private Key Value: the work queue and shared sign-in limits; never
+evicts a queued job), `ccp-prod-db` (PostgreSQL 16, private, point-in-time recovery). The worker
+copies its settings from the API, so the two cannot disagree. Files go under `production/` in the
+Wasabi bucket. `APP_ENV=production` makes the application refuse to start without real email
+(SMTP), Redis, an https address and storage keys; there are no demo accounts.
+
+Before creating it, the owner needs: an SMTP mail account (B-13; host, user name, password and a
+sender address on a domain the mail service has verified), and approval of the cost below.
+
+Steps in the Render dashboard:
+
+1. New > Blueprint > the same repository, branch `main`, Blueprint path `render.production.yaml`.
+2. Enter the values Render asks for: `DATA_ENCRYPTION_KEY` (a NEW key, made with
+   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`,
+   kept in the password manager), Wasabi keys, `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+   `EMAIL_FROM` (for example `Conversation Collection <no-reply@yourdomain>`), `ADMIN_EMAIL`,
+   `ADMIN_PASSWORD` (12+ characters), and `PUBLIC_APP_URL` = the address Render shows for
+   `ccp-prod-web` (or the custom domain), without a trailing slash.
+3. Deploy. If `PUBLIC_APP_URL` was guessed and Render shows another address, correct it on
+   `ccp-prod-api` and redeploy (the worker copies it).
+4. Sign in as the Super Admin, turn on two-step sign-in for that account, then create the team.
+
+Cost at Render's published prices (read 2026-11-11): three `starter` services at USD 7 each, Key
+Value `starter` (256 MB) USD 10, Postgres `basic-256mb` USD 6 plus storage (USD 0.30 per GB):
+about USD 37 a month, plus Wasabi storage. The check copy costs about USD 20 a month on top while
+it is kept.
 
 ## 4. Release procedure (Phase 10)
 

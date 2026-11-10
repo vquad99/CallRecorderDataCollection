@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.permissions import Perm
+from app.modules.audio_qc.models import AudioQcResult
 from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.projects.models import Project
@@ -236,6 +237,29 @@ def summary(
         "returned": statuses.get("RETURNED", 0),
         "waiting": statuses.get("AUDIO_QC", 0),
     }
+    # What the automatic check said about the recordings now waiting for a QC decision (D-079).
+    latest_auto = in_scope(
+        select(AudioQcResult.task_id, AudioQcResult.outcome)
+        .select_from(AudioQcResult)
+        .join(Task, Task.id == AudioQcResult.task_id)
+        .join(Recording, Recording.id == AudioQcResult.recording_id)
+        .where(Task.status == "AUDIO_QC", AudioQcResult.automated.is_(True))
+        .distinct(AudioQcResult.task_id)
+        .order_by(AudioQcResult.task_id, AudioQcResult.created_at.desc())
+    ).subquery()
+    automatic = {
+        outcome: int(n)
+        for outcome, n in db.execute(
+            select(latest_auto.c.outcome, func.count()).group_by(latest_auto.c.outcome)
+        )
+    }
+    result.qc.update(
+        {
+            "auto_pass": automatic.get("PASS", 0),
+            "auto_review": automatic.get("NEEDS_REVIEW", 0),
+            "auto_fail": automatic.get("FAIL", 0),
+        }
+    )
     if view != "manager":
         return result
 

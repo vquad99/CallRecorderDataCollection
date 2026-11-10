@@ -3,3 +3,6 @@ render.yaml validated against Render's published Blueprint schema
 with python jsonschema: 0 errors. A deliberately broken copy (unknown key, bogus plan) gave 3
 errors, so the check is live. Repository tests: backend/tests/test_render_blueprint.py.
 Not yet deployed: needs the owner's Render account (dubdesk).
+
+2026-11-11: render.production.yaml validated the same way (Draft 2020-12 validator): 0 errors; a
+copy with a bogus plan and an unknown key gave 3 errors. render.yaml re-checked: 0 errors.

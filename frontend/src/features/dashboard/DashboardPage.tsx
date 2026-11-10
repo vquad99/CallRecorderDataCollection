@@ -447,6 +447,21 @@ function Body({ data }: { data: Dashboard }) {
                   <dd>{data.qc.waiting}</dd>
                 </div>
               </dl>
+              <h3>Automatic check of those waiting</h3>
+              <dl className="checks">
+                <div className="checks__row">
+                  <dt>All checks passed</dt>
+                  <dd>{data.qc.auto_pass}</dd>
+                </div>
+                <div className="checks__row">
+                  <dt>Listen and decide</dt>
+                  <dd>{data.qc.auto_review}</dd>
+                </div>
+                <div className="checks__row">
+                  <dt>Failed a check</dt>
+                  <dd>{data.qc.auto_fail}</dd>
+                </div>
+              </dl>
             </section>
           ) : null}
         </div>

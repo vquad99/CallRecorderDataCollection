@@ -1550,3 +1550,10 @@ a.code {
     transition: none !important;
   }
 }
+
+/* Audio quality card (D-079): the player spans the card. */
+.player {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+}

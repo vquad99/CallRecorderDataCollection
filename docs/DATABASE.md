@@ -67,7 +67,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | recording_channels | recording_id, channel_index (0 left, 1 right), participant_id, source_asset_id, verified_separate, verification_note | unique (recording_id, channel_index) | cascade |
 | audio_assets | recording_id, kind, parent_asset_id, storage_key, version, container, codec, sample_format, sample_rate, bit_depth, channels, duration_ms, size_bytes, sha256, peak_dbfs, clip_count, clip_pct, silence_pct, rms_dbfs, provider_codec, provider_recording_spec | unique (storage_key, version); index sha256 | retention workflow |
 | asset_processing_steps | asset_id, seq, tool, tool_version, parameters, input_asset_id, output_sha256 | unique (asset_id, seq) | cascade |
-| audio_qc_results | audio_asset_id, rule_set_version, outcome, reason_code, metric columns, reviewer_id, comment, reviewed_at | index audio_asset_id | restrict |
+| audio_qc_results, audio_qc_checks | see "Audio quality check" below (built, D-079) | index recording_id, task_id, project_id | restrict; checks cascade |
 | transcription_jobs | audio_asset_id, provider, model_name, model_version, settings, language_code, dialect, status, attempts, started_at, finished_at, raw_response_ref, last_error | index status | restrict |
 | transcripts | task_id, source (AI, HUMAN), transcription_job_id, current_version, status, locked, locked_at | unique (task_id, source) | restrict |
 | transcript_revisions | transcript_id, version, author_id, created_at, submitted (bool) | unique (transcript_id, version) | restrict |
@@ -115,6 +115,17 @@ Not in those figures, needed by this design, sized by the retention decision (B-
 
 Keeping full browser originals for the whole retention period roughly triples storage. Backups,
 replicas and export bundles are extra.
+
+## Audio quality check (migration 0013, D-079)
+
+- `audio_assets.dynamic_range_db`, `audio_assets.content_fingerprint` (indexed): measured when a file
+  is made; files made earlier keep them empty.
+- `audio_qc_results`: recording_id, task_id, project_id, asset_id, automated, outcome (PASS,
+  NEEDS_REVIEW, FAIL, RETURN), reason_code, comment, reviewer_id, the measurements at the time
+  (duration_ms, silence_pct, clip_pct, peak_dbfs, rms_dbfs, dynamic_range_db),
+  duplicate_of_recording_id. Indexed by recording, task and project. Rows are never changed.
+- `audio_qc_checks`: result_id (cascade), position, code, state (PASS, FAIL, REVIEW, INFO,
+  NOT_APPLICABLE), measured, expected, message.
 
 ## Participant personal page (migration 0009, D-067)
 

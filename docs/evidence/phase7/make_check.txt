@@ -1,0 +1,15 @@
+Phase 7 audio QC and recording details (D-079), aws-dev, 2026-11-10 IST.
+make check-backend check-frontend (private PostgreSQL ccp_test, REQUIRE_DB_TESTS=1):
+
+126 files already formatted
+All checks passed!
+Success: no issues found in 126 source files
+=========== 308 passed, 13 skipped, 19 warnings in 522.17s (0:08:42) ===========
+ Test Files  21 passed (21)
+      Tests  364 passed (364)
+first screen 122.3 KB compressed (7 files, limit 125 KB); 27 pages on demand, largest RecorderPage-CnYAernh.js 5.4 KB (limit 30 KB)
+exit=0
+
+Audio QC tests: tests/test_audio_qc_rules.py (23, generated fixtures), tests/test_audio_qc.py (11, end to end),
+tests/test_security_access.py (5 new routes x every role), frontend audioqc.test.tsx (5), forms.test.tsx (2 new forms).
+Not covered here: swapped channels (TA-AQC-08) needs a telephony reference recording (B-01).

@@ -115,7 +115,8 @@ export async function putChunk(
   }
 }
 
-/** Saves the delivery file and, with it, the consent record for that recording (D-068). */
+/** Saves the delivery file and, with it, the consent record (D-068) and the details file with
+ * every measurement and the audio check (D-079). */
 export async function downloadWithConsent(recording: Recording, taskCode: string): Promise<void> {
   const final = recording.assets.find(
     (a) => a.kind === "FTF_DERIVED_PCM" || a.kind === "TELEPHONY_FINAL_STEREO",
@@ -129,5 +130,9 @@ export async function downloadWithConsent(recording: Recording, taskCode: string
   await apiDownload(
     `/api/v1/recordings/${recording.id}/consent-form`,
     `consent_${taskCode}_${recording.id}.html`,
+  );
+  await apiDownload(
+    `/api/v1/recordings/${recording.id}/metadata`,
+    `metadata_${taskCode}_${recording.id}.json`,
   );
 }

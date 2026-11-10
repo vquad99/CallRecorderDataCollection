@@ -22,7 +22,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Face-to-face recording | FTF | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Edge and by-ear playback checks open |
 | Storage | STOR | 13 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED |
 | Audio rules and conversion | AUDIO | 24 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Telephony parts in Phases 5-6 |
-| Audio QC | AQC | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Audio QC | AQC | 10 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | Built 2026-11-10 (D-079); telephony parts wait for B-01 |
 | AI transcription | ASR | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Human transcription | TRN | 12 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
 | Transcript QC | TQC | 6 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
@@ -52,7 +52,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 4 Storage, face-to-face recording | ACCEPTED | 4 | Approved by owner 2026-11-09 (CI run 42652152398 green; Option A fix D-048) |
 | 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
 | 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
-| 7 Audio QC, optional AI transcription | NOT STARTED | 7 | - |
+| 7 Audio QC, optional AI transcription | IN PROGRESS | 7 | - |
 | 8 Human transcription, transcript QC | WITHDRAWN | 8 | D-062: owner 2026-11-10, no manual transcription |
 | 9 Exports, dashboards | NOT STARTED | 9 | - |
 | 10 Security, PWA, deployment, operations | NOT STARTED | 10 | - |
@@ -270,7 +270,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AUDIO-015 | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. | 4-7 | [x] | [x] | [ ] | [x] TA-STOR-08, TA-FTF-05, TA-STOR-11 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt; docs/evidence/phase4/walkthrough_channels.txt | VERIFIED | - |
 | AUDIO-016 | Microphone capture needs HTTPS, user permission and a supported browser; clear microphone test before recording. | 4-7 | [ ] | [ ] | [x] | n/a | [x] TM-FTF-01 | docs/evidence/phase4/walkthrough.txt | VERIFIED | - |
 | AUDIO-017 | Every final asset stores: extension and actual container, codec/sample format, sample rate, bit depth, channels, duration, size, peak, clipping count or %, silence %, RMS, hash, source recording ID, processing history. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-06 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
-| AUDIO-018 | QC analysis never modifies source audio. | 4-7 | [x] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | docs/evidence/phase4/make_check.txt | IN PROGRESS | Measurements read-only; full QC in Phase 7 |
+| AUDIO-018 | QC analysis never modifies source audio. | 4-7 | [x] | [x] | [x] | [x] TA-AQC-11 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | AUDIO-019 | Deterministic, tested processing pipeline. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-07 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | AUDIO-020 | Actual original inspected before conversion; decoded without noise reduction or enhancement; resampled to 16 kHz with a documented high-quality resampler; converted to signed 16-bit; written as WAV; original never overwritten. | 4-7 | [x] | [x] | [ ] | [x] TA-FTF-05, TA-AUDIO-08 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/wasabi_checks.txt | VERIFIED | - |
 | AUDIO-021 | Conversion to mono only when source channel handling is understood; exact downmix method documented. | 4-7 | [x] | [x] | [ ] | [x] TA-AUDIO-09, TA-FTF-09 | n/a | docs/evidence/phase4/make_check.txt; docs/evidence/phase4/walkthrough_channels.txt | VERIFIED | - |
@@ -315,16 +315,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | TEL-036 | Moderator call UI: assigned task, A/B details, start call, call state, add B, consent checklist for A and B, recording state, leave conference, permission-restricted end session, error/retry display, event timeline. | 5, 6 | [ ] | [ ] | [ ] | [ ] TA-TEL-17 | [ ] TM-TEL-05 | - | BLOCKED | B-01 provider |
 | TEL-037 | Every call UI action goes to the backend and shows the actual provider response; no optimistic 'connected' state. | 5, 6 | [ ] | [ ] | [ ] | [ ] TA-TEL-17 | n/a | - | BLOCKED | B-01 provider |
 | TEL-038 | Failure scenarios handled: A no answer, B no answer, B fails to join, moderator drops, participant disconnects, webhook repeats, webhook out of order, retrieval fails and retries, corrupt recording, one channel missing, 50 concurrent sessions. | 5, 6 | [ ] | [ ] | [ ] | [ ] TA-TEL-19 | [ ] TM-TEL-06, TM-LOAD-01 | - | BLOCKED | B-01 provider |
-| AQC-001 | Project-configured thresholds; initial rule flags silence above 25 %; no hard-coded universal thresholds without evidence. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-01 | n/a | - | NOT STARTED | - |
-| AQC-002 | Checks container, codec, sample rate, bit depth, channels, duration, file size. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-02, TA-AQC-03, TA-AQC-04 | n/a | - | NOT STARTED | - |
-| AQC-003 | Measures silence ratio, clipping ratio, RMS, peak, dynamic range. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-05, TA-AQC-06 | n/a | - | NOT STARTED | - |
-| AQC-004 | SNR only with a validated method; otherwise null with reason. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-07 | n/a | - | NOT STARTED | - |
-| AQC-005 | Channel leakage indicator for stereo telephony. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-09 | n/a | - | NOT STARTED | - |
-| AQC-006 | Missing, corrupt or undecodable audio detected (decode errors recorded). | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-12 | n/a | - | NOT STARTED | - |
-| AQC-007 | Duplicate audio detection (hash and content). | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-13 | n/a | - | NOT STARTED | - |
-| AQC-008 | Outcome PASS, FAIL or NEEDS_REVIEW with reason code, comment, timestamp and reviewer ID. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-14 | n/a | - | NOT STARTED | - |
-| AQC-009 | Read-only analysis service; never modifies the source. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-11 | n/a | - | NOT STARTED | - |
-| AQC-010 | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. | 7 | [ ] | [ ] | [ ] | [ ] TA-AQC-02, TA-AQC-03, TA-AQC-04, TA-AQC-05, TA-AQC-06, TA-AQC-08, TA-AQC-10, TA-AQC-12, TA-AQC-15 | n/a | - | NOT STARTED | - |
+| AQC-001 | Project-configured thresholds; initial rule flags silence above 25 %; no hard-coded universal thresholds without evidence. | 7 | [x] | [x] | [x] | [x] TA-AQC-01 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-002 | Checks container, codec, sample rate, bit depth, channels, duration, file size. | 7 | [x] | [x] | [x] | [x] TA-AQC-02, TA-AQC-03, TA-AQC-04 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-003 | Measures silence ratio, clipping ratio, RMS, peak, dynamic range. | 7 | [x] | [x] | [x] | [x] TA-AQC-05, TA-AQC-06 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-004 | SNR only with a validated method; otherwise null with reason. | 7 | [x] | [x] | [x] | [x] TA-AQC-07 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-005 | Channel leakage indicator for stereo telephony. | 7 | [x] | [x] | [x] | [ ] TA-AQC-09 | n/a | docs/evidence/phase7/make_check.txt | IN PROGRESS | Correlation indicator built and tested on two-channel files; telephony stereo files need B-01 |
+| AQC-006 | Missing, corrupt or undecodable audio detected (decode errors recorded). | 7 | [x] | [x] | [x] | [x] TA-AQC-12 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-007 | Duplicate audio detection (hash and content). | 7 | [x] | [x] | [x] | [x] TA-AQC-13 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-008 | Outcome PASS, FAIL or NEEDS_REVIEW with reason code, comment, timestamp and reviewer ID. | 7 | [x] | [x] | [x] | [x] TA-AQC-14 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-009 | Read-only analysis service; never modifies the source. | 7 | [x] | [x] | [x] | [x] TA-AQC-11 | n/a | docs/evidence/phase7/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| AQC-010 | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. | 7 | [x] | [x] | [x] | [ ] TA-AQC-02, TA-AQC-03, TA-AQC-04, TA-AQC-05, TA-AQC-06, TA-AQC-08, TA-AQC-10, TA-AQC-12, TA-AQC-15 | n/a | docs/evidence/phase7/make_check.txt | IN PROGRESS | All fixtures pass except swapped channels, which needs a telephony reference recording (B-01) |
 | ASR-001 | Provider-neutral ASR interface: submit job, get status, retrieve result, cancel if supported. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-01 | n/a | - | NOT STARTED | - |
 | ASR-002 | AI transcription provider: Deepgram (owner decision 2026-11-09, replaces the spec's initial candidates Whisper Large-v3 / AI4Bharat); its capabilities, models, language coverage and prices used only after official-documentation check and evaluation; other providers only after evaluation. | 7 | [ ] | [ ] | [ ] | n/a | [ ] TM-ASR-01 | - | NOT STARTED | - |
 | ASR-003 | Audio queued for transcription after it passes audio QC. | 7 | [ ] | [ ] | [ ] | [ ] TA-ASR-02, TA-ASR-07 | n/a | - | NOT STARTED | - |

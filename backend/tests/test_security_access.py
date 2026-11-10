@@ -51,7 +51,7 @@ FOREIGN_CODE = "QZFOREIGN"
 SA, PA, MO, MO2, QC, CV = "SA", "PA", "MO", "MO2", "QC", "CV"
 CALLERS = [SA, PA, MO, MO2, QC, CV]
 EVERY_MEMBER = set(CALLERS)
-TASK_VIEWERS = {SA, PA, MO}  # QC has no audio QC assignments before Phase 7
+TASK_VIEWERS = {SA, PA, MO}  # QC sees only tasks assigned to them for audio QC; none here
 
 
 def _one_second_chunk() -> bytes:
@@ -77,7 +77,7 @@ class Side:
     participant: str
     participant_code: str
     spare_participant: str
-    task_done: str  # recorded face-to-face task (RECORDED)
+    task_done: str  # recorded face-to-face task, checked automatically (AUDIO_QC)
     task_open: str  # task with an open recording and a consent record
     recording_done: str
     recording_open: str
@@ -682,7 +682,47 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/tasks/{s.task_done}/transition",
         TASK_VIEWERS,
         Perm.TASKS_VIEW,
-        lambda e, s, who: {"to": "IN_PROGRESS"},  # never valid from RECORDED: 409 after access
+        lambda e, s, who: {"to": "IN_PROGRESS"},  # never valid from AUDIO_QC: 409 after access
+    ),
+    # Audio QC (D-079): read by task viewers, assigned by managers, decided by the task's QC
+    # Executive (none assigned here) or the Super Admin; a Project Admin reads only (matrix O(R)).
+    case(
+        "GET",
+        "/api/v1/tasks/{task_id}/audio-qc",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/audio-qc",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/assign-qc",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/assign-qc",
+        {SA, PA},
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"user_id": e.foreign_moderator},  # not a member: refused after access
+    ),
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/audio-qc/decision",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/audio-qc/decision",
+        {SA},
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"outcome": "FAIL"},  # no reason: refused after access, task unchanged
+    ),
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/audio-qc/recheck",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/audio-qc/recheck",
+        {SA, PA},
+        Perm.TASKS_VIEW,
+    ),
+    # The details file goes with a download, so it needs the download right (D-079).
+    case(
+        "GET",
+        "/api/v1/recordings/{recording_id}/metadata",
+        lambda e, s: f"/api/v1/recordings/{s.recording_done}/metadata",
+        {SA, PA},
+        Perm.RECORDINGS_DOWNLOAD,
     ),
     case(
         "POST",

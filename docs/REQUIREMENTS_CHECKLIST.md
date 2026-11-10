@@ -4,15 +4,15 @@ GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
 333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 161 are built with passing automated tests (69 of them also verified) - 56 %.
+process rule), 170 are built with passing automated tests (69 of them also verified) - 59 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 92 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 21 | some of it is built, or it needs a test that is not done yet |
+| Built | 101 | built and automated tests pass; not yet checked by hand |
+| Partly built / needs testing | 22 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
-| Not built | 41 | not started |
+| Not built | 31 | not started |
 | Blocked | 67 | waiting on a decision or account from the owner or client (see Note) |
 | Withdrawn | 20 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
@@ -36,9 +36,9 @@ process rule), 161 are built with passing automated tests (69 of them also verif
 | TASK | 8 | 4 |  |  |  |  |  |  |
 | STOR | 4 | 8 | 1 |  |  |  |  |  |
 | FTF | 13 |  | 2 |  |  |  |  |  |
-| AUDIO | 8 |  | 3 |  |  | 13 |  |  |
+| AUDIO | 8 | 1 | 2 |  |  | 13 |  |  |
 | TEL |  |  |  |  |  | 38 |  |  |
-| AQC |  |  |  |  | 10 |  |  |  |
+| AQC |  | 8 | 2 |  |  |  |  |  |
 | ASR |  |  |  |  | 10 |  |  |  |
 | TRN |  |  |  |  |  |  | 12 |  |
 | TQC |  |  |  |  |  |  | 6 |  |
@@ -324,7 +324,7 @@ process rule), 161 are built with passing automated tests (69 of them also verif
 | AUDIO-015 | Verified | Original browser capture kept; converted file is a derived asset with conversion details; never described as untouched original. |  |
 | AUDIO-016 | Verified | Microphone capture needs HTTPS, user permission and a supported browser; clear microphone test before recording. |  |
 | AUDIO-017 | Verified | Every final asset stores: extension and actual container, codec/sample format, sample rate, bit depth, channels, duration, size, peak, clipping count or %, silence %, RMS, hash, source recording ID, processing history. |  |
-| AUDIO-018 | Partly built / needs testing | QC analysis never modifies source audio. | Measurements read-only; full QC in Phase 7 |
+| AUDIO-018 | Built | QC analysis never modifies source audio. |  |
 | AUDIO-019 | Verified | Deterministic, tested processing pipeline. |  |
 | AUDIO-020 | Verified | Actual original inspected before conversion; decoded without noise reduction or enhancement; resampled to 16 kHz with a documented high-quality resampler; converted to signed 16-bit; written as WAV; original never overwritten. |  |
 | AUDIO-021 | Verified | Conversion to mono only when source channel handling is understood; exact downmix method documented. |  |
@@ -379,16 +379,16 @@ process rule), 161 are built with passing automated tests (69 of them also verif
 
 | ID | State | Requirement | Note |
 |---|---|---|---|
-| AQC-001 | Not built | Project-configured thresholds; initial rule flags silence above 25 %; no hard-coded universal thresholds without evidence. |  |
-| AQC-002 | Not built | Checks container, codec, sample rate, bit depth, channels, duration, file size. |  |
-| AQC-003 | Not built | Measures silence ratio, clipping ratio, RMS, peak, dynamic range. |  |
-| AQC-004 | Not built | SNR only with a validated method; otherwise null with reason. |  |
-| AQC-005 | Not built | Channel leakage indicator for stereo telephony. |  |
-| AQC-006 | Not built | Missing, corrupt or undecodable audio detected (decode errors recorded). |  |
-| AQC-007 | Not built | Duplicate audio detection (hash and content). |  |
-| AQC-008 | Not built | Outcome PASS, FAIL or NEEDS_REVIEW with reason code, comment, timestamp and reviewer ID. |  |
-| AQC-009 | Not built | Read-only analysis service; never modifies the source. |  |
-| AQC-010 | Not built | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. |  |
+| AQC-001 | Built | Project-configured thresholds; initial rule flags silence above 25 %; no hard-coded universal thresholds without evidence. |  |
+| AQC-002 | Built | Checks container, codec, sample rate, bit depth, channels, duration, file size. |  |
+| AQC-003 | Built | Measures silence ratio, clipping ratio, RMS, peak, dynamic range. |  |
+| AQC-004 | Built | SNR only with a validated method; otherwise null with reason. |  |
+| AQC-005 | Partly built / needs testing | Channel leakage indicator for stereo telephony. | Correlation indicator built and tested on two-channel files; telephony stereo files need B-01 |
+| AQC-006 | Built | Missing, corrupt or undecodable audio detected (decode errors recorded). |  |
+| AQC-007 | Built | Duplicate audio detection (hash and content). |  |
+| AQC-008 | Built | Outcome PASS, FAIL or NEEDS_REVIEW with reason code, comment, timestamp and reviewer ID. |  |
+| AQC-009 | Built | Read-only analysis service; never modifies the source. |  |
+| AQC-010 | Partly built / needs testing | Fixture tests: valid mono, valid stereo, wrong sample rate, wrong bit depth, wrong channel count, silence, clipping, corrupt, swapped channels, identical left/right mixed tracks, missing track. | All fixtures pass except swapped channels, which needs a telephony reference recording (B-01) |
 
 ## ASR
 

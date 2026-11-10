@@ -194,7 +194,15 @@ export const DASHBOARD = {
   tasks_total: 40,
   tasks_approved: 22,
   tasks_by_status: { APPROVED: 22, AUDIO_QC: 6, IN_PROGRESS: 4, ASSIGNED: 8 },
-  qc: { passed: 22, rejected: 1, returned: 2, waiting: 6 },
+  qc: {
+    passed: 22,
+    rejected: 1,
+    returned: 2,
+    waiting: 6,
+    auto_pass: 4,
+    auto_review: 1,
+    auto_fail: 1,
+  },
   queues: {
     waiting_for_qc: 6,
     processing: 0,

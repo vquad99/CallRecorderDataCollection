@@ -16,6 +16,7 @@ import { toApiError, useResource } from "../../hooks/useResource";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Icon, IconTile } from "../../components/Icon";
 import { Stepper } from "../../components/Stepper";
+import { AudioQcPanel } from "./AudioQcPanel";
 
 const FLOW: readonly string[] = [
   "DRAFT",
@@ -309,7 +310,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                   </span>
                 </td>
                 <td>{Math.round(r.saved_seconds / 60)} min</td>
-                <td>{r.assets.length} audio + consent record</td>
+                <td>{r.assets.length} audio + consent record + details</td>
                 {can("recordings.download") ? (
                   <td>
                     <Button
@@ -321,7 +322,9 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                         setMessage(null);
                         rec
                           .downloadWithConsent(r, task.task_code)
-                          .then(() => setMessage("Recording and consent record downloaded."))
+                          .then(() =>
+                            setMessage("Recording, consent record and details downloaded."),
+                          )
                           .catch((err: unknown) => setError(toApiError(err)))
                           .finally(() => setBusy(null));
                       }}
@@ -418,6 +421,9 @@ export function TaskDetailPage() {
             Open the recorder
           </Link>
         </p>
+      ) : null}
+      {HAS_RECORDINGS.includes(task.status) ? (
+        <AudioQcPanel task={task} onDecided={reload} />
       ) : null}
       {HAS_RECORDINGS.includes(task.status) ? <Recordings task={task} /> : null}
       <Actions task={task} onChange={replace} />
