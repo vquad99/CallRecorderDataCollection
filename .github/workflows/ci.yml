@@ -19,6 +19,8 @@ jobs:
           fetch-depth: 0
       - name: Repository rules (TA-GEN-01/03/06/07, TA-ARCH-01)
         run: python3 tools/check_repo.py
+      - name: Requirements checklist matches the tracker (D-076)
+        run: python3 tools/requirements_checklist.py --check
       - name: Secret scan (TA-SEC-02)
         uses: gitleaks/gitleaks-action@v3
         env:
