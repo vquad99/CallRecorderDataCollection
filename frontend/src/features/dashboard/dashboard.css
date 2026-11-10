@@ -6,11 +6,10 @@
   --series-approved: #1f5fbb;
   --series-waiting: #6aa8f0;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --series-approved: #3a74d4;
-    --series-waiting: #27a3b3;
-  }
+/* Dark-mode chart colours, kept for a later switch; not active (see global.css). */
+:root[data-theme="dark"] {
+  --series-approved: #3a74d4;
+  --series-waiting: #27a3b3;
 }
 
 /* Key figures */

@@ -84,58 +84,58 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0f18;
-    --surface: #121824;
-    --surface-2: #0f141e;
-    --surface-hover: #19202e;
-    --text: #e7eaf1;
-    --text-2: #c5cbd8;
-    --muted: #8e98ab;
-    --border: #222b3a;
-    --border-strong: #334052;
+/* Dark tokens, kept for a later light/dark switch. Not active: the app always uses the light
+   design, whatever the computer is set to (owner 2026-11-10: "too dark"). */
+:root[data-theme="dark"] {
+  --bg: #0b0f18;
+  --surface: #121824;
+  --surface-2: #0f141e;
+  --surface-hover: #19202e;
+  --text: #e7eaf1;
+  --text-2: #c5cbd8;
+  --muted: #8e98ab;
+  --border: #222b3a;
+  --border-strong: #334052;
 
-    --primary: #6fb0ff;
-    --primary-hover: #8fc2ff;
-    --primary-soft: #13233b;
-    --primary-text: #0b0f18;
-    --focus-ring: 0 0 0 3px rgb(111 176 255 / 0.3);
+  --primary: #6fb0ff;
+  --primary-hover: #8fc2ff;
+  --primary-soft: #13233b;
+  --primary-text: #0b0f18;
+  --focus-ring: 0 0 0 3px rgb(111 176 255 / 0.3);
 
-    --ok: #4cc79a;
-    --ok-soft: #0f2a21;
-    --warn: #e8a94f;
-    --warn-soft: #2b2110;
-    --danger: #f2767c;
-    --danger-soft: #2e1518;
-    --info: #6fb0ff;
-    --info-soft: #13233b;
-    --progress: #55bfd2;
-    --progress-soft: #0f272c;
-    --neutral: #a9b2c3;
-    --neutral-soft: #1d2535;
+  --ok: #4cc79a;
+  --ok-soft: #0f2a21;
+  --warn: #e8a94f;
+  --warn-soft: #2b2110;
+  --danger: #f2767c;
+  --danger-soft: #2e1518;
+  --info: #6fb0ff;
+  --info-soft: #13233b;
+  --progress: #55bfd2;
+  --progress-soft: #0f272c;
+  --neutral: #a9b2c3;
+  --neutral-soft: #1d2535;
 
-    --blue: #6fb0ff;
-    --blue-soft: #13233b;
-    --teal: #6fb0ff;
-    --teal-soft: #13233b;
-    --violet: #6fb0ff;
-    --violet-soft: #13233b;
-    --amber: #6fb0ff;
-    --amber-soft: #13233b;
-    --rose: #6fb0ff;
-    --rose-soft: #13233b;
-    --green: #6fb0ff;
-    --green-soft: #13233b;
-    --slate: #a9b2c3;
-    --slate-soft: #1d2535;
+  --blue: #6fb0ff;
+  --blue-soft: #13233b;
+  --teal: #6fb0ff;
+  --teal-soft: #13233b;
+  --violet: #6fb0ff;
+  --violet-soft: #13233b;
+  --amber: #6fb0ff;
+  --amber-soft: #13233b;
+  --rose: #6fb0ff;
+  --rose-soft: #13233b;
+  --green: #6fb0ff;
+  --green-soft: #13233b;
+  --slate: #a9b2c3;
+  --slate-soft: #1d2535;
 
-    --nav-bg: #070a13;
-    --nav-bg-2: #070a13;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
-    color-scheme: dark;
-  }
+  --nav-bg: #070a13;
+  --nav-bg-2: #070a13;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
 }
 
 *,
