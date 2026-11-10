@@ -693,3 +693,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
   separately); frontend 323; browser tests 2; journeys 6/6 in Chrome; storage contract 9/9 on Wasabi
   (docs/evidence/option_o/). Test objects deleted from Wasabi. The development database's
   staff-account limit was raised to 1000 in Settings because it holds the 150 load-test accounts.
+- CI run 42740789337 (commit 64e94d5): all five jobs green; backend 243 passed (ffprobe included),
+  frontend 323, browser tests 4, journeys 12 (6 in Chromium, 6 in Edge); the container job backed up,
+  deleted data, restored it and found it again, and confirmed compression and one-year caching on the
+  web server (docs/evidence/option_o/ci_run.txt).
+- Optimisation items done; waiting for the owner's next choice.

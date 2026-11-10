@@ -1,0 +1,37 @@
+GitHub Actions run 42740789337 (commit 64e94d5, optimisation items O1-O12) - SUCCESS
+https://github.com/vquad99/CallRecorderDataCollection/actions/runs/42740789337
+
+Jobs:
+  success: Frontend lint, types, unit and browser tests
+  success: Backend lint, types, tests
+  success: Repository rules and secret scan
+  success: Containers start, migrate, persist (TM-FND-02)
+  success: User journeys in a real browser (Option D)
+
+Key lines:
+  Frontend lint, types, unit a | Test Files  17 passed (17)
+  Frontend lint, types, unit a | Tests  323 passed (323)
+  Frontend lint, types, unit a | first screen 107.3 KB compressed (6 files, limit 115 KB); 21 pages on demand, largest RecorderPage-4aIb5Swm.js 5.6 KB (limit 30 KB)
+  Frontend lint, types, unit a | 4 passed (1.8m)
+  Backend lint, types, tests | ================== 243 passed, 9 skipped in 211.49s (0:03:31) ==================
+  Backend lint, types, tests | No known vulnerabilities found
+  Containers start, migrate, p | #26 10.55 first screen 107.3 KB compressed (6 files, limit 115 KB); 21 pages on demand, largest RecorderPage-4aIb5Swm.js 5.6 KB (limit 30 KB)
+  Containers start, migrate, p | Cache-Control: max-age=31536000
+  Containers start, migrate, p | Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' https://*.wasabisys.com; conn
+  Containers start, migrate, p | Content-Encoding: gzip
+  Containers start, migrate, p | backup-upload: backups/db/ccp-20261110T021935Z.dump 86224 bytes sha256 76fa550d2e7df4c50403069779e1fa3fe36f04aca377d1ec7d7feca97bc2c35d
+  Containers start, migrate, p | restore: backups/db/ccp-20261110T021935Z.dump restored
+  User journeys in a real brow | ================= 9 passed, 1 skipped, 8 deselected in 13.22s ==================
+  User journeys in a real brow | ✓   1 [chromium] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (12.0s)
+  User journeys in a real brow | ✓   2 [chromium] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (11.3s)
+  User journeys in a real brow | ✓   3 [chromium] › journeys/network.spec.ts:17:1 › a network drop mid-recording loses nothing (30.4s)
+  User journeys in a real brow | ✓   4 [chromium] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (5.5s)
+  User journeys in a real brow | ✓   5 [chromium] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (22.4s)
+  User journeys in a real brow | ✓   6 [chromium] › journeys/session.spec.ts:18:1 › a session ended mid-recording loses nothing once the moderator signs in again (25.0s)
+  User journeys in a real brow | ✓   7 [edge] › journeys/boundaries.spec.ts:19:1 › each role reaches only its own pages and records (21.3s)
+  User journeys in a real brow | ✓   8 [edge] › journeys/interrupted.spec.ts:17:1 › an interrupted recording keeps the saved audio and can be finished (12.5s)
+  User journeys in a real brow | ✓   9 [edge] › journeys/network.spec.ts:17:1 › a network drop mid-recording loses nothing (33.0s)
+  User journeys in a real brow | ✓  10 [edge] › journeys/password.spec.ts:16:1 › a forgotten password is reset by email and old sessions end (5.8s)
+  User journeys in a real brow | ✓  11 [edge] › journeys/recording.spec.ts:37:1 › set up a project, invite a moderator, and record a face-to-face conversation (23.8s)
+  User journeys in a real brow | ✓  12 [edge] › journeys/session.spec.ts:18:1 › a session ended mid-recording loses nothing once the moderator signs in again (26.8s)
+  User journeys in a real brow | 12 passed (4.1m)
