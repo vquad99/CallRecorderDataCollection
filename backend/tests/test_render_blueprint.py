@@ -17,7 +17,7 @@ import pytest
 import yaml
 
 from app import cli
-from tests.conftest import build_settings
+from tests.conftest import TEST_FERNET_KEY, build_settings
 
 ROOT = Path(__file__).resolve().parents[2]
 BLUEPRINT = yaml.safe_load((ROOT / "render.yaml").read_text())
@@ -144,7 +144,7 @@ def _filled(service: dict[str, Any], entered: dict[str, str]) -> dict[str, str]:
 
 
 ENTERED = {
-    "DATA_ENCRYPTION_KEY": "q0hO2a0kQ8Vb6E3r7wqjv0lF6g9X6m4Z1yS3t5u7w9A=",
+    "DATA_ENCRYPTION_KEY": TEST_FERNET_KEY,
     "PUBLIC_APP_URL": "https://collect.example.org",
     "STORAGE_ACCESS_KEY_ID": "AKIAEXAMPLE",
     "STORAGE_SECRET_ACCESS_KEY": "example-secret",
