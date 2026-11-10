@@ -90,11 +90,23 @@ services:
         sync: false
       - key: MEDIA_WORK_DIR
         value: /tmp/media
-      # No mail service yet (B-13): emails are written inside the container and are not sent.
+      # Mail (B-13): set in the dashboard, never here, so a Blueprint sync cannot switch real email
+      # back off. smtp + Resend (domain dubdesk.live, verified 2026-11-10); "file" writes emails
+      # inside the container instead of sending them.
       - key: EMAIL_BACKEND
-        value: file
+        sync: false
       - key: EMAIL_FILE_DIR
         value: /tmp/outbox
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

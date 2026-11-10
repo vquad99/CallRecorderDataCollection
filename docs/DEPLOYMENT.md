@@ -74,9 +74,14 @@ Steps in the Render dashboard (owner's account):
 
 Known limits of the check copy:
 
-- Emails (invitations, password resets, consent links) are written inside the container and not
-  sent until a mail service is configured (B-13). Personal links can be copied from the
-  Participants page instead.
+- Email (B-13) goes through Resend's SMTP service from the domain `dubdesk.live` (verified in
+  Resend on 2026-11-10, records at GoDaddy). Set on `ccp-api` in the dashboard, never in
+  `render.yaml`: `EMAIL_BACKEND=smtp`, `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`,
+  `SMTP_PASSWORD=<Resend API key>`, `EMAIL_FROM=Conversation Collection <no-reply@dubdesk.live>`.
+  With `EMAIL_BACKEND=file` emails are written inside the container instead of sent.
+- Address: `https://dubdesk.live` (custom domain on `ccp-web`; `www.dubdesk.live` redirects to it;
+  GoDaddy `A @ 216.24.57.1`, `CNAME www ccp-web-5mws.onrender.com`). `PUBLIC_APP_URL` on `ccp-api`
+  is `https://dubdesk.live`, so links in emails use it.
 - How Render passes the visitor's address is not documented by Render. Tested on the live copy
   (2026-11-10): the address reached the API correctly, but a false `X-Forwarded-For` sent by the
   visitor dodged the per-address sign-in limit (the per-account limit held). Fixed: on Render,
