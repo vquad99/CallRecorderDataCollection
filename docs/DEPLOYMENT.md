@@ -51,8 +51,9 @@ starts every service, migrates, and proves data survives a database restart (D-0
 `ccp-web` (public; nginx serving the app and forwarding /api to the API), `ccp-api` (private
 service; only reachable over Render's private network), `ccp-db` (PostgreSQL 16, private network
 only). No Redis or worker: on staging the API processes recordings itself. Before each deploy goes
-live, a pre-deploy step runs the migrations, creates the first Super Admin (`create-admin`) and,
-only when `ALLOW_DEMO_SEED` is `true`, the demo accounts.
+live, a pre-deploy step (`python -m app.cli prepare-deploy`) runs the migrations, creates the
+first Super Admin and, only when `ALLOW_DEMO_SEED` is `true`, the demo accounts. It is one command
+with no quotes or `&&`: Render ran a quoted `sh -c "..."` as a single word on the first deploy.
 
 Steps in the Render dashboard (owner's account):
 

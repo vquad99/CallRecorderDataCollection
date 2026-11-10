@@ -73,10 +73,8 @@ def test_the_web_server_reaches_the_api_on_the_port_it_listens_on() -> None:
 
 
 def test_each_deploy_migrates_and_bootstraps_before_going_live() -> None:
-    command = _service("ccp-api")["preDeployCommand"]
-    assert command.startswith('sh -c "alembic upgrade head')
-    assert "app.cli create-admin" in command
-    assert "seed-dev --if-allowed" in command
+    # A single command with no quotes or shell operators: Render ran a quoted sh -c as one word.
+    assert _service("ccp-api")["preDeployCommand"] == "python -m app.cli prepare-deploy"
 
 
 @pytest.mark.db
@@ -91,3 +89,21 @@ def test_the_deploy_step_skips_demo_accounts_unless_switched_on(
     monkeypatch.delenv("ADMIN_EMAIL", raising=False)
     assert cli.main(["create-admin"]) == 0
     assert "nothing to do" in capsys.readouterr().out
+
+
+@pytest.mark.db
+def test_the_deploy_step_migrates_creates_the_admin_once_and_skips_demo_data(
+    migrated_db: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = build_settings(app_env="staging", database_url=migrated_db)
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setenv("ADMIN_EMAIL", "owner@example.org")
+    monkeypatch.setenv("ADMIN_PASSWORD", "a-strong-admin-password")
+    monkeypatch.delenv("ALLOW_DEMO_SEED", raising=False)
+    assert cli.main(["prepare-deploy"]) == 0
+    out = capsys.readouterr().out
+    assert "database migrated" in out
+    assert "owner@example.org created" in out
+    assert "demo account" not in out
+    assert cli.main(["prepare-deploy"]) == 0, "a second deploy changes nothing"
+    assert "owner@example.org exists" in capsys.readouterr().out

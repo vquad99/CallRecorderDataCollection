@@ -147,6 +147,34 @@ def create_admin(settings: Settings, email: str, password: str, *, reset: bool) 
         engine.dispose()
 
 
+def migrate(settings: Settings) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", settings.database_url.get_secret_value())
+    command.upgrade(config, "head")
+
+
+def prepare_deploy(settings: Settings) -> int:
+    """One command for a host's pre-deploy step (D-077): migrations, the first Super Admin when
+    ADMIN_EMAIL is set, and demo accounts only where allowed. One command, so no shell is needed
+    (Render ran a quoted `sh -c` command as a single word)."""
+    migrate(settings)
+    print("prepare-deploy: database migrated")
+    email = os.environ.get("ADMIN_EMAIL", "")
+    if email:
+        outcome = create_admin(settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=False)
+        print(f"prepare-deploy: admin {email} {outcome}")
+    allowed = settings.app_env in ("development", "test") or (
+        settings.app_env == "staging" and os.environ.get("ALLOW_DEMO_SEED", "").lower() == "true"
+    )
+    if allowed and settings.app_env == "staging":
+        created = seed_dev(settings, os.environ.get("DEMO_PASSWORD", ""))
+        print(f"prepare-deploy: {len(created)} demo account(s) created")
+    return 0
+
+
 def run_retention(settings: Settings) -> int:
     from app.core.storage import build_storage
     from app.modules.recordings.service import apply_retention
@@ -314,6 +342,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do nothing (and succeed) where seeding is not allowed, e.g. in a deploy step",
     )
+    sub.add_parser(
+        "prepare-deploy",
+        help="before a deploy: migrate, create the first admin, seed demo data if allowed",
+    )
     admin = sub.add_parser(
         "create-admin",
         help="create the first Super Admin from ADMIN_EMAIL and ADMIN_PASSWORD (any environment)",
@@ -357,6 +389,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             created = seed_dev(settings, os.environ.get("DEMO_PASSWORD", ""))
             print(f"seed-dev: {len(created)} account(s) created; passwords from DEMO_PASSWORD")
+        elif args.command == "prepare-deploy":
+            return prepare_deploy(settings)
         elif args.command == "create-admin":
             email = os.environ.get("ADMIN_EMAIL", "")
             if not email:

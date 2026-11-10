@@ -44,11 +44,9 @@ services:
         - backend/**
     # Runs before each deploy goes live: database migrations, the first Super Admin, and - only
     # when ALLOW_DEMO_SEED is true - the demo accounts.
-    # Wrapped in sh -c because whether Render runs it through a shell is NOT DOCUMENTED.
-    preDeployCommand: >-
-      sh -c "alembic upgrade head
-      && python -m app.cli create-admin
-      && python -m app.cli seed-dev --if-allowed"
+    # One command, no shell: Render ran a quoted `sh -c "..."` as a single word (first deploy,
+    # 2026-11-10). prepare-deploy runs the three steps itself.
+    preDeployCommand: python -m app.cli prepare-deploy
     envVars:
       - key: PORT
         value: "10000"
