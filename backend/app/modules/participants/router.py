@@ -14,7 +14,7 @@ from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.router import AppSettings, Cipher
 from app.modules.auth.security import FieldCipher
-from app.modules.participants import manage, service
+from app.modules.participants import consent_view, manage, service
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 
@@ -371,3 +371,51 @@ def review_consent(
         db, principal, project_id, participant_id, body.decision, body.note, client_ip(request)
     )
     return ConsentOut.model_validate(record, from_attributes=True)
+
+
+# ---------------------------------------------------------------- one consent form (D-074)
+
+
+class AnswerOut(BaseModel):
+    status: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+    answered_at: datetime
+    policy_version: str
+    review_status: str | None
+    review_note: str
+    reviewed_at: datetime | None
+
+
+class ConsentFormOut(BaseModel):
+    participant_code: str
+    project_code: str
+    project_name: str
+    form_text: str
+    form_version: str
+    answered: bool
+    current: AnswerOut | None
+    earlier: list[AnswerOut]
+
+
+@router.get("/{participant_id}/consent-form", response_model=ConsentFormOut)
+def consent_form(
+    project_id: uuid.UUID, participant_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
+) -> ConsentFormOut:
+    return ConsentFormOut.model_validate(
+        consent_view.get(db, principal, project_id, participant_id), from_attributes=True
+    )
+
+
+@router.get("/{participant_id}/consent-form/file")
+def consent_form_file(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+) -> Response:
+    name, html = consent_view.as_file(db, principal, project_id, participant_id, client_ip(request))
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )

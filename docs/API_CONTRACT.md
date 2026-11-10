@@ -202,3 +202,5 @@ history, `captured_by` is `null` for the participant's own answers.
 | POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; answers each row's result, `ready`, `created`. |
 | POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove / send_consent, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result. |
 | POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |
+| GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer with review, earlier answers. |
+| GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |

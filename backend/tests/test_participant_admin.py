@@ -163,3 +163,32 @@ def test_a_consent_answer_is_approved_or_sent_back(world: dict[str, Any]) -> Non
         p for p in world["api"]("cv@example.org").get(base).json()["items"] if p["id"] == a
     )
     assert (client_row["consent_status"], client_row["consent_review"]) == (None, None)
+
+
+def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) -> None:
+    db, pa, base = world["db"], world["pa"], _base(world)
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
+    db.commit()
+    a = world["task"]["participant_a"]["id"]
+    blank = pa.get(f"{base}/{a}/consent-form").json()
+    assert (blank["answered"], blank["current"], blank["form_text"]) == (False, None, FORM)
+    token = pa.post(f"{base}/{a}/portal-link").json()["url"].split("#", 1)[1]
+    api, head = _visitor(world, token)
+    api.post("/api/v1/portal/consent", json={"decision": "REFUSED"}, headers=head)
+    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text="New"))
+    db.commit()
+    form = pa.get(f"{base}/{a}/consent-form").json()
+    assert form["form_text"] == FORM, "the text that was answered, not the project's new text"
+    assert (form["current"]["status"], form["current"]["review_status"]) == ("GIVEN", "APPROVED")
+    assert [e["status"] for e in form["earlier"]] == ["REFUSED"]
+    got = pa.get(f"{base}/{a}/consent-form/file")
+    assert got.status_code == 200
+    code = world["task"]["participant_a"]["participant_code"]
+    assert got.headers["content-disposition"] == f'attachment; filename="consent_VOICE_{code}.html"'
+    for expected in (code, FORM, "Agreed", "Approved", "Did not agree"):
+        assert expected in got.text, expected
+    assert "Asha" not in got.text, "by code only"
+    # QC staff and clients have no consent access.
+    assert world["api"]("qc@example.org").get(f"{base}/{a}/consent-form").status_code == 403

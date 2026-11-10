@@ -1169,6 +1169,15 @@ a.code {
   font-size: 0.8125rem;
 }
 
+.consent-doc {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .bulkbar {
   display: flex;
   flex-wrap: wrap;

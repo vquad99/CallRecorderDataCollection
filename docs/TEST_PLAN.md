@@ -236,6 +236,7 @@ output saved to evidence.
 | TA-PART-12 | Automated | 7 (D-071) | `tests/test_portal.py::test_the_consent_link_is_emailed_to_the_participant`: no address = 409; invalid address refused; the address is kept when a correction omits it and removed when sent empty; a moderator sees only that one exists; the emailed link opens the participant page. | PART-014 |
 | TA-PART-13 | Automated | 7 (D-073) | `tests/test_participant_admin.py`, `participants.page.test.tsx`: a file is checked before anyone is added and only good rows are created; bulk send, assign and remove report each participant (no email, already linked, on an open task); a project the caller is not in looks missing; moderators get 403. | PART-016 |
 | TA-PART-14 | Automated | 7 (D-073) | Same files plus `portal.test.tsx`: an 'agree' answer waits for review; a rejection needs a note, shows on the participant's page and lets them answer again; approval is recorded; clients see no consent state. | PART-017, PART-014 |
+| TA-PART-15 | Automated | 7 (D-074) | `test_participant_admin.py::test_one_consent_form_can_be_viewed_and_downloaded`, `participants.page.test.tsx`: the view shows the text that was answered even after the project form changes, the review and earlier answers; the file is named by project and participant code and holds no name; QC staff get 403. | PART-017, PART-015 |
 | TM-PART-01 | Manual | 3 | Participant fields limited to what the project needs. | PART-010 |
 
 ### TASK - Module 5 - Task assignment and workflow

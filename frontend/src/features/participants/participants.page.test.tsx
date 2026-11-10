@@ -129,4 +129,50 @@ describe("participants section", () => {
         .map((c) => (c.body as { confirm: boolean }).confirm),
     ).toEqual([false, true]);
   });
+
+  it("opens one participant's consent form as they answered it", async () => {
+    open({
+      "GET /api/v1/projects/p1/participants/a1/consent-form": () => [
+        200,
+        {
+          participant_code: "P000001",
+          project_code: "HINDI",
+          project_name: "Hindi conversations",
+          form_text: "I agree that my voice is recorded.",
+          form_version: "2",
+          answered: true,
+          current: {
+            status: "GIVEN",
+            answered_at: "2026-11-10T08:00:00Z",
+            policy_version: "2",
+            review_status: "REJECTED",
+            review_note: "Wrong person",
+            reviewed_at: "2026-11-10T09:00:00Z",
+          },
+          earlier: [
+            {
+              status: "REFUSED",
+              answered_at: "2026-11-09T08:00:00Z",
+              policy_version: "1",
+              review_status: null,
+              review_note: "",
+              reviewed_at: null,
+            },
+          ],
+        },
+      ],
+    });
+    renderAt("/participants");
+    const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "View" }));
+    const panel = await screen.findByRole("region", { name: "Consent form" });
+    expect(
+      await within(panel).findByText("I agree that my voice is recorded."),
+    ).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Sent back: Wrong person");
+    expect(panel).toHaveTextContent("Did not agree · version 1");
+    expect(within(panel).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Consent form" })).toBeNull();
+  });
 });

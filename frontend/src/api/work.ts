@@ -217,3 +217,26 @@ export const reviewConsent = (
     method: "POST",
     body: { decision, note },
   });
+
+export interface ConsentAnswer {
+  status: "GIVEN" | "REFUSED" | "WITHDRAWN";
+  answered_at: string;
+  policy_version: string;
+  review_status: "PENDING" | "APPROVED" | "REJECTED" | null;
+  review_note: string;
+  reviewed_at: string | null;
+}
+export interface ConsentFormView {
+  participant_code: string;
+  project_code: string;
+  project_name: string;
+  form_text: string;
+  form_version: string;
+  answered: boolean;
+  current: ConsentAnswer | null;
+  earlier: ConsentAnswer[];
+}
+export const consentForm = (projectId: string, participantId: string) =>
+  apiRequest<ConsentFormView>(`${pp(projectId)}/${participantId}/consent-form`);
+export const consentFormFileUrl = (projectId: string, participantId: string) =>
+  `${pp(projectId)}/${participantId}/consent-form/file`;

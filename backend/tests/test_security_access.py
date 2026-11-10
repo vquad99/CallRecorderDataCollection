@@ -589,6 +589,20 @@ CASES: list[Case] = [
         lambda e, s, who: {"action": "send_consent", "participant_ids": [s.participant]},
     ),
     case(
+        "GET",
+        PP + "/consent-form",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/consent-form",
+        {SA, PA, MO},
+        Perm.PARTICIPANTS_VIEW,
+    ),
+    case(
+        "GET",
+        PP + "/consent-form/file",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/consent-form/file",
+        {SA, PA, MO},
+        Perm.PARTICIPANTS_VIEW,
+    ),
+    case(
         "POST",
         PP + "/consent-review",
         lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/consent-review",
