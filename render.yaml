@@ -30,6 +30,13 @@ services:
           property: hostport
       - key: MEDIA_ORIGINS
         value: https://*.wasabisys.com
+      # The visitor's address: Render's proxy is the only way in, and it passes the address
+      # Cloudflare saw. Tested on the live copy (2026-11-10): a false X-Forwarded-For dodged the
+      # per-address sign-in limit until nginx took the address from CF-Connecting-IP instead.
+      - key: REAL_IP_FROM
+        value: 0.0.0.0/0
+      - key: REAL_IP_HEADER
+        value: CF-Connecting-IP
 
   - type: pserv
     name: ccp-api
@@ -65,8 +72,8 @@ services:
       # The public address of ccp-web; personal links and emails are built from it.
       - key: PUBLIC_APP_URL
         sync: false
-      # Only nginx can reach this private service, so forwarded headers come through it.
-      # How Render passes the visitor's address is NOT DOCUMENTED (see docs/DEPLOYMENT.md).
+      # Only nginx can reach this private service, and nginx sends exactly one address (the
+      # visitor's, see ccp-web); so the API may take it from any peer.
       - key: FORWARDED_ALLOW_IPS
         value: "*"
       - key: STORAGE_ENDPOINT_URL

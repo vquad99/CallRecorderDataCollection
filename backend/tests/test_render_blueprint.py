@@ -69,6 +69,8 @@ def test_the_web_server_reaches_the_api_on_the_port_it_listens_on() -> None:
         "property": "hostport",
     }
     assert "${PORT:-8000}" in (ROOT / "backend" / "Dockerfile").read_text()
+    assert web["REAL_IP_HEADER"]["value"] == "CF-Connecting-IP"
+    assert web["REAL_IP_FROM"]["value"] == "0.0.0.0/0"
     assert api["PORT"]["value"] == "10000"
 
 

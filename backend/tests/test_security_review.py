@@ -54,6 +54,10 @@ def test_the_web_server_hides_its_version_and_keeps_tokens_out_of_its_log() -> N
     assert "$uri" in log_format.group(1)
     assert "access_log /var/log/nginx/access.log ccp_no_query;" in conf
     assert "proxy_set_header X-Request-ID $request_id;" in conf
+    # One address towards the API, never the client-supplied chain (a false first entry dodged the
+    # per-address sign-in limit on the Render copy, 2026-11-10).
+    assert "proxy_set_header X-Forwarded-For $remote_addr;" in conf
+    assert "$proxy_add_x_forwarded_for" not in conf
 
 
 def test_forgot_password_does_its_work_after_answering() -> None:

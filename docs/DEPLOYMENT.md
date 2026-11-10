@@ -77,11 +77,11 @@ Known limits of the check copy:
 - Emails (invitations, password resets, consent links) are written inside the container and not
   sent until a mail service is configured (B-13). Personal links can be copied from the
   Participants page instead.
-- How Render passes the visitor's address to the service is NOT DOCUMENTED by Render. The API
-  trusts the address chain that arrives through nginx (`FORWARDED_ALLOW_IPS=*`, safe only because
-  the API is private); a visitor could put a false address in the chain, which affects the per-
-  address sign-in limit and the address in the audit log, not the per-account limit. To be checked
-  with a test request once deployed, before real use.
+- How Render passes the visitor's address is not documented by Render. Tested on the live copy
+  (2026-11-10): the address reached the API correctly, but a false `X-Forwarded-For` sent by the
+  visitor dodged the per-address sign-in limit (the per-account limit held). Fixed: on Render,
+  nginx takes the address from `CF-Connecting-IP` (`REAL_IP_FROM` / `REAL_IP_HEADER`) and sends the
+  API exactly one address. Re-tested after the change (see BUILD_STATUS session notes).
 - Free plans are not used: a free Postgres is deleted after 30 days and private services and
   workers have no free plan.
 
