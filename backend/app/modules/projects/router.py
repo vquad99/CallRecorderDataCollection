@@ -147,7 +147,10 @@ class ProjectBody(BaseModel):
 
 
 class CreateProjectBody(ProjectBody):
-    code: str = Field(min_length=2, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{1,39}$")
+    # Left out, the platform gives the next free code: PRJ0001, PRJ0002, ... (D-083).
+    code: str | None = Field(
+        default=None, min_length=2, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{1,39}$"
+    )
 
 
 @router.post("", response_model=ProjectDetail, status_code=201)

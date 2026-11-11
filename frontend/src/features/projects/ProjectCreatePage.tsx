@@ -1,17 +1,15 @@
-// Create a project (PROJ-001).
+// Create a project (PROJ-001). The platform gives the code: PRJ0001, PRJ0002, ... (D-083).
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { createProject } from "../../api/projects";
-import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
 import { toApiError } from "../../hooks/useResource";
 import { EMPTY_FIELDS, ProjectForm } from "./ProjectForm";
 
 export function ProjectCreatePage() {
   const navigate = useNavigate();
-  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -23,19 +21,10 @@ export function ProjectCreatePage() {
         initial={EMPTY_FIELDS}
         submitLabel="Create project"
         busy={busy}
-        extra={
-          <TextField
-            label="Project code"
-            hint="2-40 letters, digits, dash or underscore. Stored in capitals."
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
-        }
         onSubmit={(fields) => {
           setBusy(true);
           setError(null);
-          createProject({ ...fields, code })
+          createProject(fields)
             .then((project) => navigate(`/projects/${project.id}`))
             .catch((err: unknown) => setError(toApiError(err)))
             .finally(() => setBusy(false));

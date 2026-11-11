@@ -28,7 +28,7 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | # | Sign in as | Do this | You should see |
 |---|---|---|---|
 | 1 | Project Admin | **Projects → Test project → Overview**. Type a short text in **Consent form text**. Click **Save project**. | The text is saved. |
-| 2 | Project Admin | **Participants → Add participant**. Add two people with **your own email addresses**. **Language code**: `en`. | Each gets a code such as P000001. |
+| 2 | Project Admin | **Participants → Add participant**. Add two people with **your own email addresses**. **Language code**: choose one from the list. | Each gets a code such as P000001. |
 | 3 | Project Admin | Click **Send** next to each participant. | An email "Consent form for Test project" arrives at each address. |
 | 4 | (Participant) | Open each email's link. Tick **I have read and understood this form**. Click **I agree**. | The page shows **You agreed**. |
 | 5 | Project Admin | **Participants**. Click **Approve** for both. | The consent shows **Agreed** and **Approved**. |
@@ -54,6 +54,7 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | D | Roles are limited | Sign in as Client Viewer and look at the menu. | Only **Dashboard** and **Projects**; no Tasks, Participants or Users. |
 | E | Quiet recording | Record 30 seconds of silence. | The automatic check flags silence (**Listen and decide** or **Failed**). |
 | F | Private link | Open a participant's consent link in a private window after they answered. | Their own page only: no other participant, no staff pages. |
+| G | Many tasks at once | **Tasks → New task**, choose Test project. Under **Add many tasks**, paste the first line `participant_a,participant_b,mode,priority,due_date,moderator` and one line with your two participant codes and `test.moderator@dubdesk.live` as moderator. **Check rows**, then **Add 1 tasks**. | **1 tasks added**; the new task is **Assigned** to Test Moderator. |
 
 ## Not in this version
 

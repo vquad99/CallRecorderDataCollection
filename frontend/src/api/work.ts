@@ -193,6 +193,25 @@ export interface ImportResult {
 export const importParticipants = (projectId: string, csv: string, confirm: boolean) =>
   apiRequest<ImportResult>(`${pp(projectId)}/import`, { method: "POST", body: { csv, confirm } });
 
+export interface TaskImportResult {
+  rows: {
+    line: number;
+    pair: string;
+    ok: boolean;
+    message: string;
+    task_code: string | null;
+  }[];
+  ready: number;
+  created: number;
+}
+
+/** Many tasks from a CSV of participant codes (D-083); confirm=false only checks the rows. */
+export const importTasks = (projectId: string, csv: string, confirm: boolean) =>
+  apiRequest<TaskImportResult>("/api/v1/tasks/import", {
+    method: "POST",
+    body: { project_id: projectId, csv, confirm },
+  });
+
 export interface BulkResult {
   results: { participant_id: string; participant_code: string; ok: boolean; message: string }[];
   done: number;

@@ -662,6 +662,14 @@ CASES: list[Case] = [
         },
     ),
     case(
+        "POST",
+        "/api/v1/tasks/import",
+        lambda e, s: "/api/v1/tasks/import",
+        {SA, PA},
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"project_id": s.project, "csv": "participant_a,participant_b\n"},
+    ),
+    case(
         "GET",
         "/api/v1/tasks/{task_id}",
         lambda e, s: f"/api/v1/tasks/{s.task_done}",

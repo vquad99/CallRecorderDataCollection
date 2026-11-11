@@ -4,7 +4,7 @@
 import { useState } from "react";
 
 import { apiDownload, type ApiError } from "../../api/client";
-import { listProjects } from "../../api/projects";
+import { getProject, listProjects } from "../../api/projects";
 import * as work from "../../api/work";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
@@ -259,6 +259,13 @@ export function ParticipantsPage() {
     [projectId, search, page],
   );
   const rows = list.state.status === "loaded" && list.state.data ? list.state.data.items : [];
+  // The chosen project's languages fill the participant form's language dropdown.
+  const detail = useResource(
+    () => (projectId ? getProject(projectId) : Promise.resolve(null)),
+    [projectId],
+  );
+  const languages =
+    detail.state.status === "loaded" && detail.state.data ? detail.state.data.languages : [];
   const live = rows.filter((p) => !p.deleted);
 
   async function run(action: () => Promise<string>) {
@@ -350,6 +357,7 @@ export function ParticipantsPage() {
       {panel === "add" && projectId ? (
         <ParticipantForm
           initial={EMPTY}
+          languages={languages}
           submitLabel="Add participant"
           busy={busy}
           onSubmit={(f) =>
@@ -367,6 +375,7 @@ export function ParticipantsPage() {
       {editing ? (
         <ParticipantForm
           key={editing.id}
+          languages={languages}
           initial={{
             display_label: editing.display_label ?? "",
             phone: editing.phone?.startsWith("•") ? null : editing.phone,

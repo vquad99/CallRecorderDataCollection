@@ -51,6 +51,17 @@ def test_create_project_with_spec_defaults(admin: Api) -> None:
     assert dup.json()["error"]["code"] == "PROJECT_CODE_TAKEN"
 
 
+def test_a_project_without_a_code_gets_the_next_prj_code(admin: Api) -> None:
+    """D-083: the New project form has no code field; the platform gives PRJ0001, PRJ0002, ..."""
+    body = {k: v for k, v in NEW_PROJECT.items() if k != "code"}
+    first = admin.post("/api/v1/projects", json=body)
+    second = admin.post("/api/v1/projects", json={**body, "name": "Second"})
+    assert first.status_code == second.status_code == 201
+    codes = [first.json()["code"], second.json()["code"]]
+    assert all(c.startswith("PRJ") and c[3:].isdigit() and len(c) >= 7 for c in codes)
+    assert int(codes[1][3:]) > int(codes[0][3:])
+
+
 def test_mode_and_target_validation(admin: Api) -> None:
     none = admin.post(
         "/api/v1/projects",

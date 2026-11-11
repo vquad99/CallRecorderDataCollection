@@ -1,16 +1,126 @@
 // Create a recording task (TASK-001); the project's allowed modes drive the choices (PROJ-011).
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { getProject, listProjects } from "../../api/projects";
-import { createTask, listParticipants } from "../../api/work";
+import { createTask, importTasks, listParticipants, type TaskImportResult } from "../../api/work";
 import { Button } from "../../components/form/Button";
+import { Icon } from "../../components/Icon";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+
+const SAMPLE =
+  "participant_a,participant_b,mode,priority,due_date,moderator\n" +
+  "P000001,P000002,face_to_face,normal,2026-12-31,moderator@example.org\n";
+
+/** Many tasks at once from a CSV of participant codes (D-083): check the rows, then add. */
+function BulkTasks({ projectId }: { projectId: string }) {
+  const [csv, setCsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<TaskImportResult | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  function send(confirm: boolean) {
+    setBusy(true);
+    setError(null);
+    importTasks(projectId, csv, confirm)
+      .then(setResult)
+      .catch((err: unknown) => setError(toApiError(err)))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <section className="card stack stack--tight" aria-labelledby="bulk-tasks-title">
+      <h2 id="bulk-tasks-title">Add many tasks</h2>
+      <p className="muted">
+        Paste rows or choose a CSV file, one task per line. First line:{" "}
+        <code>participant_a,participant_b,mode,priority,due_date,moderator</code>. Write
+        participants by their code (P000001). Mode, priority, due date (YYYY-MM-DD) and moderator
+        (their email) may be empty; with a moderator the task is assigned at once. Check the rows
+        first; only rows without a problem are added.
+      </p>
+      <div className="field">
+        <label htmlFor="bulk-tasks-csv" className="field__label">
+          Tasks (CSV)
+        </label>
+        <textarea
+          id="bulk-tasks-csv"
+          className="field__input mono"
+          rows={7}
+          placeholder={SAMPLE}
+          value={csv}
+          onChange={(e) => {
+            setCsv(e.target.value);
+            setResult(null);
+          }}
+        />
+      </div>
+      <div className="actions">
+        <label className="button button--secondary">
+          <Icon name="upload" size={15} />
+          Choose a file
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void file.text().then((t) => (setCsv(t), setResult(null)));
+            }}
+          />
+        </label>
+        <Button variant="secondary" busy={busy} disabled={!csv.trim()} onClick={() => send(false)}>
+          Check rows
+        </Button>
+        <Button
+          busy={busy}
+          disabled={!result || result.ready === 0 || result.created > 0}
+          onClick={() => send(true)}
+        >
+          Add {result?.ready ?? 0} tasks
+        </Button>
+      </div>
+      <ErrorNotice error={error} />
+      {result ? (
+        <>
+          <p role="status">
+            {result.created > 0
+              ? `${result.created} tasks added.`
+              : `${result.ready} of ${result.rows.length} rows are ready.`}
+          </p>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Line</th>
+                  <th scope="col">Participants</th>
+                  <th scope="col">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.rows.map((r) => (
+                  <tr key={r.line} className={r.ok ? "" : "row--invalid"}>
+                    <td>{r.line}</td>
+                    <td>{r.pair}</td>
+                    <td>
+                      {r.task_code ? <Link to="/tasks">{r.task_code}</Link> : null}
+                      {r.task_code ? " " : ""}
+                      {r.message}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
 
 export function TaskCreatePage() {
   const navigate = useNavigate();
@@ -46,6 +156,11 @@ export function TaskCreatePage() {
           label: `${p.participant_code}${p.display_label ? ` ${p.display_label}` : ""}${p.has_phone ? "" : " (no phone)"}`,
         }))
       : [];
+  // A task needs two people: say so instead of showing two empty lists.
+  const tooFew =
+    people.state.status === "loaded" && people.state.data && people.state.data.total < 2
+      ? people.state.data.total
+      : null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -103,6 +218,14 @@ export function TaskCreatePage() {
           }}
           options={[{ value: "", label: "Choose a project" }, ...projectOptions]}
         />
+        {projectId && tooFew !== null ? (
+          <p className="notice notice--info" role="status">
+            This project has {tooFew === 0 ? "no participants" : "only 1 participant"}. A task needs
+            two.{" "}
+            <Link to={`/projects/${projectId}/participants`}>Add participants to the project</Link>{" "}
+            first, then come back here.
+          </p>
+        ) : null}
         {projectId ? (
           <>
             <Select
@@ -162,6 +285,7 @@ export function TaskCreatePage() {
           Create task
         </Button>
       </form>
+      {projectId ? <BulkTasks key={projectId} projectId={projectId} /> : null}
     </section>
   );
 }

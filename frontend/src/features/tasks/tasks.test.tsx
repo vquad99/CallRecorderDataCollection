@@ -214,4 +214,61 @@ describe("tasks", () => {
     expect(await screen.findByText("user.roles_changed")).toBeInTheDocument();
     expect(screen.getByText('before: {"roles":["MODERATOR"]}')).toBeInTheDocument();
   });
+
+  it("says when the project has too few participants and adds many tasks from a file", async () => {
+    const proj = {
+      id: "p1",
+      code: "PRJ0001",
+      name: "Voice",
+      status: "ACTIVE",
+      allows_telephony: false,
+      allows_face_to_face: true,
+      languages: [],
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [], total: 0, page: 1, page_size: 100 },
+        ],
+        "POST /api/v1/tasks/import": (body) => [
+          200,
+          {
+            rows: [
+              {
+                line: 2,
+                pair: "P000001 + P000002",
+                ok: true,
+                message: (body as { confirm: boolean }).confirm ? "Added" : "Ready to add",
+                task_code: (body as { confirm: boolean }).confirm ? "T000009" : null,
+              },
+            ],
+            ready: 1,
+            created: (body as { confirm: boolean }).confirm ? 1 : 0,
+          },
+        ],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    expect(await screen.findByText(/This project has no participants/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add participants to the project" })).toHaveAttribute(
+      "href",
+      "/projects/p1/participants",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Tasks (CSV)"),
+      "participant_a,participant_b{enter}P000001,P000002",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Check rows" }));
+    expect(await screen.findByText("1 of 1 rows are ready.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add 1 tasks" }));
+    expect(await screen.findByText("1 tasks added.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/tasks/import").map((c) => c.body)).toEqual([
+      { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: false },
+      { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: true },
+    ]);
+  });
 });

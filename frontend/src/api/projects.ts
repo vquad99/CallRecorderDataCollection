@@ -103,7 +103,7 @@ const base = (id: string) => `/api/v1/projects/${id}`;
 export const listProjects = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<ProjectSummary>>(`/api/v1/projects${query(params)}`);
 export const getProject = (id: string) => apiRequest<Project>(base(id));
-export const createProject = (body: ProjectFields & { code: string }) =>
+export const createProject = (body: ProjectFields & { code?: string }) =>
   apiRequest<Project>("/api/v1/projects", { method: "POST", body });
 export const updateProject = (id: string, body: ProjectFields) =>
   apiRequest<Project>(base(id), { method: "PATCH", body });

@@ -97,14 +97,14 @@ The number of active accounts is limited by **Settings → Staff accounts**.
 
 **Projects → New project** (only the Super Admin can create projects):
 
-- **Project code**: 2 to 40 letters or digits, for example `HINDI01`.
+- The **project code** is given by the platform: `PRJ0001`, `PRJ0002`, and so on. You do not type it.
 - **Name**, **Description**.
 - **Recording modes allowed**: tick **Face-to-face** only. Phone calls are not available yet
   (section 11).
 - **Face-to-face target (hours per day)**: the daily goal shown on dashboards.
 - **Who may see participant phone numbers**.
-- **Consent form text**: what participants read and agree to. Change **Consent policy version**
-  whenever you change the text.
+- **Consent form text**: what participants read and agree to. A sample text is already filled in;
+  change it to fit the project. Change **Consent policy version** whenever you change the text.
 
 A new project starts as **Draft**. Open it and use **Overview → Status → Change status to: Active**.
 Only **Active** projects accept new tasks and recordings.
@@ -117,8 +117,8 @@ Project tabs:
 - **Participants**: the project's participants (section 5).
 - **Audio rules**: the sound format and limits the automatic check uses (default 16 000 Hz,
   16-bit, mono, at most 25 % silence).
-- **Languages**: the languages allowed for participants (for example `hi`, `ta`, `en-IN`). When a
-  project has languages, every participant must match one.
+- **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,
+  Tamil, English (India)). When a project has languages, every participant must match one.
 - **Retention**: how many days to keep each kind of file.
 
 ### Settings, System status, Audit log
@@ -136,9 +136,11 @@ Project tabs:
 **Participants → Add participant**:
 
 - **Name or label** (required).
-- **Phone number** (optional; international format, for example `+91 98765 43210`).
+- **Country code** (choose from the list; India +91 is first) and **Phone number** (optional;
+  exactly 10 digits, without the country code).
 - **Email address**: needed to email the consent form.
-- **Language code** (required; one of the project's languages, for example `hi`).
+- **Language code** (required; choose from the list. When the project has languages, only those
+  are listed).
 - **Dialect**, **Internal notes** (optional).
 
 Each participant gets a code such as `P000123`.
@@ -174,6 +176,21 @@ participant yourself (it works for 30 days; making a new one ends the old one).
 **Tasks → New task**: choose **Project (active projects)**, **Recording mode: Face-to-face**,
 **Participant A** and **Participant B** (two different people), **Priority** and **Due date**, then
 **Create task**. Each task gets a code such as `T000045`.
+
+If the project has fewer than two participants, the page says so and links to **Add participants
+to the project**; add them first.
+
+**Add many tasks** (on the same page, after choosing the project): paste or choose a CSV file, one
+task per line. The first line must be exactly:
+
+```
+participant_a,participant_b,mode,priority,due_date,moderator
+```
+
+Write participants by their code (`P000001`). `mode` is `face_to_face` or `telephony` (empty means
+face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means normal), `due_date` is
+`YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
+leaves it in Draft). Click **Check rows**, then **Add N tasks**. Up to 500 rows.
 
 On the task page:
 
@@ -282,6 +299,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "Microphone permission was refused" | Click the lock icon in the address bar, allow the microphone, reload. |
 | "No microphone was found" | Connect a microphone, then choose it again. |
 | "This browser cannot record here" | Use the latest Chrome or Edge on a computer. |
+| New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
 | "The task must be in progress to record" | Moderator: **Change status → In progress → Apply**. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |

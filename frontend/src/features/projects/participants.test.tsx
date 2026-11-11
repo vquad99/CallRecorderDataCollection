@@ -88,7 +88,7 @@ describe("participants tab", () => {
     renderAt("/projects/p1/participants");
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
     await userEvent.type(screen.getByLabelText(/Name or label/), "Chitra");
-    await userEvent.type(screen.getByLabelText(/Language code/), "hi");
+    await userEvent.selectOptions(screen.getByLabelText(/Language code/), "hi");
     await userEvent.click(screen.getByRole("button", { name: "Add participant" }));
     expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
@@ -104,6 +104,37 @@ describe("participants tab", () => {
     expect(await screen.findByText("P000001 deleted.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/delete"))?.body).toEqual({
       reason: "Asked to be removed",
+    });
+  });
+
+  it("takes a 10-digit phone number with the country code chosen from a list", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+        "POST /api/v1/projects/p1/participants": () => [
+          201,
+          { ...asha, id: "c1", participant_code: "P000003" },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
+    await userEvent.type(screen.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.selectOptions(screen.getByLabelText(/Language code/), "ta");
+    await userEvent.type(screen.getByLabelText(/Phone number/), "98765-4");
+    expect(screen.getByText("Type exactly 10 digits (you typed 6).")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add participant" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/Phone number/), "32109");
+    await userEvent.selectOptions(screen.getByLabelText("Country code"), "+44");
+    await userEvent.click(screen.getByRole("button", { name: "Add participant" }));
+    expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      phone: "+449876543210",
+      language_code: "ta",
     });
   });
 });

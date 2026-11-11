@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.modules.audit import service as audit_service
 from app.modules.tasks import service, workflow
@@ -277,3 +277,54 @@ def test_filters_comments_and_timeline(world: dict[str, Any]) -> None:
     )
     kinds = [e["kind"] for e in world["pa"].get(f"/api/v1/tasks/{tid}/timeline").json()]
     assert kinds == ["status", "comment"]
+
+
+def test_bulk_task_upload_checks_then_adds_and_assigns(world: dict[str, Any], db: Any) -> None:
+    """D-083: many tasks from a CSV of participant codes; check first, then add."""
+    a, b, c = (world[k]["participant_code"] for k in ("a", "b", "c"))
+    csv = (
+        "participant_a,participant_b,mode,priority,due_date,moderator\n"
+        f"{a},{b},face_to_face,high,2026-12-01,mod@example.org\n"
+        f"{a},{c},,,,\n"
+        f"{a},{a},,,,\n"
+        f"{a},P999999,,,,\n"
+        f"{a},{c},telephony,,,\n"
+        f"{a},{b},,someday,,\n"
+        f"{a},{b},,,01/12/2026,\n"
+        f"{a},{b},,,,out@example.org\n"
+    )
+    body = {"project_id": str(world["project"].id), "csv": csv}
+    check = world["pa"].post("/api/v1/tasks/import", json=body).json()
+    assert [r["ok"] for r in check["rows"]] == [True, True] + [False] * 6
+    assert check["created"] == 0
+    assert db.scalar(select(func.count()).select_from(Task)) == 0
+    messages = [r["message"] for r in check["rows"]]
+    assert messages[2] == "Participant A and B must be different people"
+    assert "not in this project" in messages[3]
+    assert "phone number" in messages[4]
+    assert "Priority" in messages[5]
+    assert "YYYY-MM-DD" in messages[6]
+    assert "not a member" in messages[7]
+
+    added = world["pa"].post("/api/v1/tasks/import", json={**body, "confirm": True}).json()
+    assert added["created"] == 2
+    first, second = added["rows"][0], added["rows"][1]
+    assert first["message"] == "Added and assigned to mod@example.org"
+    assert second["message"] == "Added"
+    assert second["task_code"].startswith("T")
+    tasks = {t.task_code: t for t in db.scalars(select(Task))}
+    assert tasks[first["task_code"]].status == "ASSIGNED"
+    assert tasks[first["task_code"]].priority == "HIGH"
+    assert tasks[second["task_code"]].status == "DRAFT"
+    assert tasks[second["task_code"]].recording_mode == "FACE_TO_FACE"
+
+
+def test_bulk_task_upload_needs_the_assign_permission(world: dict[str, Any]) -> None:
+    body = {"project_id": str(world["project"].id), "csv": "participant_a,participant_b\n"}
+    assert world["mod"].post("/api/v1/tasks/import", json=body).status_code == 403
+    bad = (
+        world["pa"]
+        .post("/api/v1/tasks/import", json={**body, "csv": "a,b\nP000001,P000002\n"})
+        .json()
+    )
+    assert bad["error"]["code"] == "INVALID_CSV"

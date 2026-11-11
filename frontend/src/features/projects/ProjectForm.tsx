@@ -6,6 +6,32 @@ import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 
+/** Filled in on every new project; the admin edits it to fit the project (D-083). */
+export const SAMPLE_CONSENT_TEXT = `Consent to be recorded
+
+What this is about
+We are collecting recordings of everyday conversations between two people. The recordings help build and test speech technology, such as systems that understand spoken languages.
+
+What will happen
+- You will talk with another person for a set time. A moderator records the conversation.
+- Only your voice and the conversation are recorded. No video is recorded.
+- We note the language and dialect you speak.
+
+How your recording is used and kept
+- The recording, with your language and dialect, may be shared with the client of this project for speech research and product development.
+- Your name, phone number and email address are never shared with the client.
+- Recordings are stored securely and kept only as long as the project needs them.
+
+Your choice
+- Taking part is your choice. Saying no has no effect on you.
+- You can stop the recording at any time.
+- You can withdraw your consent later from your personal page.
+
+Questions
+If you have a question, ask the moderator or the project team before you agree.
+
+By clicking "I agree" you confirm that you have read this form, you are 18 years or older, and you agree to be recorded.`;
+
 export const EMPTY_FIELDS: ProjectFields = {
   name: "",
   description: "",
@@ -15,7 +41,7 @@ export const EMPTY_FIELDS: ProjectFields = {
   target_face_to_face_hours_per_day: "0",
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
-  consent_text: "",
+  consent_text: SAMPLE_CONSENT_TEXT,
 };
 
 export function ProjectForm({
@@ -24,14 +50,12 @@ export function ProjectForm({
   busy,
   disabled = false,
   onSubmit,
-  extra,
 }: {
   initial: ProjectFields;
   submitLabel: string;
   busy: boolean;
   disabled?: boolean;
   onSubmit: (fields: ProjectFields) => void;
-  extra?: React.ReactNode;
 }) {
   const [f, setF] = useState<ProjectFields>(initial);
   const set = <K extends keyof ProjectFields>(key: K, value: ProjectFields[K]) =>
@@ -50,7 +74,6 @@ export function ProjectForm({
         </p>
       ) : null}
       <fieldset disabled={disabled} className="plain-fieldset">
-        {extra}
         <TextField
           label="Name"
           required

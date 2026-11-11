@@ -44,6 +44,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
   const admin = await (await browser.newContext()).newPage();
   const moderator = await (await browser.newContext()).newPage();
   let projectUrl = "";
+  let projectCode = "";
   let taskUrl = "";
 
   await test.step("the Super Admin creates and opens the project", async () => {
@@ -53,17 +54,19 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .getByRole("link", { name: "Projects" })
       .click();
     await admin.getByRole("link", { name: "New project" }).click();
-    await admin.getByLabel(/^Project code/).fill(code);
     await admin.getByLabel(/^Name/).fill(name);
     await admin.getByRole("checkbox", { name: "Face-to-face" }).check();
     await admin.getByRole("button", { name: "Create project" }).click();
-    await expect(admin.getByRole("heading", { level: 1 })).toHaveText(`${code} · ${name}`);
+    // The platform gives the project code (D-083).
+    const heading = admin.getByRole("heading", { level: 1 });
+    await expect(heading).toHaveText(new RegExp(`^PRJ\\d{4,} · ${name}$`));
+    projectCode = ((await heading.textContent()) ?? "").split(" · ")[0] ?? "";
     projectUrl = new URL(admin.url()).pathname;
     await admin.getByLabel("Change status to").selectOption("ACTIVE");
     await admin.getByRole("button", { name: "Change status" }).click();
     await expect(admin.getByText("This project accepts new work.")).toBeVisible();
     await admin.getByRole("link", { name: "Languages" }).click();
-    await admin.getByLabel(/^Language code/).fill("hi");
+    await admin.getByLabel(/^Language code/).selectOption("hi");
     await admin.getByRole("button", { name: "Add language" }).click();
     await expect(admin.getByRole("listitem").filter({ hasText: /^hi/ })).toBeVisible();
   });
@@ -108,7 +111,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     for (const person of ["Asha", "Bina"]) {
       await admin.getByRole("button", { name: "Add participant" }).first().click();
       await admin.getByLabel(/^Name or label/).fill(`${person} ${code}`);
-      await admin.getByLabel(/^Language code/).fill("hi");
+      await admin.getByLabel(/^Language code/).selectOption("hi");
       await admin.getByRole("button", { name: "Add participant" }).last().click();
       await expect(admin.getByRole("cell", { name: `${person} ${code}` })).toBeVisible();
     }
@@ -120,7 +123,9 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .getByRole("link", { name: "Tasks" })
       .click();
     await admin.getByRole("link", { name: "New task" }).click();
-    await admin.getByLabel("Project (active projects)").selectOption({ label: `${code} ${name}` });
+    await admin
+      .getByLabel("Project (active projects)")
+      .selectOption({ label: `${projectCode} ${name}` });
     await admin.getByLabel("Recording mode").selectOption("FACE_TO_FACE");
     await pickParticipant(admin, "Participant A", `Asha ${code}`);
     await pickParticipant(admin, "Participant B", `Bina ${code}`);

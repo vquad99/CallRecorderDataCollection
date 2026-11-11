@@ -12,6 +12,7 @@ import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { LANGUAGES, languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
 import { ProjectForm } from "./ProjectForm";
 import { STATUS_LABELS } from "./ProjectsPage";
@@ -357,8 +358,8 @@ export function LanguagesTab() {
       <ul className="list">
         {project.languages.map((l) => (
           <li key={`${l.language_code}/${l.dialect}`}>
-            {l.language_code}
-            {l.dialect ? ` (${l.dialect})` : ""}{" "}
+            {languageLabel(l.language_code)}
+            {l.dialect ? `, ${l.dialect}` : ""}{" "}
             {canManage ? (
               <Button
                 variant="secondary"
@@ -393,12 +394,15 @@ export function LanguagesTab() {
             });
           }}
         >
-          <TextField
+          <Select
             label="Language code"
-            hint="ISO code, for example hi, ta, en-IN."
             required
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            options={[
+              { value: "", label: "Choose a language" },
+              ...LANGUAGES.map((l) => ({ value: l.code, label: languageLabel(l.code) })),
+            ]}
           />
           <TextField
             label="Dialect"

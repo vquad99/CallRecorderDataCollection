@@ -6,14 +6,15 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"
   options: readonly { value: string; label: string }[];
 }
 
-export function Select({ label, options, ...props }: SelectProps) {
+export function Select({ label, options, required, ...props }: SelectProps) {
   const id = useId();
   return (
     <div className="field">
       <label htmlFor={id} className="field__label">
         {label}
+        {required ? <span aria-hidden="true"> *</span> : null}
       </label>
-      <select id={id} className="field__input" {...props}>
+      <select id={id} className="field__input" required={required} {...props}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

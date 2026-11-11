@@ -5,12 +5,15 @@ import { useState } from "react";
 import { apiDownload, type ApiError } from "../../api/client";
 import * as work from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
+import type { Language } from "../../api/projects";
 import { Button } from "../../components/form/Button";
+import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "./choices";
 import { useProject } from "./ProjectDetailPage";
 
 export const EMPTY: work.ParticipantFields = {
@@ -23,22 +26,34 @@ export const EMPTY: work.ParticipantFields = {
 
 export function ParticipantForm({
   initial,
+  languages,
   submitLabel,
   onSubmit,
   busy,
 }: {
   initial: work.ParticipantFields;
+  languages: readonly Language[]; // the project's languages; empty means any
   submitLabel: string;
   onSubmit: (f: work.ParticipantFields) => void;
   busy: boolean;
 }) {
   const [f, setF] = useState(initial);
+  const [phone, setPhone] = useState(() => splitPhone(initial.phone));
+  const phoneError =
+    phone.digits && phone.digits.length !== PHONE_DIGITS
+      ? `Type exactly ${PHONE_DIGITS} digits (you typed ${phone.digits.length}).`
+      : undefined;
   return (
     <form
       className="card"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ ...f, phone: f.phone?.trim() ? f.phone : null, email: f.email?.trim() });
+        if (phoneError) return;
+        onSubmit({
+          ...f,
+          phone: phone.digits ? `${phone.cc}${phone.digits}` : null,
+          email: f.email?.trim(),
+        });
       }}
     >
       <TextField
@@ -47,11 +62,21 @@ export function ParticipantForm({
         value={f.display_label}
         onChange={(e) => setF({ ...f, display_label: e.target.value })}
       />
+      <Select
+        label="Country code"
+        value={phone.cc}
+        onChange={(e) => setPhone({ ...phone, cc: e.target.value })}
+        options={COUNTRY_CODES.map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }))}
+      />
       <TextField
         label="Phone number"
-        hint="International format, e.g. +91 98765 43210. Needed for telephony tasks."
-        value={f.phone ?? ""}
-        onChange={(e) => setF({ ...f, phone: e.target.value })}
+        hint={`${PHONE_DIGITS} digits, without the country code. Needed for telephony tasks.`}
+        inputMode="numeric"
+        autoComplete="tel-national"
+        maxLength={PHONE_DIGITS}
+        value={phone.digits}
+        {...(phoneError ? { error: phoneError } : {})}
+        onChange={(e) => setPhone({ ...phone, digits: e.target.value.replace(/\D/g, "") })}
       />
       <TextField
         label="Email address"
@@ -60,12 +85,12 @@ export function ParticipantForm({
         value={f.email ?? ""}
         onChange={(e) => setF({ ...f, email: e.target.value })}
       />
-      <TextField
+      <Select
         label="Language code"
-        hint="One of the project's languages, e.g. hi."
         required
         value={f.language_code}
         onChange={(e) => setF({ ...f, language_code: e.target.value })}
+        options={languageOptions(languages, initial.language_code)}
       />
       <TextField
         label="Dialect"
@@ -80,7 +105,7 @@ export function ParticipantForm({
       <Button
         type="submit"
         busy={busy}
-        disabled={!f.display_label.trim() || !f.language_code.trim()}
+        disabled={!f.display_label.trim() || !f.language_code.trim() || Boolean(phoneError)}
       >
         {submitLabel}
       </Button>
@@ -180,6 +205,7 @@ export function ParticipantsTab() {
       {adding ? (
         <ParticipantForm
           initial={EMPTY}
+          languages={project.languages}
           submitLabel="Add participant"
           busy={busy}
           onSubmit={(f) =>
@@ -194,6 +220,7 @@ export function ParticipantsTab() {
       {editing ? (
         <ParticipantForm
           key={editing.id}
+          languages={project.languages}
           initial={{
             display_label: editing.display_label ?? "",
             phone: editing.phone?.startsWith("•") ? null : editing.phone,

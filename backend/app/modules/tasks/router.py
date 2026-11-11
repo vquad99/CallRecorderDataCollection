@@ -14,7 +14,7 @@ from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.models import User
 from app.modules.participants.models import Participant
-from app.modules.tasks import service, workflow
+from app.modules.tasks import bulk, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
 
 router = APIRouter(
@@ -156,6 +156,41 @@ def create_task(
     )
     return detail(
         db, principal, service.create_task(db, principal, body.project_id, data, client_ip(request))
+    )
+
+
+class ImportTasksBody(BaseModel):
+    project_id: uuid.UUID
+    csv: str = Field(min_length=1, max_length=500_000)
+    confirm: bool = False
+
+
+class ImportTaskRow(BaseModel):
+    line: int
+    pair: str
+    ok: bool
+    message: str
+    task_code: str | None
+
+
+class ImportTasksOut(BaseModel):
+    rows: list[ImportTaskRow]
+    ready: int
+    created: int
+
+
+@router.post("/import", response_model=ImportTasksOut)
+def import_tasks(
+    body: ImportTasksBody, request: Request, principal: CurrentPrincipal, db: DbSession
+) -> ImportTasksOut:
+    """Add many tasks from a CSV file; check first, then add (D-083)."""
+    rows = bulk.import_csv(
+        db, principal, body.project_id, body.csv, body.confirm, client_ip(request)
+    )
+    return ImportTasksOut(
+        rows=[ImportTaskRow.model_validate(r, from_attributes=True) for r in rows],
+        ready=sum(1 for r in rows if r.ok),
+        created=sum(1 for r in rows if r.task_code),
     )
 
 

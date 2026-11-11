@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -174,12 +174,20 @@ def _ensure_default_audio_rules(project: Project) -> None:
             )
 
 
+def next_project_code(db: Session) -> str:
+    """The next free PRJnnnn code; skips a number someone already typed by hand (D-083)."""
+    while True:
+        code = f"PRJ{db.scalar(text("SELECT nextval('project_code_seq')")):04d}"
+        if not db.scalar(select(Project.id).where(Project.code == code)):
+            return code
+
+
 def create_project(
-    db: Session, principal: Principal, code: str, data: ProjectInput, ip: str | None
+    db: Session, principal: Principal, code: str | None, data: ProjectInput, ip: str | None
 ) -> Project:
     if not principal.can(Perm.PROJECTS_CREATE):
         raise forbidden()
-    code = code.strip().upper()
+    code = code.strip().upper() if code else next_project_code(db)
     if db.scalar(select(Project.id).where(Project.code == code)):
         raise AppError(
             "A project with this code already exists", code="PROJECT_CODE_TAKEN", status_code=409

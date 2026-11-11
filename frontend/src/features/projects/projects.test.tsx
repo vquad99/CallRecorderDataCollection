@@ -85,7 +85,7 @@ describe("project detail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Audio rules" }));
     expect(await screen.findByRole("group", { name: "Telephony" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Languages" }));
-    expect(await screen.findByText(/hi \(Awadhi\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Hindi \(hi\), Awadhi/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
   });
