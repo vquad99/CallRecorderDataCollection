@@ -107,6 +107,56 @@ function Actions({
   );
 }
 
+/** The moderator's way in to recording (D-091): start the session, then open the recorder. */
+function RecordCard({
+  task,
+  onChange,
+}: {
+  task: work.TaskDetail;
+  onChange: (t: work.TaskDetail) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const canStart =
+    task.allowed_transitions.includes("IN_PROGRESS") && task.status !== "IN_PROGRESS";
+  const recording = task.status === "IN_PROGRESS";
+  if (!canStart && !recording) return null;
+  const start = () => {
+    setBusy(true);
+    setError(null);
+    work
+      .transitionTask(task.id, "IN_PROGRESS", "", "")
+      .then(onChange)
+      .catch((err: unknown) => setError(toApiError(err)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <section className="card record-card" aria-labelledby="record-card-title">
+      <div className="record-card__text">
+        <h2 id="record-card-title">{recording ? "Ready to record" : "Start the session"}</h2>
+        <ol className="record-card__steps">
+          <li className={recording ? "is-done" : "is-now"}>Start the session</li>
+          <li className={recording ? "is-now" : ""}>Record each person&apos;s consent below</li>
+          <li className={recording ? "is-now" : ""}>Open the recorder and record</li>
+        </ol>
+      </div>
+      <div className="record-card__go">
+        {recording ? (
+          <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
+            <Icon name="mic" size={16} weight="fill" />
+            Open the recorder
+          </Link>
+        ) : (
+          <Button busy={busy} onClick={start}>
+            Start session
+          </Button>
+        )}
+      </div>
+      <ErrorNotice error={error} />
+    </section>
+  );
+}
+
 function Assignment({
   task,
   onChange,
@@ -193,32 +243,75 @@ function ConsentCapture({
       .finally(() => setBusy(false));
   };
   return (
-    <section className="card" aria-labelledby="consent-title">
-      <h2 id="consent-title">Record consent</h2>
-      <Select
-        label="How consent was given"
-        value={method}
-        onChange={(e) => setMethod(e.target.value)}
-        options={["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"].map((m) => ({
-          value: m,
-          label: words(m),
-        }))}
-      />
-      {[task.participant_a, task.participant_b].map((p, i) => (
-        <div key={p.id} className="actions">
-          <span>
-            Participant {i === 0 ? "A" : "B"} ({p.participant_code}):
-          </span>
-          <Button busy={busy} onClick={() => record(p.id, "GIVEN")}>
-            Consent given
-          </Button>
-          <Button variant="secondary" busy={busy} onClick={() => record(p.id, "REFUSED")}>
-            Refused
-          </Button>
+    <section className="card consent" aria-labelledby="consent-title">
+      <div className="consent__head">
+        <div>
+          <h2 id="consent-title">Record consent</h2>
+          <p className="muted">Ask each person before you record, then mark their answer.</p>
         </div>
-      ))}
+        <div className="consent__method">
+          <Select
+            label="How consent was given"
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+            options={["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"].map((m) => ({
+              value: m,
+              label: words(m),
+            }))}
+          />
+        </div>
+      </div>
+      <ul className="consent__rows">
+        {[task.participant_a, task.participant_b].map((p, i) => (
+          <li key={p.id} className="consent__row">
+            <span className="consent__who">
+              <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
+              <span className="code-tag">{p.participant_code}</span>
+            </span>
+            <ConsentChip status={p.consent_status} />
+            <span className="seg" role="group" aria-label={`Consent of ${p.participant_code}`}>
+              <button
+                type="button"
+                className="seg__option"
+                aria-pressed={p.consent_status === "GIVEN"}
+                disabled={busy}
+                onClick={() => record(p.id, "GIVEN")}
+              >
+                Consent given
+              </button>
+              <button
+                type="button"
+                className="seg__option seg__option--no"
+                aria-pressed={p.consent_status === "REFUSED"}
+                disabled={busy}
+                onClick={() => record(p.id, "REFUSED")}
+              >
+                Refused
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
       <ErrorNotice error={error} />
     </section>
+  );
+}
+
+const CONSENT_WORDS: Record<string, string> = {
+  GIVEN: "Given",
+  REFUSED: "Refused",
+  WITHDRAWN: "Withdrawn",
+};
+
+/** A participant's consent for this session as a coloured chip (D-091). */
+function ConsentChip({ status }: { status: string | null }) {
+  const tone =
+    status === "GIVEN" ? "success" : status === "REFUSED" || status === "WITHDRAWN" ? "danger" : "";
+  return (
+    <span className={`badge${tone ? ` badge--${tone}` : ""}`}>
+      <span className="badge__dot" aria-hidden="true" />
+      {CONSENT_WORDS[status ?? ""] ?? "Not recorded"}
+    </span>
   );
 }
 
@@ -379,7 +472,7 @@ export function TaskDetailPage() {
           label={`Workflow progress: ${label(task.status)}`}
         />
       </div>
-      <dl className="checks card">
+      <dl className="checks checks--facts card">
         <div className="checks__row">
           <dt>Mode</dt>
           <dd>{task.recording_mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</dd>
@@ -395,9 +488,9 @@ export function TaskDetailPage() {
         {[task.participant_a, task.participant_b].map((p, i) => (
           <div key={p.id} className="checks__row">
             <dt>Participant {i === 0 ? "A" : "B"}</dt>
-            <dd>
-              {p.participant_code} · consent:{" "}
-              {p.consent_status ? words(p.consent_status) : "not recorded"}
+            <dd className="party">
+              <span className="code-tag">{p.participant_code}</span>
+              <ConsentChip status={p.consent_status} />
             </dd>
           </div>
         ))}
@@ -411,17 +504,10 @@ export function TaskDetailPage() {
       {task.can_assign && ["DRAFT", "ASSIGNED", "ON_HOLD", "RETURNED"].includes(task.status) ? (
         <Assignment task={task} onChange={replace} />
       ) : null}
-      {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}
-      {task.is_moderator &&
-      task.recording_mode === "FACE_TO_FACE" &&
-      task.status === "IN_PROGRESS" ? (
-        <p>
-          <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
-            <Icon name="mic" size={16} weight="fill" />
-            Open the recorder
-          </Link>
-        </p>
+      {task.is_moderator && task.recording_mode === "FACE_TO_FACE" ? (
+        <RecordCard task={task} onChange={replace} />
       ) : null}
+      {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}
       {HAS_RECORDINGS.includes(task.status) ? (
         <AudioQcPanel task={task} onDecided={reload} />
       ) : null}

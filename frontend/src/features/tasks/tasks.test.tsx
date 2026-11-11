@@ -144,6 +144,37 @@ describe("tasks", () => {
     });
   });
 
+  it("gives the moderator one button to start, then the recorder (D-091)", async () => {
+    const mine = {
+      ...task,
+      recording_mode: "FACE_TO_FACE",
+      can_assign: false,
+      is_moderator: true,
+      allowed_transitions: ["IN_PROGRESS"],
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "consent.capture"], {
+        "GET /api/v1/tasks/t1": () => [200, mine],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "POST /api/v1/tasks/t1/transition": () => [
+          200,
+          { ...mine, status: "IN_PROGRESS", allowed_transitions: ["ON_HOLD"] },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    await userEvent.click(await screen.findByRole("button", { name: "Start session" }));
+    expect(await screen.findByRole("link", { name: "Open the recorder" })).toHaveAttribute(
+      "href",
+      "/tasks/t1/record",
+    );
+    expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
+      to: "IN_PROGRESS",
+      reason_code: null,
+      comment: "",
+    });
+  });
+
   it("lets the assigned moderator record consent", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "consent.capture"], {
@@ -174,7 +205,10 @@ describe("tasks", () => {
     await userEvent.click(
       screen.getAllByRole("button", { name: "Consent given" })[0] as HTMLElement,
     );
-    expect(await screen.findByText(/consent: given/)).toBeInTheDocument();
+    expect((await screen.findAllByText("Given")).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: "Consent given" })[0] as HTMLElement,
+    ).toHaveAttribute("aria-pressed", "true");
     expect(calls.find((c) => c.path.endsWith("/consent"))?.body).toEqual({
       participant_id: "a1",
       status: "GIVEN",

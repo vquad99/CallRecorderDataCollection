@@ -226,10 +226,10 @@ Downloads are available to the Super Admin and Project Admin.
 ## 7. Moderator: recording
 
 1. Open **Tasks** and click your task.
-2. **Change status → Move to: In progress → Apply**.
+2. Click **Start session** (the highlighted box near the top).
 3. **Record consent**: choose **How consent was given**, then click **Consent given** (or
-   **Refused**) for Participant A and Participant B.
-4. Click **Open the recorder**.
+   **Refused**) on the row of Participant A and of Participant B.
+4. Click **Open the recorder** (in the same highlighted box).
 5. Click **Allow microphone** and allow it in the browser. Choose the **Microphone** if you have
    more than one, and watch the **Input level**.
 6. Optional: **Test (5 s, then play back)** to hear yourself.

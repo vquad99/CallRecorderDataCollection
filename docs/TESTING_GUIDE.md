@@ -34,9 +34,9 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | 5 | Project Admin | **Participants**. Click **Approve** for both. | The consent shows **Agreed** and **Approved**. |
 | 6 | Project Admin | **Tasks → New task**. Project **Test project**, mode **Face-to-face**, the two participants. Click **Create task**. | A task such as T000001 with status **Draft**. |
 | 7 | Project Admin | On the task page, **Assign moderator**: choose Test Moderator. Click **Assign**. | Status **Assigned**. |
-| 8 | Moderator | **Tasks** → open the task. **Change status → In progress → Apply**. | Status **In progress**. |
+| 8 | Moderator | **Tasks** → open the task. Click **Start session**. | Status **In progress**. |
 | 9 | Moderator | **Record consent**: click **Consent given** for both participants. | Both show consent given. |
-| 10 | Moderator | **Open the recorder → Allow microphone** (allow in the browser) **→ Start recording**. Talk for 1 to 2 minutes. **Stop and save**. | **Recording saved**, with the files listed. |
+| 10 | Moderator | **Open the recorder** (same box) **→ Allow microphone** (allow in the browser) **→ Start recording**. Talk for 1 to 2 minutes. **Stop and save**. | **Recording saved**, with the files listed. |
 | 11 | Moderator | Open the task again after about a minute. | Status **Audio QC**; **Automatic check** shows a result. |
 | 12 | Project Admin | Open the task. **Audio quality**: choose Test QC Executive. Click **Assign QC**. | The QC Executive is shown. |
 | 13 | QC Executive | **Tasks** → open the task. Read the check results. Click **Listen**. | The recording plays. |

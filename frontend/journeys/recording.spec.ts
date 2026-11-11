@@ -149,18 +149,16 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     const taskCode =
       (await admin.getByRole("heading", { level: 1 }).textContent())?.replace("Task ", "") ?? "";
     await moderator.getByRole("link", { name: taskCode }).click();
-    await moderator.getByLabel("Move to").selectOption("IN_PROGRESS");
-    await moderator.getByRole("button", { name: "Apply" }).click();
+    // D-091: one button starts the session; the recorder link then appears in the same card.
+    await moderator.getByRole("button", { name: "Start session" }).click();
     await expect(moderator.getByText("In progress").first()).toBeVisible();
     for (const which of ["A", "B"]) {
-      await moderator
-        .locator(".actions")
-        .filter({ hasText: `Participant ${which}` })
-        .getByRole("button", { name: "Consent given" })
-        .click();
-      await expect(
-        moderator.locator(".actions").filter({ hasText: `Participant ${which}` }),
-      ).toBeVisible();
+      const row = moderator.locator(".consent__row").filter({ hasText: `Participant ${which}` });
+      await row.getByRole("button", { name: "Consent given" }).click();
+      await expect(row.getByRole("button", { name: "Consent given" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     }
   });
 
