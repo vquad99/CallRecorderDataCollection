@@ -259,6 +259,77 @@ describe("tasks", () => {
     );
   });
 
+  it("approves many tasks at once and downloads their audio and metadata (D-093)", async () => {
+    const row = (id: string, code: string, status: string) => ({
+      id,
+      task_code: code,
+      project_id: "p1",
+      recording_mode: "FACE_TO_FACE",
+      status,
+      priority: "NORMAL",
+      due_at: null,
+      created_at: "2026-11-09T00:00:00Z",
+    });
+    const items = [
+      row("t1", "T000001", "ADMIN_REVIEW"),
+      row("t2", "T000002", "ADMIN_REVIEW"),
+      row("t3", "T000003", "ASSIGNED"),
+    ];
+    const ready = {
+      id: "r1",
+      task_id: "t1",
+      state: "READY",
+      saved_seconds: 60,
+      assets: [{ id: "as1", kind: "FTF_DERIVED_PCM" }],
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "recordings.download"], {
+        "GET /api/v1/projects": () => [
+          200,
+          { items: [{ id: "p1", code: "VOICE" }], total: 1, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/tasks": () => [200, { items, total: 3, page: 1, page_size: 25 }],
+        "POST /api/v1/tasks/t1/transition": () => [200, { ...task, status: "APPROVED" }],
+        "POST /api/v1/tasks/t2/transition": () => [200, { ...task, status: "APPROVED" }],
+        "GET /api/v1/tasks/t1/recordings": () => [200, [ready]],
+        "GET /api/v1/tasks/t3/recordings": () => [200, []],
+        "POST /api/v1/assets/as1/url": () => [
+          200,
+          { url: "https://files.example/a.wav", expires_in: 300 },
+        ],
+        "GET /api/v1/recordings/r1/consent-form": () => [200, "<html></html>"],
+        "GET /api/v1/recordings/r1/metadata": () => [200, { task: "T000001" }],
+      }),
+    );
+    renderAt("/tasks");
+    await userEvent.click(await screen.findByLabelText("Select every task on this page"));
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Approve selected (2)" }));
+    expect(
+      await screen.findByText("2 approved. 1 skipped: not waiting for admin review."),
+    ).toBeInTheDocument();
+    expect(calls.filter((c) => c.path.endsWith("/transition")).map((c) => c.body)).toEqual([
+      { to: "APPROVED", reason_code: null, comment: "" },
+      { to: "APPROVED", reason_code: null, comment: "" },
+    ]);
+
+    const [create, revoke] = [URL.createObjectURL, URL.revokeObjectURL];
+    URL.createObjectURL = () => "blob:x";
+    URL.revokeObjectURL = () => undefined;
+    const clicks = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await userEvent.click(await screen.findByLabelText("Select T000001"));
+    await userEvent.click(screen.getByLabelText("Select T000003"));
+    await userEvent.click(screen.getByRole("button", { name: "Download audio and metadata" }));
+    expect(
+      await screen.findByText(
+        "Audio, metadata and consent record downloaded for 1 task(s). No finished recording yet: T000003.",
+      ),
+    ).toBeInTheDocument();
+    expect(calls.some((c) => c.path === "/api/v1/recordings/r1/metadata")).toBe(true);
+    clicks.mockRestore();
+    [URL.createObjectURL, URL.revokeObjectURL] = [create, revoke];
+  });
+
   it("lets the assigned moderator record consent", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "consent.capture"], {

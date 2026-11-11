@@ -2,14 +2,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
+import type { ApiError } from "../../api/client";
 import { listProjects } from "../../api/projects";
-import { listTasks, TASK_STATUS_LABELS } from "../../api/work";
+import { downloadWithConsent, listRecordings } from "../../api/recordings";
+import { listTasks, TASK_STATUS_LABELS, transitionTask, type TaskSummary } from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
+import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
+import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
-import { useResource } from "../../hooks/useResource";
+import { toApiError, useResource } from "../../hooks/useResource";
 import { Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 
@@ -47,6 +51,74 @@ export function TasksPage() {
       ? Object.fromEntries(projects.state.data.items.map((p) => [p.id, p.code]))
       : {};
   const reset = () => setPage(1);
+  // Many tasks at once (D-093): approve the ones waiting for admin review, or download their
+  // audio with its metadata and consent record. Each one goes through the single-task checks.
+  const canSelect = can("tasks.assign");
+  // The selection belongs to the list it was made in: another filter or page starts empty.
+  const listKey = JSON.stringify([projectId, status, mode, search, page]);
+  const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: "", ids: [] });
+  const selected = selection.key === listKey ? selection.ids : [];
+  const setSelected = (ids: string[]) => setSelection({ key: listKey, ids });
+  const [busy, setBusy] = useState<"approve" | "export" | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const rows: TaskSummary[] = tasks.state.status === "loaded" ? tasks.state.data.items : [];
+  const chosen = rows.filter((t) => selected.includes(t.id));
+  const waiting = chosen.filter((t) => t.status === "ADMIN_REVIEW");
+  const toggle = (id: string) =>
+    setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+
+  async function approveSelected() {
+    setBusy("approve");
+    setMessage(null);
+    setError(null);
+    let done = 0;
+    const failed: string[] = [];
+    for (const t of waiting) {
+      try {
+        await transitionTask(t.id, "APPROVED", "", "");
+        done += 1;
+      } catch (err) {
+        failed.push(`${t.task_code}: ${toApiError(err).message}`);
+      }
+    }
+    const skipped = chosen.length - waiting.length;
+    setMessage(
+      `${done} approved.` +
+        (skipped ? ` ${skipped} skipped: not waiting for admin review.` : "") +
+        (failed.length ? ` Not approved: ${failed.join("; ")}.` : ""),
+    );
+    setSelected([]);
+    setBusy(null);
+    tasks.reload();
+  }
+
+  async function exportSelected() {
+    setBusy("export");
+    setMessage(null);
+    setError(null);
+    let done = 0;
+    const missing: string[] = [];
+    try {
+      for (const t of chosen) {
+        const latest = (await listRecordings(t.id)).find((r) => r.state === "READY");
+        if (!latest) {
+          missing.push(t.task_code);
+          continue;
+        }
+        await downloadWithConsent(latest, t.task_code);
+        done += 1;
+      }
+      setMessage(
+        `Audio, metadata and consent record downloaded for ${done} task(s).` +
+          (missing.length ? ` No finished recording yet: ${missing.join(", ")}.` : ""),
+      );
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <section aria-labelledby="tasks-title" className="stack">
@@ -109,6 +181,34 @@ export function TasksPage() {
           ]}
         />
       </div>
+      {canSelect && selected.length > 0 ? (
+        <div className="card bulkbar" role="group" aria-label="Actions for selected tasks">
+          <strong>{selected.length} selected</strong>
+          <Button
+            busy={busy === "approve"}
+            disabled={waiting.length === 0 || busy !== null}
+            onClick={() => void approveSelected()}
+          >
+            Approve selected ({waiting.length})
+          </Button>
+          {can("recordings.download") ? (
+            <Button
+              variant="secondary"
+              busy={busy === "export"}
+              disabled={busy !== null}
+              onClick={() => void exportSelected()}
+            >
+              <Icon name="upload" size={15} />
+              Download audio and metadata
+            </Button>
+          ) : null}
+          <Button variant="secondary" disabled={busy !== null} onClick={() => setSelected([])}>
+            Clear
+          </Button>
+        </div>
+      ) : null}
+      <SuccessNotice message={message} />
+      <ErrorNotice error={error} />
       {tasks.state.status === "loading" ? <LoadingState label="Loading tasks" /> : null}
       {tasks.state.status === "failed" ? (
         <ErrorState error={tasks.state.error} onRetry={tasks.reload} />
@@ -125,6 +225,16 @@ export function TasksPage() {
             <table className="table">
               <thead>
                 <tr>
+                  {canSelect ? (
+                    <th scope="col">
+                      <input
+                        type="checkbox"
+                        aria-label="Select every task on this page"
+                        checked={rows.length > 0 && chosen.length === rows.length}
+                        onChange={(e) => setSelected(e.target.checked ? rows.map((t) => t.id) : [])}
+                      />
+                    </th>
+                  ) : null}
                   <th scope="col">Task</th>
                   <th scope="col">Project</th>
                   <th scope="col">Mode</th>
@@ -136,6 +246,16 @@ export function TasksPage() {
               <tbody>
                 {tasks.state.data.items.map((t) => (
                   <tr key={t.id}>
+                    {canSelect ? (
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${t.task_code}`}
+                          checked={selected.includes(t.id)}
+                          onChange={() => toggle(t.id)}
+                        />
+                      </td>
+                    ) : null}
                     <td>
                       <Link className="code" to={`/tasks/${t.id}`}>
                         {t.task_code}

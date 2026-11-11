@@ -277,6 +277,15 @@ A task that passed QC shows **Admin review**. Open it: the **Final approval** ca
 **Listen** and **Approve**. To reject it or send it back for a new recording, use **Change
 status** with a reason. Only then is the task **Approved** and ready to download.
 
+**Many at once** (Tasks list): tick the tasks (or the box at the top of the list for the whole
+page). A bar appears with:
+
+- **Approve selected (N)**: approves the ticked tasks that are waiting for admin review; the others
+  are skipped and named.
+- **Download audio and metadata**: for each ticked task with a finished recording, downloads the
+  audio file (16 kHz WAV), its details file (metadata JSON) and its consent record. The browser
+  may ask once to allow several downloads; click **Allow**.
+
 ---
 
 ## 9. Client Viewer: progress
