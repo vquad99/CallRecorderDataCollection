@@ -97,8 +97,12 @@ class Settings(BaseSettings):
     def _fernet_key(cls, value: SecretStr) -> SecretStr:
         from cryptography.fernet import Fernet
 
+        keys = [k.strip() for k in value.get_secret_value().split(",") if k.strip()]
         try:
-            Fernet(value.get_secret_value().encode())
+            if not keys:
+                raise ValueError
+            for key in keys:  # one key, or several for rotation: the first encrypts (D-088)
+                Fernet(key.encode())
         except (ValueError, TypeError):
             raise ValueError("must be a Fernet key (32 url-safe base64-encoded bytes)") from None
         return value
@@ -208,7 +212,9 @@ class Settings(BaseSettings):
         """Values that must never appear in logs or responses."""
         from sqlalchemy.engine import make_url
 
-        values = [self.secret_key.get_secret_value(), self.data_encryption_key.get_secret_value()]
+        keys = self.data_encryption_key.get_secret_value()
+        values = [self.secret_key.get_secret_value(), keys]
+        values += [k.strip() for k in keys.split(",") if k.strip()]  # each rotation key too
         if self.smtp_password is not None:
             values.append(self.smtp_password.get_secret_value())
         if self.storage_secret_access_key is not None:

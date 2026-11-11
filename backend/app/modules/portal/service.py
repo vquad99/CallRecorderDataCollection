@@ -61,8 +61,11 @@ def create_link(
     project_id: uuid.UUID,
     participant_id: uuid.UUID,
     ip: str | None,
+    *,
+    shown_to_staff: bool,
 ) -> tuple[str, datetime]:
-    """A new personal link; any earlier link for this participant and project stops working."""
+    """A new personal link; any earlier link for this participant and project stops working.
+    shown_to_staff: the caller sees the link (to hand it over), as opposed to only emailing it."""
     project, participant = participants.get_in_project(db, principal, project_id, participant_id)
     if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
         raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
@@ -78,6 +81,7 @@ def create_link(
             token_hash=hash_token(token),
             expires_at=expires,
             created_by=principal.user_id,
+            shown_to_staff=shown_to_staff,
         )
     )
     audit.record(
@@ -88,7 +92,7 @@ def create_link(
         project_id=project.id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"expires_at": expires.isoformat()},
+        after={"expires_at": expires.isoformat(), "shown_to_staff": shown_to_staff},
     )
     db.commit()
     # The secret sits after "#": browsers never send that part to a server.
@@ -110,7 +114,9 @@ def email_link(
     project, participant = participants.get_in_project(db, principal, project_id, participant_id)
     if participant.email_enc is None:
         raise AppError("This participant has no email address", code="NO_EMAIL", status_code=409)
-    url, expires = create_link(db, settings, principal, project_id, participant_id, ip)
+    url, expires = create_link(
+        db, settings, principal, project_id, participant_id, ip, shown_to_staff=False
+    )
     body = (
         "Hello,\n\n"
         f'You are taking part in the project "{project.name}". Please read the consent form '
@@ -292,7 +298,7 @@ def view(db: Session, token: str) -> PortalView:
 
 def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> None:
     """The participant's own answer: GIVEN, REFUSED, or WITHDRAWN after having given it."""
-    _, participant, project = _resolve(db, token)
+    link, participant, project = _resolve(db, token)
     if not project.consent_text.strip():
         raise AppError(
             "The consent form for this project is not ready yet",
@@ -316,7 +322,12 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             method="DIGITAL",
             policy_version=project.consent_policy_version,
             captured_by=None,
-            note="Answered by the participant on their personal page",
+            link_shown_to=link.created_by if link.shown_to_staff else None,
+            note=(
+                "Answered on the participant's personal page, from a link handed out by staff"
+                if link.shown_to_staff
+                else "Answered by the participant on their personal page"
+            ),
             form_text=project.consent_text,
             review_status="PENDING" if decision == "GIVEN" else None,
         )

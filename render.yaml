@@ -32,8 +32,9 @@ services:
           type: pserv
           name: ccp-api
           property: hostport
+      # Only this platform's own bucket, not every Wasabi customer's (D-088).
       - key: MEDIA_ORIGINS
-        value: https://*.wasabisys.com
+        value: https://callrec57.s3.ap-southeast-1.wasabisys.com
       # The visitor's address: Render's proxy is the only way in, and it passes the address
       # Cloudflare saw. Tested on the live copy (2026-11-10): a false X-Forwarded-For dodged the
       # per-address sign-in limit until nginx took the address from CF-Connecting-IP instead.

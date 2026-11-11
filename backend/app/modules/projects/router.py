@@ -42,6 +42,13 @@ class LanguageOut(BaseModel):
     dialect: str
 
 
+class LanguageIn(BaseModel):
+    # Checked like a participant's own language and dialect (D-088): the dialect reaches the
+    # participant export, so it is short, plain text.
+    language_code: str = Field(max_length=35, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+    dialect: str = Field(default="", max_length=100)
+
+
 class AudioRuleIO(BaseModel):
     mode: Mode
     sample_rate: int = Field(ge=8000, le=192000)
@@ -200,7 +207,7 @@ def change_status(
 
 
 class LanguagesBody(BaseModel):
-    languages: list[LanguageOut] = Field(max_length=100)
+    languages: list[LanguageIn] = Field(max_length=100)
 
 
 @router.put("/{project_id}/languages", response_model=ProjectDetail)

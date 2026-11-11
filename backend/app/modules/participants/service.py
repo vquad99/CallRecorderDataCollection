@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, func, or_, select, text
+from sqlalchemy import exists, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -28,7 +28,12 @@ from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
 from app.modules.auth.security import FieldCipher
-from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
+from app.modules.participants.models import (
+    ConsentRecord,
+    Participant,
+    ParticipantPortalLink,
+    ParticipantProjectLink,
+)
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_visible as get_visible_project
 from app.modules.tasks.models import Task, TaskAssignment
@@ -136,6 +141,24 @@ def visibility(
 def _require(principal: Principal, perm: Perm, project: Project) -> None:
     if not principal.can_in_project(perm, project.id):
         raise forbidden()
+
+
+def _require_every_project(db: Session, principal: Principal, participant: Participant) -> None:
+    """A participant can belong to several projects, and an edit or a removal changes them in all
+    of them: allowed only to someone who manages every one (D-088). Before, an admin of one
+    project could change the email the other project's consent links go to."""
+    project_ids = db.scalars(
+        select(ParticipantProjectLink.project_id).where(
+            ParticipantProjectLink.participant_id == participant.id
+        )
+    ).all()
+    if not all(principal.can_in_project(Perm.PARTICIPANTS_MANAGE, pid) for pid in project_ids):
+        raise AppError(
+            "This participant also belongs to a project you do not manage. "
+            "Ask a Super Admin to make this change.",
+            code="SHARED_PARTICIPANT",
+            status_code=403,
+        )
 
 
 def _linked(db: Session, project_id: uuid.UUID, participant_id: uuid.UUID) -> bool:
@@ -379,6 +402,7 @@ def correct_participant(
     _require(principal, Perm.PARTICIPANTS_MANAGE, project)
     if participant.deleted_at is not None:
         raise AppError("This participant was deleted", code="PARTICIPANT_DELETED", status_code=409)
+    _require_every_project(db, principal, participant)
     _check_language(project, data.language_code, data.dialect)
     phone = normalize_phone(data.phone) if data.phone else None
     new_hash = phone_hash(settings, phone) if phone else None
@@ -404,6 +428,16 @@ def correct_participant(
         email_changed = new_email != old_email
         if email_changed:
             participant.email_enc = cipher.encrypt(new_email) if new_email else None
+            # A personal link already mailed to the old address stops working (D-088), as staff
+            # invitation and reset links do when an email changes (D-064).
+            db.execute(
+                update(ParticipantPortalLink)
+                .where(
+                    ParticipantPortalLink.participant_id == participant.id,
+                    ParticipantPortalLink.revoked_at.is_(None),
+                )
+                .values(revoked_at=datetime.now(UTC))
+            )
     audit.record(
         db,
         action="participant.corrected",
@@ -440,6 +474,7 @@ def delete_participant(
         raise AppError(
             "This participant was already deleted", code="PARTICIPANT_DELETED", status_code=409
         )
+    _require_every_project(db, principal, participant)
     busy = db.execute(
         select(Task.task_code, Task.project_id).where(
             Task.status.not_in(TERMINAL),
@@ -502,7 +537,7 @@ def export_contacts(
                 _safe_cell(p.display_label),
                 _safe_cell(phone),
                 p.language_code,
-                p.dialect,
+                _safe_cell(p.dialect),  # free text: no formula may reach a spreadsheet (D-088)
             ]
         )
     audit.record(

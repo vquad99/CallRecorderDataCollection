@@ -285,6 +285,12 @@ def test_assigning_qc_checks_the_person(world: dict[str, Any]) -> None:
     own = _second_task(world, "both@example.org")
     same = pa.post(f"/api/v1/tasks/{own}/assign-qc", json={"user_id": user_id("both@example.org")})
     assert same.json()["error"]["code"] == "SAME_PERSON"
+    # D-088: nor the other way round. Assign the QC first, then try to make them the moderator.
+    other = _second_task(world)
+    both = user_id("both@example.org")
+    assert pa.post(f"/api/v1/tasks/{other}/assign-qc", json={"user_id": both}).status_code == 200
+    swap_mod = pa.post(f"/api/v1/tasks/{other}/assign", json={"user_id": both, "reason": "Cover"})
+    assert swap_mod.json()["error"]["code"] == "SAME_PERSON"
     assert world["mod"].post(url, json={"user_id": user_id("qc@example.org")}).status_code == 403
 
 

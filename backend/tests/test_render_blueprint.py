@@ -114,6 +114,21 @@ def test_the_deploy_step_migrates_creates_the_admin_once_and_skips_demo_data(
     assert "demo account" not in out
     assert cli.main(["prepare-deploy"]) == 0, "a second deploy changes nothing"
     assert "owner@example.org exists" in capsys.readouterr().out
+    # D-088: once the owner renames that account, a deploy must not bring the old address back
+    # as a second Super Admin with the stored password.
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(migrated_db)
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE users SET email = 'renamed@example.org' WHERE email = :e"),
+            {"e": "owner@example.org"},
+        )
+    assert cli.main(["prepare-deploy"]) == 0
+    assert "skipped (a Super Admin already exists)" in capsys.readouterr().out
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM users")).scalar() == 1
+    engine.dispose()
 
 
 # ---------------------------------------------------- production rules (the one hosted copy, D-081)

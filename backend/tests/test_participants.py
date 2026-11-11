@@ -251,3 +251,11 @@ def test_link_existing_participant_to_another_project(world: dict[str, Any], db:
         .status_code
         == 404
     )
+    # D-088: once shared, an admin of only one of the projects can no longer change or remove the
+    # participant for both; a Super Admin (who manages both) still can.
+    base = f"/api/v1/projects/{world['project'].id}/participants/{p['id']}"
+    edit = {"display_label": "Asha R", "language_code": "hi"}
+    assert world["pa"].patch(base, json=edit).json()["error"]["code"] == "SHARED_PARTICIPANT"
+    gone = world["pa"].post(f"{base}/delete", json={"reason": "test"})
+    assert gone.json()["error"]["code"] == "SHARED_PARTICIPANT"
+    assert root.patch(base, json=edit).status_code == 200

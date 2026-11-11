@@ -99,8 +99,17 @@ the repository.
 
 **Rotate before or at handover**: the Resend, Render and Wasabi keys were shared in chat during
 setup. After rotating the Resend key, update `SMTP_PASSWORD` on `ccp-api`; after rotating Wasabi
-keys, update `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY`. `DATA_ENCRYPTION_KEY` cannot
-simply be rotated: it must move with the database.
+keys, update `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY`.
+
+**Rotating `DATA_ENCRYPTION_KEY`** (do this at handover, so no earlier holder of the key can read
+phone numbers or emails in a database copy): make a new key with
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`, set
+`DATA_ENCRYPTION_KEY` on `ccp-api` to `NEW_KEY,OLD_KEY` (new first), let it deploy, run the one-off
+job `python -m app.cli rotate-keys`, then set `DATA_ENCRYPTION_KEY` to `NEW_KEY` alone (D-088).
+
+**First admin**: every deploy creates the `ADMIN_EMAIL` account only while no active Super Admin
+exists, so renaming or removing that account later is safe. `ADMIN_PASSWORD` can be cleared after
+the first deploy.
 
 ## 6. Accounts on the live system
 

@@ -96,7 +96,9 @@ def seed_dev(settings: Settings, password: str) -> list[str]:
     return created
 
 
-def create_admin(settings: Settings, email: str, password: str, *, reset: bool) -> str:
+def create_admin(
+    settings: Settings, email: str, password: str, *, reset: bool, first_only: bool = False
+) -> str:
     """Bootstrap the first Super Admin in any environment (a new deployment has no users and no
     way to invite one before someone can sign in). Creates the account if it is missing; changes
     an existing account's password only with reset. Audited."""
@@ -118,6 +120,10 @@ def create_admin(settings: Settings, email: str, password: str, *, reset: bool) 
             user = db.scalar(select(User).where(User.email == email))
             if user is not None and not reset:
                 return "exists"
+            if user is None and first_only and _has_active_super_admin(db):
+                # Every deploy runs this. Once a Super Admin exists, a changed or removed
+                # ADMIN_EMAIL account must not come back with the stored password (D-088).
+                return "skipped (a Super Admin already exists)"
             if user is None:
                 role = db.scalar(
                     select(RoleRecord).where(RoleRecord.code == Role.SUPER_ADMIN.value)
@@ -147,6 +153,48 @@ def create_admin(settings: Settings, email: str, password: str, *, reset: bool) 
         engine.dispose()
 
 
+def _has_active_super_admin(db: Any) -> bool:
+    from app.modules.auth.models import UserRole
+
+    return (
+        db.scalar(
+            select(User.id)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(RoleRecord, RoleRecord.id == UserRole.role_id)
+            .where(RoleRecord.code == Role.SUPER_ADMIN.value, User.status == "ACTIVE")
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def rotate_keys(settings: Settings) -> dict[str, int]:
+    """Encrypt every stored secret field again with the first DATA_ENCRYPTION_KEY (D-088).
+    Run after putting a new key first in the list; then the old key can be removed."""
+    from app.modules.auth.security import FieldCipher
+    from app.modules.participants.models import Participant
+
+    cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
+    counts = {"participant phone": 0, "participant email": 0, "authenticator secret": 0}
+    engine = create_db_engine(settings)
+    try:
+        with make_session_factory(engine)() as db:
+            for p in db.scalars(select(Participant)):
+                if p.phone_e164_enc:
+                    p.phone_e164_enc = cipher.rotate(p.phone_e164_enc)
+                    counts["participant phone"] += 1
+                if p.email_enc:
+                    p.email_enc = cipher.rotate(p.email_enc)
+                    counts["participant email"] += 1
+            for u in db.scalars(select(User).where(User.mfa_secret_enc.is_not(None))):
+                u.mfa_secret_enc = cipher.rotate(u.mfa_secret_enc or "")
+                counts["authenticator secret"] += 1
+            db.commit()
+    finally:
+        engine.dispose()
+    return counts
+
+
 def migrate(settings: Settings) -> None:
     from alembic import command
     from alembic.config import Config
@@ -164,7 +212,9 @@ def prepare_deploy(settings: Settings) -> int:
     print("prepare-deploy: database migrated")
     email = os.environ.get("ADMIN_EMAIL", "")
     if email:
-        outcome = create_admin(settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=False)
+        outcome = create_admin(
+            settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=False, first_only=True
+        )
         print(f"prepare-deploy: admin {email} {outcome}")
     allowed = settings.app_env in ("development", "test") or (
         settings.app_env == "staging" and os.environ.get("ALLOW_DEMO_SEED", "").lower() == "true"
@@ -357,6 +407,10 @@ def main(argv: list[str] | None = None) -> int:
         "retention", help="delete stored files older than each project's retention rules"
     )
     sub.add_parser(
+        "rotate-keys",
+        help="encrypt stored secrets again with the first key in DATA_ENCRYPTION_KEY",
+    )
+    sub.add_parser(
         "recover-recordings",
         help="process again every recording left half-done by a stopped process",
     )
@@ -400,6 +454,9 @@ def main(argv: list[str] | None = None) -> int:
                 settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=args.reset_password
             )
             print(f"create-admin: {email} {outcome}")
+        elif args.command == "rotate-keys":
+            for what, n in rotate_keys(settings).items():
+                print(f"rotate-keys: {n} {what}(s) re-encrypted")
         elif args.command == "retention":
             print(f"retention: {run_retention(settings)} file(s) deleted")
         elif args.command == "recover-recordings":

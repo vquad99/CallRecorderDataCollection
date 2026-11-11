@@ -872,6 +872,18 @@ def decide(
         raise AppError(
             "This task is not waiting for an audio check", code="TASK_NOT_IN_QC", status_code=409
         )
+    # Checked at decision time too, for every caller including a Super Admin: assigning the QC
+    # first and the moderator second used to let one person record and approve (D-088).
+    moderator = tasks.active_assignee(db, task.id, Role.MODERATOR.value)
+    recorded = db.scalar(
+        select(Recording.id).where(
+            Recording.task_id == task.id, Recording.created_by == principal.user_id
+        )
+    )
+    if (moderator is not None and moderator.user_id == principal.user_id) or recorded is not None:
+        raise AppError(
+            "The person who records a session cannot check it", code="SAME_PERSON", status_code=422
+        )
     target = DECISIONS.get(outcome)
     if target is None:
         raise AppError("Choose PASS, FAIL or RETURN", code="VALIDATION_ERROR", status_code=422)

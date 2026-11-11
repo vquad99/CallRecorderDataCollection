@@ -137,9 +137,17 @@ def import_csv(
         )
     results: list[RowResult] = []
     for i, raw in enumerate(rows, start=2):
+        # csv puts values beyond the header under the key None, as a list (D-088: was a 500).
+        extra = raw.pop(None, None)
         row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
         pair = f"{row.get('participant_a', '')} + {row.get('participant_b', '')}"
         try:
+            if extra:
+                raise AppError(
+                    "This line has more values than the first line has columns",
+                    code="INVALID_ROW",
+                    status_code=422,
+                )
             a = _participant(db, project.id, row.get("participant_a", ""), "A")
             b = _participant(db, project.id, row.get("participant_b", ""), "B")
             if a.id == b.id:

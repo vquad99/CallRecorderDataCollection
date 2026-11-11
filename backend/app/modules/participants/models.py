@@ -5,7 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -79,6 +89,11 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     captured_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
     )
+    # Set when the participant answered on a link that was shown to this staff member: that
+    # person may not review the answer (D-088).
+    link_shown_to: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
     note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     # The consent form text the participant answered (their own answers only, D-068), kept so a
     # later change of the project's form cannot change what they agreed to.
@@ -110,4 +125,9 @@ class ParticipantPortalLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    # True when the link was shown to the staff member (copy and hand over), false when only
+    # emailed to the participant: an answer on a shown link may have been typed by staff (D-088).
+    shown_to_staff: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )

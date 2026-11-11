@@ -62,7 +62,16 @@ def _events(records: list[ConsentRecord], *, own: bool) -> str:
             _row("When", _when(r.created_at)),
             _row("How", METHOD_WORDS.get(r.method, r.method)),
             _row("Form version", r.policy_version),
-            _row("Recorded by", "The participant" if own else "The moderator of this session"),
+            _row(
+                "Recorded by",
+                (
+                    "The participant's personal page, from a link handed out by staff"
+                    if r.link_shown_to is not None
+                    else "The participant"
+                )
+                if own
+                else "The moderator of this session",
+            ),
         ]
         if r.note and not own:
             rows.append(_row("Note", r.note))

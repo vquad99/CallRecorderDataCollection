@@ -7,12 +7,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, and_, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.email import EmailSender, EmailSendError, OutgoingEmail
 from app.core.errors import AppError
+from app.core.ratelimit import address_key
 from app.modules.audit import service as audit
 from app.modules.auth.models import LoginAttempt, PasswordResetToken, User, UserSession
 from app.modules.auth.security import (
@@ -65,12 +66,16 @@ def _user(db: Session, user_id: uuid.UUID) -> User:
 
 
 def _failures_since(
-    db: Session, match: ColumnElement[bool], since: datetime
+    db: Session, match: ColumnElement[bool], since: datetime, *, reset_on_success: bool = True
 ) -> tuple[int, datetime | None]:
-    last_success = db.scalar(
-        select(func.max(LoginAttempt.created_at)).where(
-            match, LoginAttempt.succeeded.is_(True), LoginAttempt.created_at >= since
+    last_success = (
+        db.scalar(
+            select(func.max(LoginAttempt.created_at)).where(
+                match, LoginAttempt.succeeded.is_(True), LoginAttempt.created_at >= since
+            )
         )
+        if reset_on_success
+        else None
     )
     start = max(since, last_success) if last_success else since
     count, oldest = db.execute(
@@ -81,16 +86,31 @@ def _failures_since(
     return int(count), oldest
 
 
+# An account locks for one address after login_max_failures_per_account failures from it, and for
+# everyone only after this many times that number from anywhere: a stranger who knows an email can
+# no longer keep its owner out with five wrong passwords (security review 2026-11-11, D-088).
+ACCOUNT_CEILING_FACTOR = 10
+
+
 def ensure_not_throttled(db: Session, settings: Settings, email: str, ip: str | None) -> None:
     window = timedelta(minutes=settings.login_window_minutes)
     since = datetime.now(UTC) - window
-    checks: list[tuple[ColumnElement[bool], int]] = [
-        (LoginAttempt.email == email, settings.login_max_failures_per_account)
-    ]
+    ip = address_key(ip)  # an IPv6 address counts as its /64
+    per_account = settings.login_max_failures_per_account
+    # (who, limit, whether a successful sign-in starts the count again)
+    checks: list[tuple[ColumnElement[bool], int, bool]]
     if ip:
-        checks.append((LoginAttempt.ip == ip, settings.login_max_failures_per_ip))
-    for match, limit in checks:
-        count, oldest = _failures_since(db, match, since)
+        checks = [
+            (and_(LoginAttempt.email == email, LoginAttempt.ip == ip), per_account, True),
+            (LoginAttempt.email == email, per_account * ACCOUNT_CEILING_FACTOR, True),
+            # Not reset by a success: signing in to one's own account must not buy more guesses
+            # at other accounts from the same address.
+            (LoginAttempt.ip == ip, settings.login_max_failures_per_ip, False),
+        ]
+    else:
+        checks = [(LoginAttempt.email == email, per_account, True)]
+    for match, limit, reset in checks:
+        count, oldest = _failures_since(db, match, since, reset_on_success=reset)
         if count >= limit:
             retry = int(
                 ((oldest or datetime.now(UTC)) + window - datetime.now(UTC)).total_seconds()
@@ -103,8 +123,13 @@ def ensure_not_throttled(db: Session, settings: Settings, email: str, ip: str | 
             )
 
 
+def _account_lock(db: Session, email: str) -> None:
+    """Serialise password and authenticator checks for one account until the transaction ends."""
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"login:{email}"})
+
+
 def _record_attempt(db: Session, email: str, ip: str | None, succeeded: bool) -> None:
-    db.add(LoginAttempt(email=email, ip=ip, succeeded=succeeded))
+    db.add(LoginAttempt(email=email, ip=address_key(ip), succeeded=succeeded))
 
 
 def _fresh_step(user: User, step: int | None) -> bool:
@@ -135,6 +160,10 @@ def login(
     user_agent: str | None,
 ) -> NewSession:
     email = normalize_email(email)
+    # One sign-in per account at a time: parallel requests can no longer all read the failure
+    # count before any of them records a failure, nor use one authenticator code twice (D-088).
+    # Held until this transaction ends.
+    _account_lock(db, email)
     ensure_not_throttled(db, settings, email, ip)
     user = db.scalar(select(User).where(User.email == email))
     password_ok = verify_password(user.password_hash if user else None, password)
@@ -376,6 +405,8 @@ def change_password(
 ) -> None:
     user = _user(db, user_id)
     # Guessing the password through a signed-in session is throttled like sign-in (AUTH-009).
+    _account_lock(db, user.email)
+    db.refresh(user)  # read again under the lock
     ensure_not_throttled(db, settings, user.email, ip)
     if not verify_password(user.password_hash, current):
         _record_attempt(db, user.email, ip, succeeded=False)
@@ -415,6 +446,8 @@ def mfa_enroll(
         raise AppError(
             "Two-step sign-in is already on", code="MFA_ALREADY_ENABLED", status_code=409
         )
+    _account_lock(db, user.email)
+    db.refresh(user)  # read again under the lock
     ensure_not_throttled(db, settings, user.email, ip)
     if not verify_password(user.password_hash, password):
         _record_attempt(db, user.email, ip, succeeded=False)
@@ -460,6 +493,8 @@ def mfa_disable(
     user = _user(db, user_id)
     if not user.mfa_enabled or not user.mfa_secret_enc:
         raise AppError("Two-step sign-in is not on", code="MFA_NOT_ENABLED", status_code=409)
+    _account_lock(db, user.email)
+    db.refresh(user)  # read again under the lock
     ensure_not_throttled(db, settings, user.email, ip)
     password_ok = verify_password(user.password_hash, password)
     step = totp_step(cipher.decrypt(user.mfa_secret_enc), code)

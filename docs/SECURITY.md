@@ -132,6 +132,50 @@ in no access log), same answer for every link that does not work, rate limited p
 checked on the consent answer. The page returns no names, phone numbers, staff, other speakers,
 storage keys or audio. Creating and revoking links is audited.
 
+## 9c. Third review, 2026-11-11 (D-088)
+
+Three independent reviews (roles and business rules; sign-in, sessions and tokens; browser,
+files, web server and dependencies) and a check of the live site from outside. No high
+findings. Fixed, each with a test in `backend/tests/test_security_review_2.py` or next to the
+code it changes:
+
+- Password hashing used 64 MiB per sign-in: a burst of parallel sign-ins could exhaust the
+  512 MB server. Now 19 MiB (OWASP minimum for Argon2id), at most two hashes at once per process,
+  503 "busy" after 10 s.
+- Parallel sign-ins could all pass the failure count, and one authenticator code could be used
+  twice at the same moment: password and code checks for one account now run one at a time.
+- Five wrong passwords from anywhere locked the real owner out: an account now locks for the
+  address the failures came from, and for everyone only after ten times as many.
+- Signing in to one's own account reset the address's failure count: it no longer does.
+- An IPv6 visitor could use a new address per request: limits now count the whole /64.
+- An authenticator code in another script's digits caused a server error: refused instead.
+- One person could record a session and approve it by being assigned QC first and moderator
+  second: refused both at assignment and at the decision, for every role.
+- An admin could open a participant's personal link, answer "I agree" and approve the answer:
+  links shown to staff are marked, the answer names the link, and the person who handed it out
+  cannot review it; consent records say "link handed out by staff".
+- An admin of one project could edit or remove a participant shared with another project:
+  now only someone who manages every project the participant is in.
+- Correcting a participant's email now ends the personal link mailed to the old address.
+- Participant export: the dialect cell is protected against spreadsheet formulas; project
+  languages are checked like a participant's own.
+- A CSV line with more values than the header broke the whole upload: now a per-line error.
+- The first-admin step of every deploy could bring back a renamed admin address with the stored
+  password: it now runs only while no Super Admin exists.
+- The encryption key can be rotated (`DATA_ENCRYPTION_KEY=new,old`, then `rotate-keys`).
+- Web server: request bodies limited to 9 MB (was 50 MB); recordings may play only from this
+  platform's own bucket (was any Wasabi bucket).
+
+Checked on the live site: TLS 1.0 and 1.1 refused; HSTS, content policy and frame protection on
+every answer; http and www redirect to https://dubdesk.live; session cookie HttpOnly, Secure,
+SameSite=Strict; no API docs, dotfiles or server status pages exposed; other websites cannot
+call the API (no CORS permission); a request carrying a forged visitor-address header is refused
+by the hosting edge (Cloudflare error 1000). No known vulnerable package (npm audit, pip-audit).
+
+Accepted, not changed: the web server's main process runs as root inside its container (its
+workers do not; the unprivileged image lags one nginx patch release); the API trusts forwarded
+addresses from the private network, where only this platform's own services run.
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

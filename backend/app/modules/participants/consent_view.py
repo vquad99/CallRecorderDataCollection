@@ -32,6 +32,7 @@ class Answer:
     review_status: str | None
     review_note: str
     reviewed_at: datetime | None
+    link_handed_out: bool = False  # answered on a link shown to staff, not emailed (D-088)
 
 
 @dataclass
@@ -54,6 +55,7 @@ def _answer(r: ConsentRecord) -> Answer:
         review_status=r.review_status,
         review_note=r.review_note,
         reviewed_at=r.reviewed_at,
+        link_handed_out=r.link_shown_to is not None,
     )
 
 
@@ -101,7 +103,14 @@ def as_file(
         c = form.current
         rows.append(_row("Answer", ANSWER_WORDS.get(c.status, c.status)))
         rows.append(_row("Answered on", _when(c.answered_at)))
-        rows.append(_row("Answered by", "The participant, on their personal page"))
+        rows.append(
+            _row(
+                "Answered by",
+                "On the participant's personal page, from a link handed out by staff (not emailed)"
+                if c.link_handed_out
+                else "The participant, on their personal page",
+            )
+        )
         if c.review_status:
             rows.append(_row("Review", REVIEW_WORDS.get(c.review_status, c.review_status)))
             if c.reviewed_at:

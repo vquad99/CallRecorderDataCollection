@@ -79,9 +79,17 @@ def import_csv(
     results: list[RowResult] = []
     seen_phones: set[str] = set()
     for i, raw in enumerate(rows, start=2):
+        # csv puts values beyond the header under the key None, as a list (D-088: was a 500).
+        extra = raw.pop(None, None)
         row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
         name = row.get("name", "")
         try:
+            if extra:
+                raise AppError(
+                    "This line has more values than the first line has columns",
+                    code="INVALID_ROW",
+                    status_code=422,
+                )
             if not name:
                 raise AppError("Name is missing", code="INVALID_ROW", status_code=422)
             if len(name) > 200:
@@ -203,6 +211,14 @@ def review_consent(
     if answer is None or answer.status != "GIVEN":
         raise AppError(
             "There is no consent answer to review", code="NOTHING_TO_REVIEW", status_code=409
+        )
+    if answer.link_shown_to == principal.user_id:
+        # They could have opened the link and answered themselves (D-088).
+        raise AppError(
+            "You handed this participant their link, so another administrator must review "
+            "this answer",
+            code="SAME_PERSON",
+            status_code=409,
         )
     if decision == "REJECTED" and not note.strip():
         raise AppError(

@@ -343,6 +343,12 @@ def assign_moderator(
             f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
         )
     user = check_moderator(db, task.project_id, user_id)
+    qc = active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
+    if qc is not None and qc.user_id == user.id:
+        # The QC Executive of a task cannot also record it, whichever was assigned first (D-088).
+        raise AppError(
+            "The person who checks a session cannot record it", code="SAME_PERSON", status_code=422
+        )
     current = active_assignee(db, task.id, "MODERATOR")
     if current is not None and current.user_id == user.id:
         raise AppError(

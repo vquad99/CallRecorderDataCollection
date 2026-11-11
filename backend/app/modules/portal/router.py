@@ -78,7 +78,13 @@ def create_link(
     settings: AppSettings,
 ) -> LinkOut:
     url, expires = service.create_link(
-        db, settings, principal, project_id, participant_id, client_ip(request)
+        db,
+        settings,
+        principal,
+        project_id,
+        participant_id,
+        client_ip(request),
+        shown_to_staff=True,
     )
     return LinkOut(url=url, expires_at=expires)
 

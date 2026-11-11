@@ -7,6 +7,7 @@ backend process shares the counts; without it, counts live in this process (deve
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import threading
 import time
 from typing import Protocol
@@ -70,13 +71,30 @@ def build_limiter(settings: Settings) -> Limiter:
 ADDRESS_MULTIPLIER = 10
 
 
+def address_key(address: str | None) -> str | None:
+    """The address a limit counts. One IPv6 customer usually holds a whole /64, so an IPv6
+    address counts as its /64; otherwise a new address per request would dodge every per-address
+    limit (D-088). IPv4 and anything unparseable are used as given."""
+    if not address:
+        return address
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.ipv4_mapped is not None:
+            return str(parsed.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{parsed}/64", strict=False))
+    return str(parsed)
+
+
 def rate_limit(request: Request) -> None:
     settings: Settings = request.app.state.settings
     limiter: Limiter = request.app.state.rate_limiter
     write = request.method in _UNSAFE
     limit = settings.rate_limit_writes_per_minute if write else settings.rate_limit_reads_per_minute
     kind = "w" if write else "r"
-    address = request.client.host if request.client else "-"
+    address = address_key(request.client.host if request.client else None) or "-"
     session = request.cookies.get("ccp_session")
     if session:
         keys = [

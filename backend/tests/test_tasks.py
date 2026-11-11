@@ -350,3 +350,17 @@ def test_new_task_can_assign_the_moderator_at_once(world: dict[str, Any], db: An
     assert made.status_code == 201
     assert made.json()["status"] == "ASSIGNED"
     assert made.json()["moderator_id"] == str(world["mod_user"].id)
+
+
+def test_bulk_task_upload_reports_a_line_with_extra_values(world: dict[str, Any]) -> None:
+    """D-088: a line with more values than the header was a server error for the whole file."""
+    a, b = world["a"]["participant_code"], world["b"]["participant_code"]
+    body = {
+        "project_id": str(world["project"].id),
+        "csv": f"participant_a,participant_b\n{a},{b},surplus\n{a},{b}\n",
+    }
+    check = world["pa"].post("/api/v1/tasks/import", json=body)
+    assert check.status_code == 200
+    rows = check.json()["rows"]
+    assert [r["ok"] for r in rows] == [False, True]
+    assert "more values" in rows[0]["message"]

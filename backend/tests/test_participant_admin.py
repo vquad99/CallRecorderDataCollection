@@ -37,6 +37,14 @@ def _base(world: dict[str, Any]) -> str:
     return f"/api/v1/projects/{world['project'].id}/participants"
 
 
+def _link_from_another_admin(world: dict[str, Any], a: str) -> str:
+    """A personal link handed out by a second Project Admin: the one who hands out a link may
+    not review the answer given on it (D-088), so the tests review as world["pa"]."""
+    make_user(world["db"], "pa2@example.org", ["PROJECT_ADMIN"], projects=[world["project"]])
+    made = world["api"]("pa2@example.org").post(f"{_base(world)}/{a}/portal-link")
+    return str(made.json()["url"].split("#", 1)[1])
+
+
 def test_a_file_is_checked_first_and_only_good_rows_are_added(world: dict[str, Any]) -> None:
     pa, base = world["pa"], _base(world)
     before = pa.get(base).json()["total"]
@@ -129,7 +137,7 @@ def test_a_consent_answer_is_approved_or_sent_back(world: dict[str, Any]) -> Non
     a = world["task"]["participant_a"]["id"]
     nothing = pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
     assert nothing.json()["error"]["code"] == "NOTHING_TO_REVIEW"
-    token = pa.post(f"{base}/{a}/portal-link").json()["url"].split("#", 1)[1]
+    token = _link_from_another_admin(world, a)
     api, head = _visitor(world, token)
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
     row = next(p for p in pa.get(base).json()["items"] if p["id"] == a)
@@ -172,7 +180,7 @@ def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) ->
     a = world["task"]["participant_a"]["id"]
     blank = pa.get(f"{base}/{a}/consent-form").json()
     assert (blank["answered"], blank["current"], blank["form_text"]) == (False, None, FORM)
-    token = pa.post(f"{base}/{a}/portal-link").json()["url"].split("#", 1)[1]
+    token = _link_from_another_admin(world, a)
     api, head = _visitor(world, token)
     api.post("/api/v1/portal/consent", json={"decision": "REFUSED"}, headers=head)
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
@@ -192,3 +200,25 @@ def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) ->
     assert "Asha" not in got.text, "by code only"
     # QC staff and clients have no consent access.
     assert world["api"]("qc@example.org").get(f"{base}/{a}/consent-form").status_code == 403
+
+
+def test_whoever_hands_out_a_link_cannot_approve_the_answer_given_on_it(
+    world: dict[str, Any],
+) -> None:
+    """D-088: an admin could open the personal link, answer "I agree" and approve it."""
+    db, pa, base = world["db"], world["pa"], _base(world)
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
+    db.commit()
+    a = world["task"]["participant_a"]["id"]
+    token = pa.post(f"{base}/{a}/portal-link").json()["url"].split("#", 1)[1]
+    api, head = _visitor(world, token)
+    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    own = pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
+    assert own.json()["error"]["code"] == "SAME_PERSON"
+    record = pa.get(f"{base}/{a}/consent-form/file").text
+    assert "handed out by staff" in record
+    make_user(db, "pa3@example.org", ["PROJECT_ADMIN"], projects=[world["project"]])
+    other = world["api"]("pa3@example.org").post(
+        f"{base}/{a}/consent-review", json={"decision": "APPROVED"}
+    )
+    assert other.json()["review_status"] == "APPROVED"
