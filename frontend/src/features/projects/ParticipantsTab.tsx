@@ -136,16 +136,27 @@ function AddExisting({
     () => work.linkCandidates(projectId, search),
     [projectId, search, refresh],
   );
+  const people = found.state.status === "loaded" ? found.state.data : [];
   return (
-    <section className="card stack stack--tight" aria-labelledby="add-existing-title">
-      <h2 id="add-existing-title">Add an existing participant</h2>
-      <p className="muted">
-        People already in your other projects who are not in this one yet. They keep their code,
-        details and consent history.
-      </p>
+    <section className="card pick" aria-labelledby="add-existing-title">
+      <div className="pick__head">
+        <div>
+          <h2 id="add-existing-title">Add an existing participant</h2>
+          <p className="muted">
+            People from your other projects who are not in this one yet. They keep their code,
+            details and consent history.
+          </p>
+        </div>
+        {found.state.status === "loaded" ? (
+          <span className="pick__count">
+            {people.length === 1 ? "1 person" : `${people.length} people`}
+          </span>
+        ) : null}
+      </div>
       <TextField
-        label="Find by code or name"
+        label="Search your other projects"
         type="search"
+        placeholder="Code or name, e.g. P000123"
         value={typed}
         onChange={(e) => setTyped(e.target.value)}
       />
@@ -153,46 +164,32 @@ function AddExisting({
       {found.state.status === "failed" ? (
         <ErrorState error={found.state.error} onRetry={found.reload} />
       ) : null}
-      {found.state.status === "loaded" && found.state.data.length === 0 ? (
-        <p className="muted">No one found.</p>
+      {found.state.status === "loaded" && people.length === 0 ? (
+        <p className="pick__empty">
+          {search ? `No one matches "${search}".` : "No one to add: everyone is already here."}
+        </p>
       ) : null}
-      {found.state.status === "loaded" && found.state.data.length > 0 ? (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">Code</th>
-                <th scope="col">Name</th>
-                <th scope="col">Language</th>
-                <th scope="col">
-                  <span className="sr-only">Add</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {found.state.data.map((c) => (
-                <tr key={c.id}>
-                  <td className="mono">{c.participant_code}</td>
-                  <td>{c.display_label ?? "-"}</td>
-                  <td>
-                    {languageLabel(c.language_code)}
-                    {c.dialect ? `, ${c.dialect}` : ""}
-                  </td>
-                  <td>
-                    <Button
-                      variant="secondary"
-                      busy={busy}
-                      aria-label={`Add ${c.participant_code}`}
-                      onClick={() => onAdd(c.participant_code)}
-                    >
-                      Add
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {people.length > 0 ? (
+        <ul className="pick__list">
+          {people.map((c) => (
+            <li key={c.id} className="pick__row">
+              <span className="pick__code">{c.participant_code}</span>
+              <span className="pick__name">{c.display_label ?? "Name hidden"}</span>
+              <span className="pick__meta">
+                {languageLabel(c.language_code)}
+                {c.dialect ? ` · ${c.dialect}` : ""}
+              </span>
+              <Button
+                variant="secondary"
+                busy={busy}
+                aria-label={`Add ${c.participant_code}`}
+                onClick={() => onAdd(c.participant_code)}
+              >
+                Add
+              </Button>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   );

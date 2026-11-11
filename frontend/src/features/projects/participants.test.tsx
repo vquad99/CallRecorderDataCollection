@@ -163,7 +163,8 @@ describe("participants tab", () => {
     renderAt("/projects/p1/participants");
     await userEvent.click(await screen.findByRole("button", { name: "Add existing participant" }));
     expect(await screen.findByText("Quinn")).toBeInTheDocument();
-    expect(screen.getByText("Hindi (hi), Awadhi")).toBeInTheDocument();
+    expect(screen.getByText("Hindi (hi) · Awadhi")).toBeInTheDocument();
+    expect(screen.getByText("1 person")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Add P000009" }));
     expect(await screen.findByText("P000009 added to this project.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/link"))?.body).toEqual({

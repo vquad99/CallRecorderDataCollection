@@ -1974,3 +1974,101 @@ code,
   position: relative;
   inset: auto;
 }
+
+/* A table inside a card keeps its own padding when it has its own frame (table-wrap). */
+.card .table-wrap .table th,
+.card .table-wrap .table td {
+  padding-left: 16px;
+}
+
+/* Pick list: search, then one row per person with an action on the right (D-090). */
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pick__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pick__head h2 {
+  margin-bottom: 4px;
+}
+.pick__head p {
+  margin: 0;
+}
+.pick__count {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.pick__list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fffdf9;
+  list-style: none;
+}
+.pick__row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.pick__row:last-child {
+  border-bottom: 0;
+}
+.pick__row:hover {
+  background: var(--surface-2);
+}
+.pick__code {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+.pick__name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick__meta {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.pick__row .button {
+  min-height: 32px;
+  padding: 5px 14px;
+}
+.pick__empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .pick__row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .pick__meta {
+    display: none;
+  }
+}
