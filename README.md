@@ -5,8 +5,9 @@ automatic audio quality check and human QC.
 
 Status: **Phase 1 live** at **https://dubdesk.live**: face-to-face recording in the browser,
 participants and consent by email, tasks, automatic audio check, QC decisions, downloads with the
-consent record and a details file, dashboards per role, audit log. Phone-call recording (Phase 2),
-client export packages, transcription and app install are not built yet. See `docs/BUILD_STATUS.md`
+consent record and a details file, project exports (audio, metadata, both, progress report),
+dashboards per role, audit log. Phone-call recording (Phase 2), transcription and app install are
+not built yet. See `docs/BUILD_STATUS.md`
 for the module-by-module state.
 
 ## Documents

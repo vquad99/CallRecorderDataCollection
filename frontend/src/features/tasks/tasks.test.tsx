@@ -259,7 +259,7 @@ describe("tasks", () => {
     );
   });
 
-  it("approves many tasks at once and downloads their audio and metadata (D-093)", async () => {
+  it("approves many tasks at once (D-093)", async () => {
     const row = (id: string, code: string, status: string) => ({
       id,
       task_code: code,
@@ -313,21 +313,7 @@ describe("tasks", () => {
       { to: "APPROVED", reason_code: null, comment: "" },
     ]);
 
-    const [create, revoke] = [URL.createObjectURL, URL.revokeObjectURL];
-    URL.createObjectURL = () => "blob:x";
-    URL.revokeObjectURL = () => undefined;
-    const clicks = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    await userEvent.click(await screen.findByLabelText("Select T000001"));
-    await userEvent.click(screen.getByLabelText("Select T000003"));
-    await userEvent.click(screen.getByRole("button", { name: "Download audio and metadata" }));
-    expect(
-      await screen.findByText(
-        "Audio, metadata and consent record downloaded for 1 task(s). No finished recording yet: T000003.",
-      ),
-    ).toBeInTheDocument();
-    expect(calls.some((c) => c.path === "/api/v1/recordings/r1/metadata")).toBe(true);
-    clicks.mockRestore();
-    [URL.createObjectURL, URL.revokeObjectURL] = [create, revoke];
+    expect(screen.queryByRole("button", { name: "Download audio and metadata" })).toBeNull();
   });
 
   it("lets the assigned moderator record consent", async () => {

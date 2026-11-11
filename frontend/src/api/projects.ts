@@ -119,6 +119,20 @@ export const setAudioRules = (id: string, rules: AudioRule[]) =>
 export const setRetention = (id: string, rules: RetentionRule[]) =>
   apiRequest<Project>(`${base(id)}/retention`, { method: "PUT", body: { rules } });
 export const listMembers = (id: string) => apiRequest<Member[]>(`${base(id)}/members`);
+
+export type ExportContent = "audio" | "metadata" | "both" | "progress";
+export type ExportScope = "approved" | "finished";
+export interface ExportSummary {
+  recordings: number;
+  audio_bytes: number;
+  file_name: string;
+}
+/** What a project export would hold (D-094). */
+export const exportSummary = (id: string, content: ExportContent, scope: ExportScope) =>
+  apiRequest<ExportSummary>(`${base(id)}/export/summary${query({ content, scope })}`);
+/** The export itself is a plain link, so a large ZIP streams to disk instead of into memory. */
+export const exportPath = (id: string, content: ExportContent, scope: ExportScope) =>
+  `${base(id)}/export${query({ content, scope })}`;
 export const listCandidates = (id: string, search: string) =>
   apiRequest<Candidate[]>(`${base(id)}/member-candidates${query({ search })}`);
 export const addMember = (id: string, userId: string) =>

@@ -153,7 +153,7 @@ invitation email.
 | Item | Status |
 |---|---|
 | Phone-call recording (Phase 2) | Not built; needs a provider account (B-01, Exotel chosen) |
-| Client downloads / export packages | Not built (Phase 9) |
+| Exports | Project **Export** tab: audio, metadata, both (ZIP with manifest) or progress report (CSV) (D-094) |
 | Backups to a separate bucket | Open (B-14): needs a second Wasabi bucket with its own keys |
 | Two-step sign-in compulsory for admins | Owner decision open (B-15) |
 | Consent rules (withdrawal blocks recording?) and real consent wording | Owner/client decision open (B-16) |

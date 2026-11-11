@@ -24,7 +24,8 @@ from app.modules.auth.deps import Principal
 from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import Project
 from app.modules.recordings import service
-from app.modules.recordings.models import AudioAsset
+from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.tasks.models import Task
 
 STATUS_WORDS = {"GIVEN": "Consent given", "REFUSED": "Consent refused", "WITHDRAWN": "Withdrawn"}
 METHOD_WORDS = {
@@ -91,6 +92,22 @@ def build(
         raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
     project = db.get(Project, task.project_id)
     assert project is not None  # noqa: S101  (foreign key guarantees it)
+    html = render(db, rec, task, project)
+    audit.record(
+        db,
+        action="recording.consent_form_download",
+        entity_type="recording",
+        entity_id=rec.id,
+        project_id=task.project_id,
+        actor_id=principal.user_id,
+        ip=ip,
+    )
+    db.commit()
+    return f"consent_{task.task_code}_{rec.id}.html", html
+
+
+def render(db: Session, rec: Recording, task: Task, project: Project) -> str:
+    """The consent record's HTML, for a caller that has already checked access (D-094)."""
     assets = db.scalars(
         select(AudioAsset)
         .where(AudioAsset.recording_id == rec.id, AudioAsset.deleted_at.is_(None))
@@ -134,17 +151,7 @@ def build(
         + f'<p class="foot">Generated {_when(datetime.now(UTC))} from the consent records held by '
         "Conversation Collection. Participants are shown by code only.</p></body></html>"
     )
-    audit.record(
-        db,
-        action="recording.consent_form_download",
-        entity_type="recording",
-        entity_id=rec.id,
-        project_id=task.project_id,
-        actor_id=principal.user_id,
-        ip=ip,
-    )
-    db.commit()
-    return f"consent_{task.task_code}_{rec.id}.html", html
+    return html
 
 
-__all__ = ["build"]
+__all__ = ["build", "render"]

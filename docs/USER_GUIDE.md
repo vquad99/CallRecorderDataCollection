@@ -282,9 +282,24 @@ page). A bar appears with:
 
 - **Approve selected (N)**: approves the ticked tasks that are waiting for admin review; the others
   are skipped and named.
-- **Download audio and metadata**: for each ticked task with a finished recording, downloads the
-  audio file (16 kHz WAV), its details file (metadata JSON) and its consent record. The browser
-  may ask once to allow several downloads; click **Allow**.
+- **Clear**: removes the ticks.
+
+### Export a project
+
+Open the project and click the **Export** tab (Super Admin, Project Admin and Client Viewer).
+Choose what to export:
+
+| Choice | You get |
+|---|---|
+| **Audio + metadata** | One ZIP: `audio/` (16 kHz WAV), `metadata/` (details file, JSON), `consent/` (consent record) |
+| **Audio only** | One ZIP with the `audio/` folder |
+| **Metadata only** | One ZIP with the `metadata/` and `consent/` folders |
+| **Progress report** | One spreadsheet (CSV): a row per task with status, participants, moderator, QC, recording length, checks and approval date |
+
+For the ZIPs, choose **Which recordings**: **Approved tasks only** (the delivery) or **Every
+finished recording**. The page shows how many recordings and how much audio before you click
+**Download**. Every ZIP also holds `manifest.csv`, one row per recording with its file names and
+checksum. A large project streams straight to your Downloads folder.
 
 ---
 
@@ -313,7 +328,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 
 - **Phone-call recording.** "Telephony" appears in some forms and filters, but a telephony task
   cannot be recorded yet. Use **Face-to-face** only.
-- **Downloads for Client Viewers** and **export packages**. The Project Admin downloads for now.
+- Telephony audio in exports (no telephony recordings exist yet).
 - **Transcription.**
 - **Installing as an app** on a phone or computer.
 

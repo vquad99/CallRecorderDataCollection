@@ -1038,6 +1038,22 @@ def metadata(
         raise forbidden()
     project = db.get(Project, task.project_id)
     assert project is not None  # noqa: S101
+    body = metadata_body(db, rec, task, project)
+    audit.record(
+        db,
+        action="recording.metadata_download",
+        entity_type="recording",
+        entity_id=rec.id,
+        project_id=task.project_id,
+        actor_id=principal.user_id,
+        ip=ip,
+    )
+    db.commit()
+    return f"metadata_{task.task_code}_{rec.id}.json", body
+
+
+def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> dict[str, Any]:
+    """The details file's content, for a caller that has already checked access (D-094)."""
     assets = db.scalars(
         select(AudioAsset)
         .where(AudioAsset.recording_id == rec.id, AudioAsset.deleted_at.is_(None))
@@ -1179,17 +1195,7 @@ def metadata(
             },
         },
     }
-    audit.record(
-        db,
-        action="recording.metadata_download",
-        entity_type="recording",
-        entity_id=rec.id,
-        project_id=task.project_id,
-        actor_id=principal.user_id,
-        ip=ip,
-    )
-    db.commit()
-    return f"metadata_{task.task_code}_{rec.id}.json", body
+    return body
 
 
 def ensure_checked(db: Session, task: Task) -> None:

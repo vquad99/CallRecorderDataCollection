@@ -2,6 +2,7 @@
 import { NavLink, Outlet, useOutletContext, useParams } from "react-router";
 
 import { getProject, type Project } from "../../api/projects";
+import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
 import { STATUS_LABELS } from "./ProjectsPage";
@@ -23,10 +24,12 @@ const TABS = [
   { to: "audio", label: "Audio rules", end: false },
   { to: "languages", label: "Languages", end: false },
   { to: "retention", label: "Retention", end: false },
+  { to: "export", label: "Export", end: false, perm: "exports.create" },
 ];
 
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
+  const { can } = useAuth();
   const { state, reload, replace } = useResource(() => getProject(projectId), [projectId]);
   if (state.status === "loading") return <LoadingState label="Loading project" />;
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
@@ -43,7 +46,7 @@ export function ProjectDetailPage() {
         />
       </div>
       <nav aria-label="Project sections" className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.perm || can(t.perm)).map((t) => (
           <NavLink key={t.label} to={t.to} end={t.end} className="tabs__link">
             {t.label}
           </NavLink>

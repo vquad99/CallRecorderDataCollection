@@ -42,7 +42,7 @@ export const UNAUTHENTICATED_EVENT = "ccp:unauthenticated";
 const CSRF_COOKIE = "csrf_token";
 const CSRF_HEADER = "X-CSRF-Token";
 
-function apiBase(): string {
+export function apiBase(): string {
   return import.meta.env.VITE_API_BASE_URL ?? "";
 }
 

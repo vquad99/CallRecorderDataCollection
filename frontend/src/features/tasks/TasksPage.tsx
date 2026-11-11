@@ -4,7 +4,6 @@ import { Link } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { listProjects } from "../../api/projects";
-import { downloadWithConsent, listRecordings } from "../../api/recordings";
 import { listTasks, TASK_STATUS_LABELS, transitionTask, type TaskSummary } from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
 import { Button } from "../../components/form/Button";
@@ -51,15 +50,15 @@ export function TasksPage() {
       ? Object.fromEntries(projects.state.data.items.map((p) => [p.id, p.code]))
       : {};
   const reset = () => setPage(1);
-  // Many tasks at once (D-093): approve the ones waiting for admin review, or download their
-  // audio with its metadata and consent record. Each one goes through the single-task checks.
+  // Many tasks at once (D-093): approve the ones waiting for admin review, each through the
+  // single-task checks. Exports are per project, on the project's Export tab (D-094).
   const canSelect = can("tasks.assign");
   // The selection belongs to the list it was made in: another filter or page starts empty.
   const listKey = JSON.stringify([projectId, status, mode, search, page]);
   const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: "", ids: [] });
   const selected = selection.key === listKey ? selection.ids : [];
   const setSelected = (ids: string[]) => setSelection({ key: listKey, ids });
-  const [busy, setBusy] = useState<"approve" | "export" | null>(null);
+  const [busy, setBusy] = useState<"approve" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const rows: TaskSummary[] = tasks.state.status === "loaded" ? tasks.state.data.items : [];
@@ -91,33 +90,6 @@ export function TasksPage() {
     setSelected([]);
     setBusy(null);
     tasks.reload();
-  }
-
-  async function exportSelected() {
-    setBusy("export");
-    setMessage(null);
-    setError(null);
-    let done = 0;
-    const missing: string[] = [];
-    try {
-      for (const t of chosen) {
-        const latest = (await listRecordings(t.id)).find((r) => r.state === "READY");
-        if (!latest) {
-          missing.push(t.task_code);
-          continue;
-        }
-        await downloadWithConsent(latest, t.task_code);
-        done += 1;
-      }
-      setMessage(
-        `Audio, metadata and consent record downloaded for ${done} task(s).` +
-          (missing.length ? ` No finished recording yet: ${missing.join(", ")}.` : ""),
-      );
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(null);
-    }
   }
 
   return (
@@ -191,17 +163,6 @@ export function TasksPage() {
           >
             Approve selected ({waiting.length})
           </Button>
-          {can("recordings.download") ? (
-            <Button
-              variant="secondary"
-              busy={busy === "export"}
-              disabled={busy !== null}
-              onClick={() => void exportSelected()}
-            >
-              <Icon name="upload" size={15} />
-              Download audio and metadata
-            </Button>
-          ) : null}
           <Button variant="secondary" disabled={busy !== null} onClick={() => setSelected([])}>
             Clear
           </Button>

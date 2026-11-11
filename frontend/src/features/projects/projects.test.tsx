@@ -1,5 +1,5 @@
 // Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -113,5 +113,39 @@ describe("project detail", () => {
       "href",
       "/projects/p9",
     );
+  });
+
+  it("exports the project as audio, metadata, both or a progress report (D-094)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "exports.create"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/export/summary": (_b, url) => [
+          200,
+          {
+            recordings: 3,
+            audio_bytes: 240_000_000,
+            file_name: `${url.searchParams.get("content")}_HINDI_20261111.zip`,
+          },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/export");
+    expect(await screen.findByText("3 recordings")).toBeInTheDocument();
+    expect(screen.getByText(/about 240 MB of audio/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Audio only/ }));
+    const link = await screen.findByRole("link", { name: "Download" });
+    await waitFor(() =>
+      expect(link).toHaveAttribute(
+        "href",
+        "/api/v1/projects/p1/export?content=audio&scope=approved",
+      ),
+    );
+    await userEvent.selectOptions(screen.getByLabelText("Which recordings"), "finished");
+    await waitFor(() =>
+      expect(calls.some((c) => c.path.includes("content=audio&scope=finished"))).toBe(true),
+    );
+    await userEvent.click(screen.getByRole("radio", { name: /Progress report/ }));
+    expect(screen.queryByLabelText("Which recordings")).not.toBeInTheDocument();
+    expect(await screen.findByText("Every task in HINDI")).toBeInTheDocument();
   });
 });

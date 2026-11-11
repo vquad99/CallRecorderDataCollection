@@ -255,6 +255,11 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects": ok(page([PROJECT])),
     "GET /api/v1/projects/p1": ok(PROJECT),
     "GET /api/v1/projects/p1/members": ok([MEMBER, MEMBER_2]),
+    "GET /api/v1/projects/p1/export/summary": ok({
+      recordings: 1,
+      audio_bytes: 1_000_000,
+      file_name: "both_HINDI_20261111.zip",
+    }),
     "GET /api/v1/projects/p1/member-candidates": ok([
       { user_id: "u3", email: "tara@example.org", display_name: "Tara", roles: ["QC_EXECUTIVE"] },
     ]),
