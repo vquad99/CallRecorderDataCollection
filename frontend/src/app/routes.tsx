@@ -9,13 +9,14 @@ import { LoginPage } from "../auth/LoginPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { AppShell } from "../layouts/AppShell";
 import { NotFoundPage } from "../routes/NotFoundPage";
+import { loadFresh } from "./staleBuild";
 
 /** A page loaded on first visit, so the first screen does not wait for every page (O11). */
 function page<K extends string>(
   load: () => Promise<Record<K, ComponentType>>,
   name: K,
 ): ReactElement {
-  const Page = lazy(() => load().then((m) => ({ default: m[name] as ComponentType })));
+  const Page = lazy(() => loadFresh(load).then((m) => ({ default: m[name] as ComponentType })));
   return (
     <Suspense fallback={<LoadingState label="Loading page" />}>
       <Page />

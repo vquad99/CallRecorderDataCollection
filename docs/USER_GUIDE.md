@@ -303,6 +303,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "No microphone was found" | Connect a microphone, then choose it again. |
 | "This browser cannot record here" | Use the latest Chrome or Edge on a computer. |
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
+| "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
 | "The task must be in progress to record" | Moderator: **Change status → In progress → Apply**. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
