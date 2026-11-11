@@ -23,6 +23,7 @@ NATURALLY_BOUNDED = {
     "/api/v1/settings": "the fixed set of capacity settings",
     "/api/v1/projects/{project_id}/members": "a project's staff (capacity: 50 accounts)",
     "/api/v1/projects/{project_id}/member-candidates": "capped at 20 by the service",
+    "/api/v1/projects/{project_id}/participants/link-candidates": "capped at 50 by the service",
     "/api/v1/projects/{project_id}/participants/{participant_id}/consent": "one person's consent history",
     "/api/v1/tasks/{task_id}/timeline": "one task's history",
     "/api/v1/tasks/{task_id}/recordings": "one task's recordings",
