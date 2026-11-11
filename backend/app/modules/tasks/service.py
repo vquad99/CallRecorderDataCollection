@@ -306,6 +306,27 @@ def create_task(
     return task
 
 
+def check_moderator(db: Session, project_id: uuid.UUID, user_id: uuid.UUID) -> User:
+    """The user may moderate this project's tasks: an active member with the Moderator role."""
+    user = db.get(User, user_id)
+    is_member = user is not None and db.scalar(
+        select(ProjectMembership.id).where(
+            ProjectMembership.project_id == project_id, ProjectMembership.user_id == user.id
+        )
+    )
+    if user is None or not is_member:
+        raise AppError(
+            "The moderator must be a member of the project",
+            code="NOT_PROJECT_MEMBER",
+            status_code=422,
+        )
+    if user.status != "ACTIVE" or Role.MODERATOR.value not in {r.code for r in user.roles}:
+        raise AppError(
+            "Choose an active user with the Moderator role", code="NOT_A_MODERATOR", status_code=422
+        )
+    return user
+
+
 def assign_moderator(
     db: Session,
     principal: Principal,
@@ -321,22 +342,7 @@ def assign_moderator(
         raise AppError(
             f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
         )
-    user = db.get(User, user_id)
-    is_member = user is not None and db.scalar(
-        select(ProjectMembership.id).where(
-            ProjectMembership.project_id == task.project_id, ProjectMembership.user_id == user.id
-        )
-    )
-    if user is None or not is_member:
-        raise AppError(
-            "The moderator must be a member of the project",
-            code="NOT_PROJECT_MEMBER",
-            status_code=422,
-        )
-    if user.status != "ACTIVE" or Role.MODERATOR.value not in {r.code for r in user.roles}:
-        raise AppError(
-            "Choose an active user with the Moderator role", code="NOT_A_MODERATOR", status_code=422
-        )
+    user = check_moderator(db, task.project_id, user_id)
     current = active_assignee(db, task.id, "MODERATOR")
     if current is not None and current.user_id == user.id:
         raise AppError(

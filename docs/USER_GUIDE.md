@@ -175,8 +175,8 @@ participant yourself (it works for 30 days; making a new one ends the old one).
 ## 6. Project Admin: tasks
 
 **Tasks → New task**: choose **Project (active projects)**, **Recording mode: Face-to-face**,
-**Participant A** and **Participant B** (two different people), **Priority** and **Due date**, then
-**Create task**. Each task gets a code such as `T000045`.
+**Participant A** and **Participant B** (two different people), **Priority**, **Moderator** (choose
+now and the task starts as **Assigned**, or **Assign later**) and **Due date**, then **Create task**. Each task gets a code such as `T000045`.
 
 If the project has fewer than two participants, the page says so and links to **Add participants
 to the project**; add them first.
@@ -191,7 +191,8 @@ participant_a,participant_b,mode,priority,due_date,moderator
 Write participants by their code (`P000001`). `mode` is `face_to_face` or `telephony` (empty means
 face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means normal), `due_date` is
 `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
-leaves it in Draft). Click **Check rows**, then **Add N tasks**. Up to 500 rows.
+leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
+rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
 
 On the task page:
 

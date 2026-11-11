@@ -11,9 +11,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
+from app.modules.auth.deps import (
+    CurrentPrincipal,
+    DbSession,
+    Principal,
+    client_ip,
+    forbidden,
+    require,
+)
 from app.modules.auth.models import User
 from app.modules.participants.models import Participant
+from app.modules.projects.service import get_visible as get_visible_project
 from app.modules.tasks import bulk, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
 
@@ -141,6 +149,8 @@ class CreateTaskBody(BaseModel):
     participant_b_id: uuid.UUID
     priority: Priority = "NORMAL"
     due_at: datetime | None = None
+    # Optional: assign the moderator at once, so the task starts as Assigned (D-085).
+    moderator_id: uuid.UUID | None = None
 
 
 @router.post("", response_model=TaskDetail, status_code=201)
@@ -154,9 +164,18 @@ def create_task(
         priority=body.priority,
         due_at=body.due_at,
     )
-    return detail(
-        db, principal, service.create_task(db, principal, body.project_id, data, client_ip(request))
-    )
+    ip = client_ip(request)
+    if body.moderator_id is not None:
+        # Checked before the task exists, so a wrong choice never leaves a half-made task;
+        # only someone who may add tasks here learns who is a moderator of the project.
+        project = get_visible_project(db, principal, body.project_id)
+        if not principal.can_in_project(Perm.TASKS_ASSIGN, project.id):
+            raise forbidden()
+        service.check_moderator(db, project.id, body.moderator_id)
+    task = service.create_task(db, principal, body.project_id, data, ip)
+    if body.moderator_id is not None:
+        task = service.assign_moderator(db, principal, task.id, body.moderator_id, None, ip)
+    return detail(db, principal, task)
 
 
 class ImportTasksBody(BaseModel):

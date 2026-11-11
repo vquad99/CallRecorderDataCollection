@@ -233,6 +233,7 @@ describe("tasks", () => {
           200,
           { items: [], total: 0, page: 1, page_size: 100 },
         ],
+        "GET /api/v1/projects/p1/members": () => [200, []],
         "POST /api/v1/tasks/import": (body) => [
           200,
           {
@@ -258,6 +259,19 @@ describe("tasks", () => {
       "href",
       "/projects/p1/participants",
     );
+    // The sample CSV downloads as a file (D-085).
+    const saved: Blob[] = [];
+    const [create, revoke] = [URL.createObjectURL, URL.revokeObjectURL];
+    URL.createObjectURL = (b: Blob | MediaSource) => (saved.push(b as Blob), "blob:sample");
+    URL.revokeObjectURL = () => undefined;
+    const clicks = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await userEvent.click(screen.getByRole("button", { name: "Download sample CSV" }));
+    expect(clicks).toHaveBeenCalledTimes(1);
+    expect(await saved[0]?.text()).toMatch(
+      /^participant_a,participant_b,mode,priority,due_date,moderator\nP000001,P000002,/,
+    );
+    clicks.mockRestore();
+    [URL.createObjectURL, URL.revokeObjectURL] = [create, revoke];
     await userEvent.type(
       screen.getByLabelText("Tasks (CSV)"),
       "participant_a,participant_b{enter}P000001,P000002",

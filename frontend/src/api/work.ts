@@ -145,6 +145,7 @@ export const createTask = (body: {
   participant_b_id: string;
   priority: string;
   due_at: string | null;
+  moderator_id?: string;
 }) => apiRequest<TaskDetail>("/api/v1/tasks", { method: "POST", body });
 export const assignModerator = (id: string, userId: string, reason: string) =>
   apiRequest<TaskDetail>(`/api/v1/tasks/${id}/assign`, {

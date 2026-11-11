@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 
 import type { ApiError } from "../../api/client";
-import { getProject, listProjects } from "../../api/projects";
+import { getProject, listMembers, listProjects } from "../../api/projects";
 import { createTask, importTasks, listParticipants, type TaskImportResult } from "../../api/work";
 import { Button } from "../../components/form/Button";
 import { Icon } from "../../components/Icon";
@@ -15,7 +15,18 @@ import { toApiError, useResource } from "../../hooks/useResource";
 
 const SAMPLE =
   "participant_a,participant_b,mode,priority,due_date,moderator\n" +
-  "P000001,P000002,face_to_face,normal,2026-12-31,moderator@example.org\n";
+  "P000001,P000002,face_to_face,normal,2026-12-31,moderator@example.org\n" +
+  "P000003,P000004,,,,\n";
+
+/** Save the sample as a CSV file the admin fills in (D-085). */
+function downloadSample() {
+  const url = URL.createObjectURL(new Blob([SAMPLE], { type: "text/csv" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "tasks_template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 /** Many tasks at once from a CSV of participant codes (D-083): check the rows, then add. */
 function BulkTasks({ projectId }: { projectId: string }) {
@@ -60,6 +71,9 @@ function BulkTasks({ projectId }: { projectId: string }) {
         />
       </div>
       <div className="actions">
+        <Button variant="secondary" onClick={downloadSample}>
+          Download sample CSV
+        </Button>
         <label className="button button--secondary">
           <Icon name="upload" size={15} />
           Choose a file
@@ -130,6 +144,7 @@ export function TaskCreatePage() {
   const [b, setB] = useState("");
   const [priority, setPriority] = useState("NORMAL");
   const [due, setDue] = useState("");
+  const [moderator, setModerator] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const projects = useResource(() => listProjects({ status: "ACTIVE", page_size: 100 }), []);
@@ -137,6 +152,19 @@ export function TaskCreatePage() {
     () => (projectId ? getProject(projectId) : Promise.resolve(null)),
     [projectId],
   );
+  const members = useResource(
+    () => (projectId ? listMembers(projectId) : Promise.resolve([])),
+    [projectId],
+  );
+  const moderators =
+    members.state.status === "loaded"
+      ? members.state.data
+          .filter((m) => m.roles.includes("MODERATOR") && m.status === "ACTIVE")
+          .map((m) => ({
+            value: m.user_id,
+            label: m.email ? `${m.display_name} (${m.email})` : m.display_name,
+          }))
+      : [];
   const people = useResource(
     () => (projectId ? listParticipants(projectId, { page_size: 100 }) : Promise.resolve(null)),
     [projectId],
@@ -174,6 +202,7 @@ export function TaskCreatePage() {
         participant_b_id: b,
         priority,
         due_at: due ? new Date(due).toISOString() : null,
+        ...(moderator ? { moderator_id: moderator } : {}),
       });
       navigate(`/tasks/${task.id}`);
     } catch (err) {
@@ -215,6 +244,7 @@ export function TaskCreatePage() {
             setMode("");
             setA("");
             setB("");
+            setModerator("");
           }}
           options={[{ value: "", label: "Choose a project" }, ...projectOptions]}
         />
@@ -257,6 +287,12 @@ export function TaskCreatePage() {
                 value: v,
                 label: v.toLowerCase(),
               }))}
+            />
+            <Select
+              label="Moderator"
+              value={moderator}
+              onChange={(e) => setModerator(e.target.value)}
+              options={[{ value: "", label: "Assign later" }, ...moderators]}
             />
             <TextField
               label="Due date"

@@ -321,11 +321,12 @@ const FORMS: Record<string, FormSpec> = {
       choose("Recording mode", "FACE_TO_FACE"),
       choose("Participant A", "a1"),
       choose("Participant B", "b1"),
+      choose("Moderator", "m1"),
     ],
     submit: "Create task",
     write: "POST /api/v1/tasks",
     reply: [201, TASK],
-    body: { project_id: "p1", participant_a_id: "a1", participant_b_id: "b1" },
+    body: { project_id: "p1", participant_a_id: "a1", participant_b_id: "b1", moderator_id: "m1" },
     kept: "Due date",
   },
   "task status": {

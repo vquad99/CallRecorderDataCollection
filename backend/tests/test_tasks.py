@@ -328,3 +328,25 @@ def test_bulk_task_upload_needs_the_assign_permission(world: dict[str, Any]) -> 
         .json()
     )
     assert bad["error"]["code"] == "INVALID_CSV"
+
+
+def test_new_task_can_assign_the_moderator_at_once(world: dict[str, Any], db: Any) -> None:
+    """D-085: New task takes an optional moderator; the task then starts as Assigned."""
+    body = {
+        "project_id": str(world["project"].id),
+        "recording_mode": "FACE_TO_FACE",
+        "participant_a_id": world["a"]["id"],
+        "participant_b_id": world["c"]["id"],
+    }
+    before = db.scalar(select(func.count()).select_from(Task))
+    wrong = world["pa"].post(
+        "/api/v1/tasks", json={**body, "moderator_id": str(world["outsider"].id)}
+    )
+    assert wrong.json()["error"]["code"] == "NOT_PROJECT_MEMBER"
+    assert db.scalar(select(func.count()).select_from(Task)) == before  # nothing half-made
+    made = world["pa"].post(
+        "/api/v1/tasks", json={**body, "moderator_id": str(world["mod_user"].id)}
+    )
+    assert made.status_code == 201
+    assert made.json()["status"] == "ASSIGNED"
+    assert made.json()["moderator_id"] == str(world["mod_user"].id)
