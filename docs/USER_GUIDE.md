@@ -120,7 +120,8 @@ Project tabs:
   16-bit, mono, at most 25 % silence).
 - **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,
   Tamil, English (India)). When a project has languages, every participant must match one.
-- **Retention**: how many days to keep each kind of file.
+- **Retention**: how many days to keep each kind of file. Each box shows a faded example under it
+  (for example `365` for one year); leave a box empty when there is no rule yet.
 
 ### Settings, System status, Audit log
 

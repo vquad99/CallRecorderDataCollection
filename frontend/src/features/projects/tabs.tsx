@@ -432,6 +432,18 @@ const KIND_LABELS: Record<string, string> = {
   EXPORT_PACKAGE: "Export packages",
 };
 
+/** Example periods shown faded under each box (D-086); nothing is filled in for the admin. */
+const KIND_EXAMPLES: Record<string, string> = {
+  PROVIDER_ORIGINAL_TRACK: "Example: 30 (one month)",
+  PROVIDER_ORIGINAL_MIXED: "Example: 30 (one month)",
+  TELEPHONY_FINAL_STEREO: "Example: 365 (one year)",
+  CONSENT_RECORDING: "Example: 1825 (five years)",
+  BROWSER_ORIGINAL: "Example: 30 (one month)",
+  FTF_DERIVED_PCM: "Example: 365 (one year)",
+  TRANSCRIPT_FILE: "Example: 365 (one year)",
+  EXPORT_PACKAGE: "Example: 90 (three months)",
+};
+
 export function RetentionTab() {
   const { project, replace } = useProject();
   const { can } = useAuth();
@@ -462,6 +474,7 @@ export function RetentionTab() {
           <TextField
             key={kind}
             label={KIND_LABELS[kind] ?? kind}
+            {...(KIND_EXAMPLES[kind] ? { example: KIND_EXAMPLES[kind] } : {})}
             type="number"
             min={1}
             value={days[kind] ?? ""}

@@ -4,14 +4,23 @@ import { useId, type InputHTMLAttributes } from "react";
 interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
   label: string;
   hint?: string;
+  example?: string; // shown faded under the box (D-086)
   error?: string;
 }
 
-export function TextField({ label, hint, error, required, ...inputProps }: TextFieldProps) {
+export function TextField({
+  label,
+  hint,
+  example,
+  error,
+  required,
+  ...inputProps
+}: TextFieldProps) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
+  const exampleId = example ? `${id}-example` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
+  const describedBy = [hintId, exampleId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className={`field${error ? " field--invalid" : ""}`}>
@@ -32,6 +41,11 @@ export function TextField({ label, hint, error, required, ...inputProps }: TextF
         aria-describedby={describedBy}
         {...inputProps}
       />
+      {example ? (
+        <p id={exampleId} className="field__hint">
+          {example}
+        </p>
+      ) : null}
       {error ? (
         <p id={errorId} className="field__error">
           {error}

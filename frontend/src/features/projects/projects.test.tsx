@@ -88,6 +88,10 @@ describe("project detail", () => {
     expect(await screen.findByText(/Hindi \(hi\), Awadhi/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
+    // Each box shows a faded example under it, tied to the box for screen readers (D-086).
+    expect(screen.getByLabelText("Consent recordings")).toHaveAccessibleDescription(
+      "Example: 1825 (five years)",
+    );
   });
 
   it("goes back to the project list with a note after creating a project", async () => {
