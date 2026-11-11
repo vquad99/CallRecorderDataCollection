@@ -147,6 +147,11 @@ Project tabs:
 
 Each participant gets a code such as `P000123`.
 
+**Add existing participant** (on a project's **Participants** tab): adds someone who is already
+in another of your projects, instead of creating them again. Search by code or name, then click
+**Add**. They keep their code, details and consent history. Only people who speak one of the
+project's languages are listed.
+
 **Add many**: paste or choose a file whose first line is `name,phone,email,language,dialect`.
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
 

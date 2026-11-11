@@ -1,6 +1,6 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
 // them; the server decides what each role receives.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { apiDownload, type ApiError } from "../../api/client";
 import * as work from "../../api/work";
@@ -13,7 +13,7 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
-import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "./choices";
+import { COUNTRY_CODES, languageLabel, languageOptions, PHONE_DIGITS, splitPhone } from "./choices";
 import { useProject } from "./ProjectDetailPage";
 
 export const EMPTY: work.ParticipantFields = {
@@ -113,6 +113,91 @@ export function ParticipantForm({
   );
 }
 
+/** People who already exist in another of the caller's projects, added here as they are (D-090). */
+function AddExisting({
+  projectId,
+  refresh,
+  busy,
+  onAdd,
+}: {
+  projectId: string;
+  refresh: number;
+  busy: boolean;
+  onAdd: (code: string) => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [search, setSearch] = useState("");
+  // Ask the server once typing pauses, not on every key.
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(typed.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [typed]);
+  const found = useResource(
+    () => work.linkCandidates(projectId, search),
+    [projectId, search, refresh],
+  );
+  return (
+    <section className="card stack stack--tight" aria-labelledby="add-existing-title">
+      <h2 id="add-existing-title">Add an existing participant</h2>
+      <p className="muted">
+        People already in your other projects who are not in this one yet. They keep their code,
+        details and consent history.
+      </p>
+      <TextField
+        label="Find by code or name"
+        type="search"
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+      />
+      {found.state.status === "loading" ? <LoadingState label="Searching" /> : null}
+      {found.state.status === "failed" ? (
+        <ErrorState error={found.state.error} onRetry={found.reload} />
+      ) : null}
+      {found.state.status === "loaded" && found.state.data.length === 0 ? (
+        <p className="muted">No one found.</p>
+      ) : null}
+      {found.state.status === "loaded" && found.state.data.length > 0 ? (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Language</th>
+                <th scope="col">
+                  <span className="sr-only">Add</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {found.state.data.map((c) => (
+                <tr key={c.id}>
+                  <td className="mono">{c.participant_code}</td>
+                  <td>{c.display_label ?? "-"}</td>
+                  <td>
+                    {languageLabel(c.language_code)}
+                    {c.dialect ? `, ${c.dialect}` : ""}
+                  </td>
+                  <td>
+                    <Button
+                      variant="secondary"
+                      busy={busy}
+                      aria-label={`Add ${c.participant_code}`}
+                      onClick={() => onAdd(c.participant_code)}
+                    >
+                      Add
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function ConsentList({
   projectId,
   participantId,
@@ -150,6 +235,8 @@ export function ParticipantsTab() {
   const [editing, setEditing] = useState<work.Participant | null>(null);
   const [consentFor, setConsentFor] = useState<string | null>(null);
   const [link, setLink] = useState<{ code: string; url: string; expires_at: string } | null>(null);
+  const [addingExisting, setAddingExisting] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -179,10 +266,23 @@ export function ParticipantsTab() {
           <Button
             onClick={() => {
               setAdding(!adding);
+              setAddingExisting(false);
               setEditing(null);
             }}
           >
             {adding ? "Close form" : "Add participant"}
+          </Button>
+        ) : null}
+        {canManage ? (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setAddingExisting(!addingExisting);
+              setAdding(false);
+              setEditing(null);
+            }}
+          >
+            {addingExisting ? "Close search" : "Add existing participant"}
           </Button>
         ) : null}
         {can("participants.export") ? (
@@ -202,6 +302,20 @@ export function ParticipantsTab() {
           </Button>
         ) : null}
       </div>
+      {addingExisting ? (
+        <AddExisting
+          projectId={project.id}
+          refresh={refresh}
+          busy={busy}
+          onAdd={(code) =>
+            void run(async () => {
+              await work.linkParticipant(project.id, code);
+              setRefresh((n) => n + 1);
+              return `${code} added to this project.`;
+            })
+          }
+        />
+      ) : null}
       {adding ? (
         <ParticipantForm
           initial={EMPTY}

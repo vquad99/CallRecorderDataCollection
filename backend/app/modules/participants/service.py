@@ -388,6 +388,44 @@ def link_existing(
     return participant
 
 
+def link_candidates(
+    db: Session, principal: Principal, project_id: uuid.UUID, search: str | None, limit: int = 50
+) -> list[Participant]:
+    """People who can be added to this project as they are (D-090): not deleted, not already in
+    it, in a project where the caller manages participants (a Super Admin: any project), and
+    speaking one of this project's languages when it has a list. Search by code or name."""
+    project = get_visible_project(db, principal, project_id)
+    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
+    already = select(ParticipantProjectLink.participant_id).where(
+        ParticipantProjectLink.project_id == project.id
+    )
+    query = select(Participant).where(
+        Participant.deleted_at.is_(None), Participant.id.not_in(already)
+    )
+    if not principal.is_super_admin:
+        managed = [
+            pid
+            for pid in (principal.project_ids or [])
+            if principal.can_in_project(Perm.PARTICIPANTS_MANAGE, pid)
+        ]
+        visible = select(ParticipantProjectLink.participant_id).where(
+            ParticipantProjectLink.project_id.in_(managed or [uuid.UUID(int=0)])
+        )
+        query = query.where(Participant.id.in_(visible))
+    codes = sorted({lang.language_code for lang in project.languages})
+    if codes:
+        query = query.where(Participant.language_code.in_(codes))
+    if search and search.strip():
+        like = f"%{search.strip().lower()}%"
+        query = query.where(
+            or_(
+                func.lower(Participant.participant_code).like(like),
+                func.lower(Participant.display_label).like(like),
+            )
+        )
+    return list(db.scalars(query.order_by(Participant.participant_code).limit(limit)).all())
+
+
 def correct_participant(
     db: Session,
     settings: Settings,

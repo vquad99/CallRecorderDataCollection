@@ -137,4 +137,37 @@ describe("participants tab", () => {
       language_code: "ta",
     });
   });
+
+  it("adds an existing participant from another project (D-090)", async () => {
+    const quinn = {
+      id: "q1",
+      participant_code: "P000009",
+      display_label: "Quinn",
+      language_code: "hi",
+      dialect: "Awadhi",
+    };
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+        "GET /api/v1/projects/p1/participants/link-candidates": () => [200, [quinn]],
+        "POST /api/v1/projects/p1/participants/link": () => [
+          201,
+          { ...asha, id: "q1", participant_code: "P000009" },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add existing participant" }));
+    expect(await screen.findByText("Quinn")).toBeInTheDocument();
+    expect(screen.getByText("Hindi (hi), Awadhi")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add P000009" }));
+    expect(await screen.findByText("P000009 added to this project.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path.endsWith("/link"))?.body).toEqual({
+      participant_code: "P000009",
+    });
+  });
 });

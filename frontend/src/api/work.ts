@@ -126,6 +126,22 @@ const pp = (projectId: string) => `/api/v1/projects/${projectId}/participants`;
 
 export const listParticipants = (projectId: string, params: Params) =>
   apiRequest<Page<Participant>>(`${pp(projectId)}${query(params)}`);
+export interface LinkCandidate {
+  id: string;
+  participant_code: string;
+  display_label: string | null;
+  language_code: string;
+  dialect: string;
+}
+
+/** Existing participants from the caller's other projects, to add here (D-090). */
+export const linkCandidates = (projectId: string, search: string) =>
+  apiRequest<LinkCandidate[]>(`${pp(projectId)}/link-candidates${query({ search })}`);
+export const linkParticipant = (projectId: string, participantCode: string) =>
+  apiRequest<Participant>(`${pp(projectId)}/link`, {
+    method: "POST",
+    body: { participant_code: participantCode },
+  });
 export const createParticipant = (projectId: string, body: ParticipantFields) =>
   apiRequest<Participant>(pp(projectId), { method: "POST", body });
 export const correctParticipant = (projectId: string, id: string, body: ParticipantFields) =>

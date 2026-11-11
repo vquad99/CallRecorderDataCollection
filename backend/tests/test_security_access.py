@@ -544,6 +544,13 @@ CASES: list[Case] = [
     ),
     case(
         "GET",
+        P + "/participants/link-candidates",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/link-candidates",
+        {SA, PA},
+        Perm.PARTICIPANTS_VIEW,
+    ),
+    case(
+        "GET",
         P + "/participants/export",
         lambda e, s: f"/api/v1/projects/{s.project}/participants/export",
         {SA},

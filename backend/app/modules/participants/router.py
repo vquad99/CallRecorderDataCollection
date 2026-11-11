@@ -165,6 +165,28 @@ def link_participant(
     return present(db, principal, cipher, project, p)
 
 
+class CandidateOut(BaseModel):
+    id: uuid.UUID
+    participant_code: str
+    display_label: str | None
+    language_code: str
+    dialect: str
+
+
+@router.get("/link-candidates", response_model=list[CandidateOut])
+def link_candidates(
+    project_id: uuid.UUID,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    search: Annotated[str | None, Query(max_length=100)] = None,
+) -> list[CandidateOut]:
+    """Existing participants from the caller's other projects, to add here (D-090)."""
+    return [
+        CandidateOut.model_validate(p, from_attributes=True)
+        for p in service.link_candidates(db, principal, project_id, search)
+    ]
+
+
 @router.get("/export")
 def export_contacts(
     project_id: uuid.UUID,

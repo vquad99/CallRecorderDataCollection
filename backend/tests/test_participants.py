@@ -259,3 +259,47 @@ def test_link_existing_participant_to_another_project(world: dict[str, Any], db:
     gone = world["pa"].post(f"{base}/delete", json={"reason": "test"})
     assert gone.json()["error"]["code"] == "SHARED_PARTICIPANT"
     assert root.patch(base, json=edit).status_code == 200
+
+
+def test_existing_participants_can_be_found_and_added_to_another_project(
+    world: dict[str, Any], db: Any
+) -> None:
+    """D-090: add someone who already exists instead of creating them again."""
+    from app.modules.projects.models import ProjectMembership
+
+    root: Api = world["root"]
+    pa: Api = world["pa"]
+    voice, other = world["project"].id, world["other"].id
+    p = make_participant(pa, voice, "Asha")
+    q = make_participant(root, other, "Quinn")
+
+    def candidates(api: Api, project_id: Any, search: str = "") -> list[str]:
+        got = api.get(f"/api/v1/projects/{project_id}/participants/link-candidates?search={search}")
+        assert got.status_code == 200, got.text
+        return [c["participant_code"] for c in got.json()]
+
+    assert p["participant_code"] in candidates(root, other)
+    assert q["participant_code"] not in candidates(root, other), "already in that project"
+    assert candidates(pa, voice) == [], "nobody from a project the caller does not manage"
+    assert world["mod"].get(
+        f"/api/v1/projects/{voice}/participants/link-candidates"
+    ).status_code == (403)
+    db.add(ProjectMembership(user_id=pa_user_id(db), project_id=other))
+    db.commit()
+    assert candidates(pa, voice) == [q["participant_code"]]
+    assert candidates(pa, voice, "quin") == [q["participant_code"]]
+    assert candidates(pa, voice, "zzz") == []
+    added = pa.post(
+        f"/api/v1/projects/{voice}/participants/link",
+        json={"participant_code": q["participant_code"]},
+    )
+    assert added.status_code == 201, added.text
+    assert candidates(pa, voice) == []
+
+
+def pa_user_id(db: Any) -> Any:
+    from sqlalchemy import select
+
+    from app.modules.auth.models import User
+
+    return db.scalar(select(User.id).where(User.email == "pa@example.org"))
