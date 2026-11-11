@@ -1955,3 +1955,22 @@ code,
 .checks dd {
   font-weight: 500;
 }
+/* The headline sits above the dots, never on them (owner: "can't even read the text"). */
+.public__stage {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 32px;
+  padding: 40px 40px 32px;
+}
+.public__headline {
+  order: -1;
+  max-width: 15ch;
+  font-size: 2.75rem;
+  text-align: left;
+  text-shadow: none;
+}
+.public__art {
+  position: relative;
+  inset: auto;
+}
