@@ -108,6 +108,7 @@ function Stat({
 const DONUT: Record<string, string> = {
   APPROVED: "var(--ok)",
   AUDIO_QC: "var(--warn)",
+  ADMIN_REVIEW: "var(--info)",
   RECORDED: "var(--series-approved)",
   IN_PROGRESS: "var(--primary)",
   ASSIGNED: "var(--violet)",

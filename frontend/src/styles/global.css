@@ -2255,3 +2255,16 @@ code,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* Listening and two actions in the moderator's and the admin's cards (D-092). */
+.record-card__listen {
+  margin-top: 12px;
+}
+.record-card__listen .player {
+  width: min(100%, 420px);
+}
+.record-card__go {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}

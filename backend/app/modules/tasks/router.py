@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.core.permissions import Perm
+from app.modules.audio_qc import service as audio_qc
 from app.modules.auth.deps import (
     CurrentPrincipal,
     DbSession,
@@ -35,6 +36,7 @@ Status = Literal[
     "IN_PROGRESS",
     "RECORDED",
     "AUDIO_QC",
+    "ADMIN_REVIEW",
     "APPROVED",
     "REJECTED",
     "RETURNED",
@@ -256,6 +258,18 @@ def transition(
 ) -> TaskDetail:
     task = service.get_task(db, principal, task_id)
     actor = service.actor_for(db, principal, task)
+    if task.status == "RECORDED" and body.to == "AUDIO_QC":
+        # Who may do it first, then whether the recording's automatic check is there: the
+        # moderator sends it on only once QC has something to read (D-092).
+        workflow.check(
+            task.status,
+            body.to,
+            actor,
+            held_from=task.held_from,
+            reason_code=body.reason_code,
+            comment=body.comment,
+        )
+        audio_qc.ensure_checked(db, task)
     service.transition(
         db,
         task,

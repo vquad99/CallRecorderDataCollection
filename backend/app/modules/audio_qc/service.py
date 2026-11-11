@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -48,7 +48,8 @@ DELIVERY_KIND = "FTF_DERIVED_PCM"
 QC_ASSIGNABLE = frozenset(
     {"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD", "RETURNED"}
 )
-DECISIONS = {"PASS": "APPROVED", "FAIL": "REJECTED", "RETURN": "RETURNED"}
+# A pass goes to the project admin for the final approval (D-092).
+DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED", "RETURN": "RETURNED"}
 # Content comparison needs enough sound to be meaningful: a short or mostly silent file has a level
 # pattern many unrelated files share.
 FINGERPRINT_MIN_MS = 5000
@@ -664,18 +665,8 @@ def _store(
     return result
 
 
-def _finish(db: Session, task: Task, result: AudioQcResult) -> None:
-    if task.status == "RECORDED":
-        db.flush()
-        tasks.system_transition(
-            db, task, "AUDIO_QC", comment=f"Automatic audio check: {result.outcome}"
-        )
-    else:
-        db.commit()
-
-
 def run_automatic(db: Session, recording_id: uuid.UUID) -> AudioQcResult:
-    """Check the newest delivery file of a ready recording and hand the task to audio QC."""
+    """Check the newest delivery file of a ready recording; the moderator then sends it on."""
     rec = db.get(Recording, recording_id)
     if rec is None:
         raise AppError("Recording not found", code="NOT_FOUND", status_code=404)
@@ -686,7 +677,8 @@ def run_automatic(db: Session, recording_id: uuid.UUID) -> AudioQcResult:
     duplicate = find_duplicate(db, task.project_id, rec.id, measured) if measured else None
     checks = evaluate(measured, _limits_for(db, task), duplicate=duplicate)
     result = _store(db, rec, task, asset, checks, measured, duplicate, requested_by=None)
-    _finish(db, task, result)
+    # The task stays with the moderator after the check (D-092): they listen and send it on.
+    db.commit()
     return result
 
 
@@ -761,7 +753,8 @@ def recheck(
     result = _store(
         db, rec, task, asset, checks, measured, duplicate, requested_by=principal.user_id
     )
-    _finish(db, task, result)
+    # The task stays with the moderator after the check (D-092): they listen and send it on.
+    db.commit()
     return result
 
 
@@ -1199,14 +1192,34 @@ def metadata(
     return f"metadata_{task.task_code}_{rec.id}.json", body
 
 
+def ensure_checked(db: Session, task: Task) -> None:
+    """The newest finished recording has its automatic check, so QC has something to read."""
+    rec = _latest_ready_recording(db, task)
+    checked = rec is not None and db.scalar(
+        select(AudioQcResult.id).where(
+            AudioQcResult.recording_id == rec.id, AudioQcResult.automated.is_(True)
+        )
+    )
+    if not checked:
+        raise AppError(
+            "The automatic sound check is still running. Try again in a minute.",
+            code="CHECK_PENDING",
+            status_code=409,
+        )
+
+
 def pending_automatic(db: Session, limit: int = 50) -> list[uuid.UUID]:
-    """READY recordings whose task still sits at RECORDED: the automatic check did not run (the
-    process stopped in between). The recovery sweep checks them."""
+    """READY recordings of a task at RECORDED that have no automatic check yet: the process
+    stopped in between. The recovery sweep checks them. (A task now waits at RECORDED for its
+    moderator, D-092, so a checked recording must not be checked again on every sweep.)"""
+    checked = exists().where(
+        AudioQcResult.recording_id == Recording.id, AudioQcResult.automated.is_(True)
+    )
     return list(
         db.scalars(
             select(Recording.id)
             .join(Task, Task.id == Recording.task_id)
-            .where(Task.status == "RECORDED", Recording.state == "READY")
+            .where(Task.status == "RECORDED", Recording.state == "READY", ~checked)
             .order_by(Recording.updated_at)
             .limit(limit)
         ).all()

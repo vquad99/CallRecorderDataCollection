@@ -16,6 +16,7 @@ TASK_STATUSES = (
     "IN_PROGRESS",
     "RECORDED",
     "AUDIO_QC",
+    "ADMIN_REVIEW",
     "APPROVED",
     "REJECTED",
     "RETURNED",

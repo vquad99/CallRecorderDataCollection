@@ -53,7 +53,7 @@ def test_hours_are_counted_once_per_recording_against_the_daily_target(
     assert len(body["daily"]) == 30
     assert body["approved_hours"] == 0
     assert body["tasks_total"] == 1
-    assert body["tasks_by_status"] == {"AUDIO_QC": 1}
+    assert body["tasks_by_status"] == {"RECORDED": 1}, "waits for the moderator (D-092)"
     assert body["queues"]["failed_processing"] == 0
     assert body["team"][0]["recordings"] == 1
     assert body["storage_bytes"] > 0
@@ -106,7 +106,7 @@ def test_staff_see_their_own_work_without_the_operations_view(world: dict[str, A
     assert mine["target_hours_per_day"] == 0, "no project targets in someone's own work"
     assert all(m["target_hours_per_day"] == 0 for m in mine["by_mode"])
     assert mine["recordings"] == 1
-    assert mine["tasks_by_status"] == {"AUDIO_QC": 1}
+    assert mine["tasks_by_status"] == {"RECORDED": 1}
     for key in MANAGER_ONLY:
         assert mine[key] is None, key
     # A moderator in the same project with no tasks sees zero, not the project's totals.

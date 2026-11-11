@@ -158,6 +158,9 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
     )
     detail = mo.get(f"/api/v1/recordings/{rec['id']}").json()
     assert detail["state"] == "READY", detail
+    # D-092: the moderator sends the recording to QC, so the task reaches AUDIO_QC.
+    sent = mo.post(f"/api/v1/tasks/{done}/transition", json={"to": "AUDIO_QC"})
+    assert sent.status_code == 200, sent.text
     asset = next(x["id"] for x in detail["assets"] if x["kind"] == "FTF_DERIVED_PCM")
 
     open_task = new_task()

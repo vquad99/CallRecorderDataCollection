@@ -16,7 +16,7 @@ import { toApiError, useResource } from "../../hooks/useResource";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Icon, IconTile } from "../../components/Icon";
 import { Stepper } from "../../components/Stepper";
-import { AudioQcPanel } from "./AudioQcPanel";
+import { AudioQcPanel, Player } from "./AudioQcPanel";
 
 const FLOW: readonly string[] = [
   "DRAFT",
@@ -24,6 +24,7 @@ const FLOW: readonly string[] = [
   "IN_PROGRESS",
   "RECORDED",
   "AUDIO_QC",
+  "ADMIN_REVIEW",
   "APPROVED",
 ];
 const label = (s: string) => work.TASK_STATUS_LABELS[s as work.TaskStatus] ?? s;
@@ -107,8 +108,106 @@ function Actions({
   );
 }
 
-/** The moderator's way in to recording (D-091): start the session, then open the recorder. */
+/** The delivery file of the newest finished recording, to listen to (D-092). */
+function ListenLatest({ taskId }: { taskId: string }) {
+  const { state } = useResource(() => rec.listRecordings(taskId), [taskId]);
+  if (state.status !== "loaded") return null;
+  const latest = state.data.find((r) => r.state === "READY");
+  const asset = latest?.assets.find((a) => a.kind === "FTF_DERIVED_PCM");
+  return asset ? (
+    <Player assetId={asset.id} />
+  ) : (
+    <p className="muted">No finished recording yet.</p>
+  );
+}
+
+/** The moderator's way through a session (D-091, D-092): start it, record, then listen and send
+ * the recording to QC or record it again. One card, one main button at each step. */
 function RecordCard({
+  task,
+  onChange,
+}: {
+  task: work.TaskDetail;
+  onChange: (t: work.TaskDetail) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const canStart = task.status !== "RECORDED" && task.allowed_transitions.includes("IN_PROGRESS");
+  const recording = task.status === "IN_PROGRESS";
+  const review = task.status === "RECORDED" && task.allowed_transitions.includes("AUDIO_QC");
+  if (!canStart && !recording && !review) return null;
+  const move = (to: work.TaskStatus) => {
+    setBusy(to);
+    setError(null);
+    work
+      .transitionTask(task.id, to, "", "")
+      .then(onChange)
+      .catch((err: unknown) => setError(toApiError(err)))
+      .finally(() => setBusy(null));
+  };
+  const step = review ? 4 : recording ? 2 : 1;
+  const steps = [
+    "Start the session",
+    "Record each person's consent below",
+    "Open the recorder and record",
+    "Listen, then send it to QC",
+  ];
+  return (
+    <section className="card record-card" aria-labelledby="record-card-title">
+      <div className="record-card__text">
+        <h2 id="record-card-title">
+          {review ? "Check your recording" : recording ? "Ready to record" : "Start the session"}
+        </h2>
+        <ol className="record-card__steps">
+          {steps.map((text, i) => (
+            <li
+              key={text}
+              className={
+                i + 1 < step ? "is-done" : i + 1 === step || (recording && i === 2) ? "is-now" : ""
+              }
+            >
+              {text}
+            </li>
+          ))}
+        </ol>
+        {review ? (
+          <div className="record-card__listen">
+            <ListenLatest taskId={task.id} />
+          </div>
+        ) : null}
+      </div>
+      <div className="record-card__go">
+        {review ? (
+          <>
+            <Button busy={busy === "AUDIO_QC"} onClick={() => move("AUDIO_QC")}>
+              Send to QC
+            </Button>
+            <Button
+              variant="secondary"
+              busy={busy === "IN_PROGRESS"}
+              onClick={() => move("IN_PROGRESS")}
+            >
+              Record again
+            </Button>
+          </>
+        ) : recording ? (
+          <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
+            <Icon name="mic" size={16} weight="fill" />
+            Open the recorder
+          </Link>
+        ) : (
+          <Button busy={busy === "IN_PROGRESS"} onClick={() => move("IN_PROGRESS")}>
+            Start session
+          </Button>
+        )}
+      </div>
+      <ErrorNotice error={error} />
+    </section>
+  );
+}
+
+/** The project admin's final word after QC passed the recording (D-092). */
+function AdminReviewCard({
   task,
   onChange,
 }: {
@@ -117,40 +216,34 @@ function RecordCard({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const canStart =
-    task.allowed_transitions.includes("IN_PROGRESS") && task.status !== "IN_PROGRESS";
-  const recording = task.status === "IN_PROGRESS";
-  if (!canStart && !recording) return null;
-  const start = () => {
-    setBusy(true);
-    setError(null);
-    work
-      .transitionTask(task.id, "IN_PROGRESS", "", "")
-      .then(onChange)
-      .catch((err: unknown) => setError(toApiError(err)))
-      .finally(() => setBusy(false));
-  };
+  if (task.status !== "ADMIN_REVIEW" || !task.allowed_transitions.includes("APPROVED")) return null;
   return (
-    <section className="card record-card" aria-labelledby="record-card-title">
+    <section className="card record-card" aria-labelledby="admin-review-title">
       <div className="record-card__text">
-        <h2 id="record-card-title">{recording ? "Ready to record" : "Start the session"}</h2>
-        <ol className="record-card__steps">
-          <li className={recording ? "is-done" : "is-now"}>Start the session</li>
-          <li className={recording ? "is-now" : ""}>Record each person&apos;s consent below</li>
-          <li className={recording ? "is-now" : ""}>Open the recorder and record</li>
-        </ol>
+        <h2 id="admin-review-title">Final approval</h2>
+        <p className="muted">
+          QC passed this recording. Listen, then approve it. To reject it or send it back for a new
+          recording, use Change status below.
+        </p>
+        <div className="record-card__listen">
+          <ListenLatest taskId={task.id} />
+        </div>
       </div>
       <div className="record-card__go">
-        {recording ? (
-          <Link className="button button--primary" to={`/tasks/${task.id}/record`}>
-            <Icon name="mic" size={16} weight="fill" />
-            Open the recorder
-          </Link>
-        ) : (
-          <Button busy={busy} onClick={start}>
-            Start session
-          </Button>
-        )}
+        <Button
+          busy={busy}
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            work
+              .transitionTask(task.id, "APPROVED", "", "")
+              .then(onChange)
+              .catch((err: unknown) => setError(toApiError(err)))
+              .finally(() => setBusy(false));
+          }}
+        >
+          Approve
+        </Button>
       </div>
       <ErrorNotice error={error} />
     </section>
@@ -365,7 +458,7 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
   );
 }
 
-const HAS_RECORDINGS = ["RECORDED", "AUDIO_QC", "APPROVED", "REJECTED", "RETURNED"];
+const HAS_RECORDINGS = ["RECORDED", "AUDIO_QC", "ADMIN_REVIEW", "APPROVED", "REJECTED", "RETURNED"];
 
 /** The task's finished recordings; a download brings the consent record with the audio. */
 function Recordings({ task }: { task: work.TaskDetail }) {
@@ -390,6 +483,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
               <th scope="col">Recording</th>
               <th scope="col">Length</th>
               <th scope="col">Files</th>
+              <th scope="col">Listen</th>
               {can("recordings.download") ? <th scope="col">Download</th> : null}
             </tr>
           </thead>
@@ -404,6 +498,15 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                 </td>
                 <td>{Math.round(r.saved_seconds / 60)} min</td>
                 <td>{r.assets.length} audio + consent record + details</td>
+                <td>
+                  {r.assets.find((a) => a.kind === "FTF_DERIVED_PCM") ? (
+                    <Player
+                      assetId={(r.assets.find((a) => a.kind === "FTF_DERIVED_PCM") as rec.Asset).id}
+                    />
+                  ) : (
+                    "-"
+                  )}
+                </td>
                 {can("recordings.download") ? (
                   <td>
                     <Button
@@ -507,6 +610,7 @@ export function TaskDetailPage() {
       {task.is_moderator && task.recording_mode === "FACE_TO_FACE" ? (
         <RecordCard task={task} onChange={replace} />
       ) : null}
+      <AdminReviewCard task={task} onChange={replace} />
       {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}
       {HAS_RECORDINGS.includes(task.status) ? (
         <AudioQcPanel task={task} onDecided={reload} />

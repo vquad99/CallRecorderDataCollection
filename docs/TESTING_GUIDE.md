@@ -37,12 +37,13 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | 8 | Moderator | **Tasks** → open the task. Click **Start session**. | Status **In progress**. |
 | 9 | Moderator | **Record consent**: click **Consent given** for both participants. | Both show consent given. |
 | 10 | Moderator | **Open the recorder** (same box) **→ Allow microphone** (allow in the browser) **→ Start recording**. Talk for 1 to 2 minutes. **Stop and save**. | **Recording saved**, with the files listed. |
-| 11 | Moderator | Open the task again after about a minute. | Status **Audio QC**; **Automatic check** shows a result. |
+| 11 | Moderator | Open the task again. In **Check your recording**, click **Listen**, then **Send to QC**. | Status **Audio QC**. |
 | 12 | Project Admin | Open the task. **Audio quality**: choose Test QC Executive. Click **Assign QC**. | The QC Executive is shown. |
 | 13 | QC Executive | **Tasks** → open the task. Read the check results. Click **Listen**. | The recording plays. |
-| 14 | QC Executive | **Your decision → Pass: approve the recording → Save decision**. | Status **Approved**. |
-| 15 | Project Admin | Open the task. **Recordings → Download with consent form**. | Three files download: the audio (.wav), the consent record (.html) and the details file (.json). |
-| 16 | Client Viewer | Open the **Dashboard**. | **Collection progress** shows the recorded and approved time. |
+| 14 | QC Executive | **Your decision → Pass: send to the admin for final approval → Save decision**. | Status **Admin review**. |
+| 15 | Project Admin | Open the task. In **Final approval**, click **Listen**, then **Approve**. | Status **Approved**. |
+| 16 | Project Admin | **Recordings → Download with consent form**. | Three files download: the audio (.wav), the consent record (.html) and the details file (.json). |
+| 17 | Client Viewer | Open the **Dashboard**. | **Collection progress** shows the recorded and approved time. |
 
 ## Extra checks
 

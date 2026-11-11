@@ -107,7 +107,7 @@ def test_processing_that_never_started_is_picked_up_by_the_sweep(
     _age(db, rid, "UPLOADED", minutes=2)
     assert worker_dispatch.recover(world["app"]) == 1
     assert _state(db, rid) == "READY"
-    assert world["mod"].get(f"/api/v1/tasks/{world['task']['id']}").json()["status"] == "AUDIO_QC"
+    assert world["mod"].get(f"/api/v1/tasks/{world['task']['id']}").json()["status"] == "RECORDED"
 
 
 def test_processing_abandoned_mid_way_is_finished_but_live_work_is_left_alone(

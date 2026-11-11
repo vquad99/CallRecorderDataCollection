@@ -50,6 +50,7 @@ export type TaskStatus =
   | "IN_PROGRESS"
   | "RECORDED"
   | "AUDIO_QC"
+  | "ADMIN_REVIEW"
   | "APPROVED"
   | "REJECTED"
   | "RETURNED"
@@ -62,6 +63,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   IN_PROGRESS: "In progress",
   RECORDED: "Recorded",
   AUDIO_QC: "Audio QC",
+  ADMIN_REVIEW: "Admin review",
   APPROVED: "Approved",
   REJECTED: "Rejected",
   RETURNED: "Returned",

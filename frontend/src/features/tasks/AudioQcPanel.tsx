@@ -68,7 +68,7 @@ function Checks({ result }: { result: qc.QcResult }) {
   );
 }
 
-function Player({ assetId }: { assetId: string }) {
+export function Player({ assetId }: { assetId: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -215,7 +215,7 @@ function DecisionForm({
         }}
         options={[
           { value: "", label: "Choose" },
-          { value: "PASS", label: "Pass: approve the recording" },
+          { value: "PASS", label: "Pass: send to the admin for final approval" },
           { value: "RETURN", label: "Return: record again" },
           { value: "FAIL", label: "Fail: reject the recording" },
         ]}

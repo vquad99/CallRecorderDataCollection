@@ -33,10 +33,12 @@ _T: dict[str, dict[str, str]] = {
     "DRAFT": {"ASSIGNED": "system", "ON_HOLD": "assign", "CANCELLED": "assign"},
     "ASSIGNED": {"IN_PROGRESS": "moderator", "ON_HOLD": "assign", "CANCELLED": "assign"},
     "IN_PROGRESS": {"RECORDED": "system", "ON_HOLD": "assign", "CANCELLED": "assign"},
-    "RECORDED": {"AUDIO_QC": "system", "CANCELLED": "assign"},
-    # Audio QC is the last step (D-062: no manual transcription); AI transcription, when a project
-    # turns it on, runs beside the recording and never holds up the task.
-    "AUDIO_QC": {"APPROVED": "system", "REJECTED": "system", "RETURNED": "system"},
+    # D-092: the moderator listens first and sends the recording on, or records it again.
+    "RECORDED": {"AUDIO_QC": "moderator", "IN_PROGRESS": "moderator", "CANCELLED": "assign"},
+    # A pass at audio QC goes to the project admin for the final word (D-092); a fail or a return
+    # is the QC Executive's decision as before (D-062: no manual transcription).
+    "AUDIO_QC": {"ADMIN_REVIEW": "system", "REJECTED": "system", "RETURNED": "system"},
+    "ADMIN_REVIEW": {"APPROVED": "assign", "REJECTED": "assign", "RETURNED": "assign"},
     "RETURNED": {"ASSIGNED": "assign", "CANCELLED": "assign"},
     "ON_HOLD": {"CANCELLED": "assign"},  # resuming to the held status is handled below
 }
@@ -47,6 +49,7 @@ FORWARD_PATH = (
     "IN_PROGRESS",
     "RECORDED",
     "AUDIO_QC",
+    "ADMIN_REVIEW",
     "APPROVED",
 )
 

@@ -41,6 +41,7 @@ SESSION_STATES = {
     "RETURNED": "To be recorded again",
     "RECORDED": "Recorded, being checked",
     "AUDIO_QC": "Recorded, being checked",
+    "ADMIN_REVIEW": "Recorded, being checked",
     "APPROVED": "Accepted",
     "REJECTED": "Not used",
 }

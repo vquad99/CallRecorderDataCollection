@@ -175,6 +175,90 @@ describe("tasks", () => {
     });
   });
 
+  it("lets the moderator listen and send the recording to QC, then the admin approve (D-092)", async () => {
+    const recorded = {
+      ...task,
+      status: "RECORDED",
+      recording_mode: "FACE_TO_FACE",
+      can_assign: false,
+      is_moderator: true,
+      allowed_transitions: ["AUDIO_QC", "IN_PROGRESS"],
+    };
+    const recording = {
+      id: "r1",
+      task_id: "t1",
+      state: "READY",
+      saved_seconds: 120,
+      assets: [{ id: "as1", kind: "FTF_DERIVED_PCM" }],
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "consent.capture", "recordings.view"], {
+        "GET /api/v1/tasks/t1": () => [200, recorded],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/tasks/t1/recordings": () => [200, [recording]],
+        "GET /api/v1/tasks/t1/audio-qc": () => [
+          404,
+          { error: { code: "NOT_FOUND", message: "x" } },
+        ],
+        "POST /api/v1/tasks/t1/transition": () => [
+          200,
+          { ...recorded, status: "AUDIO_QC", allowed_transitions: [] },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByRole("heading", { name: "Check your recording" }),
+    ).toBeInTheDocument();
+    expect((await screen.findAllByRole("button", { name: "Listen" })).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Record again" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Send to QC" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
+        to: "AUDIO_QC",
+        reason_code: null,
+        comment: "",
+      }),
+    );
+  });
+
+  it("gives the admin a final approval after QC passed (D-092)", async () => {
+    const review = {
+      ...task,
+      status: "ADMIN_REVIEW",
+      recording_mode: "FACE_TO_FACE",
+      can_assign: true,
+      is_moderator: false,
+      allowed_transitions: ["APPROVED", "REJECTED", "RETURNED"],
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "recordings.view"], {
+        "GET /api/v1/tasks/t1": () => [200, review],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/tasks/t1/recordings": () => [200, []],
+        "GET /api/v1/tasks/t1/audio-qc": () => [
+          404,
+          { error: { code: "NOT_FOUND", message: "x" } },
+        ],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks/t1/transition": () => [
+          200,
+          { ...review, status: "APPROVED", allowed_transitions: [] },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(await screen.findByRole("heading", { name: "Final approval" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
+        to: "APPROVED",
+        reason_code: null,
+        comment: "",
+      }),
+    );
+  });
+
   it("lets the assigned moderator record consent", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "consent.capture"], {

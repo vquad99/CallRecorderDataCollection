@@ -58,9 +58,10 @@ authenticator app (Google Authenticator, Microsoft Authenticator), type the 6-di
 | 1 | Draft | Project Admin | Creates the task with two participants |
 | 2 | Assigned | Project Admin | Chooses the Moderator (status changes by itself) |
 | 3 | In progress | Moderator | Starts the task |
-| 4 | Recorded | Platform | The recording is saved and its files are prepared |
-| 5 | Audio QC | Platform | The automatic sound check runs (within about a minute) |
-| 6 | Approved / Rejected / Returned | QC Executive | Pass, Fail, or Return (record again) |
+| 4 | Recorded | Moderator | The recording is saved and checked automatically; the Moderator listens, then clicks **Send to QC** (or **Record again**) |
+| 5 | Audio QC | QC Executive | Pass (goes to the admin), Fail (Rejected) or Return (record again) |
+| 6 | Admin review | Project Admin | Listens and gives the final word: **Approve**, or Reject / send back with a reason |
+| 7 | Approved | - | Done; the recording can be downloaded with its consent form |
 
 A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason. A
 **Returned** task goes back to the Moderator to record again. **Approved**, **Rejected** and
@@ -238,8 +239,11 @@ Downloads are available to the Super Admin and Project Admin.
 8. Click **Start recording**. Talk. Keep the tab open and the computer awake. The audio uploads in
    small parts while you record.
 9. Click **Stop and save**. Wait for **Recording saved**.
+10. Go back to the task. In **Check your recording**, click **Listen**. If it is good, click
+    **Send to QC**; if not, click **Record again** and record it once more.
 
-Within about a minute the platform checks the sound and the task moves to **Audio QC**.
+The platform checks the sound within about a minute of saving; **Send to QC** works once that
+check is done.
 
 If the internet drops, recording carries on and the saved parts are sent when it comes back. If
 the tab closes by mistake, open the recorder again: it offers **Keep the saved m:ss** or **Discard
@@ -255,7 +259,7 @@ it**. A recording can be up to 4 hours long.
    clipping, loudness, duplicates and more).
 3. Click **Listen** to hear the recording.
 4. Under **Your decision**, choose:
-   - **Pass: approve the recording** → the task becomes **Approved**;
+   - **Pass: send to the admin for final approval** → the task becomes **Admin review**;
    - **Return: record again** → back to the Moderator;
    - **Fail: reject the recording** → **Rejected**.
 
@@ -266,6 +270,12 @@ it**. A recording can be up to 4 hours long.
 **Check the stored file again** repeats the automatic check on the stored file.
 
 The automatic check never approves or rejects anything by itself; a person always decides.
+
+### Project Admin: final approval
+
+A task that passed QC shows **Admin review**. Open it: the **Final approval** card lets you
+**Listen** and **Approve**. To reject it or send it back for a new recording, use **Change
+status** with a reason. Only then is the task **Approved** and ready to download.
 
 ---
 

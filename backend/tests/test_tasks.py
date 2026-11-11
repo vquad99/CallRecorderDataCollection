@@ -147,7 +147,7 @@ def test_platform_only_steps_cannot_be_set_through_the_api(world: dict[str, Any]
     for status, target in [
         ("DRAFT", "ASSIGNED"),
         ("IN_PROGRESS", "RECORDED"),
-        ("RECORDED", "AUDIO_QC"),
+        ("AUDIO_QC", "ADMIN_REVIEW"),
         ("AUDIO_QC", "APPROVED"),
         ("AUDIO_QC", "RETURNED"),
     ]:
@@ -186,6 +186,8 @@ def test_every_invalid_transition_fails_through_the_api(world: dict[str, Any], d
         if workflow.required_kind(s, t, "ASSIGNED" if s == "ON_HOLD" else None)
         in ("assign", "moderator")
     }
+    # Sending to QC also needs a checked recording (D-092), which this test has none of.
+    allowed.discard(("RECORDED", "AUDIO_QC"))
     assert set(accepted) == allowed
 
 
@@ -364,3 +366,31 @@ def test_bulk_task_upload_reports_a_line_with_extra_values(world: dict[str, Any]
     rows = check.json()["rows"]
     assert [r["ok"] for r in rows] == [False, True]
     assert "more values" in rows[0]["message"]
+
+
+def test_the_moderator_listens_first_then_qc_then_the_admin(world: dict[str, Any], db: Any) -> None:
+    """D-092: RECORDED waits for the moderator (send to QC or record again); a QC pass goes to
+    ADMIN_REVIEW, where only someone who assigns tasks approves, rejects or returns."""
+    tid = _create(world).json()["id"]
+    world["pa"].post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    set_status(db, tid, "RECORDED")
+    again = world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+    assert again.json()["status"] == "IN_PROGRESS", "record again"
+    set_status(db, tid, "RECORDED")
+    assert (
+        world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"}).status_code
+        == 403
+    ), "only the task's moderator sends it to QC"
+    no_check = world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
+    assert no_check.json()["error"]["code"] == "CHECK_PENDING"
+    set_status(db, tid, "ADMIN_REVIEW")
+    mod_try = world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
+    assert mod_try.status_code == 403
+    back = world["pa"].post(
+        f"/api/v1/tasks/{tid}/transition",
+        json={"to": "RETURNED", "reason_code": "RE_RECORD", "comment": ""},
+    )
+    assert back.json()["status"] == "RETURNED"
+    set_status(db, tid, "ADMIN_REVIEW")
+    done = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
+    assert done.json()["status"] == "APPROVED"

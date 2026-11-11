@@ -213,7 +213,8 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     assert remaining == 0, "chunks are removed once the original is stored"
     steps = db.scalars(select(AssetProcessingStep.tool)).all()
     assert set(steps) == {"ccp chunk assembly", "python-soxr"}
-    assert mod.get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC"
+    # D-092: the task waits for its moderator to listen and send it to QC.
+    assert mod.get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
 
 
 def _record(world: dict[str, Any], parts: list[bytes], complete: bool = True) -> str:

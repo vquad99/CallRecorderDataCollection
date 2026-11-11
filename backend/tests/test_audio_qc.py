@@ -49,7 +49,10 @@ def audio_rule(world: dict[str, Any]) -> None:
     db.commit()
 
 
-def _record(world: dict[str, Any], seconds: int = 6, task_id: str | None = None) -> str:
+def _record(
+    world: dict[str, Any], seconds: int = 6, task_id: str | None = None, *, send: bool = True
+) -> str:
+    """Record, then (send=True) the moderator listens and sends it to QC, as D-092 requires."""
     mod: Api = world["mod"]
     tid = task_id or world["task"]["id"]
     rid: str = mod.post(f"/api/v1/tasks/{tid}/recordings", json=test_recordings.START).json()["id"]
@@ -58,6 +61,10 @@ def _record(world: dict[str, Any], seconds: int = 6, task_id: str | None = None)
         assert test_recordings.put(mod, rid, seq, data).status_code == 200
     done = mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": len(parts)})
     assert done.status_code == 200, done.text
+    if send:
+        assert mod.get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+        sent = mod.post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
+        assert sent.status_code == 200, sent.text
     return rid
 
 
@@ -139,7 +146,7 @@ def test_a_finished_recording_is_checked_and_waits_for_a_decision(world: dict[st
     )
 
 
-def test_the_assigned_qc_executive_passes_it_and_the_task_is_approved(
+def test_a_qc_pass_goes_to_the_admin_who_approves_it(
     world: dict[str, Any],
 ) -> None:
     _record(world)
@@ -155,7 +162,12 @@ def test_the_assigned_qc_executive_passes_it_and_the_task_is_approved(
         "PASS",
         "qc",
     )
-    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "APPROVED"
+    # D-092: a pass goes to the project admin, who gives the final approval.
+    pa: Api = world["pa"]
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["status"] == "ADMIN_REVIEW"
+    assert qc.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"}).status_code == 403
+    approved = pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
+    assert approved.json()["status"] == "APPROVED"
     db = world["db"]
     stored = db.scalar(select(AudioQcResult).where(AudioQcResult.automated.is_(False)))
     assert stored.reviewer_id is not None
@@ -325,13 +337,21 @@ def test_a_check_that_did_not_run_is_run_by_the_recovery_sweep(
         raise RuntimeError("stopped")
 
     monkeypatch.setattr(audio_qc, "run_automatic", broken)
-    _record(world)
+    _record(world, send=False)
     tid = world["task"]["id"]
+    mod: Api = world["mod"]
     assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+    # Nothing for QC to read yet, so the moderator cannot send it on (D-092).
+    early = mod.post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
+    assert early.json()["error"]["code"] == "CHECK_PENDING"
     monkeypatch.undo()
     assert worker_dispatch.check_pending_audio(world["app"]) == 1
-    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC"
-    assert worker_dispatch.check_pending_audio(world["app"]) == 0
+    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+    assert worker_dispatch.check_pending_audio(world["app"]) == 0, (
+        "a checked recording is left alone"
+    )
+    sent = mod.post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
+    assert sent.json()["status"] == "AUDIO_QC"
 
 
 def test_the_details_file_goes_with_the_recording(world: dict[str, Any]) -> None:
