@@ -1,10 +1,10 @@
 /* Dashboard page styles, loaded with the page (not part of the first screen). */
 
-/* Two blues, validated for colour-vision deficiency (light and dark). The lighter one is under
-   3:1 against white, so the legend and the table view carry the same information. */
+/* Deep teal and amber (D-087): a blue-orange pair that stays apart for colour-vision deficiency
+   and in lightness. The legend and the table view carry the same information. */
 :root {
-  --series-approved: #1f5fbb;
-  --series-waiting: #6aa8f0;
+  --series-approved: #36707f;
+  --series-waiting: #d9a654;
 }
 /* Dark-mode chart colours, kept for a later switch; not active (see global.css). */
 :root[data-theme="dark"] {
@@ -34,9 +34,9 @@
   gap: 10px;
 }
 .stat__label {
-  color: var(--text-2);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 .stat__body {
   display: flex;
@@ -47,10 +47,10 @@
 .stat__value {
   margin: 0;
   color: var(--text);
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 .stat__note {

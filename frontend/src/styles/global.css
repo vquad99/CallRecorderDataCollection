@@ -1557,3 +1557,401 @@ a.code {
   width: 100%;
   max-width: 560px;
 }
+
+/* ==========================================================================================
+ * Design refresh (D-087, 2026-11-11). Owner: make it look as professional as a leading
+ * data-labelling product. Warm paper surfaces, ink text, one deep teal accent, thin borders
+ * instead of shadows, small mono capital labels, pill chips with a coloured square dot, large
+ * light headings. This layer sits last on purpose: it overrides the tokens and the components
+ * above without touching their structure.
+ * ======================================================================================== */
+
+:root {
+  --font-sans:
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #f1ede6;
+  --surface: #faf8f4;
+  --surface-2: #f5f1ea;
+  --surface-hover: #ede7de;
+  --text: #2a2622;
+  --text-2: #4a443d;
+  --muted: #7a7268;
+  --border: #e3ddd3;
+  --border-strong: #d2c9bc;
+
+  --primary: #36707f;
+  --primary-hover: #2b5d6a;
+  --primary-soft: #e2ecec;
+  --primary-text: #ffffff;
+  --focus-ring: 0 0 0 3px rgb(54 112 127 / 0.22);
+
+  --ok: #3f7d52;
+  --ok-soft: #e5efe4;
+  --warn: #a5711b;
+  --warn-soft: #f5ead3;
+  --danger: #b2473e;
+  --danger-soft: #f6e2dd;
+  --info: #3e6ba3;
+  --info-soft: #e4eaf2;
+  --progress: #36707f;
+  --progress-soft: #e2ecec;
+  --neutral: #6b645b;
+  --neutral-soft: #ebe6de;
+
+  --blue: #4a6aa8;
+  --blue-soft: #e5e9f1;
+  --teal: #36707f;
+  --teal-soft: #e2ecec;
+  --violet: #7560a8;
+  --violet-soft: #ebe6f1;
+  --amber: #b07f26;
+  --amber-soft: #f4ead6;
+  --rose: #ad4f72;
+  --rose-soft: #f4e3e9;
+  --green: #4d8659;
+  --green-soft: #e5efe4;
+  --slate: #6b645b;
+  --slate-soft: #ebe6de;
+
+  --nav-bg: #ebe6dd;
+  --nav-bg-2: #ebe6dd;
+  --nav-text: #4a443d;
+  --nav-muted: #8a8277;
+  --nav-line: #ddd6cb;
+  --brand-ink: #36707f;
+  --accent: #36707f;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: none;
+  --shadow-lg: 0 18px 48px rgb(42 38 34 / 0.12);
+
+  font-family: var(--font-sans);
+}
+
+body {
+  font-size: 0.9375rem;
+}
+h1 {
+  font-size: 1.875rem;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+h2 {
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-weight: 500;
+}
+code,
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Small capital labels in mono: the product's voice for section names and column heads. */
+.eyebrow,
+.sidenav__title,
+.table th,
+.stat__label,
+.public__stats dt {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Navigation rail: paper, not black. */
+.sidenav {
+  background: var(--nav-bg);
+  border-right: 1px solid var(--nav-line);
+  color: var(--nav-text);
+}
+.sidenav__brand {
+  border-bottom: 1px solid var(--nav-line);
+}
+.sidenav__brand .brand {
+  color: var(--text);
+}
+.sidenav__title {
+  font-size: 0.6875rem;
+  color: var(--nav-muted);
+}
+.sidenav__link {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--nav-text);
+  font-weight: 400;
+}
+.sidenav__link .icon {
+  color: var(--nav-muted);
+}
+.sidenav__link:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.sidenav__link[aria-current="page"],
+.sidenav__link.active {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+}
+.sidenav__link[aria-current="page"] .icon,
+.sidenav__link.active .icon {
+  color: var(--primary);
+}
+.sidenav__link[aria-current="page"]::before,
+.sidenav__link.active::before {
+  display: none;
+}
+.sidenav__foot {
+  border-top: 1px solid var(--nav-line);
+  color: var(--nav-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Top bar: translucent paper with a hairline. */
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.topbar__account .avatar {
+  background: var(--primary);
+}
+.topbar__signout {
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+.topbar__signout:hover {
+  background: var(--surface-hover);
+}
+
+/* Surfaces: thin borders, no drop shadows. */
+.card,
+.state,
+.table-wrap {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: none;
+}
+.tile {
+  border-radius: var(--radius-sm);
+}
+.avatar--square {
+  border-radius: 6px;
+}
+
+/* Buttons. */
+.button {
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.button--primary {
+  background: var(--primary);
+  box-shadow: none;
+}
+.button--primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.button--secondary {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+.button--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* Form fields. */
+.field__label {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.field__input {
+  min-height: 40px;
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: #fffdf9;
+  box-shadow: none;
+}
+.field__input:focus,
+.field__input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+/* Tables: mono column heads, warm hover. */
+.table th {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+.table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+/* Tabs as pills, like a segmented control. */
+.tabs {
+  gap: 6px;
+  padding-bottom: 10px;
+}
+.tabs__link {
+  margin-bottom: 0;
+  padding: 5px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+.tabs__link:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.tabs__link[aria-current="page"],
+.tabs__link.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+/* Status chips: outlined pill with a coloured square dot. */
+.badge {
+  gap: 7px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-weight: 500;
+}
+.badge__dot {
+  border-radius: 2px;
+}
+.badge--success,
+.badge--warning,
+.badge--danger,
+.badge--info,
+.badge--progress {
+  background: var(--surface);
+  color: var(--text-2);
+}
+.badge--success .badge__dot {
+  background: var(--ok);
+}
+.badge--warning .badge__dot {
+  background: var(--warn);
+}
+.badge--danger .badge__dot {
+  background: var(--danger);
+}
+.badge--info .badge__dot {
+  background: var(--info);
+}
+.badge--progress .badge__dot {
+  background: var(--progress);
+}
+
+/* Notices keep their meaning colours, softened. */
+.notice {
+  border-radius: var(--radius-sm);
+}
+
+/* Signed-out pages in the same paper and ink (D-087). */
+.public {
+  background: var(--bg);
+}
+.public__panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ece7de;
+  background-image: radial-gradient(rgb(42 38 34 / 0.09) 1px, transparent 1px);
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.public__top .brand,
+.public__stats strong,
+.public__headline {
+  color: var(--text);
+}
+.public__top .brand {
+  font-family: var(--font-sans);
+}
+.public__fig span,
+.public__bottom span + span {
+  color: var(--primary);
+}
+.public__stats,
+.public__bottom {
+  border-color: var(--border-strong);
+}
+.public__stats div {
+  border-right-color: var(--border-strong);
+  color: var(--muted);
+}
+.public__panel::before,
+.public__panel::after {
+  border-color: rgb(42 38 34 / 0.35);
+}
+.public__headline {
+  font-family: var(--font-sans);
+  font-size: 2.75rem;
+  letter-spacing: -0.03em;
+  text-shadow:
+    0 0 18px #ece7de,
+    0 0 6px #ece7de;
+}
+.art--login path {
+  fill: var(--primary);
+  opacity: 0.55;
+}
+.public__main {
+  background: var(--surface);
+}
+.auth-page h1 {
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+.auth-page .button--primary[type="submit"] {
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  font-family: var(--font-mono);
+}
+.auth-page .button--primary[type="submit"]:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.auth-page .field__input {
+  border-color: var(--border-strong);
+  background-color: #fffdf9;
+}
+.public__top .brand__mark rect {
+  fill: var(--primary);
+}
+/* Label and value lists (task facts, check results): mono capital labels, lighter values. */
+.checks dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.checks dd {
+  font-weight: 500;
+}
