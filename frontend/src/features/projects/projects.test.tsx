@@ -89,4 +89,25 @@ describe("project detail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
   });
+
+  it("goes back to the project list with a note after creating a project", async () => {
+    const created = { ...project, id: "p9", code: "PRJ0009", name: "Tamil talk" };
+    fakeApi(
+      signedInAs(["projects.view", "projects.create", "projects.manage"], {
+        "POST /api/v1/projects": () => [201, created],
+        "GET /api/v1/projects": () => [200, { items: [created], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/projects/new");
+    await userEvent.type(await screen.findByLabelText(/^Name/), "Tamil talk");
+    await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+    expect(
+      await screen.findByText(/^PRJ0009 Tamil talk created\. It starts as Draft/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "PRJ0009" })).toHaveAttribute(
+      "href",
+      "/projects/p9",
+    );
+  });
 });

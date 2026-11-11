@@ -57,10 +57,12 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.getByLabel(/^Name/).fill(name);
     await admin.getByRole("checkbox", { name: "Face-to-face" }).check();
     await admin.getByRole("button", { name: "Create project" }).click();
-    // The platform gives the project code (D-083).
-    const heading = admin.getByRole("heading", { level: 1 });
-    await expect(heading).toHaveText(new RegExp(`^PRJ\\d{4,} · ${name}$`));
-    projectCode = ((await heading.textContent()) ?? "").split(" · ")[0] ?? "";
+    // The platform gives the project code (D-083) and goes back to the list (D-084).
+    const note = admin.getByRole("status").filter({ hasText: `${name} created.` });
+    await expect(note).toHaveText(new RegExp(`^PRJ\\d{4,} ${name} created\\.`));
+    projectCode = ((await note.textContent()) ?? "").split(" ")[0] ?? "";
+    await admin.getByRole("link", { name: projectCode, exact: true }).click();
+    await expect(admin.getByRole("heading", { level: 1 })).toHaveText(`${projectCode} · ${name}`);
     projectUrl = new URL(admin.url()).pathname;
     await admin.getByLabel("Change status to").selectOption("ACTIVE");
     await admin.getByRole("button", { name: "Change status" }).click();
@@ -68,7 +70,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.getByRole("link", { name: "Languages" }).click();
     await admin.getByLabel(/^Language code/).selectOption("hi");
     await admin.getByRole("button", { name: "Add language" }).click();
-    await expect(admin.getByRole("listitem").filter({ hasText: /^hi/ })).toBeVisible();
+    await expect(admin.getByRole("listitem").filter({ hasText: /^Hindi \(hi\)/ })).toBeVisible();
   });
 
   await test.step("the Super Admin invites a moderator by email", async () => {

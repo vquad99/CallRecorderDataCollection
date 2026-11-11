@@ -106,8 +106,9 @@ The number of active accounts is limited by **Settings → Staff accounts**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
 
-A new project starts as **Draft**. Open it and use **Overview → Status → Change status to: Active**.
-Only **Active** projects accept new tasks and recordings.
+After **Create project** you return to the project list. A new project starts as **Draft**: click
+its code to open it and use **Overview → Status → Change status to: Active**. Only **Active**
+projects accept new tasks and recordings, and only they appear in **New task**.
 
 Project tabs:
 

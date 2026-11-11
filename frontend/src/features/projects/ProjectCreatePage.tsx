@@ -25,7 +25,16 @@ export function ProjectCreatePage() {
           setBusy(true);
           setError(null);
           createProject(fields)
-            .then((project) => navigate(`/projects/${project.id}`))
+            // Back to the project list with a note (D-084): a new project starts as Draft.
+            .then((project) =>
+              navigate("/projects", {
+                state: {
+                  created:
+                    `${project.code} ${project.name} created. It starts as Draft: open it and ` +
+                    "change its status to Active before adding tasks.",
+                },
+              }),
+            )
             .catch((err: unknown) => setError(toApiError(err)))
             .finally(() => setBusy(false));
         }}

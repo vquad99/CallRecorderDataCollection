@@ -1,10 +1,11 @@
 // Projects the user can see (PROJ-001, PROJ-012).
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import { listProjects } from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { Select } from "../../components/form/Select";
+import { SuccessNotice } from "../../components/Notice";
 import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
@@ -23,6 +24,8 @@ export const STATUS_LABELS: Record<string, string> = {
 
 export function ProjectsPage() {
   const { can } = useAuth();
+  // Set by New project after a save (D-084).
+  const created = (useLocation().state as { created?: string } | null)?.created ?? null;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
@@ -45,6 +48,7 @@ export function ProjectsPage() {
           </Link>
         ) : null}
       </div>
+      <SuccessNotice message={created} />
       <div className="filters">
         <TextField
           label="Search"
