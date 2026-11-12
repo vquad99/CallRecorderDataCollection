@@ -1,0 +1,133 @@
+# The whole platform on one AWS EC2 server (D-096): database, Redis, API, worker, web and a TLS
+# front (Caddy). Replaces the Render blueprint (render.yaml) once the move is done.
+#
+#   cd /opt/ccp && deploy/aws/deploy.sh          build, migrate, start (or update)
+#
+# Settings and secrets come from deploy/aws/.env (copy env.example; never committed). Only Caddy
+# publishes ports; everything else is on the private compose network.
+name: ccp
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+x-app: &app
+  build: ../../backend
+  image: ccp-backend:latest
+  env_file: .env
+  environment:
+    APP_ENV: production
+    DATABASE_URL: postgresql+psycopg://ccp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/ccp
+    REDIS_URL: redis://redis:6379/0
+    MEDIA_WORK_DIR: /tmp/media
+    # Only the web container (fixed address below) may tell the API the visitor's address.
+    FORWARDED_ALLOW_IPS: 172.30.58.10
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  db:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: ccp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ccp
+    volumes: [db_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ccp -d ccp"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+  # Work queue and shared sign-in limits; never evicts a queued job (as on Render).
+  redis:
+    image: redis:7.4.12-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+  # Before every start: migrations and the first Super Admin (Render's preDeployCommand).
+  migrate:
+    <<: *app
+    command: ["python", "-m", "app.cli", "prepare-deploy"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  backend:
+    <<: *app
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    <<: *app
+    command: ["sh", "-c", "exec celery -A app.worker worker --loglevel=INFO --concurrency=${WORKER_CONCURRENCY:-2}"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+  web:
+    build: ../../frontend
+    image: ccp-web:latest
+    environment:
+      BACKEND_HOSTPORT: backend:8000
+      MEDIA_ORIGINS: ${MEDIA_ORIGINS:?set MEDIA_ORIGINS in .env}
+      # Caddy (fixed address below) passes the visitor's address in X-Real-IP.
+      REAL_IP_FROM: 172.30.58.20/32
+      REAL_IP_HEADER: X-Real-IP
+    networks:
+      default: { ipv4_address: 172.30.58.10 }
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+
+  # HTTPS in front of the web container; the only service with public ports.
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+      TLS: ${TLS:-internal}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      default: { ipv4_address: 172.30.58.20 }
+    depends_on:
+      web: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.58.0/24
+
+volumes:
+  db_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

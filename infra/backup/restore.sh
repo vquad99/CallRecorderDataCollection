@@ -7,7 +7,7 @@
 #   list stored backups: docker compose ... exec backend python -m app.cli backup-list
 set -euo pipefail
 key="${1:?usage: restore.sh <backup key, e.g. backups/db/ccp-20261110T020000Z.dump>}"
-C="docker compose --env-file ${ENV_FILE:-.env} -f infra/docker-compose.yml"
+C="docker compose --env-file ${ENV_FILE:-.env} -f ${COMPOSE_FILE_PATH:-infra/docker-compose.yml}"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 $C exec -T backend python -m app.cli backup-download "$key" > "$tmp"

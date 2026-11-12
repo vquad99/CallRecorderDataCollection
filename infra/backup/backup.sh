@@ -5,7 +5,7 @@
 #   infra/backup/backup.sh            (run from the repository root, with .env in place)
 #   KEEP_DAYS=30 infra/backup/backup.sh   also deletes backups older than 30 days (newest kept)
 set -euo pipefail
-C="docker compose --env-file ${ENV_FILE:-.env} -f infra/docker-compose.yml"
+C="docker compose --env-file ${ENV_FILE:-.env} -f ${COMPOSE_FILE_PATH:-infra/docker-compose.yml}"
 name="ccp-$(date -u +%Y%m%dT%H%M%SZ).dump"
 $C exec -T db pg_dump --username=ccp --dbname=ccp --format=custom --no-owner \
   | $C exec -T backend python -m app.cli backup-upload --name "$name"

@@ -243,3 +243,32 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: docker compose --env-file .env -f infra/docker-compose.yml logs --no-color --tail 200
+
+  aws-stack:
+    name: AWS server set-up starts behind HTTPS (D-096)
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Settings from the example (dummy keys; nothing outside is contacted)
+        run: |
+          E=deploy/aws/.env
+          cp deploy/aws/env.example $E
+          sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" $E
+          sed -i "s|^SECRET_KEY=.*|SECRET_KEY=ci-$(openssl rand -hex 32)|" $E
+          sed -i "s|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=$(make -s key)|" $E
+          sed -i "s|^STORAGE_ACCESS_KEY_ID=.*|STORAGE_ACCESS_KEY_ID=ci|; s|^STORAGE_SECRET_ACCESS_KEY=.*|STORAGE_SECRET_ACCESS_KEY=ci|" $E
+          sed -i "s|^SMTP_HOST=.*|SMTP_HOST=smtp.invalid|; s|^EMAIL_FROM=.*|EMAIL_FROM=ci@dubdesk.live|" $E
+      - name: Build, migrate and start every service
+        run: NO_PULL=1 deploy/aws/deploy.sh
+      - name: The site answers over HTTPS through Caddy and nginx
+        run: |
+          H="--resolve dubdesk.live:443:127.0.0.1 -k -fsS"
+          curl $H https://dubdesk.live/ | grep -q '<div id="root">'
+          curl $H https://dubdesk.live/health/live
+          curl $H https://dubdesk.live/api/v1/version | grep -q '"version"'
+          curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1/ -H 'Host: dubdesk.live' | grep -qx 308
+          docker compose -f deploy/aws/docker-compose.yml ps worker --format '{{.State}}' | grep -qx running
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/aws/docker-compose.yml logs --no-color --tail 200
