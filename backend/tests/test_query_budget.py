@@ -60,6 +60,12 @@ def _estate(db: Any, new_api: Any, size: int, tag: str) -> dict[str, Any]:
 # Highest count after the O5 work is 8 (sign-in check 4, page 4); a page passing this has
 # gained a query that needs a reason.
 MAX_QUERIES = 10
+# Pages allowed more, each with its reason (still flat: the same count for 2 rows as for 10).
+ALLOWED = {
+    # D-095: the minutes columns (recorded, approved, payable) are one query for the whole page,
+    # sent only to people who may export the project.
+    ("sa", "/api/v1/projects/{project}/participants?page_size=100"): MAX_QUERIES + 1,
+}
 
 PAGES = [
     ("sa", "/api/v1/users?page_size=100"),
@@ -89,9 +95,10 @@ def test_list_pages_cost_the_same_for_2_and_10_rows(
             for e in (small, large)
         ]
         print(f"QUERIES {who} {template}: {counts}")  # shown with -s, kept for the evidence file
-        if counts[1] > counts[0] or counts[1] > MAX_QUERIES:
+        limit = ALLOWED.get((who, template), MAX_QUERIES)
+        if counts[1] > counts[0] or counts[1] > limit:
             grows.append(
                 f"{who} {template}: {counts[0]} queries for 2 rows, {counts[1]} for 10 "
-                f"(limit {MAX_QUERIES})"
+                f"(limit {limit})"
             )
     assert not grows, "\n".join(grows)
