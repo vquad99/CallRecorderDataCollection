@@ -295,11 +295,20 @@ Choose what to export:
 | **Audio only** | One ZIP with the `audio/` folder |
 | **Metadata only** | One ZIP with the `metadata/` and `consent/` folders |
 | **Progress report** | One spreadsheet (CSV): a row per task with status, participants, moderator, QC, recording length, checks and approval date |
+| **Participant minutes** | One spreadsheet (CSV): a row per participant with conversations, recorded minutes, approved minutes and payable minutes |
 
 For the ZIPs, choose **Which recordings**: **Approved tasks only** (the delivery) or **Every
 finished recording**. The page shows how many recordings and how much audio before you click
 **Download**. Every ZIP also holds `manifest.csv`, one row per recording with its file names and
 checksum. A large project streams straight to your Downloads folder.
+
+### Participant minutes (payment)
+
+Payment follows **approved** audio. Every conversation has two participants, so each one is
+credited with half of it: a 5-minute approved conversation gives each participant **2.5 payable
+minutes**. A re-recorded task counts once (its newest finished recording). Project Admins see the
+**Recorded min**, **Approved min** and **Payable min** columns on the project's **Participants**
+tab; the **Participant minutes** export gives the same numbers as a spreadsheet.
 
 ---
 

@@ -222,6 +222,9 @@ export function ConsentList({
   );
 }
 
+const minutesText = (value: number | undefined) =>
+  value === undefined ? "–" : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
 export function ParticipantsTab() {
   const { project } = useProject();
   const { can } = useAuth();
@@ -241,6 +244,10 @@ export function ParticipantsTab() {
     () => work.listParticipants(project.id, { search, page, page_size: 25 }),
     [project.id, search, page],
   );
+
+  // The server sends minutes only to people who may export the project (D-095).
+  const showMinutes =
+    list.state.status === "loaded" && list.state.data.items.some((p) => p.minutes != null);
 
   async function run(action: () => Promise<string>) {
     setBusy(true);
@@ -379,6 +386,23 @@ export function ParticipantsTab() {
                   <th scope="col">Name</th>
                   <th scope="col">Phone</th>
                   <th scope="col">Language</th>
+                  {showMinutes ? (
+                    <>
+                      <th scope="col" className="num">
+                        Recorded min
+                      </th>
+                      <th scope="col" className="num">
+                        Approved min
+                      </th>
+                      <th
+                        scope="col"
+                        className="num"
+                        title="Half of approved: two participants share each conversation"
+                      >
+                        Payable min
+                      </th>
+                    </>
+                  ) : null}
                   <th scope="col">Actions</th>
                 </tr>
               </thead>
@@ -394,6 +418,15 @@ export function ParticipantsTab() {
                       {p.language_code}
                       {p.dialect ? ` (${p.dialect})` : ""}
                     </td>
+                    {showMinutes ? (
+                      <>
+                        <td className="num">{minutesText(p.minutes?.recorded_minutes)}</td>
+                        <td className="num">{minutesText(p.minutes?.approved_minutes)}</td>
+                        <td className="num">
+                          <strong>{minutesText(p.minutes?.payable_minutes)}</strong>
+                        </td>
+                      </>
+                    ) : null}
                     <td className="actions">
                       {p.consent_visible ? (
                         <Button

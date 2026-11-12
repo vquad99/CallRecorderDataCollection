@@ -18,9 +18,20 @@ export interface Participant {
   consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "NONE" | null;
   consent_review: "PENDING" | "APPROVED" | "REJECTED" | null;
   link_active: boolean | null;
+  /** Minutes in this project (D-095); only for people who may export it. Payable = half of
+   * approved, since every conversation has two participants. */
+  minutes?: ParticipantMinutes | null;
   notes: string | null;
   deleted: boolean;
   created_at: string;
+}
+
+export interface ParticipantMinutes {
+  conversations: number;
+  recorded_minutes: number;
+  approved_conversations: number;
+  approved_minutes: number;
+  payable_minutes: number;
 }
 
 export interface ParticipantFields {

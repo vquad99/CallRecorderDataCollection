@@ -1100,6 +1100,12 @@ meter::-webkit-meter-even-less-good-value {
   text-transform: uppercase;
   white-space: nowrap;
 }
+.table th.num,
+.table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .table tbody tr:last-child td {
   border-bottom: 0;
 }

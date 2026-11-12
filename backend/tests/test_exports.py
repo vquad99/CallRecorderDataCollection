@@ -74,3 +74,65 @@ def test_a_project_exports_audio_metadata_both_or_progress(world: dict[str, Any]
     make_user(world["db"], "pa.other@example.org", ["PROJECT_ADMIN"])
     outsider = world["api"]("pa.other@example.org")
     assert outsider.get(f"{base}/summary").status_code == 404
+
+
+@pytest.mark.db
+def test_each_participant_is_credited_with_half_of_an_approved_conversation(
+    world: dict[str, Any],
+) -> None:
+    """D-095: payment follows approved audio, split equally between the two participants."""
+    tid = world["task"]["id"]
+    pa: Api = world["pa"]
+    pid = world["project"].id
+    test_audio_qc._record(world)
+
+    def people() -> dict[str, dict[str, Any]]:
+        items = pa.get(f"/api/v1/projects/{pid}/participants").json()["items"]
+        return {p["display_label"]: p["minutes"] for p in items}
+
+    before = people()
+    assert before["Asha"]["conversations"] == 1
+    assert before["Asha"]["recorded_minutes"] > 0
+    assert before["Asha"]["approved_minutes"] == 0
+    assert before["Asha"]["payable_minutes"] == 0
+
+    qc = test_audio_qc._assign_qc(world)
+    assert (
+        qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"}).status_code
+        == 200
+    )
+    assert pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"}).status_code == 200
+
+    after = people()
+    for name in ("Asha", "Bina"):
+        m = after[name]
+        assert m["approved_conversations"] == 1
+        assert m["approved_minutes"] == m["recorded_minutes"]
+        assert m["payable_minutes"] == pytest.approx(m["approved_minutes"] / 2, abs=0.01)
+
+    got = pa.get(f"/api/v1/projects/{pid}/export", params={"content": "participants"})
+    assert got.status_code == 200, got.text
+    assert got.headers["content-type"].startswith("text/csv")
+    rows = list(csv.DictReader(io.StringIO(got.text)))
+    assert len(rows) == 2
+    for row in rows:
+        assert float(row["payable_minutes"]) == pytest.approx(
+            float(row["approved_minutes"]) / 2, abs=0.01
+        )
+    summary = pa.get(
+        f"/api/v1/projects/{pid}/export/summary", params={"content": "participants"}
+    ).json()
+    assert summary["file_name"].startswith("participants_VOICE_")
+
+    # A moderator sees the people, not the payment minutes.
+    assert all(
+        p["minutes"] is None
+        for p in world["mod"].get(f"/api/v1/projects/{pid}/participants").json()["items"]
+    )
+
+
+def test_payable_minutes_are_half_of_approved() -> None:
+    from app.modules.exports.minutes import Minutes, as_minutes
+
+    five_minutes = Minutes(conversations=1, recorded_ms=300_000, approved_ms=300_000)
+    assert as_minutes(five_minutes.payable_ms) == 2.5

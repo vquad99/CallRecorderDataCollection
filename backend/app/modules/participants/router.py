@@ -14,6 +14,7 @@ from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.router import AppSettings, Cipher
 from app.modules.auth.security import FieldCipher
+from app.modules.exports import minutes as minutes_report
 from app.modules.participants import consent_view, manage, service
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
@@ -25,6 +26,28 @@ router = APIRouter(
 )
 
 MASK = "••••••"
+
+
+class MinutesOut(BaseModel):
+    """Recorded, approved and payable minutes in this project (D-095): payable is half of the
+    approved conversation minutes, since every conversation has two participants."""
+
+    conversations: int
+    recorded_minutes: float
+    approved_conversations: int
+    approved_minutes: float
+    payable_minutes: float
+
+
+def minutes_out(t: minutes_report.Minutes | None) -> MinutesOut:
+    t = t or minutes_report.Minutes()
+    return MinutesOut(
+        conversations=t.conversations,
+        recorded_minutes=minutes_report.as_minutes(t.recorded_ms),
+        approved_conversations=t.approved_conversations,
+        approved_minutes=minutes_report.as_minutes(t.approved_ms),
+        payable_minutes=minutes_report.as_minutes(t.payable_ms),
+    )
 
 
 class ParticipantOut(BaseModel):
@@ -42,6 +65,8 @@ class ParticipantOut(BaseModel):
     consent_status: str | None = None
     consent_review: str | None = None
     link_active: bool | None = None
+    # Only for people who may export the project (the same people who get the minutes report).
+    minutes: MinutesOut | None = None
     notes: str | None
     deleted: bool
     consent_visible: bool  # whether this caller may open the person's consent history
@@ -108,8 +133,13 @@ def list_participants(
     )
     assigned = service.assigned_participants(db, principal.user_id, project.id)
     overview = manage.consent_overview(db, project, [p.id for p in items])
+    shown = [present(db, principal, cipher, project, p, assigned, overview) for p in items]
+    if principal.can_in_project(Perm.EXPORTS_CREATE, project.id):
+        totals = minutes_report.per_participant(db, project.id, [p.id for p in items])
+        for out in shown:
+            out.minutes = minutes_out(totals.get(out.id))
     return ParticipantPage(
-        items=[present(db, principal, cipher, project, p, assigned, overview) for p in items],
+        items=shown,
         total=total,
         page=page,
         page_size=page_size,

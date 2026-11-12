@@ -20,7 +20,7 @@ router = APIRouter(
     dependencies=[Depends(require(Perm.EXPORTS_CREATE))],
 )
 
-Content = Literal["audio", "metadata", "both", "progress"]
+Content = Literal["audio", "metadata", "both", "progress", "participants"]
 Scope = Literal["approved", "finished"]
 
 
@@ -57,8 +57,12 @@ def export(
     p = service.plan(db, principal, project_id, content, scope)
     name = service.file_name(p)
     disposition = {"Content-Disposition": f'attachment; filename="{name}"'}
-    if content == "progress":
-        body = service.progress_csv(db, p.project)
+    if content in service.REPORTS:
+        body = (
+            service.progress_csv(db, p.project)
+            if content == "progress"
+            else service.participants_csv(db, p.project)
+        )
         service.record(db, principal, p, client_ip(request))
         return Response(content=body, media_type="text/csv; charset=utf-8", headers=disposition)
     storage = (

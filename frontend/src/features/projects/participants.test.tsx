@@ -70,6 +70,31 @@ describe("participants tab", () => {
     expect(screen.queryByRole("button", { name: "Consent" })).not.toBeInTheDocument();
   });
 
+  it("shows recorded, approved and payable minutes when the server sends them (D-095)", async () => {
+    const minutes = {
+      conversations: 2,
+      recorded_minutes: 9,
+      approved_conversations: 1,
+      approved_minutes: 5,
+      payable_minutes: 2.5,
+    };
+    fakeApi(
+      signedInAs(["projects.view", "participants.view"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [{ ...asha, minutes }], total: 1, page: 1, page_size: 25 },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    expect(await screen.findByRole("columnheader", { name: /Payable min/ })).toBeInTheDocument();
+    const row = screen.getByRole("row", { name: /P000001/ });
+    expect(row).toHaveTextContent("9");
+    expect(row).toHaveTextContent("5");
+    expect(row).toHaveTextContent("2.5");
+  });
+
   it("adds a participant and deletes one with a reason", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "participants.view", "participants.manage"], {

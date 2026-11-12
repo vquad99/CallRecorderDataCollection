@@ -147,5 +147,8 @@ describe("project detail", () => {
     await userEvent.click(screen.getByRole("radio", { name: /Progress report/ }));
     expect(screen.queryByLabelText("Which recordings")).not.toBeInTheDocument();
     expect(await screen.findByText("Every task in HINDI")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Participant minutes/ }));
+    expect(screen.queryByLabelText("Which recordings")).not.toBeInTheDocument();
+    expect(await screen.findByText("Every participant in HINDI")).toBeInTheDocument();
   });
 });

@@ -4,7 +4,8 @@ One download per project, in one of four forms:
 - "audio": the delivery WAV of each recording, in a ZIP;
 - "metadata": the details file (JSON) and consent record (HTML) of each recording, in a ZIP;
 - "both": audio and metadata together, in a ZIP;
-- "progress": one CSV row per task (status, people, recording length, checks, decisions, dates).
+- "progress": one CSV row per task (status, people, recording length, checks, decisions, dates);
+- "participants": one CSV row per participant with recorded, approved and payable minutes (D-095).
 
 Every ZIP also holds manifest.csv, one row per recording with its files and checksum. Recordings
 are the newest finished one of each task, from approved tasks only unless the caller asks for
@@ -34,6 +35,7 @@ from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
 from app.modules.auth.models import User
+from app.modules.exports import minutes
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_visible as get_visible_project
@@ -41,7 +43,8 @@ from app.modules.recordings import consent_form
 from app.modules.recordings.models import Recording
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
 
-CONTENTS = ("audio", "metadata", "both", "progress")
+CONTENTS = ("audio", "metadata", "both", "progress", "participants")
+REPORTS = ("progress", "participants")  # a CSV, not a ZIP of recordings
 SCOPES = ("approved", "finished")
 MAX_RECORDINGS = 5000  # one export; more is split by asking for a smaller scope
 
@@ -84,7 +87,7 @@ def plan(
     if not principal.can_in_project(Perm.EXPORTS_CREATE, project.id):
         raise forbidden()
     entries: list[Entry] = []
-    if content != "progress":
+    if content not in REPORTS:
         statuses = ("APPROVED",) if scope == "approved" else None
         query = select(Task).where(Task.project_id == project.id).order_by(Task.task_code)
         if statuses:
@@ -137,8 +140,8 @@ def record(db: Session, principal: Principal, p: Plan, ip: str | None) -> None:
 
 def file_name(p: Plan) -> str:
     day = datetime.now(UTC).strftime("%Y%m%d")
-    if p.content == "progress":
-        return f"progress_{p.project.code}_{day}.csv"
+    if p.content in REPORTS:
+        return f"{p.content}_{p.project.code}_{day}.csv"
     return f"{p.content}_{p.project.code}_{day}.zip"
 
 
@@ -232,6 +235,49 @@ def progress_csv(db: Session, project: Project) -> str:
                     automatic.outcome if automatic else "",
                     decision.outcome if decision else "",
                     _iso(approved_at) if task.status == "APPROVED" else "",
+                )
+            ]
+        )
+    return out.getvalue()
+
+
+def participants_csv(db: Session, project: Project) -> str:
+    """Minutes per participant (D-095): each conversation is split equally between its two
+    participants, so payable minutes are half of the approved conversation minutes."""
+    totals = minutes.per_participant(db, project.id)
+    people = (
+        {p.id: p for p in db.scalars(select(Participant).where(Participant.id.in_(list(totals))))}
+        if totals
+        else {}
+    )
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(
+        [
+            "participant_code",
+            "language",
+            "conversations_recorded",
+            "recorded_minutes",
+            "conversations_approved",
+            "approved_minutes",
+            "payable_minutes",
+        ]
+    )
+    for pid, t in sorted(
+        totals.items(), key=lambda kv: people[kv[0]].participant_code if kv[0] in people else ""
+    ):
+        person = people.get(pid)
+        writer.writerow(
+            [
+                _safe_cell(v)
+                for v in (
+                    person.participant_code if person else "",
+                    person.language_code if person else "",
+                    t.conversations,
+                    minutes.as_minutes(t.recorded_ms),
+                    t.approved_conversations,
+                    minutes.as_minutes(t.approved_ms),
+                    minutes.as_minutes(t.payable_ms),
                 )
             ]
         )

@@ -510,6 +510,13 @@ const EXPORT_CHOICES: { value: api.ExportContent; label: string; detail: string 
     label: "Progress report",
     detail: "One spreadsheet row per task: status, people, length, checks, approval date.",
   },
+  {
+    value: "participants",
+    label: "Participant minutes",
+    detail:
+      "One row per participant: recorded, approved and payable minutes. Each approved " +
+      "conversation is split equally, so 5 minutes gives each participant 2.5.",
+  },
 ];
 
 const megabytes = (n: number) =>
@@ -524,7 +531,7 @@ export function ExportTab() {
     () => api.exportSummary(project.id, content, scope),
     [project.id, content, scope],
   );
-  const files = content !== "progress";
+  const files = content !== "progress" && content !== "participants";
   const ready = summary.state.status === "loaded" ? summary.state.data : null;
   const empty = files && ready !== null && ready.recordings === 0;
   return (
@@ -576,7 +583,11 @@ export function ExportTab() {
                     : ""}
                 </>
               ) : (
-                <strong>Every task in {project.code}</strong>
+                <strong>
+                  {content === "participants"
+                    ? `Every participant in ${project.code}`
+                    : `Every task in ${project.code}`}
+                </strong>
               )}
               <span className="muted mono">{ready.file_name}</span>
             </p>

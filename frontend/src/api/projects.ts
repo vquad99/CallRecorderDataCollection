@@ -120,7 +120,7 @@ export const setRetention = (id: string, rules: RetentionRule[]) =>
   apiRequest<Project>(`${base(id)}/retention`, { method: "PUT", body: { rules } });
 export const listMembers = (id: string) => apiRequest<Member[]>(`${base(id)}/members`);
 
-export type ExportContent = "audio" | "metadata" | "both" | "progress";
+export type ExportContent = "audio" | "metadata" | "both" | "progress" | "participants";
 export type ExportScope = "approved" | "finished";
 export interface ExportSummary {
   recordings: number;
