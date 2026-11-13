@@ -100,6 +100,8 @@ class Call(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_reason: Mapped[str | None] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # The identifier the provider's dialer returned for this request (TxContact: a UUID).
+    provider_reference: Mapped[str | None] = mapped_column(String(100))
     provider_session_id: Mapped[str | None] = mapped_column(String(100))
     provider_file: Mapped[str | None] = mapped_column(String(300))
     # Calls the platform could not choose between (JSON list of safe fields; no phone numbers).

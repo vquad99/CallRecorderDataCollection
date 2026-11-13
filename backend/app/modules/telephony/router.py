@@ -67,6 +67,7 @@ class CallOut(BaseModel):
     closed_at: datetime | None
     cancel_reason: str | None
     note: str
+    provider_reference: str | None
     provider_session_id: str | None
     recording_id: uuid.UUID | None
     fetch_attempts: int
@@ -106,6 +107,7 @@ def _out(db: DbSession, calls: list[Call]) -> list[CallOut]:
             closed_at=c.closed_at,
             cancel_reason=c.cancel_reason,
             note=c.note,
+            provider_reference=c.provider_reference,
             provider_session_id=c.provider_session_id,
             recording_id=c.recording_id,
             fetch_attempts=c.fetch_attempts,

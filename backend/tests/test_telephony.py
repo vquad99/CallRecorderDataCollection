@@ -53,7 +53,7 @@ class StandIn:
     def dial(self, phone_e164: str, agent_id: str) -> DialResult:
         self.dials.append((phone_e164, agent_id))
         if self.accept:
-            return DialResult(True, 200, "Contact queued")
+            return DialResult(True, 200, "Contact queued", "fec72ece-df50-11f1-96b6-bc24110b2437")
         return DialResult(False, 200, "error: agent not logged in")
 
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]:
@@ -240,6 +240,7 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert call["state"] == "DIALLING"
     assert call["agent_id"] == SEAT
     assert call["phone_hint"] == "10"
+    assert call["provider_reference"] == "fec72ece-df50-11f1-96b6-bc24110b2437"
     assert [e["kind"] for e in call["events"]] == ["DIAL_REQUESTED", "DIAL_ACCEPTED"]
     assert "Contact queued" in call["events"][1]["text"]  # the provider's own answer (TEL-037)
     assert A_PHONE not in json.dumps(call)

@@ -60,6 +60,7 @@ export interface Call {
   closed_at: string | null;
   cancel_reason: CancelReason | null;
   note: string;
+  provider_reference?: string | null;
   provider_session_id: string | null;
   recording_id: string | null;
   fetch_attempts: number;

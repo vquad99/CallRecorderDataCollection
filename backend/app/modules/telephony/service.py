@@ -244,6 +244,7 @@ def start_call(
     else:
         answer = f"HTTP {result.http_status}: {result.response_excerpt or '(empty answer)'}"
         if result.accepted:
+            call.provider_reference = result.reference
             _event(db, call, "DIAL_ACCEPTED", f"{provider.name} answered {answer}")
         else:
             call.state = "DIAL_FAILED"

@@ -24,6 +24,8 @@ class DialResult:
     http_status: int
     # The provider's answer, shortened, with credentials and the phone number removed.
     response_excerpt: str
+    # The provider's identifier for this dial request, when it gives one.
+    reference: str | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,16 @@ VERIFIED must be settled by the first real call.
    `https://amber.txcontact.com/txrecord/swagger.json` (Swagger 2.0, "TxRecord API" v1, generated
    by drf-yasg). The page `/txrecord/swagger/` is only the viewer for it.
 
+## Tested on the account, 2026-11-13
+
+No phone was rung: the dialer was only sent the invalid number `0000000000`.
+
+| Test | Result | What it settles |
+|---|---|---|
+| Dialer, real login, number `0000000000` | HTTP 200, `text/html`, body a UUID (e.g. `fec72ece-df50-11f1-96b6-bc24110b2437`) | An accepted request returns an identifier. The platform stores it as `calls.provider_reference` (migration 0019). Which recording field carries it is still NOT VERIFIED. |
+| Dialer, wrong password | HTTP 200, `text/html`, **empty body** | A wrong login is not an HTTP error. The platform treats an empty answer as refused ("usually a wrong dialer username or password"). |
+| Recording sign-in (`/auth/`, `/getjwt/`, `/base64token/`) with the dialer login | HTTP 400 `{"status": "ERROR", "message": "invalid username/password"}`; once, a 500 with a MySQL error on TxContact's side | The recording service needs **its own login**: ask TxContact for it. The search, time zone, number format and recording format cannot be tested until then. |
+
 ## Calls used
 
 | Purpose | Request | Notes |

@@ -34,6 +34,7 @@ logger = logging.getLogger("app.telephony")
 
 MAX_SEARCH_PAGES = 20
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._@+()-]{0,250}$")
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 _FAILURE_WORDS = ("error", "invalid", "fail", "denied", "unauthor")
 
 
@@ -199,10 +200,17 @@ class TxContact:
             body = response.read(20_000)
         finally:
             response.close()
-        text = body.decode("utf-8", errors="replace")
+        text = body.decode("utf-8", errors="replace").strip()
         excerpt = self._scrub(text, [phone, phone_e164])
-        accepted = 200 <= status < 300 and not _says_failure(text)
-        return DialResult(accepted=accepted, http_status=status, response_excerpt=excerpt)
+        # Tested 2026-11-13: an accepted request answers 200 with a UUID as plain text; a wrong
+        # username or password answers 200 with an empty body. Empty therefore means refused.
+        reference = text if _UUID.fullmatch(text) else None
+        accepted = 200 <= status < 300 and bool(text) and not _says_failure(text)
+        if not text and 200 <= status < 300:
+            excerpt = "(empty answer: usually a wrong dialer username or password)"
+        return DialResult(
+            accepted=accepted, http_status=status, response_excerpt=excerpt, reference=reference
+        )
 
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]:
         found: list[ProviderSession] = []

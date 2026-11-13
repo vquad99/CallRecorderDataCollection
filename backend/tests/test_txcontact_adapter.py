@@ -243,3 +243,20 @@ def test_secrets_are_kept_out_of_logs_by_the_settings() -> None:
     )
     assert DIAL_PASSWORD in settings.secret_values()
     assert RECORD_PASSWORD in settings.secret_values()
+
+
+def test_the_real_answers_seen_on_2026_11_13() -> None:
+    """TxContact's dialer answered 200 with a UUID when it took the request, and 200 with an empty
+    body for a wrong password. Empty must count as refused, or a bad login looks like a call."""
+    server = FakeServer()
+    server.answer("/txdialer/api/contact/add", 200, b"fec72ece-df50-11f1-96b6-bc24110b2437")
+    taken = make(server).dial(PHONE, "70001")
+    assert taken.accepted is True
+    assert taken.reference == "fec72ece-df50-11f1-96b6-bc24110b2437"
+
+    server = FakeServer()
+    server.answer("/txdialer/api/contact/add", 200, b"")
+    refused = make(server).dial(PHONE, "70001")
+    assert refused.accepted is False
+    assert refused.reference is None
+    assert "wrong dialer username or password" in refused.response_excerpt
