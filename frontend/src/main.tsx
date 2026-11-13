@@ -8,7 +8,6 @@ import { AuthProvider } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "@fontsource/roboto/latin-400.css";
 import "@fontsource/roboto/latin-500.css";
-import "@fontsource/roboto/latin-700.css";
 import "@fontsource/ibm-plex-sans/latin-400.css";
 import "@fontsource/ibm-plex-sans/latin-500.css";
 import "@fontsource/ibm-plex-sans/latin-600.css";
