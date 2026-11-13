@@ -2330,60 +2330,213 @@ code,
 }
 
 /* ==========================================================================================
- * The sign-in page's design language across the whole app (D-098, 2026-11-13). Owner: make it
- * look like a paid enterprise product, in the style of the sign-in page. The tokens above (D-087:
- * paper, ink, deep teal, IBM Plex Sans and Mono) stay; this layer brings in the sign-in panel's
- * pieces: the deep-paper rail with the dot texture, "FIG. 01 / SPEECH DATA" style captions, the
- * spec strip of figures divided by hairlines, large light headlines and mono capital action
- * buttons. Titles carry no icon tiles. Sits last on purpose and changes only appearance.
+ * KoboToolbox-style app (D-099, 2026-11-13). Owner: "refer https://www.kobotoolbox.org/". Colours
+ * from KoboToolbox's published palette (kobotoolbox/kpi jsapp/scss/colors.scss): dark slate top
+ * bar (#333847), light grey side menu (#edeef2), white panels, their blue (#2095f3), Roboto.
+ * Replaces the paper-and-teal look inside the app (D-087/D-098); the signed-out pages keep it
+ * (scoped below). Sits last on purpose and changes only appearance.
  * ======================================================================================== */
 
 :root {
-  --paper-deep: #ece7de;
-  --dots: radial-gradient(rgb(42 38 34 / 0.08) 1px, transparent 1px);
-  --caption: 0.6875rem;
-  /* No purple: the "assigned" series and telephony marks in a slate blue. */
-  --violet: #5f6f8f;
-  --violet-soft: #eef1f6;
+  --font-sans: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --k-900: #1e212a;
+  --k-800: #333847;
+  --k-700: #5a627d;
+  --k-600: #828ba5;
+  --k-500: #a6acbf;
+  --k-400: #cacdd9;
+  --k-300: #e1e3ea;
+  --k-200: #edeef2;
+  --k-100: #f9f9fb;
+
+  --bg: #f9f9fb;
+  --surface: #ffffff;
+  --surface-2: #f9f9fb;
+  --surface-hover: #edeef2;
+  --text: #333847;
+  --text-2: #5a627d;
+  --muted: #828ba5;
+  --border: #e1e3ea;
+  --border-strong: #cacdd9;
+
+  --primary: #2095f3;
+  --primary-hover: #1977c2;
+  --primary-soft: #e8f4fd;
+  --primary-text: #ffffff;
+  --focus-ring: 0 0 0 3px rgb(32 149 243 / 0.25);
+
+  --ok: #178949;
+  --ok-soft: #e3f9db;
+  --warn: #803f00;
+  --warn-soft: #ffe8cc;
+  --danger: #9d0000;
+  --danger-soft: #ffe9e9;
+  --info: #135991;
+  --info-soft: #d2e9fc;
+  --progress: #1b5e64;
+  --progress-soft: #ebf8fa;
+  --neutral: #5a627d;
+  --neutral-soft: #edeef2;
+
+  --blue: #2095f3;
+  --blue-soft: #e8f4fd;
+  --teal: #26838c;
+  --teal-soft: #ebf8fa;
+  --violet: #7386b9;
+  --violet-soft: #eef0f6;
+  --amber: #803f00;
+  --amber-soft: #ffe8cc;
+  --rose: #9d0000;
+  --rose-soft: #ffe9e9;
+  --green: #178949;
+  --green-soft: #e3f9db;
+  --slate: #5a627d;
+  --slate-soft: #edeef2;
+
+  --nav-bg: #edeef2;
+  --nav-bg-2: #edeef2;
+  --nav-text: #333847;
+  --nav-muted: #828ba5;
+  --nav-line: #e1e3ea;
+  --brand-ink: #2095f3;
+  --accent: #2095f3;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: none;
+  --shadow-lg: 0 8px 24px rgb(30 33 42 / 0.16);
+
+  font-family: var(--font-sans);
 }
 
-/* Navigation rail: the sign-in panel's deep paper with its dot texture. */
-.sidenav {
-  background-color: var(--paper-deep);
-  background-image: var(--dots);
-  background-size: 22px 22px;
+body {
+  font-size: 0.875rem;
 }
-.sidenav__title,
-.sidenav__foot {
-  letter-spacing: 0.12em;
+h1 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
 }
-
-/* Top bar caption, like "FIG. 01 / SPEECH DATA": section in teal, page in ink. */
-.crumbs {
-  gap: 10px;
-  font-family: var(--font-mono);
-  font-size: var(--caption);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+h2 {
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
-.crumbs::before {
-  color: var(--primary);
-}
-.crumbs::after {
-  color: var(--text-2);
+h3 {
   font-weight: 500;
 }
 
-/* Page titles: the sign-in headline voice, no icon tile, a hairline under the header. */
-.page-header {
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border-strong);
+/* Labels and column heads in the normal font, sentence case. */
+.eyebrow,
+.sidenav__title,
+.sidenav__foot,
+.table th,
+.stat__label,
+.checks dt,
+.consent__side,
+.pick__count {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
-.page-header h1 {
-  font-size: 2.125rem;
+.checks dt,
+.consent__side,
+.stat__label {
+  color: var(--text-2);
+}
+
+/* Top band: dark slate across the full width (brand cell of the menu + the top bar). */
+.sidenav__brand,
+.topbar {
+  border-bottom: 0;
+  background: var(--k-800);
+}
+.sidenav__brand {
+  /* covers the menu's right border so the dark band runs unbroken */
+  box-shadow: 1px 0 0 var(--k-800);
+}
+.sidenav__brand .brand {
+  color: #fff;
+}
+.sidenav__brand .brand__mark rect {
+  fill: var(--primary);
+}
+.crumbs {
+  gap: 8px;
+  font-size: 0.875rem;
+}
+.crumbs::before {
+  color: var(--k-500);
+}
+.crumbs::after {
+  color: #fff;
+  font-weight: 500;
+}
+.topbar__name {
+  color: #fff;
+}
+.topbar__role {
+  color: var(--k-500);
+}
+.topbar__account .avatar {
+  background: var(--primary);
+}
+.topbar__signout,
+.topbar__menu {
+  border-color: rgb(255 255 255 / 0.25);
+  background: transparent;
+  color: #fff;
+}
+.topbar__signout:hover,
+.topbar__menu:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* Side menu: light grey, the current page in light blue. */
+.sidenav {
+  border-right: 1px solid var(--border);
+  background: var(--nav-bg);
+}
+.sidenav__title {
+  color: var(--nav-muted);
+  font-size: 0.75rem;
+}
+.sidenav__link {
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
   font-weight: 400;
-  letter-spacing: -0.03em;
 }
+.sidenav__link .icon {
+  color: var(--k-600);
+}
+.sidenav__link:hover {
+  background: var(--k-300);
+  color: var(--text);
+}
+.sidenav__link[aria-current="page"],
+.sidenav__link.active {
+  background: var(--primary-soft);
+  color: #135991;
+  font-weight: 500;
+}
+.sidenav__link[aria-current="page"] .icon,
+.sidenav__link.active .icon {
+  color: var(--primary);
+}
+.sidenav__foot {
+  border-top: 1px solid var(--border);
+  color: var(--nav-muted);
+  font-size: 0.75rem;
+}
+
+/* Titles without icon tiles. */
+h1 > .tile,
 .page-header .tile,
 .page-header__text .tile,
 .stat__head .tile,
@@ -2394,30 +2547,95 @@ code,
   margin-left: 0;
 }
 
-/* Main actions speak like the SIGN IN button: mono capitals. */
-.button--primary {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+/* Panels: white with a thin grey line. */
+.card,
+.state,
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: none;
+}
+.card,
+.state {
+  padding: 20px 24px;
 }
 
-/* Tabs: mono captions with a teal line under the current one. */
+/* Buttons: Kobo blue, sentence case. */
+.button {
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.button--primary {
+  background: var(--primary);
+  color: #fff;
+}
+.button--primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.button--secondary {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+.button--secondary:hover:not(:disabled) {
+  border-color: var(--k-500);
+  background: var(--k-100);
+}
+
+/* Fields. */
+.field__label {
+  color: var(--text);
+  font-weight: 500;
+}
+.field__input {
+  min-height: 36px;
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: #fff;
+}
+.field__input:focus,
+.field__input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+.pick__list,
+.consent__rows {
+  background: #fff;
+}
+
+/* Tables: grey heading row, light highlight on hover. */
+.table th {
+  background: var(--k-200);
+  color: var(--text-2);
+}
+.table tbody tr:hover {
+  background: var(--k-100);
+}
+
+/* Tabs: capitals with a blue line under the current one, as in a Kobo project. */
 .tabs {
-  gap: 24px;
+  gap: 4px;
   padding-bottom: 0;
-  border-bottom: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
 }
 .tabs__link {
   margin-bottom: -1px;
-  padding: 10px 0;
+  padding: 10px 14px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: var(--muted);
-  font-size: var(--caption);
-  letter-spacing: 0.12em;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 .tabs__link:hover {
@@ -2431,24 +2649,64 @@ code,
   color: var(--text);
 }
 
-/* Tables: the figure strip's hairlines and captions. */
-.table th {
-  font-size: var(--caption);
-  letter-spacing: 0.12em;
+/* Status chips: filled pills, no dot. */
+.badge {
+  gap: 0;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  color: var(--neutral);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.badge__dot {
+  display: none;
+}
+.badge--success {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.badge--warning {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.badge--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.badge--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.badge--progress {
+  background: var(--progress-soft);
+  color: var(--progress);
 }
 
-/* A task code in a list is a link: teal monospace text, no chip. */
+/* Codes: plain monospace; in a list they are blue links. */
+.code-tag,
+.pick__code {
+  border-radius: var(--radius-sm);
+  background: var(--k-200);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
 a.code {
   padding: 0;
   background: transparent;
   color: var(--primary);
+  font-family: var(--font-mono);
 }
 a.code:hover {
   text-decoration: underline;
 }
+.record-card__steps li::before {
+  font-family: var(--font-sans);
+}
 
-/* Row actions in a table: compact text buttons, not a row of boxes. The cell stays a table cell
-   so the row's line runs through it. */
+/* Row actions in a table: compact blue text buttons. The cell stays a table cell so the row's
+   line runs through it. */
 .table td.actions {
   display: table-cell;
   white-space: nowrap;
@@ -2469,4 +2727,48 @@ a.code:hover {
   .table td {
     white-space: nowrap;
   }
+}
+
+/* Signed-out pages keep the paper-and-teal look the owner chose (D-087), with IBM Plex. */
+.public {
+  --font-sans:
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg: #f1ede6;
+  --surface: #faf8f4;
+  --surface-2: #f5f1ea;
+  --surface-hover: #ede7de;
+  --text: #2a2622;
+  --text-2: #4a443d;
+  --muted: #7a7268;
+  --border: #e3ddd3;
+  --border-strong: #d2c9bc;
+  --primary: #36707f;
+  --primary-hover: #2b5d6a;
+  --primary-soft: #e2ecec;
+  --focus-ring: 0 0 0 3px rgb(54 112 127 / 0.22);
+  --danger: #b2473e;
+  --danger-soft: #f6e2dd;
+  --brand-ink: #36707f;
+  --accent: #36707f;
+  --radius: 12px;
+  --radius-sm: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+}
+.public .field__input {
+  min-height: 40px;
+  background-color: #fffdf9;
+}
+.public .button {
+  font-family: var(--font-sans);
+}
+.auth-page .button--primary[type="submit"] {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.public .field__label {
+  color: var(--text-2);
 }
