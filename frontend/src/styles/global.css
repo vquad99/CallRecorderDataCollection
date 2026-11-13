@@ -2330,105 +2330,60 @@ code,
 }
 
 /* ==========================================================================================
- * Plain product look (D-097, 2026-11-13). Owner: "it should not look AI generated". Replaces the
- * paper-and-teal layer above (D-087): white and neutral grey, the operating system's own font,
- * one deep blue, sentence-case labels in the normal font (no small mono capitals), underline
- * tabs, filled status chips without dots, no icon tiles beside titles, a plain sign-in page.
- * Sits last on purpose and changes only appearance.
+ * The sign-in page's design language across the whole app (D-098, 2026-11-13). Owner: make it
+ * look like a paid enterprise product, in the style of the sign-in page. The tokens above (D-087:
+ * paper, ink, deep teal, IBM Plex Sans and Mono) stay; this layer brings in the sign-in panel's
+ * pieces: the deep-paper rail with the dot texture, "FIG. 01 / SPEECH DATA" style captions, the
+ * spec strip of figures divided by hairlines, large light headlines and mono capital action
+ * buttons. Titles carry no icon tiles. Sits last on purpose and changes only appearance.
  * ======================================================================================== */
 
 :root {
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-
-  --bg: #f7f7f8;
-  --surface: #ffffff;
-  --surface-2: #fafafa;
-  --surface-hover: #f2f2f4;
-  --text: #18181b;
-  --text-2: #3f3f46;
-  --muted: #71717a;
-  --border: #e7e7ea;
-  --border-strong: #d4d4d8;
-
-  --primary: #2456c9;
-  --primary-hover: #1c46a8;
-  --primary-soft: #edf2fd;
-  --primary-text: #ffffff;
-  --focus-ring: 0 0 0 3px rgb(36 86 201 / 0.2);
-
-  --ok: #17663f;
-  --ok-soft: #e8f5ee;
-  --warn: #8a5300;
-  --warn-soft: #fdf3e1;
-  --danger: #b42318;
-  --danger-soft: #fdecec;
-  --info: #2456c9;
-  --info-soft: #edf2fd;
-  --progress: #0e6271;
-  --progress-soft: #e6f3f5;
-  --neutral: #52525b;
-  --neutral-soft: #f0f0f2;
-
-  --nav-bg: #fbfbfc;
-  --nav-bg-2: #fbfbfc;
-  --nav-text: #3f3f46;
-  --nav-muted: #71717a;
-  --nav-line: #e7e7ea;
-  --brand-ink: #2456c9;
-  --accent: #2456c9;
-
-  --radius: 8px;
-  --radius-sm: 6px;
-  --shadow: none;
-  --shadow-lg: 0 12px 32px rgb(24 24 27 / 0.12);
-
-  font-family: var(--font-sans);
+  --paper-deep: #ece7de;
+  --dots: radial-gradient(rgb(42 38 34 / 0.08) 1px, transparent 1px);
+  --caption: 0.6875rem;
+  /* No purple: the "assigned" series and telephony marks in a slate blue. */
+  --violet: #5f6f8f;
+  --violet-soft: #eef1f6;
 }
 
-body {
-  font-size: 0.875rem;
+/* Navigation rail: the sign-in panel's deep paper with its dot texture. */
+.sidenav {
+  background-color: var(--paper-deep);
+  background-image: var(--dots);
+  background-size: 22px 22px;
 }
-h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-}
-h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-h3 {
-  font-weight: 600;
-}
-
-/* Labels: the normal font, sentence case. */
-.eyebrow,
 .sidenav__title,
-.table th,
-.stat__label,
-.public__stats dt,
-.checks dt,
-.consent__side {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.checks dt,
-.consent__side,
-.stat__label {
-  color: var(--muted);
-}
-.sidenav__title {
-  font-size: 0.75rem;
+.sidenav__foot {
+  letter-spacing: 0.12em;
 }
 
-/* Titles and card headings without icon tiles. */
+/* Top bar caption, like "FIG. 01 / SPEECH DATA": section in teal, page in ink. */
+.crumbs {
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--caption);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.crumbs::before {
+  color: var(--primary);
+}
+.crumbs::after {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+/* Page titles: the sign-in headline voice, no icon tile, a hairline under the header. */
+.page-header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.page-header h1 {
+  font-size: 2.125rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
 .page-header .tile,
 .page-header__text .tile,
 .stat__head .tile,
@@ -2439,84 +2394,31 @@ h3 {
   margin-left: 0;
 }
 
-/* Navigation. */
-.sidenav__link {
-  border: 0;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-}
-.sidenav__link[aria-current="page"],
-.sidenav__link.active {
-  background: #ececef;
-  color: var(--text);
-  font-weight: 500;
-}
-.sidenav__link[aria-current="page"] .icon,
-.sidenav__link.active .icon {
-  color: var(--text);
+/* Main actions speak like the SIGN IN button: mono capitals. */
+.button--primary {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-/* Top bar: the page title is already on the page. */
-.topbar {
-  background: var(--surface);
-}
-.crumbs {
-  display: none;
-}
-.topbar__account .avatar {
-  background: #3f3f46;
-}
-
-/* Surfaces. */
-.card,
-.state {
-  padding: 18px 20px;
-}
-
-/* Buttons and fields. */
-.button {
-  min-height: 36px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0;
-}
-.button--secondary {
-  background: var(--surface);
-}
-.field__input,
-.pick__list,
-.consent__rows {
-  background-color: var(--surface);
-}
-.field__input {
-  min-height: 36px;
-}
-
-/* Tables. */
-.table th {
-  background: var(--surface-2);
-  color: var(--muted);
-}
-.table tbody tr:hover {
-  background: var(--surface-2);
-}
-
-/* Tabs: a line under the current one. */
+/* Tabs: mono captions with a teal line under the current one. */
 .tabs {
-  gap: 20px;
+  gap: 24px;
   padding-bottom: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
 }
 .tabs__link {
   margin-bottom: -1px;
-  padding: 8px 2px;
+  padding: 10px 0;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--caption);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .tabs__link:hover {
   background: transparent;
@@ -2524,97 +2426,18 @@ h3 {
 }
 .tabs__link[aria-current="page"],
 .tabs__link.active {
-  border-color: var(--text);
+  border-color: var(--primary);
   background: transparent;
   color: var(--text);
 }
 
-/* Status chips: filled, no dot. */
-.badge {
-  gap: 0;
-  padding: 1px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--neutral-soft);
-  color: var(--neutral);
-  font-size: 0.75rem;
-}
-.badge__dot {
-  display: none;
-}
-.badge--success {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-.badge--warning {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-.badge--danger {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-.badge--info {
-  background: var(--info-soft);
-  color: var(--info);
-}
-.badge--progress {
-  background: var(--progress-soft);
-  color: var(--progress);
+/* Tables: the figure strip's hairlines and captions. */
+.table th {
+  font-size: var(--caption);
+  letter-spacing: 0.12em;
 }
 
-/* Codes (tasks, participants): plain grey, monospace. */
-.code,
-.code-tag,
-.pick__code {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--neutral-soft);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-.pick__count {
-  font-family: var(--font-sans);
-}
-.record-card__steps li::before {
-  font-family: var(--font-sans);
-}
-
-/* Sign-in and other signed-out pages keep the paper-and-teal look of D-087 with its panel (owner
-   2026-11-13: "it was so good"): the D-087 tokens and fonts, scoped to the signed-out layout. */
-.public {
-  --font-sans:
-    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --bg: #f1ede6;
-  --surface: #faf8f4;
-  --surface-2: #f5f1ea;
-  --surface-hover: #ede7de;
-  --text: #2a2622;
-  --text-2: #4a443d;
-  --muted: #7a7268;
-  --border: #e3ddd3;
-  --border-strong: #d2c9bc;
-  --primary: #36707f;
-  --primary-hover: #2b5d6a;
-  --primary-soft: #e2ecec;
-  --focus-ring: 0 0 0 3px rgb(54 112 127 / 0.22);
-  --danger: #b2473e;
-  --danger-soft: #f6e2dd;
-  --brand-ink: #36707f;
-  --accent: #36707f;
-  --radius: 12px;
-  --radius-sm: 8px;
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
-}
-.public .field__input {
-  min-height: 40px;
-  background-color: #fffdf9;
-}
-/* A task code in a list is a link: blue monospace text, no chip. */
+/* A task code in a list is a link: teal monospace text, no chip. */
 a.code {
   padding: 0;
   background: transparent;
@@ -2623,11 +2446,7 @@ a.code {
 a.code:hover {
   text-decoration: underline;
 }
-/* No purple: the "assigned" series and telephony marks in a slate blue. */
-:root {
-  --violet: #5f6f8f;
-  --violet-soft: #eef1f6;
-}
+
 /* Row actions in a table: compact text buttons, not a row of boxes. The cell stays a table cell
    so the row's line runs through it. */
 .table td.actions {
