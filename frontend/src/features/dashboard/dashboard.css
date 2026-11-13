@@ -346,3 +346,13 @@
 .spark {
   flex: none;
 }
+
+/* Plain product look (D-097): firm figures, approved in the product blue. */
+:root {
+  --series-approved: #2456c9;
+}
+.stat__value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}

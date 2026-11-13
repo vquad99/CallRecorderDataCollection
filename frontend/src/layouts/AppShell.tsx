@@ -8,8 +8,6 @@ import { ROLE_LABELS } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
 import { BrandMark, Icon, type IconName } from "../components/Icon";
 
-import { LoginArt } from "../components/Art";
-
 interface NavItem {
   to: string;
   label: string;
@@ -83,40 +81,10 @@ export function AppShell() {
 
   if (status !== "authenticated") {
     // One tree while the sign-in check runs and after it, so a page being typed into is not
-    // rebuilt when the check finishes; only the brand panel waits.
+    // rebuilt when the check finishes.
     return (
       <div className={status === "loading" ? "public public--checking" : "public"}>
         {skip}
-        <div className="public__panel" aria-hidden="true">
-          <div className="public__top">
-            <Brand />
-            <span className="public__fig">
-              <span>Fig. 01</span> / Speech data
-            </span>
-          </div>
-          <div className="public__stats">
-            <div>
-              <strong>2 speakers</strong>per conversation
-            </div>
-            <div>
-              <strong>16 kHz</strong>delivery audio
-            </div>
-            <div>
-              <strong>Lossless</strong>capture
-            </div>
-            <div>
-              <strong>Consent</strong>on record
-            </div>
-          </div>
-          <div className="public__stage">
-            <div className="public__art">{status === "loading" ? null : <LoginArt />}</div>
-            <p className="public__headline">Collect real conversations, with consent.</p>
-          </div>
-          <div className="public__bottom">
-            <span>Private workspace</span>
-            <span>Every action audited</span>
-          </div>
-        </div>
         <main id="main" className="public__main" tabIndex={-1}>
           <div className="public__content">
             <div className="public__brand">
@@ -165,9 +133,6 @@ export function AppShell() {
             </div>
           ))}
         </nav>
-        <p className="sidenav__foot" aria-hidden="true">
-          <Icon name="lock" size={14} /> Private workspace
-        </p>
       </aside>
       <div className="shell__column">
         <header className="topbar">
