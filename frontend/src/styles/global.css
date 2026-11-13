@@ -2483,7 +2483,6 @@ h3 {
   background: var(--surface);
 }
 .field__input,
-.auth-page .field__input,
 .pick__list,
 .consent__rows {
   background-color: var(--surface);
@@ -2583,42 +2582,37 @@ h3 {
   font-family: var(--font-sans);
 }
 
-/* Sign-in and other signed-out pages: one centred form. */
+/* Sign-in and other signed-out pages keep the paper-and-teal look of D-087 with its panel (owner
+   2026-11-13: "it was so good"): the D-087 tokens and fonts, scoped to the signed-out layout. */
 .public {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-}
-.public__main {
-  width: 100%;
-  padding: 48px 16px;
-  background: transparent;
-}
-.public__content {
-  max-width: 380px;
-  padding: 32px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.public__brand {
-  display: block;
-  margin-bottom: 28px;
-}
-.auth-page h1 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.auth-page .button--primary[type="submit"] {
+  --font-sans:
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg: #f1ede6;
+  --surface: #faf8f4;
+  --surface-2: #f5f1ea;
+  --surface-hover: #ede7de;
+  --text: #2a2622;
+  --text-2: #4a443d;
+  --muted: #7a7268;
+  --border: #e3ddd3;
+  --border-strong: #d2c9bc;
+  --primary: #36707f;
+  --primary-hover: #2b5d6a;
+  --primary-soft: #e2ecec;
+  --focus-ring: 0 0 0 3px rgb(54 112 127 / 0.22);
+  --danger: #b2473e;
+  --danger-soft: #f6e2dd;
+  --brand-ink: #36707f;
+  --accent: #36707f;
+  --radius: 12px;
+  --radius-sm: 8px;
   font-family: var(--font-sans);
-  letter-spacing: 0;
-  text-transform: none;
+  font-size: 0.9375rem;
 }
-.public__foot {
-  border-top: 0;
-  padding-top: 0;
+.public .field__input {
+  min-height: 40px;
+  background-color: #fffdf9;
 }
 /* A task code in a list is a link: blue monospace text, no chip. */
 a.code {
