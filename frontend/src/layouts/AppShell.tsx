@@ -67,7 +67,7 @@ function Brand() {
 }
 
 export function AppShell() {
-  const { status, user, can, signOut } = useAuth();
+  const { status, user, can, signOut, stopViewing } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // The small-screen menu stays open only on the page where it was opened, so following a link
@@ -211,6 +211,22 @@ export function AppShell() {
             </button>
           </div>
         </header>
+        {user?.viewer ? (
+          <div className="view-as" role="status">
+            <Icon name="info" size={16} />
+            <span>
+              Viewing as <strong>{user.display_name}</strong> ({roles}). Read-only: nothing can be
+              changed.
+            </span>
+            <button
+              type="button"
+              className="view-as__stop"
+              onClick={() => void stopViewing().then(() => navigate("/admin/users"))}
+            >
+              Stop viewing
+            </button>
+          </div>
+        ) : null}
         <main id="main" className="shell__main" tabIndex={-1}>
           <div className="shell__content">
             <Outlet />

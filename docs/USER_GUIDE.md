@@ -94,6 +94,15 @@ disabled.
 
 The number of active accounts is limited by **Settings → Staff accounts**.
 
+**View as** (Super Admin only): on **Users**, click **View as [name]** to see the platform exactly
+as that person does: their menu, their projects, their tasks. A yellow strip says who you are
+viewing as. Nothing can be changed while viewing; every button that would save something is
+refused. Click **Stop viewing** to return to your own view. Starting and stopping are in the
+audit log under your own name.
+
+To see a participant's own page, open the project's **Participants** tab and click **Their page**
+on the row (Super Admin only). It is the page the participant sees, without the consent buttons.
+
 ### Projects
 
 **Projects → New project** (only the Super Admin can create projects):
@@ -324,6 +333,10 @@ against the daily target, and an hours-per-day chart. Choose a **Project** and a
 
 The participant opens the link from the consent email. No login is needed. The page shows:
 
+- **Your details**: code, name, language, dialect and the last two digits of the phone number.
+  Read-only; to correct anything the participant contacts the project team.
+- **Minutes**: sessions, recorded time, accepted time, and **Your share for payment** (half of
+  each accepted conversation).
 - **Consent form**: read it, tick **I have read and understood this form**, click **I agree** or
   **I do not agree**. After agreeing they can **Withdraw my consent**.
 - **Your sessions**: each session and its state (**Planned**, **Recorded, being checked**,

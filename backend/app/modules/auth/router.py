@@ -10,6 +10,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings
+from app.core.errors import AppError
+from app.modules.audit import service as audit
 from app.modules.auth import service
 from app.modules.auth.deps import (
     CSRF_COOKIE,
@@ -18,8 +20,11 @@ from app.modules.auth.deps import (
     DbSession,
     Principal,
     client_ip,
+    forbidden,
     load_principal,
+    viewing,
 )
+from app.modules.auth.models import User, UserSession
 from app.modules.auth.security import FieldCipher, new_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -45,6 +50,11 @@ class LoginBody(BaseModel):
     totp_code: str | None = Field(default=None, max_length=10)
 
 
+class ViewerOut(BaseModel):
+    id: uuid.UUID
+    display_name: str
+
+
 class MeOut(BaseModel):
     id: uuid.UUID
     email: str
@@ -53,6 +63,8 @@ class MeOut(BaseModel):
     permissions: list[str]
     project_ids: list[uuid.UUID]
     mfa_enabled: bool
+    # Set while a Super Admin views the app as this user (D-100); everything is read-only then.
+    viewer: ViewerOut | None = None
 
 
 def me_from(p: Principal) -> MeOut:
@@ -64,6 +76,7 @@ def me_from(p: Principal) -> MeOut:
         permissions=sorted(p.permissions),
         project_ids=sorted(p.project_ids, key=str),
         mfa_enabled=p.mfa_enabled,
+        viewer=ViewerOut(id=p.viewer_id, display_name=p.viewer_name or "") if p.viewer_id else None,
     )
 
 
@@ -135,6 +148,66 @@ def logout(
 @router.get("/me", response_model=MeOut)
 def me(principal: CurrentPrincipal) -> MeOut:
     return me_from(principal)
+
+
+class ViewAsBody(BaseModel):
+    user_id: uuid.UUID
+
+
+@router.post("/view-as", response_model=MeOut)
+def start_view_as(
+    body: ViewAsBody, request: Request, principal: CurrentPrincipal, db: DbSession
+) -> MeOut:
+    """Super Admin only (D-100): see the app exactly as another user does, read-only. Audited."""
+    if not principal.is_super_admin:
+        raise forbidden()
+    target = db.get(User, body.user_id)
+    if target is None or target.status != "ACTIVE":
+        raise AppError("No active user with this id", code="NOT_FOUND", status_code=404)
+    if target.id == principal.user_id:
+        raise AppError(
+            "Choose someone other than yourself", code="VALIDATION_ERROR", status_code=422
+        )
+    session = db.get(UserSession, principal.session_id)
+    if session is None:
+        raise AppError("Sign in again", code="UNAUTHENTICATED", status_code=401)
+    session.view_as_user_id = target.id
+    audit.record(
+        db,
+        action="auth.view_as_started",
+        entity_type="user",
+        entity_id=target.id,
+        actor_id=principal.user_id,
+        after={"viewed_user": target.email},
+        ip=client_ip(request),
+    )
+    db.commit()
+    real = db.get(User, principal.user_id)
+    if real is None:
+        raise AppError("Sign in again", code="UNAUTHENTICATED", status_code=401)
+    return me_from(viewing(load_principal(db, target, session.id), real))
+
+
+@router.delete("/view-as", response_model=MeOut)
+def stop_view_as(request: Request, principal: CurrentPrincipal, db: DbSession) -> MeOut:
+    """Back to the Super Admin's own view (D-100)."""
+    session = db.get(UserSession, principal.session_id)
+    if session is None or principal.viewer_id is None:
+        return me_from(principal)
+    session.view_as_user_id = None
+    audit.record(
+        db,
+        action="auth.view_as_stopped",
+        entity_type="user",
+        entity_id=principal.user_id,
+        actor_id=principal.viewer_id,
+        ip=client_ip(request),
+    )
+    db.commit()
+    real = db.get(User, principal.viewer_id)
+    if real is None:
+        raise AppError("Sign in again", code="UNAUTHENTICATED", status_code=401)
+    return me_from(load_principal(db, real, session.id))
 
 
 class ForgotBody(BaseModel):

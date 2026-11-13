@@ -104,6 +104,14 @@ export const routes: RouteObject[] = [
                   { path: "export", element: page(tabs, "ExportTab") },
                 ],
               },
+              {
+                // A participant's own page as they see it; the API answers Super Admins only.
+                path: "projects/:projectId/participants/:participantId/page",
+                element: page(
+                  () => import("../features/portal/ParticipantPagePreview"),
+                  "ParticipantPagePreview",
+                ),
+              },
             ],
           },
           {

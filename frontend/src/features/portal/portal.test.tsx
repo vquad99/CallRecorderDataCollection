@@ -3,7 +3,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeApi, renderAt } from "../../test/fakeApi";
+import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 import { PORTAL } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -60,5 +60,33 @@ describe("participant page", () => {
     renderAt("/portal");
     expect(await screen.findByRole("alert")).toHaveTextContent("This link is incomplete");
     expect(calls.some((c) => c.path.includes("/portal/"))).toBe(false);
+  });
+
+  it("shows the participant their own details and minutes, read-only (D-100)", async () => {
+    fakeApi({ ...anonymous, "GET /api/v1/portal/me": () => [200, PORTAL] });
+    renderAt("/portal#secret-link-token-0123456789");
+    expect(await screen.findByRole("heading", { name: "Your details" })).toBeInTheDocument();
+    expect(screen.getByText("Asha")).toBeInTheDocument();
+    expect(screen.getByText("ending in 21")).toBeInTheDocument();
+    expect(screen.getByText("30 min")).toBeInTheDocument();
+    expect(screen.getByText("11.3 min")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("gives a Super Admin the participant's page without answer buttons (D-100)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects/p1/participants/a1/page": () => [
+          200,
+          { ...PORTAL, link_expires_at: null },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants/a1/page");
+    expect(await screen.findByText("I agree that my voice is recorded.")).toBeInTheDocument();
+    expect(screen.getByText(/as they see it. Read-only/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I agree" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/This private link works until/)).not.toBeInTheDocument();
+    expect(calls.some((c) => c.path === "/api/v1/projects/p1/participants/a1/page")).toBe(true);
   });
 });

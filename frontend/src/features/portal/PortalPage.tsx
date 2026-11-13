@@ -1,5 +1,6 @@
 // A participant's personal page (D-067): opened from a private link, no account. Shows the
-// project's consent form with the participant's answer, and their own sessions.
+// participant's own details, minutes and sessions (read-only) and the project's consent form with
+// their answer (D-100). The same page, without the answer buttons, is the Super Admin's view.
 import { useState } from "react";
 import { useLocation } from "react-router";
 
@@ -15,7 +16,8 @@ import "./portal.css";
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-const minutes = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} min`);
+const minutes = (m: number) =>
+  m >= 60 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m * 10) / 10} min`;
 const TONE: Record<string, string> = {
   Accepted: "APPROVED",
   "Recorded, being checked": "AUDIO_QC",
@@ -35,7 +37,7 @@ function Consent({
   onChange,
 }: {
   view: PortalView;
-  token: string;
+  token: string | null; // null: the Super Admin's read-only view, no answer buttons
   onChange: (v: PortalView) => void;
 }) {
   const [read, setRead] = useState(false);
@@ -51,6 +53,7 @@ function Consent({
         : undefined;
 
   function send(decision: "GIVEN" | "REFUSED" | "WITHDRAWN") {
+    if (!token) return;
     setBusy(true);
     setError(null);
     answerConsent(token, decision)
@@ -85,7 +88,7 @@ function Consent({
               the form and answer again.
             </p>
           ) : null}
-          {view.consent_status === "GIVEN" && !sentBack ? (
+          {!token ? null : view.consent_status === "GIVEN" && !sentBack ? (
             <div className="actions">
               <Button variant="secondary" busy={busy} onClick={() => send("WITHDRAWN")}>
                 Withdraw my consent
@@ -123,6 +126,108 @@ function Consent({
   );
 }
 
+/** The participant's own details, minutes, consent and sessions. token null = read-only. */
+export function ParticipantView({
+  view,
+  token,
+  onChange,
+}: {
+  view: PortalView;
+  token: string | null;
+  onChange: (v: PortalView) => void;
+}) {
+  const details: [string, string][] = [
+    ["Participant code", view.participant_code],
+    ["Name", view.display_name],
+    ["Language", view.language_code],
+    ...(view.dialect ? ([["Dialect", view.dialect]] as [string, string][]) : []),
+    ["Phone", view.phone_hint ? `ending in ${view.phone_hint}` : "Not given"],
+  ];
+  return (
+    <>
+      <div className="portal__hero">
+        <IconTile name="user" tone="blue" size={48} />
+        <div>
+          <h1>Your participation</h1>
+          <p className="muted">
+            {view.project_name} · participant {view.participant_code}
+          </p>
+        </div>
+      </div>
+      <section className="card" aria-labelledby="details-title">
+        <h2 id="details-title">Your details</h2>
+        <dl className="checks">
+          {details.map(([label, value]) => (
+            <div key={label} className="checks__row">
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="muted">To correct your details, contact the project team.</p>
+      </section>
+      <div className="portal__stats">
+        <div className="card">
+          <p className="muted">Sessions</p>
+          <p className="portal__num">{view.sessions.length}</p>
+        </div>
+        <div className="card">
+          <p className="muted">Recorded time</p>
+          <p className="portal__num">{minutes(view.recorded_minutes)}</p>
+        </div>
+        <div className="card">
+          <p className="muted">Accepted recording time</p>
+          <p className="portal__num">{minutes(view.accepted_minutes)}</p>
+        </div>
+        <div className="card">
+          <p className="muted">Your share for payment</p>
+          <p className="portal__num">{minutes(view.payable_minutes)}</p>
+          <p className="muted">Half of each accepted conversation</p>
+        </div>
+      </div>
+      <Consent view={view} token={token} onChange={onChange} />
+      <section className="stack stack--tight" aria-labelledby="sessions-title">
+        <h2 id="sessions-title">Your sessions</h2>
+        {view.sessions.length === 0 ? (
+          <EmptyState title="No sessions yet" message="Your recording sessions will appear here." />
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Session</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Length</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.sessions.map((s) => (
+                  <tr key={s.task_code}>
+                    <td className="mono">{s.task_code}</td>
+                    <td>{day(s.day)}</td>
+                    <td>
+                      <span className="cell-icon">
+                        <Icon name={s.mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
+                        {s.mode === "TELEPHONY" ? "Phone call" : "In person"}
+                      </span>
+                    </td>
+                    <td>{s.minutes === null ? "-" : minutes(s.minutes)}</td>
+                    <td>
+                      <StatusBadge status={TONE[s.state] ?? "DRAFT"} label={s.state} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
 export function PortalPage() {
   // The secret is the part after "#": browsers never send it to a server or write it to a log.
   const token = useLocation().hash.replace(/^#/, "");
@@ -155,71 +260,13 @@ export function PortalPage() {
         {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
         {state.status === "loaded" ? (
           <div className="stack">
-            <div className="portal__hero">
-              <IconTile name="user" tone="blue" size={48} />
-              <div>
-                <h1>Your participation</h1>
-                <p className="muted">
-                  {state.data.project_name} · participant {state.data.participant_code}
-                </p>
-              </div>
-            </div>
-            <div className="portal__stats">
-              <div className="card">
-                <p className="muted">Sessions</p>
-                <p className="portal__num">{state.data.sessions.length}</p>
-              </div>
-              <div className="card">
-                <p className="muted">Accepted recording time</p>
-                <p className="portal__num">{minutes(state.data.accepted_minutes)}</p>
-              </div>
-            </div>
-            <Consent view={state.data} token={token} onChange={replace} />
-            <section className="stack stack--tight" aria-labelledby="sessions-title">
-              <h2 id="sessions-title">Your sessions</h2>
-              {state.data.sessions.length === 0 ? (
-                <EmptyState
-                  title="No sessions yet"
-                  message="Your recording sessions will appear here."
-                />
-              ) : (
-                <div className="table-wrap">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Session</th>
-                        <th scope="col">Date</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Length</th>
-                        <th scope="col">State</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {state.data.sessions.map((s) => (
-                        <tr key={s.task_code}>
-                          <td className="mono">{s.task_code}</td>
-                          <td>{day(s.day)}</td>
-                          <td>
-                            <span className="cell-icon">
-                              <Icon name={s.mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
-                              {s.mode === "TELEPHONY" ? "Phone call" : "In person"}
-                            </span>
-                          </td>
-                          <td>{s.minutes === null ? "-" : minutes(s.minutes)}</td>
-                          <td>
-                            <StatusBadge status={TONE[s.state] ?? "DRAFT"} label={s.state} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-            <p className="muted">
-              This private link works until {day(state.data.link_expires_at)}. Do not share it. To
-              ask a question or have your data removed, contact the project team.
-            </p>
+            <ParticipantView view={state.data} token={token} onChange={replace} />
+            {state.data.link_expires_at ? (
+              <p className="muted">
+                This private link works until {day(state.data.link_expires_at)}. Do not share it. To
+                ask a question or have your data removed, contact the project team.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </main>

@@ -22,6 +22,13 @@ staff_router = APIRouter(
     dependencies=[Depends(require(Perm.PARTICIPANTS_MANAGE))],
 )
 
+# The participant's page as they see it, for a Super Admin (D-100); read-only, no link needed.
+admin_view_router = APIRouter(
+    prefix="/projects/{project_id}/participants/{participant_id}/page",
+    tags=["participant page"],
+    dependencies=[Depends(require(Perm.PARTICIPANTS_VIEW))],
+)
+
 Token = Annotated[str, Header(alias="X-Portal-Token", min_length=1, max_length=300)]
 
 
@@ -35,6 +42,9 @@ class SessionOut(BaseModel):
 
 class PortalOut(BaseModel):
     participant_code: str
+    display_name: str
+    dialect: str
+    phone_hint: str | None
     project_name: str
     language_code: str
     consent_policy_version: str
@@ -45,7 +55,9 @@ class PortalOut(BaseModel):
     consent_review_note: str
     sessions: list[SessionOut]
     accepted_minutes: float
-    link_expires_at: datetime
+    recorded_minutes: float
+    payable_minutes: float
+    link_expires_at: datetime | None
 
 
 @public_router.get("/me", response_model=PortalOut)
@@ -126,3 +138,11 @@ def revoke_link(
     db: DbSession,
 ) -> None:
     service.revoke_link(db, principal, project_id, participant_id, client_ip(request))
+
+
+@admin_view_router.get("", response_model=PortalOut)
+def admin_view(
+    project_id: uuid.UUID, participant_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
+) -> PortalOut:
+    page = service.view_for_admin(db, principal, project_id, participant_id)
+    return PortalOut.model_validate(page, from_attributes=True)

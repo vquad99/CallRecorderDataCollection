@@ -3,7 +3,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { fakeApi, ME, renderAt, signedInAs } from "../../test/fakeApi";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -100,5 +100,47 @@ describe("users admin", () => {
     expect(
       calls.filter((c) => c.path.startsWith("/api/v1/users/import")).map((c) => c.path),
     ).toEqual(["/api/v1/users/import/preview", "/api/v1/users/import/confirm"]);
+  });
+
+  it("lets a Super Admin view the app as someone else, read-only, and stop (D-100)", async () => {
+    const viewing = {
+      ...ME,
+      id: "id1",
+      email: "person1@example.org",
+      display_name: "Person 1",
+      roles: ["MODERATOR"],
+      permissions: ["projects.view", "tasks.view"],
+      viewer: { id: "u1", display_name: "Ada Admin" },
+    };
+    const { calls } = fakeApi(
+      signedInAs(["users.manage", "projects.view"], {
+        "GET /api/v1/users": () => [200, { items: [user(1)], total: 1, page: 1, page_size: 25 }],
+        "GET /api/v1/projects": () => [200, { items: [], total: 0, page: 1, page_size: 25 }],
+        "POST /api/v1/auth/view-as": () => [200, viewing],
+        "DELETE /api/v1/auth/view-as": () => [200, { ...ME, permissions: ["users.manage"] }],
+      }),
+    );
+    renderAt("/admin/users");
+    await userEvent.click(await screen.findByRole("button", { name: "View as Person 1" }));
+    expect(await screen.findByText(/Read-only: nothing can be changed/)).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/auth/view-as")?.body).toEqual({ user_id: "id1" });
+    await userEvent.click(screen.getByRole("button", { name: "Stop viewing" }));
+    expect(await screen.findByRole("link", { name: "Person 1" })).toBeInTheDocument();
+    expect(screen.queryByText(/Read-only: nothing can be changed/)).not.toBeInTheDocument();
+  });
+
+  it("offers View as only to a Super Admin", async () => {
+    fakeApi({
+      ...signedInAs(["users.manage"], {
+        "GET /api/v1/users": () => [200, { items: [user(1)], total: 1, page: 1, page_size: 25 }],
+      }),
+      "GET /api/v1/auth/me": () => [
+        200,
+        { ...ME, roles: ["PROJECT_ADMIN"], permissions: ["users.manage"] },
+      ],
+    });
+    renderAt("/admin/users");
+    expect(await screen.findByRole("link", { name: "Person 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View as/ })).not.toBeInTheDocument();
   });
 });

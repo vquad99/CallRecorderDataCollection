@@ -1,6 +1,7 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
 // them; the server decides what each role receives.
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 import { apiDownload, type ApiError } from "../../api/client";
 import * as work from "../../api/work";
@@ -227,8 +228,10 @@ const minutesText = (value: number | undefined) =>
 
 export function ParticipantsTab() {
   const { project } = useProject();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canManage = can("participants.manage");
+  // The participant's own page, read-only: Super Admin only (D-100).
+  const canOpenPage = Boolean(user?.roles.includes("SUPER_ADMIN"));
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -428,6 +431,14 @@ export function ParticipantsTab() {
                       </>
                     ) : null}
                     <td className="actions">
+                      {canOpenPage ? (
+                        <Link
+                          className="button button--secondary"
+                          to={`/projects/${project.id}/participants/${p.id}/page`}
+                        >
+                          Their page
+                        </Link>
+                      ) : null}
                       {p.consent_visible ? (
                         <Button
                           variant="secondary"

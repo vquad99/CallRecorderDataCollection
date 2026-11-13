@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from app.core.logging import request_id_var
 from app.modules.audit.models import AuditLog
 
+# Session.info key holding the Super Admin's id while they view the app as someone else (D-100).
+VIEWER_KEY = "view_as_viewer_id"
+
 
 def _summary(value: dict[str, Any] | None) -> str | None:
     if value is None:
@@ -30,6 +33,12 @@ def record(
     after: dict[str, Any] | None = None,
     ip: str | None = None,
 ) -> None:
+    # A Super Admin viewing the app as someone else (D-100): the entry names the Super Admin, never
+    # the person whose view it is.
+    viewer = db.info.get(VIEWER_KEY)
+    if viewer is not None and actor_id != viewer:
+        after = {**(after or {}), "viewed_as": str(actor_id) if actor_id else None}
+        actor_id = viewer
     db.add(
         AuditLog(
             actor_id=actor_id,

@@ -15,6 +15,9 @@ export interface AuthValue {
   signIn: (email: string, password: string, totpCode?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** Super Admin: see the app as another user, read-only (D-100). */
+  viewAs: (userId: string) => Promise<void>;
+  stopViewing: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthValue | null>(null);
@@ -85,6 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const viewAs = useCallback(async (userId: string) => {
+    setUser(await authApi.startViewAs(userId));
+  }, []);
+
+  const stopViewing = useCallback(async () => {
+    setUser(await authApi.stopViewAs());
+  }, []);
+
   const value = useMemo<AuthValue>(
     () => ({
       status,
@@ -94,8 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       refresh,
+      viewAs,
+      stopViewing,
     }),
-    [status, user, sessionExpired, signIn, signOut, refresh],
+    [status, user, sessionExpired, signIn, signOut, refresh, viewAs, stopViewing],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

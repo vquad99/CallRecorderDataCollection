@@ -87,6 +87,10 @@ class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ip: Mapped[str | None] = mapped_column(String(64))
     user_agent: Mapped[str | None] = mapped_column(String(500))
+    # Super Admin "View as" (D-100): while set, this session sees the app as that user, read-only.
+    view_as_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
 
 
 class PasswordResetToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):

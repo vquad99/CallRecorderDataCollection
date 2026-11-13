@@ -489,12 +489,7 @@ summary:focus-visible {
   order: 2;
   overflow: hidden;
   margin: 12px;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  background: #0b1020;
-  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
   background-size: 22px 22px;
-  color: #aab4c8;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.6875rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -508,17 +503,8 @@ summary:focus-visible {
   padding: 22px 28px;
 }
 .public__top .brand {
-  color: #fff;
-  font-family: "IBM Plex Sans", sans-serif;
   letter-spacing: 0;
   text-transform: none;
-}
-.public__top .brand__mark rect {
-  fill: transparent;
-}
-.public__fig span,
-.public__bottom span + span {
-  color: #8ec0ff;
 }
 .public__stats {
   display: grid;
@@ -532,14 +518,12 @@ summary:focus-visible {
   gap: 4px;
   padding: 16px 20px;
   border-right: 1px solid rgb(255 255 255 / 0.1);
-  color: #727d94;
   font-size: 0.625rem;
 }
 .public__stats div:last-child {
   border-right: 0;
 }
 .public__stats strong {
-  color: #fff;
   font-size: 0.8125rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -622,20 +606,13 @@ summary:focus-visible {
   width: 100%;
   min-height: 46px;
   margin-top: 6px;
-  background: #0b1020;
   box-shadow: none;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.auth-page .button--primary[type="submit"]:hover:not(:disabled) {
-  background: #1b2440;
-}
 .auth-page .field__input {
   min-height: 46px;
-  background-color: var(--primary-soft);
-  border-color: transparent;
 }
 .auth-page > p {
   margin-top: 16px;
@@ -2363,4 +2340,26 @@ a.code:hover {
 }
 .public .field__label {
   color: var(--text-2);
+}
+
+/* Super Admin "View as" (D-100): a strip under the top bar while viewing as someone else. */
+.view-as {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 28px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.view-as__stop {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid currentcolor;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }

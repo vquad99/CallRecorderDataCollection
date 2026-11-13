@@ -35,7 +35,7 @@
 }
 .portal__stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 .portal__stats p {
@@ -54,4 +54,9 @@
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* The same page inside the staff app (D-100): the app already gives the margins. */
+.portal__main--inside {
+  margin: 0;
+  padding: 0;
 }

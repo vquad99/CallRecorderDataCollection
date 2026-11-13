@@ -4,9 +4,12 @@ consent form and the participant's own sessions.
 
 Security: the link carries a 256-bit secret that is stored only as a hash, expires, can be replaced
 or revoked at any time, and is sent to the API in a header (never in an address, so it reaches no
-log). The page shows the participant's code, their own sessions (date, mode, length, state) and
-their consent answer - no names, no phone number, no other speaker, no audio. A wrong, expired or
-revoked link answers exactly like one that never existed.
+log). The page shows the participant's own details (code, name, language, dialect, the last two
+digits of their phone), their own sessions (date, mode, length, state), their minutes (recorded,
+accepted, and their payable half of the accepted ones, D-095) and their consent answer - read-only
+apart from the consent answer itself; no other speaker, no full phone number, no audio (D-100).
+A wrong, expired or revoked link answers exactly like one that never existed. A Super Admin can
+open the same page for any participant, without a link and without changing anything (D-100).
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher, hash_token, new_token
+from app.modules.exports import minutes as minute_totals
 from app.modules.participants import service as participants
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
@@ -215,6 +219,9 @@ class SessionRow:
 @dataclass
 class PortalView:
     participant_code: str
+    display_name: str
+    dialect: str
+    phone_hint: str | None
     project_name: str
     language_code: str
     consent_policy_version: str
@@ -225,7 +232,9 @@ class PortalView:
     consent_review_note: str
     sessions: list[SessionRow]
     accepted_minutes: float
-    link_expires_at: datetime
+    recorded_minutes: float
+    payable_minutes: float
+    link_expires_at: datetime | None
 
 
 def own_consent(
@@ -247,6 +256,24 @@ def own_consent(
 
 def view(db: Session, token: str) -> PortalView:
     link, participant, project = _resolve(db, token)
+    link.last_used_at = datetime.now(UTC)
+    db.commit()
+    return build_view(db, participant, project, link.expires_at)
+
+
+def view_for_admin(
+    db: Session, principal: Principal, project_id: uuid.UUID, participant_id: uuid.UUID
+) -> PortalView:
+    """The participant's own page as they see it, for a Super Admin (D-100); read-only."""
+    if not principal.is_super_admin:
+        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+    project, participant = participants.get_in_project(db, principal, project_id, participant_id)
+    return build_view(db, participant, project, None)
+
+
+def build_view(
+    db: Session, participant: Participant, project: Project, expires: datetime | None
+) -> PortalView:
     final = (
         select(Recording.task_id, func.max(AudioAsset.duration_ms).label("ms"))
         .join(AudioAsset, AudioAsset.recording_id == Recording.id)
@@ -275,12 +302,13 @@ def view(db: Session, token: str) -> PortalView:
         )
         for r in rows
     ]
-    accepted = sum(s.minutes or 0 for s in sessions if s.state == "Accepted")
+    totals = minute_totals.per_participant(db, project.id, [participant.id]).get(participant.id)
     answer = own_consent(db, participant.id, project.id)
-    link.last_used_at = datetime.now(UTC)
-    db.commit()
     return PortalView(
         participant_code=participant.participant_code,
+        display_name=participant.display_label,
+        dialect=participant.dialect,
+        phone_hint=participant.phone_hint,
         project_name=project.name,
         language_code=participant.language_code,
         consent_policy_version=project.consent_policy_version,
@@ -292,8 +320,10 @@ def view(db: Session, token: str) -> PortalView:
         if answer and answer.review_status == "REJECTED"
         else "",
         sessions=sessions,
-        accepted_minutes=round(accepted, 1),
-        link_expires_at=link.expires_at,
+        accepted_minutes=minute_totals.as_minutes(totals.approved_ms) if totals else 0.0,
+        recorded_minutes=minute_totals.as_minutes(totals.recorded_ms) if totals else 0.0,
+        payable_minutes=minute_totals.as_minutes(totals.payable_ms) if totals else 0.0,
+        link_expires_at=expires,
     )
 
 

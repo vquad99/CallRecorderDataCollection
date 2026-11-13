@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -20,6 +20,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
 from app.db.session import get_db_session
+from app.modules.audit.service import VIEWER_KEY
 from app.modules.auth.models import User, UserSession
 from app.modules.auth.security import hash_token, tokens_equal
 from app.modules.projects.models import ProjectMembership
@@ -43,6 +44,13 @@ class Principal:
     permissions: frozenset[str]
     project_ids: frozenset[uuid.UUID]
     mfa_enabled: bool
+    # Set while a Super Admin views the app as this user (D-100): who is really looking.
+    viewer_id: uuid.UUID | None = None
+    viewer_name: str | None = None
+
+    @property
+    def read_only(self) -> bool:
+        return self.viewer_id is not None
 
     @property
     def is_super_admin(self) -> bool:
@@ -112,7 +120,44 @@ def current_principal(request: Request, db: DbSession) -> Principal:
     if now - session.last_seen_at >= _LAST_SEEN_WRITE_INTERVAL:
         session.last_seen_at = now
         db.commit()
+    if session.view_as_user_id is not None:
+        viewed = view_as_target(db, user, session)
+        if viewed is not None:
+            refuse_changes_while_viewing(request)
+            db.info[VIEWER_KEY] = user.id
+            return viewing(load_principal(db, viewed, session.id), user)
     return load_principal(db, user, session.id)
+
+
+# The only changes allowed while viewing as someone else: stop viewing, and sign out (D-100).
+_ALLOWED_WHILE_VIEWING = {("DELETE", "/api/v1/auth/view-as"), ("POST", "/api/v1/auth/logout")}
+
+
+def view_as_target(db: Session, user: User, session: UserSession) -> User | None:
+    """The user this session is viewing as, or None (and the view ended) when the caller is no
+    longer a Super Admin or the other account is gone, deactivated or their own."""
+    target = db.get(User, session.view_as_user_id) if session.view_as_user_id else None
+    still_admin = any(r.code == Role.SUPER_ADMIN.value for r in user.roles)
+    if target is None or not still_admin or target.id == user.id or target.status != "ACTIVE":
+        session.view_as_user_id = None
+        db.commit()
+        return None
+    return target
+
+
+def viewing(principal: Principal, viewer: User) -> Principal:
+    return replace(principal, viewer_id=viewer.id, viewer_name=viewer.display_name)
+
+
+def refuse_changes_while_viewing(request: Request) -> None:
+    if request.method in _UNSAFE and (request.method, request.url.path) not in (
+        _ALLOWED_WHILE_VIEWING
+    ):
+        raise AppError(
+            "You are viewing as someone else, so nothing can be changed. Stop viewing first.",
+            code="VIEW_AS_READ_ONLY",
+            status_code=403,
+        )
 
 
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]

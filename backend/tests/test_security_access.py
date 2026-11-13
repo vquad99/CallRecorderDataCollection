@@ -656,6 +656,14 @@ CASES: list[Case] = [
         {SA, PA},
         Perm.PARTICIPANTS_MANAGE,
     ),
+    # The participant's own page as they see it: Super Admin only, read-only (D-100).
+    case(
+        "GET",
+        PP + "/page",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/page",
+        {SA},
+        Perm.PARTICIPANTS_VIEW,
+    ),
     case(
         "GET",
         PP + "/consent",

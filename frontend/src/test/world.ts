@@ -139,6 +139,9 @@ export const SETTINGS = [
 /** Every permission the interface checks; tests narrow this per role. */
 export const PORTAL = {
   participant_code: "P000001",
+  display_name: "Asha",
+  dialect: "",
+  phone_hint: "21",
   project_name: "Hindi conversations",
   language_code: "hi",
   consent_policy_version: "2",
@@ -157,7 +160,9 @@ export const PORTAL = {
     },
   ],
   accepted_minutes: 22.5,
-  link_expires_at: "2026-12-10T00:00:00Z",
+  recorded_minutes: 30,
+  payable_minutes: 11.25,
+  link_expires_at: "2026-12-10T00:00:00Z" as string | null,
 };
 
 export const DASHBOARD = {
@@ -268,6 +273,7 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/tasks": ok(page([TASK])),
     "GET /api/v1/dashboard": ok(DASHBOARD),
     "GET /api/v1/portal/me": ok(PORTAL),
+    "GET /api/v1/projects/p1/participants/a1/page": ok({ ...PORTAL, link_expires_at: null }),
     "GET /api/v1/tasks/t1": ok(TASK),
     "GET /api/v1/tasks/t1/timeline": ok([
       { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },

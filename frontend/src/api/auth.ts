@@ -8,6 +8,8 @@ export interface Me {
   permissions: string[];
   project_ids: string[];
   mfa_enabled: boolean;
+  /** Set while a Super Admin views the app as this user; everything is read-only then (D-100). */
+  viewer?: { id: string; display_name: string } | null;
 }
 
 export interface SessionInfo {
@@ -28,6 +30,9 @@ export const login = (email: string, password: string, totpCode?: string) =>
     body: { email, password, ...(totpCode ? { totp_code: totpCode } : {}) },
   });
 export const logout = () => apiRequest<null>("/api/v1/auth/logout", { method: "POST" });
+export const startViewAs = (userId: string) =>
+  apiRequest<Me>("/api/v1/auth/view-as", { method: "POST", body: { user_id: userId } });
+export const stopViewAs = () => apiRequest<Me>("/api/v1/auth/view-as", { method: "DELETE" });
 export const forgotPassword = (email: string) =>
   apiRequest<{ status: string }>("/api/v1/auth/password/forgot", {
     method: "POST",

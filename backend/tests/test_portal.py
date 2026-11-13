@@ -69,8 +69,9 @@ def test_the_page_shows_only_the_participants_own_sessions(world: dict[str, Any]
     assert [s["task_code"] for s in body["sessions"]] == [world["task"]["task_code"]]
     assert body["sessions"][0]["state"] == "Recorded, being checked"
     assert body["sessions"][0]["minutes"] == 1.0
+    assert body["display_name"] == "Asha", "the participant sees their own details (D-100)"
     text = page.text
-    for private in ("Asha", "Bina", "display_label", "phone", "storage_key", "moderator"):
+    for private in ("Bina", "display_label", "storage_key", "moderator"):
         assert private not in text, private
     theirs = api.get("/api/v1/portal/me", headers={"X-Portal-Token": other_token}).json()
     assert theirs["sessions"] == []
@@ -86,6 +87,8 @@ def test_accepted_minutes_count_only_approved_sessions(world: dict[str, Any]) ->
     db.commit()
     body = api.get("/api/v1/portal/me", headers=head).json()
     assert (body["accepted_minutes"], body["sessions"][0]["state"]) == (2.0, "Accepted")
+    # Their own share for payment: half of each accepted conversation (D-095, D-100).
+    assert (body["recorded_minutes"], body["payable_minutes"]) == (2.0, 1.0)
 
 
 def test_the_participant_answers_and_withdraws_consent_themselves(world: dict[str, Any]) -> None:
