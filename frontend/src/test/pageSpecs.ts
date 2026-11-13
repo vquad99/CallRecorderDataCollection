@@ -38,6 +38,7 @@ export const PAGES: Record<string, PageSpec> = {
     shows: /1\.0\.0/,
     data: "GET /api/v1/system/status",
   },
+  "/calls": { url: "/calls", shows: /Calls per day/, data: "GET /api/v1/telephony/analytics" },
   "/account": { url: "/account", shows: /This device/i, data: "GET /api/v1/auth/sessions" },
   "/projects": { url: "/projects", shows: /Hindi conversations/, data: "GET /api/v1/projects" },
   "/projects/:projectId": {

@@ -99,3 +99,101 @@ export const setAgentSeat = (userId: string, agentId: string) =>
 
 /** States in which the call still moves without anyone clicking: the page keeps refreshing. */
 export const MOVING: readonly CallState[] = ["DIALLING", "WAITING_FOR_RECORDING"];
+
+// ------------------------------------------------------------------ analytics (D-102)
+
+export interface CallDay {
+  day: string;
+  calls: number;
+  recorded: number;
+  failed: number;
+  open: number;
+}
+
+export interface ModeratorCalls {
+  moderator_id: string;
+  name: string;
+  calls: number;
+  recorded: number;
+  failed: number;
+  avg_call_minutes: number | null;
+}
+
+export interface CallAnalytics {
+  days: number;
+  calls: number;
+  in_call: number;
+  recorded: number;
+  dial_failed: number;
+  cancelled: number;
+  waiting_for_recording: number;
+  needs_person: number;
+  success_pct: number | null;
+  avg_call_minutes: number | null;
+  avg_fetch_minutes: number | null;
+  recorded_minutes: number;
+  by_day: CallDay[];
+  by_hour: number[];
+  by_moderator: ModeratorCalls[];
+  cancel_reasons: Record<string, number>;
+  problems: Record<string, number>;
+}
+
+export interface CallListItem {
+  id: string;
+  task_id: string;
+  task_code: string;
+  project_code: string;
+  state: CallState;
+  agent_id: string;
+  phone_hint: string;
+  moderator_name: string;
+  dialled_at: string;
+  closed_at: string | null;
+  cancel_reason: CancelReason | null;
+  failure_code: string | null;
+  recording_id: string | null;
+}
+
+export interface CallPage {
+  items: CallListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ProviderTraffic {
+  available: boolean;
+  message: string;
+  first_day: string;
+  last_day: string;
+  data: unknown;
+}
+
+const qs = (params: Record<string, string | number | undefined>) => {
+  const parts = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
+  return parts.length
+    ? `?${parts.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&")}`
+    : "";
+};
+
+export const callAnalytics = (params: { project_id?: string | undefined; days: number }) =>
+  apiRequest<CallAnalytics>(`/api/v1/telephony/analytics${qs(params)}`);
+export const listAllCalls = (params: {
+  project_id?: string | undefined;
+  state?: string | undefined;
+  page: number;
+  page_size: number;
+}) => apiRequest<CallPage>(`/api/v1/calls${qs(params)}`);
+export const providerTraffic = (days: number) =>
+  apiRequest<ProviderTraffic>(`/api/v1/telephony/provider-traffic${qs({ days })}`);
+
+export const FAILURE_LABELS: Record<string, string> = {
+  PROVIDER_REFUSED: "TxContact refused the call",
+  PROVIDER_UNREACHABLE: "TxContact could not be reached",
+  SEVERAL_CALLS: "Several TxContact calls fit",
+  NUMBER_NOT_CONFIRMED: "Number not shown by TxContact",
+  RECORDING_NOT_FOUND: "Recording not found",
+  DOWNLOAD_FAILED: "Download failed",
+  SESSION_GONE: "Chosen call no longer listed",
+};

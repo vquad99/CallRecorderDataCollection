@@ -67,6 +67,57 @@ const party = (p: typeof PARTICIPANT) => ({
   consent_at: null,
 });
 
+export const CALL_ANALYTICS = {
+  days: 30,
+  calls: 4,
+  in_call: 0,
+  recorded: 2,
+  dial_failed: 1,
+  cancelled: 1,
+  waiting_for_recording: 0,
+  needs_person: 0,
+  success_pct: 50,
+  avg_call_minutes: 12.5,
+  avg_fetch_minutes: 3,
+  recorded_minutes: 24.8,
+  by_day: Array.from({ length: 30 }, (_, i) => ({
+    day: new Date(Date.UTC(2026, 9, 15 + i)).toISOString().slice(0, 10),
+    calls: i === 29 ? 4 : 0,
+    recorded: i === 29 ? 2 : 0,
+    failed: i === 29 ? 2 : 0,
+    open: 0,
+  })),
+  by_hour: Array.from({ length: 24 }, (_, h) => (h === 11 ? 3 : h === 15 ? 1 : 0)),
+  by_moderator: [
+    {
+      moderator_id: "m1",
+      name: "Mona Moderator",
+      calls: 4,
+      recorded: 2,
+      failed: 2,
+      avg_call_minutes: 12.5,
+    },
+  ],
+  cancel_reasons: { NO_ANSWER: 1 },
+  problems: { PROVIDER_REFUSED: 1 },
+};
+
+export const CALL_ROW = {
+  id: "c1",
+  task_id: "t1",
+  task_code: "T000001",
+  project_code: "HINDI",
+  state: "RECORDED",
+  agent_id: "70001",
+  phone_hint: "10",
+  moderator_name: "Mona Moderator",
+  dialled_at: "2026-11-13T10:00:00Z",
+  closed_at: "2026-11-13T10:12:00Z",
+  cancel_reason: null,
+  failure_code: null,
+  recording_id: "r1",
+};
+
 export const TASK = {
   id: "t1",
   task_code: "T000001",
@@ -236,6 +287,8 @@ export const ALL_PERMISSIONS = [
   "consent.view",
   "tasks.view",
   "tasks.assign",
+  "calls.start",
+  "calls.end",
   "recordings.create",
   "recordings.view",
   "recordings.download",
@@ -281,6 +334,15 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/tasks/t1/recordings": ok([]),
     "GET /api/v1/tasks/t1/calls": ok([]),
     "GET /api/v1/telephony/status": ok({ configured: true, provider: "TXCONTACT" }),
+    "GET /api/v1/telephony/analytics": ok(CALL_ANALYTICS),
+    "GET /api/v1/calls": ok({ items: [CALL_ROW], total: 1, page: 1, page_size: 25 }),
+    "GET /api/v1/telephony/provider-traffic": ok({
+      available: false,
+      message: "TxContact refused the recording sign-in",
+      first_day: "2026-10-15",
+      last_day: "2026-11-13",
+      data: null,
+    }),
     "GET /api/v1/audit-logs": ok(
       page([
         {

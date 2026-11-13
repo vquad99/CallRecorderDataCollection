@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ProviderError(RuntimeError):
@@ -53,3 +53,5 @@ class TelephonyProvider(Protocol):
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]: ...
 
     def download(self, session: ProviderSession, dest: Path, max_bytes: int) -> int: ...
+
+    def traffic(self, first: date, last: date) -> Any: ...

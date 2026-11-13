@@ -60,6 +60,9 @@ class StandIn:
         self.searches += 1
         return [s for s in self.listed if s.agent_id == agent_id]
 
+    def traffic(self, first: Any, last: Any) -> Any:
+        return {"10": 3, "11": 5}
+
     def download(self, session: ProviderSession, dest: Path, max_bytes: int) -> int:
         if self.download_error:
             raise ProviderError(self.download_error)
@@ -433,3 +436,56 @@ def test_an_agent_seat_belongs_to_one_user(world: dict[str, Any]) -> None:
         w["pa"].put(f"/api/v1/users/{mod2.id}/telephony-agent", json={"agent_id": "1"}).status_code
         == 403
     )
+
+
+def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[str, Any]) -> None:
+    w = world
+    _, call = started_and_closed(w)
+    w["provider"].listed = [session("S9", datetime.now(UTC))]
+    due_now(w, call["id"])
+    sweep(w)
+    other = w["new_task"]()
+    w["provider"].accept = False
+    w["mod"].post(f"/api/v1/tasks/{other}/calls")  # refused by the provider
+    w["provider"].accept = True
+    cancelled = w["mod"].post(f"/api/v1/tasks/{other}/calls").json()
+    w["mod"].post(f"/api/v1/calls/{cancelled['id']}/cancel", json={"reason": "NO_ANSWER"})
+
+    for who in ("pa", "mod"):
+        a = w[who].get("/api/v1/telephony/analytics?days=7")
+        assert a.status_code == 200, a.text
+        body = a.json()
+        assert (body["calls"], body["recorded"], body["dial_failed"], body["cancelled"]) == (
+            3,
+            1,
+            1,
+            1,
+        )
+        assert body["success_pct"] == 33.3
+        assert body["cancel_reasons"] == {"NO_ANSWER": 1}
+        assert body["recorded_minutes"] == round(4000 / 60000, 1)
+        assert len(body["by_day"]) == 7
+        assert sum(d["calls"] for d in body["by_day"]) == 3
+        assert sum(body["by_hour"]) == 3
+        assert body["by_moderator"][0]["calls"] == 3
+
+    page = w["pa"].get("/api/v1/calls?page_size=2").json()
+    assert page["total"] == 3
+    assert len(page["items"]) == 2
+    assert page["items"][0]["task_code"].startswith("T")
+    recorded = w["pa"].get("/api/v1/calls?state=RECORDED").json()
+    assert [i["state"] for i in recorded["items"]] == ["RECORDED"]
+
+    # Another moderator in the same project sees none of these calls.
+    mod2 = w["api"]("mod2@example.org")
+    assert mod2.get("/api/v1/telephony/analytics").json()["calls"] == 0
+    assert mod2.get("/api/v1/calls").json()["total"] == 0
+
+
+def test_provider_traffic_is_passed_on_for_managers_only(world: dict[str, Any]) -> None:
+    w = world
+    t = w["pa"].get("/api/v1/telephony/provider-traffic?days=7")
+    assert t.status_code == 200
+    assert t.json()["available"] is True
+    assert t.json()["data"] == {"10": 3, "11": 5}
+    assert w["mod"].get("/api/v1/telephony/provider-traffic").status_code == 403

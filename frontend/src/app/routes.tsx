@@ -144,6 +144,15 @@ export const routes: RouteObject[] = [
             ],
           },
           {
+            element: <RequirePermission permission="calls.end" />,
+            children: [
+              {
+                path: "calls",
+                element: page(() => import("../features/calls/CallsPage"), "CallsPage"),
+              },
+            ],
+          },
+          {
             element: <RequirePermission permission="tasks.assign" />,
             children: [
               {

@@ -1,0 +1,68 @@
+/* Phone calls page (D-102). Three series checked with the dataviz validator (light surface
+   #ffffff, all pairs): lightness band, chroma, colour-vision separation (worst deltaE 20.5) and
+   3:1 contrast all pass. The legend and the table view carry the same information. */
+:root {
+  --calls-recorded: #2095f3;
+  --calls-open: #c47a12;
+  --calls-failed: #9d0000;
+}
+.calls-series--recorded {
+  fill: var(--calls-recorded);
+  background: var(--calls-recorded);
+}
+.calls-series--open {
+  fill: var(--calls-open);
+  background: var(--calls-open);
+}
+.calls-series--failed {
+  fill: var(--calls-failed);
+  background: var(--calls-failed);
+}
+
+/* Calls by hour of the day: 24 thin bars, one series. */
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  align-items: end;
+  gap: 2px;
+  height: 140px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.hours li {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+.hours__bar {
+  display: block;
+  min-height: 1px;
+  border-radius: 4px 4px 0 0;
+  background: var(--primary);
+}
+.hours li:hover .hours__bar {
+  background: var(--calls-recorded);
+  opacity: 0.8;
+}
+.hours__tick {
+  height: 16px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.calls-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.calls-raw {
+  overflow: auto;
+  max-height: 240px;
+  font-size: 0.75rem;
+}

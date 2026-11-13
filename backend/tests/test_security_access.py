@@ -81,6 +81,9 @@ class _QuietProvider:
     def sessions(self, agent_id: str, day: Any) -> list[Any]:
         return []
 
+    def traffic(self, first: Any, last: Any) -> Any:
+        return {"10": 3, "11": 5}
+
     def download(self, session: Any, dest: Path, max_bytes: int) -> int:
         raise ProviderError("not used in this test")
 
@@ -959,6 +962,30 @@ CASES: list[Case] = [
         {SA, PA, MO},
         Perm.CALLS_END,
         before=lambda e: _reopen_call(e),
+    ),
+    # Call analytics and the list of calls: managers see their projects, moderators their own
+    # calls (D-102); TxContact's account-wide traffic is for people who assign tasks.
+    case(
+        "GET",
+        "/api/v1/telephony/analytics",
+        lambda e, s: f"/api/v1/telephony/analytics?project_id={s.project}",
+        {SA, PA, MO, MO2, QC},
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "GET",
+        "/api/v1/calls",
+        lambda e, s: f"/api/v1/calls?project_id={s.project}",
+        {SA, PA, MO, MO2, QC},
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "GET",
+        "/api/v1/telephony/provider-traffic",
+        lambda e, s: "/api/v1/telephony/provider-traffic",
+        {SA, PA},
+        Perm.TASKS_ASSIGN,
+        foreign=False,
     ),
     case(
         "PUT",

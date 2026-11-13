@@ -293,6 +293,15 @@ of each number. Click **This is the call** on the right one. If none was found, 
 the recording again** later, or cancel the call. A project admin can do the same from the task's
 **Phone calls** history.
 
+**Phone calls page.** The menu has **Phone calls** (Super Admin, Project Admin, Moderator). Choose
+a **Project** and a **Period** (7, 30 or 90 days). It shows: number of calls and how many were
+recorded, failed or cancelled, or need a person; average call length; minutes of recorded audio
+and how long recordings take to arrive; **Calls per day** (recorded, still open, failed or
+cancelled); **Calls by hour of the day**; a table **By moderator**; why calls were cancelled; and
+problems getting recordings. Project admins also see **TxContact: calls per hour**, TxContact's own
+count for the whole account. At the bottom, **All calls** lists every call with a link to its
+task; **Show** filters it (for example **Needs a person**). Moderators see only their own calls.
+
 **Phone calls history.** Every task shows each call with every step: when it was requested, what
 TxContact answered, when it was closed, each search, which recording was chosen and when it was
 stored.

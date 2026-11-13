@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.adapters.telephony import ProviderError
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.auth.models import User
-from app.modules.auth.router import Cipher
-from app.modules.telephony import service
+from app.modules.auth.router import AppSettings, Cipher
+from app.modules.telephony import analytics, service
 from app.modules.telephony.models import Call, CallEvent
 
 router = APIRouter(tags=["telephony"], dependencies=[Depends(require(Perm.TASKS_VIEW))])
@@ -236,3 +237,163 @@ def set_agent_seat(
 ) -> AgentSeatOut:
     user = service.set_agent_seat(db, principal, user_id, body.agent_id, client_ip(request))
     return AgentSeatOut(user_id=user.id, telephony_agent_id=user.telephony_agent_id)
+
+
+# ------------------------------------------------------------------------- analytics (D-102)
+
+
+class DayOut(BaseModel):
+    day: str
+    calls: int
+    recorded: int
+    failed: int
+    open: int
+
+
+class ModeratorOut(BaseModel):
+    moderator_id: uuid.UUID
+    name: str
+    calls: int
+    recorded: int
+    failed: int
+    avg_call_minutes: float | None
+
+
+class AnalyticsOut(BaseModel):
+    days: int
+    calls: int
+    in_call: int
+    recorded: int
+    dial_failed: int
+    cancelled: int
+    waiting_for_recording: int
+    needs_person: int
+    success_pct: float | None
+    avg_call_minutes: float | None
+    avg_fetch_minutes: float | None
+    recorded_minutes: float
+    by_day: list[DayOut]
+    by_hour: list[int]
+    by_moderator: list[ModeratorOut]
+    cancel_reasons: dict[str, int]
+    problems: dict[str, int]
+
+
+@router.get("/telephony/analytics", response_model=AnalyticsOut)
+def call_analytics(
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    project_id: uuid.UUID | None = None,
+    days: Annotated[int, Query(ge=1, le=analytics.MAX_DAYS)] = 30,
+) -> AnalyticsOut:
+    result = analytics.analytics(
+        db, principal, project_id=project_id, days=days, tz_name=settings.report_timezone
+    )
+    return AnalyticsOut.model_validate({**vars(result), "by_day": [vars(d) for d in result.by_day]})
+
+
+class CallListItem(BaseModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    task_code: str
+    project_code: str
+    state: str
+    agent_id: str
+    phone_hint: str
+    moderator_name: str
+    dialled_at: datetime
+    closed_at: datetime | None
+    cancel_reason: str | None
+    failure_code: str | None
+    recording_id: uuid.UUID | None
+
+
+class CallPage(BaseModel):
+    items: list[CallListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+@router.get("/calls", response_model=CallPage)
+def all_calls(
+    principal: CurrentPrincipal,
+    db: DbSession,
+    project_id: uuid.UUID | None = None,
+    state: Literal[
+        "DIALLING",
+        "DIAL_FAILED",
+        "CANCELLED",
+        "WAITING_FOR_RECORDING",
+        "NEEDS_MATCH",
+        "FETCH_FAILED",
+        "RECORDED",
+        "NEEDS_PERSON",
+    ]
+    | None = None,
+    page: Annotated[int, Query(ge=1, le=10_000)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> CallPage:
+    rows, total = analytics.list_calls(
+        db, principal, project_id=project_id, state=state, page=page, page_size=page_size
+    )
+    return CallPage(
+        items=[
+            CallListItem(
+                id=r.call.id,
+                task_id=r.call.task_id,
+                task_code=r.task_code,
+                project_code=r.project_code,
+                state=r.call.state,
+                agent_id=r.call.agent_id,
+                phone_hint=r.call.phone_hint,
+                moderator_name=r.moderator_name,
+                dialled_at=r.call.dialled_at,
+                closed_at=r.call.closed_at,
+                cancel_reason=r.call.cancel_reason,
+                failure_code=r.call.failure_code,
+                recording_id=r.call.recording_id,
+            )
+            for r in rows
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+class TrafficOut(BaseModel):
+    available: bool
+    message: str
+    first_day: str
+    last_day: str
+    # Calls per hour of the day as TxContact reports them; the shape is TxContact's own.
+    data: Any = None
+
+
+@router.get(
+    "/telephony/provider-traffic",
+    response_model=TrafficOut,
+    dependencies=[Depends(require(Perm.TASKS_ASSIGN))],
+)
+def provider_traffic(
+    request: Request,
+    settings: AppSettings,
+    days: Annotated[int, Query(ge=1, le=analytics.MAX_DAYS)] = 30,
+) -> TrafficOut:
+    """TxContact's own count of calls per hour of the day (its recording service, documented as
+    GET /txrecord/api/v1/record/mostcallshour/). Account-wide: TxContact does not split it by
+    project, so only people who assign tasks see it."""
+    first, last = analytics.day_range(days, settings.txcontact_timezone)
+    provider = request.app.state.telephony
+    base = {"first_day": first.isoformat(), "last_day": last.isoformat()}
+    if provider is None:
+        return TrafficOut(
+            available=False, message="Phone calls are not configured on this server", **base
+        )
+    try:
+        data = provider.traffic(first, last)
+    except ProviderError as exc:
+        return TrafficOut(available=False, message=str(exc), **base)
+    return TrafficOut(available=True, message="", data=data, **base)

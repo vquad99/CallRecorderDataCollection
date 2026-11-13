@@ -250,6 +250,18 @@ class TxContact:
             rec_status=text("sl_rec_status"),
         )
 
+    def traffic(self, first: date, last: date) -> Any:
+        """Calls per hour of the day between two dates, as TxContact counts them
+        (GET /txrecord/api/v1/record/mostcallshour/; inbound calls only when no queue is given,
+        per its description). The answer's shape is not described, so it is passed on as is."""
+        query = urllib.parse.urlencode(
+            {"from_date": first.isoformat(), "to_date": last.isoformat()}
+        )
+        return self._authorised(
+            f"{self._s.txcontact_base_url}/txrecord/api/v1/record/mostcallshour/?{query}",
+            "call traffic",
+        )
+
     def download(self, session: ProviderSession, dest: Path, max_bytes: int) -> int:
         name = file_name(session)
         url = f"{self._s.txcontact_base_url}/txrecord/download/{urllib.parse.quote(name, safe='')}"
