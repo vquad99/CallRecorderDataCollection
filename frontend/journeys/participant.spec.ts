@@ -51,7 +51,8 @@ test("a participant answers the consent form on their personal page", async ({
     await expect(visitor.getByText(`I agree to be recorded for ${code}.`)).toBeVisible();
     await expect(visitor.getByRole("cell", { name: setup.taskCode })).toBeVisible();
     await expect(visitor.getByRole("navigation", { name: "Main" })).toHaveCount(0);
-    await expect(visitor.getByText(`Asha ${code}`)).toHaveCount(0);
+    // Their own details are shown, read-only; the other speaker's never are (D-100).
+    await expect(visitor.getByText(`Asha ${code}`)).toBeVisible();
     await expect(visitor.getByText(`Bina ${code}`)).toHaveCount(0);
     const secret = new URL(link).hash.slice(1);
     expect(sent.some((u) => u.includes(secret))).toBe(false); // never in any address
