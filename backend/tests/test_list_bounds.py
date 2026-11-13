@@ -27,6 +27,7 @@ NATURALLY_BOUNDED = {
     "/api/v1/projects/{project_id}/participants/{participant_id}/consent": "one person's consent history",
     "/api/v1/tasks/{task_id}/timeline": "one task's history",
     "/api/v1/tasks/{task_id}/recordings": "one task's recordings",
+    "/api/v1/tasks/{task_id}/calls": "one task's phone calls",
     "/api/v1/storage/usage": "one row per project and file kind",
 }
 

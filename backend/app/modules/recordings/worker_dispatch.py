@@ -68,7 +68,42 @@ def recover(app: FastAPI) -> int:
     if stalled:
         logger.info("recovery_dispatched", extra={"count": len(stalled)})
     check_pending_audio(app)
+    fetch_call_recordings(app)
     return len(stalled)
+
+
+def fetch_call_recordings(app: FastAPI) -> int:
+    """Hand every closed phone call that is due for a look to the worker (D-101). Each call is
+    claimed inside `telephony.fetch`, so a call sent twice is worked on once."""
+    provider = getattr(app.state, "telephony", None)
+    if provider is None or app.state.storage is None:
+        return 0
+    from app.modules.telephony import service as telephony
+
+    with app.state.session_factory() as db:
+        due = telephony.due_calls(db)
+    celery: Any = getattr(app.state, "celery", None)
+    for call_id in due:
+        if celery is not None:
+            try:
+                celery.send_task("telephony.fetch", args=[str(call_id)])
+            except Exception:
+                logger.exception("call_fetch_dispatch_failed", extra={"call_id": str(call_id)})
+                break
+        else:
+            try:
+                with app.state.session_factory() as db:
+                    telephony.fetch(
+                        db,
+                        app.state.settings,
+                        app.state.storage,
+                        provider,
+                        app.state.cipher,
+                        call_id,
+                    )
+            except Exception:
+                logger.exception("call_fetch_failed", extra={"call_id": str(call_id)})
+    return len(due)
 
 
 def check_pending_audio(app: FastAPI) -> int:

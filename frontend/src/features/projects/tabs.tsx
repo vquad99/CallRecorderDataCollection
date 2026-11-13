@@ -428,6 +428,7 @@ const KIND_LABELS: Record<string, string> = {
   CONSENT_RECORDING: "Consent recordings",
   BROWSER_ORIGINAL: "Browser original captures",
   FTF_DERIVED_PCM: "Face-to-face 16 kHz WAV",
+  TELEPHONY_DERIVED_PCM: "Phone call 16 kHz WAV",
   TRANSCRIPT_FILE: "Transcript files",
   EXPORT_PACKAGE: "Export packages",
 };
@@ -440,6 +441,7 @@ const KIND_EXAMPLES: Record<string, string> = {
   CONSENT_RECORDING: "Example: 1825 (five years)",
   BROWSER_ORIGINAL: "Example: 30 (one month)",
   FTF_DERIVED_PCM: "Example: 365 (one year)",
+  TELEPHONY_DERIVED_PCM: "Example: 365 (one year)",
   TRANSCRIPT_FILE: "Example: 365 (one year)",
   EXPORT_PACKAGE: "Example: 90 (three months)",
 };

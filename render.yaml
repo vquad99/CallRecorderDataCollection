@@ -122,6 +122,19 @@ services:
         sync: false
       - key: ALLOW_DEMO_SEED
         value: "false"
+      # Phone calls through TxContact (D-101). Unset logins leave phone calls "Not configured".
+      - key: TXCONTACT_BASE_URL
+        value: https://amber.txcontact.com
+      - key: TXCONTACT_CAMPAIGN_REF
+        value: dc-record-call
+      - key: TXCONTACT_DIALER_USERNAME
+        sync: false
+      - key: TXCONTACT_DIALER_PASSWORD
+        sync: false
+      - key: TXCONTACT_RECORD_USER
+        sync: false
+      - key: TXCONTACT_RECORD_PASSWORD
+        sync: false
 
   # Processing and the automatic audio check. The same image as the API; settings are copied from
   # the API so the two can never disagree.
@@ -208,6 +221,30 @@ services:
           type: pserv
           name: ccp-api
           envVarKey: EMAIL_FROM
+      - key: TXCONTACT_BASE_URL
+        value: https://amber.txcontact.com
+      - key: TXCONTACT_CAMPAIGN_REF
+        value: dc-record-call
+      - key: TXCONTACT_DIALER_USERNAME
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: TXCONTACT_DIALER_USERNAME
+      - key: TXCONTACT_DIALER_PASSWORD
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: TXCONTACT_DIALER_PASSWORD
+      - key: TXCONTACT_RECORD_USER
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: TXCONTACT_RECORD_USER
+      - key: TXCONTACT_RECORD_PASSWORD
+        fromService:
+          type: pserv
+          name: ccp-api
+          envVarKey: TXCONTACT_RECORD_PASSWORD
 
   # Work queue and shared sign-in limits. Private network only; never evicts a queued job.
   - type: keyvalue

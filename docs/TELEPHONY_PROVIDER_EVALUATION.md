@@ -88,3 +88,28 @@ developer.vonage.com (recording, ncco-reference); developers.telnyx.com, telnyx.
 india-mobile-numbers; developers.sinch.com/docs/voice; infobip.com/docs/voice-and-video;
 developer.exotel.com (legs, call-recording, regions); cpaas.ozonetel.com; developer.knowlarity.com;
 docs.smartflo.tatatelebusiness.com; airtel.in/business/b2b/voice-api; myoperator.com/pricing.
+
+## TxContact, 2026-11-13 (chosen by the owner, D-101)
+
+Offered by DesiCrew / Telenetix with a working dialer account. Read from TxContact's email and its
+published API description (docs/integrations/txcontact/API_NOTES.md); nothing tested yet.
+
+| # | Criterion | TxContact |
+|---|---|---|
+| 1 | India outbound calling | Indian numbers, 10 digits (from the example request); NOT VERIFIED by a call |
+| 2 | API call creation | Yes: `contact/add` rings one number and connects it to an agent seat |
+| 3 | Conference creation | No API. The agent (our moderator) conferences B in from the TxContact agent screen |
+| 4 | Add participant to an active conference | Not by API (agent screen only) |
+| 5 | Moderator departure without ending the conference | NOT VERIFIED |
+| 6 | Recording continues after moderator leaves | NOT VERIFIED |
+| 7 | Separate participant tracks | NOT VERIFIED (not described) |
+| 8 | Recording retrieval API | Yes: search by agent seat and day, download by file name |
+| 9 | Webhooks and signatures | None described; the platform polls |
+| 10-11 | Concurrency | NOT VERIFIED (ask) |
+| 12 | Recording format and sample rate | NOT VERIFIED (examples mention .wav and .mp4) |
+| 13-18 | Retention, cost, contract, browser client, hosting, plan | NOT VERIFIED (ask) |
+
+Because B joins and the moderator leaves inside TxContact, the platform cannot enforce the
+specification's call sequence (TEL-014). The owner accepted this (D-101). Gate 5 needs one real
+call that shows: A rings and reaches the seat, B can be added, the recording is found by the
+search and downloads, and its format.

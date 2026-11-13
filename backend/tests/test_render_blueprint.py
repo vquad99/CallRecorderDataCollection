@@ -168,6 +168,10 @@ ENTERED = {
     "EMAIL_FROM": "Conversation Collection <no-reply@example.org>",
     "ADMIN_EMAIL": "owner@example.org",
     "ADMIN_PASSWORD": "a-strong-admin-password",
+    "TXCONTACT_DIALER_USERNAME": "dialer-user",
+    "TXCONTACT_DIALER_PASSWORD": "dialer-secret",
+    "TXCONTACT_RECORD_USER": "record-user",
+    "TXCONTACT_RECORD_PASSWORD": "record-secret",
 }
 
 

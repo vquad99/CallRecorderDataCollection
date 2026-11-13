@@ -10,6 +10,8 @@ export interface User {
   password_set: boolean;
   last_login_at: string | null;
   created_at: string;
+  /** The moderator's TxContact agent seat; their phone calls ring there (D-101). */
+  telephony_agent_id?: string | null;
 }
 
 export interface Page<T> {

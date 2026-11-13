@@ -37,6 +37,7 @@ from fastapi.testclient import TestClient
 from moto import mock_aws
 from sqlalchemy import text
 
+from app.adapters.telephony import DialResult, ProviderError
 from app.core.permissions import Perm
 from app.main import create_app
 from tests.conftest import Api, build_settings, make_participant, make_project, make_user
@@ -69,6 +70,21 @@ START = {
 }
 
 
+class _QuietProvider:
+    """Stands in for TxContact: takes every dial request, lists no calls (test-only)."""
+
+    name = "TXCONTACT"
+
+    def dial(self, phone_e164: str, agent_id: str) -> DialResult:
+        return DialResult(accepted=True, http_status=200, response_excerpt="queued")
+
+    def sessions(self, agent_id: str, day: Any) -> list[Any]:
+        return []
+
+    def download(self, session: Any, dest: Path, max_bytes: int) -> int:
+        raise ProviderError("not used in this test")
+
+
 @dataclass
 class Side:
     """Identifiers of one project's objects."""
@@ -82,6 +98,7 @@ class Side:
     recording_done: str
     recording_open: str
     asset: str
+    call: str  # a phone call on task_open, waiting for a person to pick its recording (D-101)
 
     def object_ids(self) -> list[str]:
         return [
@@ -93,6 +110,7 @@ class Side:
             self.recording_done,
             self.recording_open,
             self.asset,
+            self.call,
         ]
 
 
@@ -108,8 +126,8 @@ class Estate:
 
 def _ghost() -> Side:
     """Identifiers that exist nowhere: the answer for these is what 'not found' looks like."""
-    ids = [str(uuid.uuid4()) for _ in range(8)]
-    return Side(ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7])
+    ids = [str(uuid.uuid4()) for _ in range(9)]
+    return Side(ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7], ids[8])
 
 
 def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moderator: str) -> Side:
@@ -178,6 +196,15 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         ).status_code
         == 200
     )
+    call = db.execute(
+        text(
+            "INSERT INTO calls (task_id, project_id, provider, moderator_id, agent_id, phone_hint,"
+            " state, dialled_at, closed_at) VALUES (:t, :p, 'TXCONTACT', :m, :a, '10',"
+            " 'NEEDS_MATCH', now(), now()) RETURNING id"
+        ),
+        {"t": open_task, "p": project_id, "m": mod_id, "a": f"seat-{code}"},
+    ).scalar_one()
+    db.commit()
     return Side(
         project=str(project_id),
         participant=a["id"],
@@ -188,6 +215,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         recording_done=rec["id"],
         recording_open=open_rec["id"],
         asset=asset,
+        call=str(call),
     )
 
 
@@ -205,6 +233,7 @@ def estate(migrated_db: str, tmp_path: Path) -> Iterator[Estate]:
                 email_file_dir=str(tmp_path / "outbox"),
             )
         )
+        app.state.telephony = _QuietProvider()
         clients: list[TestClient] = []
 
         def api(email: str) -> Api:
@@ -283,6 +312,15 @@ def _csv(_: Estate, __: Side, who: str) -> dict[str, str]:
     return {
         "csv": f"email,display_name,roles\nimported.{who.lower()}@example.org,Imported,MODERATOR\n"
     }
+
+
+def _reopen_call(e: Estate) -> None:
+    """Put the own project's call back to waiting for a person, as an earlier caller moved it."""
+    e.db.execute(
+        text("UPDATE calls SET state = 'NEEDS_MATCH', next_fetch_at = NULL WHERE id = :c"),
+        {"c": e.own.call},
+    )
+    e.db.commit()
 
 
 P = "/api/v1/projects/{project_id}"
@@ -863,6 +901,73 @@ CASES: list[Case] = [
         TASK_VIEWERS,
         Perm.RECORDINGS_VIEW,
         lambda e, s, who: {"purpose": "play"},
+    ),
+    # Phone calls (D-101): anyone who sees tasks sees whether calls are set up; a task's calls are
+    # seen by those who see the task; only the assigned moderator starts a call; the moderator who
+    # made it, or a manager of the project, changes it; agent seats are user administration.
+    case(
+        "GET",
+        "/api/v1/telephony/status",
+        lambda e, s: "/api/v1/telephony/status",
+        {SA, PA, MO, MO2, QC},
+        Perm.TASKS_VIEW,
+        foreign=False,
+    ),
+    case(
+        "GET",
+        "/api/v1/tasks/{task_id}/calls",
+        lambda e, s: f"/api/v1/tasks/{s.task_open}/calls",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/calls",
+        # A face-to-face task: the assigned moderator passes access control and gets 422.
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/calls",
+        {MO},
+        Perm.CALLS_START,
+    ),
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/close",
+        lambda e, s: f"/api/v1/calls/{s.call}/close",
+        {SA, PA, MO},
+        Perm.CALLS_END,
+        lambda e, s, who: {"note": ""},
+    ),
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/cancel",
+        lambda e, s: f"/api/v1/calls/{s.call}/cancel",
+        {SA, PA, MO},
+        Perm.CALLS_END,
+        lambda e, s, who: {"reason": "OTHER", "note": ""},  # note missing: 422 after access
+    ),
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/match",
+        lambda e, s: f"/api/v1/calls/{s.call}/match",
+        {SA, PA, MO},
+        Perm.CALLS_END,
+        lambda e, s, who: {"session_id": "not-listed"},
+    ),
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/retry",
+        lambda e, s: f"/api/v1/calls/{s.call}/retry",
+        {SA, PA, MO},
+        Perm.CALLS_END,
+        before=lambda e: _reopen_call(e),
+    ),
+    case(
+        "PUT",
+        "/api/v1/users/{user_id}/telephony-agent",
+        lambda e, s: f"/api/v1/users/{e.spare_user}/telephony-agent",
+        {SA},
+        Perm.USERS_MANAGE,
+        lambda e, s, who: {"agent_id": f"seat-{who.lower()}"},
+        foreign=False,
     ),
     # Storage usage: project administrators only (D-049).
     case(

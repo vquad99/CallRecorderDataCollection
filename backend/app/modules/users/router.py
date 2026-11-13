@@ -31,6 +31,7 @@ class UserOut(BaseModel):
     password_set: bool
     last_login_at: datetime | None
     created_at: datetime
+    telephony_agent_id: str | None = None
 
 
 def user_out(user: User) -> UserOut:
@@ -44,6 +45,7 @@ def user_out(user: User) -> UserOut:
         password_set=user.password_hash is not None,
         last_login_at=user.last_login_at,
         created_at=user.created_at,
+        telephony_agent_id=user.telephony_agent_id,
     )
 
 

@@ -6,11 +6,14 @@ import uuid
 
 from celery import Celery
 
+from app.adapters.txcontact import TxContact
 from app.core.config import load_settings
 from app.core.logging import configure_logging
 from app.core.storage import build_storage
 from app.db.session import create_db_engine, make_session_factory
+from app.modules.auth.security import FieldCipher
 from app.modules.recordings import service
+from app.modules.telephony import service as telephony
 
 settings = load_settings()
 configure_logging(settings.log_level, settings.secret_values())
@@ -22,6 +25,8 @@ celery_app.conf.update(
 )
 _sessions = make_session_factory(create_db_engine(settings))
 _storage = build_storage(settings)
+_telephony = TxContact(settings) if settings.telephony_configured else None
+_cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
 
 
 @celery_app.task(
@@ -32,3 +37,13 @@ def process_recording(recording_id: str) -> None:
         raise RuntimeError("storage is not configured for the worker")
     with _sessions() as db:
         service.process(db, settings, _storage, uuid.UUID(recording_id))
+
+
+@celery_app.task(name="telephony.fetch")  # type: ignore[untyped-decorator]
+def fetch_call_recording(call_id: str) -> None:
+    """Look for a closed call's recording, and store it when found (D-101). Retries are planned
+    by the call itself (next_fetch_at), so Celery does not retry here."""
+    if _storage is None or _telephony is None:
+        raise RuntimeError("storage or telephony is not configured for the worker")
+    with _sessions() as db:
+        telephony.fetch(db, settings, _storage, _telephony, _cipher, uuid.UUID(call_id))

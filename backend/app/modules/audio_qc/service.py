@@ -43,7 +43,8 @@ from app.modules.tasks.models import Task, TaskAssignment
 
 logger = logging.getLogger("app.audio_qc")
 
-DELIVERY_KIND = "FTF_DERIVED_PCM"
+# The 16 kHz file each mode delivers: face-to-face, and telephony (D-101).
+DELIVERY_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM")
 # Statuses in which a QC Executive may be (re)assigned: anything still open.
 QC_ASSIGNABLE = frozenset(
     {"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD", "RETURNED"}
@@ -569,7 +570,7 @@ def find_duplicate(
         select(AudioAsset.recording_id)
         .where(
             AudioAsset.project_id == project_id,
-            AudioAsset.kind == DELIVERY_KIND,
+            AudioAsset.kind.in_(DELIVERY_KINDS),
             AudioAsset.recording_id != recording_id,
             AudioAsset.deleted_at.is_(None),
         )
@@ -591,7 +592,7 @@ def delivery_asset(db: Session, recording_id: uuid.UUID) -> AudioAsset | None:
         select(AudioAsset)
         .where(
             AudioAsset.recording_id == recording_id,
-            AudioAsset.kind == DELIVERY_KIND,
+            AudioAsset.kind.in_(DELIVERY_KINDS),
             AudioAsset.deleted_at.is_(None),
         )
         .order_by(AudioAsset.version.desc())

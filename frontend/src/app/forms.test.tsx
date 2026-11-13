@@ -46,6 +46,30 @@ const tick =
     await userEvent.click(screen.getByRole("checkbox", { name: label }));
   };
 
+// A phone call in progress on task t1 (D-101).
+const LIVE_CALL = {
+  id: "c1",
+  task_id: "t1",
+  provider: "TXCONTACT",
+  state: "DIALLING",
+  agent_id: "70001",
+  phone_hint: "10",
+  moderator_id: "m1",
+  moderator_name: "Mona Moderator",
+  dialled_at: "2026-11-13T10:00:00Z",
+  closed_at: null,
+  cancel_reason: null,
+  note: "",
+  provider_session_id: null,
+  recording_id: null,
+  fetch_attempts: 0,
+  next_fetch_at: null,
+  failure_code: null,
+  failure_detail: null,
+  candidates: [],
+  events: [],
+};
+
 interface FormSpec {
   source: string; // file holding the <form>
   url: string;
@@ -377,6 +401,36 @@ const FORMS: Record<string, FormSpec> = {
     body: { outcome: "RETURN", reason_code: "RE_RECORD", comment: "Traffic" },
     kept: "Comment",
     handlers: QC_PAGE,
+  },
+  "agent seat": {
+    source: "src/features/users/UserDetailPage.tsx",
+    url: "/admin/users/u2",
+    ready: /Disable account/,
+    fill: [type("TxContact agent seat", "70001")],
+    submit: "Save agent seat",
+    write: "PUT /api/v1/users/u2/telephony-agent",
+    reply: [200, { user_id: "u2", telephony_agent_id: "70001" }],
+    body: { agent_id: "70001" },
+    kept: "TxContact agent seat",
+  },
+  "cancel phone call": {
+    source: "src/features/tasks/CallCard.tsx",
+    url: "/tasks/t1",
+    ready: /On the call/,
+    open: [click("Cancel this call")],
+    fill: [choose("Why", "OTHER"), type("Note", "Line kept dropping")],
+    submit: "Cancel the call",
+    write: "POST /api/v1/calls/c1/cancel",
+    reply: [200, { ...LIVE_CALL, state: "CANCELLED" }],
+    body: { reason: "OTHER", note: "Line kept dropping" },
+    kept: "Note",
+    handlers: {
+      "GET /api/v1/tasks/t1": () => [
+        200,
+        { ...TASK, recording_mode: "TELEPHONY", status: "IN_PROGRESS" },
+      ],
+      "GET /api/v1/tasks/t1/calls": () => [200, [LIVE_CALL]],
+    },
   },
   "task comment": {
     source: "src/features/tasks/TaskDetailPage.tsx",

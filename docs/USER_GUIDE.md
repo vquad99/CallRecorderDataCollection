@@ -92,6 +92,10 @@ Click a name to open the user. There you can change the name, email or roles (**
 if the password is already set), and **Sign out everywhere**. Users are never deleted, only
 disabled.
 
+**Phone calls → TxContact agent seat** (moderators only): type the moderator's TxContact agent ID
+(for example `70001`) and click **Save agent seat**. Their phone calls ring that seat. Each seat
+belongs to one person; leave it empty for moderators who do not make phone calls.
+
 The number of active accounts is limited by **Settings → Staff accounts**.
 
 **View as** (Super Admin only): on **Users**, click **View as [name]** to see the platform exactly
@@ -260,6 +264,41 @@ it**. A recording can be up to 4 hours long.
 
 ---
 
+## 7a. Moderator: phone calls
+
+Phone calls go through TxContact. You need a **TxContact agent seat**: the Super Admin adds it on
+your user page (**Users → your name → Phone calls → TxContact agent seat**). Sign in to your
+TxContact agent screen before you start.
+
+1. Open **Tasks** and click your **Telephony** task.
+2. Click **Start session**.
+3. Click **Start call**. TxContact rings participant A and connects them to your TxContact seat.
+   The card shows **On the call** once TxContact has accepted the request; if it refused,
+   the card says what TxContact answered.
+4. In your TxContact agent screen, add participant B to the call (conference).
+5. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
+6. Leave A and B to talk. When they have finished, click **Close call** (add a note if useful).
+   The call can only be closed once both consents are recorded; if someone refused, click
+   **Cancel this call** and choose **Consent refused**.
+7. The card shows **Fetching the recording**. The platform finds the call at TxContact and
+   downloads its recording, usually within a few minutes. The page updates on its own.
+8. When it arrives, the task moves to **Recorded**. Listen, then **Send to QC**, or **Call again**.
+
+If the call did not work (no answer, wrong number, dropped), click **Cancel this call** and choose
+the reason. You can then start a new call.
+
+**Needs a person to pick the recording.** If several TxContact calls fit the time, or none shows
+participant A's number, the card lists them with their start time, length and the last two digits
+of each number. Click **This is the call** on the right one. If none was found, click **Look for
+the recording again** later, or cancel the call. A project admin can do the same from the task's
+**Phone calls** history.
+
+**Phone calls history.** Every task shows each call with every step: when it was requested, what
+TxContact answered, when it was closed, each search, which recording was chosen and when it was
+stored.
+
+---
+
 ## 8. QC Executive: checking a recording
 
 1. Open **Tasks** (set **Status: Audio QC** to see only waiting work), or your **Dashboard**.
@@ -348,9 +387,8 @@ The link works for 30 days. If it stops working, the project team sends a new on
 
 ## 11. Not available in this version
 
-- **Phone-call recording.** "Telephony" appears in some forms and filters, but a telephony task
-  cannot be recorded yet. Use **Face-to-face** only.
-- Telephony audio in exports (no telephony recordings exist yet).
+- **Phone calls are new and not yet tested on the TxContact account.** Try one test call (section
+  7a) before real work.
 - **Transcription.**
 - **Installing as an app** on a phone or computer.
 

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.tasks.models import Task
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
+FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 SPEAKERS = 2  # one conversation, two participants, credited equally
 
 

@@ -8,6 +8,7 @@ from app.modules.projects import models as project_models
 from app.modules.recordings import models as recording_models
 from app.modules.settings import models as settings_models
 from app.modules.tasks import models as task_models
+from app.modules.telephony import models as telephony_models
 
 __all__ = [
     "audio_qc_models",
@@ -18,4 +19,5 @@ __all__ = [
     "recording_models",
     "settings_models",
     "task_models",
+    "telephony_models",
 ]

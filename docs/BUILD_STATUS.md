@@ -18,7 +18,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Projects | PROJ | 13 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | PROJ-010/011 finish in Phases 3 and 9 |
 | Participants | PART | 17 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
 | Task assignment | TASK | 12 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 3 approved |
-| Telephony | TEL | 38 | Yes | No | No | No | No | No | BLOCKED | B-01 provider |
+| Telephony | TEL | 38 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | D-101: TxContact built; first call on the TxContact account not made yet |
 | Face-to-face recording | FTF | 15 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Edge and by-ear playback checks open |
 | Storage | STOR | 13 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Wasabi encryption at rest NOT VERIFIED |
 | Audio rules and conversion | AUDIO | 24 | Yes | Yes | Yes | No | Yes | Yes | IN PROGRESS | Telephony parts in Phases 5-6 |
@@ -50,8 +50,8 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 2 Auth, users, roles, projects | ACCEPTED | 2 | Approved by owner 2026-11-09 |
 | 3 Participants, tasks, workflow | ACCEPTED | 3 | Approved by owner 2026-11-09 |
 | 4 Storage, face-to-face recording | ACCEPTED | 4 | Approved by owner 2026-11-09 (CI run 42652152398 green; Option A fix D-048) |
-| 5 Telephony proof of capability | BLOCKED | 5 | B-01: no provider, no credentials |
-| 6 Full telephony module | BLOCKED | 6 | Depends on Gate 5 |
+| 5 Telephony proof of capability | IN PROGRESS | 5 | - (D-101: TxContact chosen; first test call outstanding) |
+| 6 Full telephony module | IN PROGRESS | 6 | - (D-101: call flow built ahead of Gate 5 by owner decision) |
 | 7 Audio QC, optional AI transcription | IN PROGRESS | 7 | - |
 | 8 Human transcription, transcript QC | WITHDRAWN | 8 | D-062: owner 2026-11-10, no manual transcription |
 | 9 Exports, dashboards | NOT STARTED | 9 | - |

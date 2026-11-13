@@ -92,6 +92,26 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
 
+    # Phone calls through TxContact (D-101). The dialer and the recording API are separate
+    # TxContact services with their own sign-in. Unset: phone calls show "Not configured" (GEN-004).
+    txcontact_base_url: str = "https://amber.txcontact.com"
+    txcontact_dialer_username: str | None = None
+    txcontact_dialer_password: SecretStr | None = None
+    txcontact_campaign_ref: str = "dc-record-call"
+    txcontact_source: str = "webapi"
+    txcontact_record_user: str | None = None
+    txcontact_record_password: SecretStr | None = None
+    # Word sent before the token in the Authorization header; TxContact's API description does not
+    # say which one it expects (NOT VERIFIED), so it can be changed without a release.
+    txcontact_auth_scheme: str = Field(default="Token", max_length=20)
+    # Time zone of the times TxContact reports when they carry none (NOT VERIFIED).
+    txcontact_timezone: str = "Asia/Kolkata"
+    txcontact_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    # After the moderator closes a call, look for its recording for this long before asking a
+    # person to pick it or try again.
+    telephony_fetch_minutes: int = Field(default=60, ge=5, le=24 * 60)
+    telephony_max_download_bytes: int = Field(default=500_000_000, ge=1_000_000)
+
     @field_validator("data_encryption_key")
     @classmethod
     def _fernet_key(cls, value: SecretStr) -> SecretStr:
@@ -107,7 +127,14 @@ class Settings(BaseSettings):
             raise ValueError("must be a Fernet key (32 url-safe base64-encoded bytes)") from None
         return value
 
-    @field_validator("report_timezone")
+    @field_validator("txcontact_base_url")
+    @classmethod
+    def _txcontact_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")) or value.endswith("/"):
+            raise ValueError("must be scheme://host[:port] without a trailing slash")
+        return value
+
+    @field_validator("report_timezone", "txcontact_timezone")
     @classmethod
     def _timezone(cls, value: str) -> str:
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -187,7 +214,18 @@ class Settings(BaseSettings):
                 raise ValueError("COOKIE_SECURE cannot be false in production")
             if not self.storage_configured:
                 raise ValueError("production needs STORAGE_BUCKET and storage keys")
+            if not self.txcontact_base_url.startswith("https://"):
+                raise ValueError("TXCONTACT_BASE_URL must use https in production")
         return self
+
+    @property
+    def telephony_configured(self) -> bool:
+        return bool(
+            self.txcontact_dialer_username
+            and self.txcontact_dialer_password
+            and self.txcontact_record_user
+            and self.txcontact_record_password
+        )
 
     @property
     def storage_configured(self) -> bool:
@@ -219,6 +257,9 @@ class Settings(BaseSettings):
             values.append(self.smtp_password.get_secret_value())
         if self.storage_secret_access_key is not None:
             values.append(self.storage_secret_access_key.get_secret_value())
+        for secret in (self.txcontact_dialer_password, self.txcontact_record_password):
+            if secret is not None:
+                values.append(secret.get_secret_value())
         password = make_url(self.database_url.get_secret_value()).password
         if password:
             values.append(str(password))

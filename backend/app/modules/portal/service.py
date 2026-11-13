@@ -35,7 +35,7 @@ from app.modules.projects.models import Project
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.tasks.models import Task
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
+FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 MAX_SESSIONS = 200
 # What a participant sees for each task state: no internal workflow words.
 SESSION_STATES = {

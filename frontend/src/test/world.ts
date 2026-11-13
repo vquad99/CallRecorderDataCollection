@@ -279,6 +279,8 @@ export function worldHandlers(): Record<string, Handler> {
       { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },
     ]),
     "GET /api/v1/tasks/t1/recordings": ok([]),
+    "GET /api/v1/tasks/t1/calls": ok([]),
+    "GET /api/v1/telephony/status": ok({ configured: true, provider: "TXCONTACT" }),
     "GET /api/v1/audit-logs": ok(
       page([
         {

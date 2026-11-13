@@ -17,6 +17,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Icon, IconTile } from "../../components/Icon";
 import { Stepper } from "../../components/Stepper";
 import { AudioQcPanel, Player } from "./AudioQcPanel";
+import { PhoneCalls } from "./CallCard";
 
 const FLOW: readonly string[] = [
   "DRAFT",
@@ -113,7 +114,7 @@ function ListenLatest({ taskId }: { taskId: string }) {
   const { state } = useResource(() => rec.listRecordings(taskId), [taskId]);
   if (state.status !== "loaded") return null;
   const latest = state.data.find((r) => r.state === "READY");
-  const asset = latest?.assets.find((a) => a.kind === "FTF_DERIVED_PCM");
+  const asset = latest ? rec.deliveryAsset(latest.assets) : undefined;
   return asset ? (
     <Player assetId={asset.id} />
   ) : (
@@ -499,10 +500,8 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                 <td>{Math.round(r.saved_seconds / 60)} min</td>
                 <td>{r.assets.length} audio + consent record + details</td>
                 <td>
-                  {r.assets.find((a) => a.kind === "FTF_DERIVED_PCM") ? (
-                    <Player
-                      assetId={(r.assets.find((a) => a.kind === "FTF_DERIVED_PCM") as rec.Asset).id}
-                    />
+                  {rec.deliveryAsset(r.assets) ? (
+                    <Player assetId={(rec.deliveryAsset(r.assets) as rec.Asset).id} />
                   ) : (
                     "-"
                   )}
@@ -609,6 +608,9 @@ export function TaskDetailPage() {
       ) : null}
       {task.is_moderator && task.recording_mode === "FACE_TO_FACE" ? (
         <RecordCard task={task} onChange={replace} />
+      ) : null}
+      {task.recording_mode === "TELEPHONY" ? (
+        <PhoneCalls task={task} onChange={replace} onTaskStale={reload} />
       ) : null}
       <AdminReviewCard task={task} onChange={replace} />
       {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}

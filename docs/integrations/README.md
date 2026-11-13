@@ -15,4 +15,5 @@ the platform relies on, record (runbook A1.13, GEN-005):
 
 Never store credentials, API keys or real participant data here.
 
-Current contents: none. No provider or model has been checked yet.
+Current contents: `exotel/` (desk research, D-070), `kathbath/`, and `txcontact/` (the telephony
+provider in use, D-101; built from its API description, not yet tested on the account).

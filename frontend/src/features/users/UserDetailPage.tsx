@@ -4,6 +4,7 @@ import { useParams } from "react-router";
 
 import * as admin from "../../api/admin";
 import type { ApiError } from "../../api/client";
+import { setAgentSeat } from "../../api/telephony";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
@@ -106,6 +107,50 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
   );
 }
 
+/** The TxContact agent seat a moderator's phone calls ring (D-101); one seat per person. */
+function AgentSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
+  const [seat, setSeat] = useState(user.telephony_agent_id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  return (
+    <form
+      className="card"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        setMessage(null);
+        setAgentSeat(user.id, seat.trim())
+          .then((r) => {
+            onSaved({ ...user, telephony_agent_id: r.telephony_agent_id });
+            setMessage(r.telephony_agent_id ? "Agent seat saved." : "Agent seat removed.");
+          })
+          .catch((err: unknown) => setError(toApiError(err)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <h2>Phone calls</h2>
+      <p className="muted">
+        The TxContact agent seat this person signs in to. Calls they start ring them there. Leave it
+        empty for people who do not make phone calls.
+      </p>
+      <TextField
+        label="TxContact agent seat"
+        value={seat}
+        maxLength={40}
+        onChange={(e) => setSeat(e.target.value)}
+      />
+      <Button type="submit" variant="secondary" busy={busy}>
+        Save agent seat
+      </Button>
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </form>
+  );
+}
+
 export function UserDetailPage() {
   const { userId = "" } = useParams();
   const { state, reload, replace } = useResource(() => admin.getUser(userId), [userId]);
@@ -122,6 +167,9 @@ export function UserDetailPage() {
             {state.data.password_set ? "set" : "invitation pending"}
           </p>
           <Editor key={state.data.id + state.data.status} user={state.data} onSaved={replace} />
+          {state.data.roles.includes("MODERATOR") ? (
+            <AgentSeat key={`seat-${state.data.id}`} user={state.data} onSaved={replace} />
+          ) : null}
         </>
       ) : null}
     </section>

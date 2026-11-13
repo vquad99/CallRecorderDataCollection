@@ -38,7 +38,7 @@ from app.modules.tasks.models import Task, TaskAssignment
 
 View = Literal["client", "worker", "manager"]
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
+FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 MODES = ("FACE_TO_FACE", "TELEPHONY")
 MAX_PROJECTS = 200  # the project picker; a Super Admin with more narrows by project
 MAX_TEAM = 25  # busiest moderators shown to managers

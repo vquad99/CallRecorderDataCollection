@@ -62,6 +62,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Time step of the last authenticator code accepted; a code is never accepted twice (D-050).
     mfa_last_step: Mapped[int | None] = mapped_column(BigInteger)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The moderator's agent seat at the telephony provider: calls they start ring them there
+    # (D-101). Empty for everyone who does not make phone calls.
+    telephony_agent_id: Mapped[str | None] = mapped_column(String(40))
 
     roles: Mapped[list[RoleRecord]] = relationship(secondary="user_roles", lazy="selectin")
 

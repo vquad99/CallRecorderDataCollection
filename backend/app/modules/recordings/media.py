@@ -120,6 +120,90 @@ def resample_to_pcm16(
                 break
 
 
+def resample_keep_channels_to_pcm16(
+    raw: Path, rate: int, out: Path, channels: int, *, offset: int = 0, length: int | None = None
+) -> None:
+    """Telephony delivery file (D-101): every channel of the interleaved float32 input, 16 kHz,
+    signed 16-bit; channels are kept apart, never mixed. Same resampler, rounding and clipping
+    as the face-to-face file, one block at a time."""
+    length = raw.stat().st_size - offset if length is None else length
+    if channels < 1 or length % (4 * channels):
+        raise ValueError("raw float32 data is not a whole number of frames")
+    stream = soxr.ResampleStream(rate, TARGET_RATE, channels, dtype="float32", quality="VHQ")
+    block_bytes = BLOCK * 4 * channels
+    remaining = length
+    with raw.open("rb") as src, wave.open(str(out), "wb") as dst:
+        src.seek(offset)
+        dst.setnchannels(channels)
+        dst.setsampwidth(2)
+        dst.setframerate(TARGET_RATE)
+        while True:
+            part = src.read(min(block_bytes, remaining))
+            remaining -= len(part)
+            last = remaining <= 0 or len(part) == 0
+            frames = np.frombuffer(part, dtype="<f4").reshape(-1, channels)
+            resampled = stream.resample_chunk(frames, last=last)
+            pcm = np.clip(np.round(resampled.astype(np.float64) * 32768.0), -32768, 32767).astype(
+                "<i2"
+            )
+            dst.writeframes(np.ascontiguousarray(pcm).tobytes())
+            if last:
+                break
+
+
+@dataclass(frozen=True)
+class ProviderAudio:
+    """What a provider's file turned out to be, as read by libsndfile."""
+
+    container: str
+    codec: str
+    sample_rate: int
+    channels: int
+    bit_depth: int
+
+
+_SUBTYPE_BITS = {
+    "PCM_S8": 8,
+    "PCM_U8": 8,
+    "PCM_16": 16,
+    "PCM_24": 24,
+    "PCM_32": 32,
+    "FLOAT": 32,
+    "DOUBLE": 64,
+    "ULAW": 8,
+    "ALAW": 8,
+}
+
+
+def decode_to_float_wav(src: Path, out: Path) -> ProviderAudio:
+    """Decode any file libsndfile reads (WAV incl. mu-law/A-law, MP3, FLAC, Ogg) to a 32-bit float
+    WAV at its own rate with all its channels. The samples are decoded, not changed: no
+    resampling, gain or mixing. Raises ValueError for a format it cannot read."""
+    import soundfile
+
+    try:
+        handle = soundfile.SoundFile(str(src))
+    except (RuntimeError, soundfile.LibsndfileError) as exc:
+        raise ValueError(f"the provider's file cannot be read as audio ({exc})") from None
+    raw = out.with_suffix(".f32")
+    with handle, raw.open("wb") as dst:
+        rate, channels = int(handle.samplerate), int(handle.channels)
+        info = ProviderAudio(
+            container=str(handle.format).lower(),
+            codec=str(handle.subtype).lower(),
+            sample_rate=rate,
+            channels=channels,
+            bit_depth=_SUBTYPE_BITS.get(str(handle.subtype), 0),
+        )
+        for block in handle.blocks(blocksize=1 << 16, dtype="float32", always_2d=True):
+            dst.write(np.ascontiguousarray(block, dtype="<f4").tobytes())
+    try:
+        write_float_wav(raw, out, rate, channels)
+    finally:
+        raw.unlink(missing_ok=True)
+    return info
+
+
 @dataclass(frozen=True)
 class WavInfo:
     container: str

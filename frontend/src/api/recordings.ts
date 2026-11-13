@@ -115,12 +115,19 @@ export async function putChunk(
   }
 }
 
+/** The 16 kHz delivery file of a recording: face-to-face, or a phone call (D-101). */
+export const DELIVERY_KINDS: readonly string[] = [
+  "FTF_DERIVED_PCM",
+  "TELEPHONY_DERIVED_PCM",
+  "TELEPHONY_FINAL_STEREO",
+];
+export const deliveryAsset = (assets: readonly Asset[]): Asset | undefined =>
+  assets.find((a) => DELIVERY_KINDS.includes(a.kind));
+
 /** Saves the delivery file and, with it, the consent record (D-068) and the details file with
  * every measurement and the audio check (D-079). */
 export async function downloadWithConsent(recording: Recording, taskCode: string): Promise<void> {
-  const final = recording.assets.find(
-    (a) => a.kind === "FTF_DERIVED_PCM" || a.kind === "TELEPHONY_FINAL_STEREO",
-  );
+  const final = deliveryAsset(recording.assets);
   if (!final) throw new ApiError({ status: 404, code: "NOT_FOUND", message: "File not found" });
   const { url } = await assetUrl(final.id, "download");
   const link = document.createElement("a");

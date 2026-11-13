@@ -60,6 +60,9 @@ later syncs.
 | `EMAIL_BACKEND`, `SMTP_*`, `EMAIL_FROM` | `smtp`, `smtp.resend.com`, port 587, user `resend`, password = Resend API key (secret), `Conversation Collection <no-reply@dubdesk.live>` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` (secret) | First Super Admin, created once by `prepare-deploy` |
 | `ALLOW_DEMO_SEED` | `false` (demo accounts are never created in production) |
+| `TXCONTACT_DIALER_USERNAME`, `TXCONTACT_DIALER_PASSWORD` (secret) | TxContact dialer login (D-101). Empty: phone calls show "Not configured". The worker copies them from `ccp-api`. |
+| `TXCONTACT_RECORD_USER`, `TXCONTACT_RECORD_PASSWORD` (secret) | TxContact recording-service login (may differ from the dialer's) |
+| `TXCONTACT_BASE_URL`, `TXCONTACT_CAMPAIGN_REF` | `https://amber.txcontact.com`, `dc-record-call` |
 
 The application refuses to start in production without real email, Redis, an https address and
 storage keys (`backend/app/core/config.py`).

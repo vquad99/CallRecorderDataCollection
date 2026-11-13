@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.adapters.txcontact import TxContact
 from app.api.health import router as health_router
 from app.api.router import api_router
 from app.core.config import Settings, load_settings
@@ -63,6 +64,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.email_sender = build_sender(settings)
     app.state.rate_limiter = build_limiter(settings)
     app.state.storage = build_storage(settings)
+    # Phone calls (D-101): unset credentials leave telephony truthfully "Not configured" (GEN-004).
+    app.state.telephony = TxContact(settings) if settings.telephony_configured else None
     app.state.celery = None
     if settings.redis_url is not None:
         from celery import Celery
