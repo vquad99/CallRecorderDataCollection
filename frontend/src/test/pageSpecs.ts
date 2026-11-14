@@ -39,6 +39,7 @@ export const PAGES: Record<string, PageSpec> = {
     data: "GET /api/v1/system/status",
   },
   "/calls": { url: "/calls", shows: /Calls per day/, data: "GET /api/v1/telephony/analytics" },
+  "/two-step-setup": { url: "/two-step-setup", shows: /Nothing to set up here/ },
   "/account": { url: "/account", shows: /This device/i, data: "GET /api/v1/auth/sessions" },
   "/projects": { url: "/projects", shows: /Hindi conversations/, data: "GET /api/v1/projects" },
   "/projects/:projectId": {

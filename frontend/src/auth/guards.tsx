@@ -4,13 +4,19 @@ import { Navigate, Outlet, useLocation } from "react-router";
 import { EmptyState, LoadingState } from "../components/StateViews";
 import { useAuth } from "./AuthContext";
 
+const SETUP = "/two-step-setup";
+
 export function RequireAuth() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const location = useLocation();
   if (status === "loading") return <LoadingState label="Checking your sign-in" />;
   if (status === "anonymous") {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
+  }
+  // An account whose role needs two-step sign-in sets it up before anything else (D-106).
+  if (user?.mfa_setup_required && location.pathname !== SETUP) {
+    return <Navigate to={SETUP} replace />;
   }
   return <Outlet />;
 }

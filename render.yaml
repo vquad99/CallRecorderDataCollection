@@ -64,6 +64,11 @@ services:
         value: "10000"
       - key: APP_ENV
         value: production
+      # Super Admin and Project Admin accounts must set up two-step sign-in (D-106). Already
+      # the rule outside development; written here so it is seen. A lost authenticator:
+      # another Super Admin resets it on the user's page, or `python -m app.cli reset-mfa`.
+      - key: REQUIRE_ADMIN_MFA
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: ccp-db
@@ -153,6 +158,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: REQUIRE_ADMIN_MFA
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: ccp-db

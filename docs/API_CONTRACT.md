@@ -44,7 +44,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /auth/csrf | public; sets the CSRF cookie |
 | POST | /auth/login | public, throttled |
 | POST | /auth/logout | authenticated |
-| GET | /auth/me | authenticated |
+| GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106) |
 | POST | /auth/password/forgot | public, throttled; same response whether or not the email exists |
 | POST | /auth/password/reset | public, single-use token |
 | GET | /auth/sessions | authenticated (own) |
@@ -64,6 +64,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /users/export | `users.manage` |
 | POST | /users/{id}/send-password-link | `users.manage` |
 | POST | /users/{id}/sessions/revoke | `users.manage` |
+| POST | /users/{id}/mfa/reset | `users.manage`. For a lost authenticator: two-step sign-in off and signed out everywhere; `{sessions_revoked}`. 409 `MFA_NOT_ENABLED`, `USE_ACCOUNT_PAGE` (one's own account). Audited as `user.mfa_reset` (D-106) |
 | GET | /roles | `users.manage` |
 
 ## Settings (CAP-*)
@@ -221,6 +222,7 @@ apostrophe put before it. No transcripts: this version makes none.
 
 ## Security review changes (D-064)
 
+- **Two-step sign-in is required for Super Admin and Project Admin (D-106).** While such an account has not set it up, every request answers 403 `MFA_SETUP_REQUIRED` except `GET /auth/me`, `POST /auth/mfa/enroll`, `POST /auth/mfa/confirm` and `POST /auth/logout`. `POST /auth/login` and `GET /auth/me` answer with `mfa_setup_required: true`. Setting: `REQUIRE_ADMIN_MFA` (unset: on everywhere except development and test).
 - `POST /auth/mfa/enroll` takes `{"password": "..."}`; a wrong password answers 400 `INVALID_CREDENTIALS` and counts as a failed sign-in.
 - `POST /auth/password/forgot` answers 202 at once for every address; the lookup and email happen afterwards.
 - `GET /projects/{id}/members`: `email` is `null` unless the caller manages the team (`projects.members` in that project).

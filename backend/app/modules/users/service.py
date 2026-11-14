@@ -311,6 +311,39 @@ def revoke_user_sessions(
     return count
 
 
+def reset_mfa(
+    db: Session, *, actor_id: uuid.UUID | None, user_id: uuid.UUID, ip: str | None
+) -> int:
+    """Turns off a person's two-step sign-in when they have lost their authenticator, and signs
+    them out everywhere (D-106). They sign in with their password and, where their role needs
+    it, set two-step sign-in up again before anything else. Not for one's own account: that goes
+    through the account page, with the current code."""
+    user = get_user(db, user_id)
+    if actor_id is not None and user.id == actor_id:
+        raise AppError(
+            "Turn two-step sign-in off on your own account page, with your current code",
+            code="USE_ACCOUNT_PAGE",
+            status_code=409,
+        )
+    if not user.mfa_enabled and not user.mfa_secret_enc:
+        raise AppError("Two-step sign-in is not on", code="MFA_NOT_ENABLED", status_code=409)
+    user.mfa_enabled = False
+    user.mfa_secret_enc = None
+    user.mfa_last_step = None
+    count = auth_service.revoke_sessions(db, user.id)
+    audit.record(
+        db,
+        action="user.mfa_reset",
+        entity_type="user",
+        entity_id=user.id,
+        actor_id=actor_id,
+        ip=ip,
+        after={"sessions_revoked": count},
+    )
+    db.commit()
+    return count
+
+
 # -------------------------------------------------------------- CSV import / export (USER-005/006)
 
 

@@ -153,6 +153,25 @@ def create_admin(
         engine.dispose()
 
 
+def reset_mfa(settings: Settings, email: str) -> str:
+    """Turns off two-step sign-in for one account and signs it out everywhere: the way back in
+    for an admin who lost their authenticator when no other Super Admin can do it (D-106).
+    Audited, with no actor: it was done on the server."""
+    from sqlalchemy import func, select
+
+    from app.modules.auth.models import User
+    from app.modules.users import service as users
+
+    with make_session_factory(create_db_engine(settings))() as db:
+        user = db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
+        if user is None:
+            raise SeedRefused("no account with that email address")
+        if not user.mfa_enabled and not user.mfa_secret_enc:
+            return "has no two-step sign-in to reset"
+        revoked = users.reset_mfa(db, actor_id=None, user_id=user.id, ip=None)
+        return f"two-step sign-in is off; {revoked} session(s) ended"
+
+
 def _has_active_super_admin(db: Any) -> bool:
     from app.modules.auth.models import UserRole
 
@@ -403,6 +422,11 @@ def main(argv: list[str] | None = None) -> int:
     admin.add_argument(
         "--reset-password", action="store_true", help="also set the password of an existing account"
     )
+    reset = sub.add_parser(
+        "reset-mfa",
+        help="turn off two-step sign-in for one account (lost authenticator) and sign it out",
+    )
+    reset.add_argument("email", help="the account's email address")
     sub.add_parser(
         "retention", help="delete stored files older than each project's retention rules"
     )
@@ -454,6 +478,8 @@ def main(argv: list[str] | None = None) -> int:
                 settings, email, os.environ.get("ADMIN_PASSWORD", ""), reset=args.reset_password
             )
             print(f"create-admin: {email} {outcome}")
+        elif args.command == "reset-mfa":
+            print(f"reset-mfa: {args.email} {reset_mfa(settings, args.email)}")
         elif args.command == "rotate-keys":
             for what, n in rotate_keys(settings).items():
                 print(f"rotate-keys: {n} {what}(s) re-encrypted")

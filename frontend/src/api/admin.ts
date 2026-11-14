@@ -72,6 +72,10 @@ export const revokeUserSessions = (id: string) =>
   apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${id}/sessions/revoke`, {
     method: "POST",
   });
+/** For someone who lost their authenticator: two-step sign-in off, signed out everywhere
+ * (D-106). */
+export const resetUserMfa = (id: string) =>
+  apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${id}/mfa/reset`, { method: "POST" });
 export const previewImport = (csv: string) =>
   apiRequest<{ rows: ImportRow[]; valid_count: number; invalid_count: number }>(
     "/api/v1/users/import/preview",

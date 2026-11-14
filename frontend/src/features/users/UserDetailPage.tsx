@@ -100,6 +100,28 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
         >
           Sign out everywhere
         </Button>
+        {user.mfa_enabled ? (
+          <Button
+            variant="secondary"
+            busy={busy}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Reset two-step sign-in for ${user.display_name}? Only when they have lost their ` +
+                    "authenticator. They are signed out and set it up again at their next sign-in.",
+                )
+              )
+                return;
+              void run(async () => {
+                await admin.resetUserMfa(user.id);
+                onSaved({ ...user, mfa_enabled: false });
+                return "Two-step sign-in reset. They are signed out everywhere.";
+              });
+            }}
+          >
+            Reset two-step sign-in
+          </Button>
+        ) : null}
       </div>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />

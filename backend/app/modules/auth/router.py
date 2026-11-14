@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Annotated
 
@@ -22,6 +23,7 @@ from app.modules.auth.deps import (
     client_ip,
     forbidden,
     load_principal,
+    needs_mfa_setup,
     viewing,
 )
 from app.modules.auth.models import User, UserSession
@@ -63,6 +65,8 @@ class MeOut(BaseModel):
     permissions: list[str]
     project_ids: list[uuid.UUID]
     mfa_enabled: bool
+    # True when this account must set up two-step sign-in before anything else (D-106).
+    mfa_setup_required: bool = False
     # Set while a Super Admin views the app as this user (D-100); everything is read-only then.
     viewer: ViewerOut | None = None
 
@@ -76,6 +80,7 @@ def me_from(p: Principal) -> MeOut:
         permissions=sorted(p.permissions),
         project_ids=sorted(p.project_ids, key=str),
         mfa_enabled=p.mfa_enabled,
+        mfa_setup_required=p.mfa_setup_required,
         viewer=ViewerOut(id=p.viewer_id, display_name=p.viewer_name or "") if p.viewer_id else None,
     )
 
@@ -130,7 +135,9 @@ def login(
     max_age = settings.session_absolute_hours * 3600
     _set_cookie(response, settings, SESSION_COOKIE, result.token, http_only=True, max_age=max_age)
     _set_cookie(response, settings, CSRF_COOKIE, new_token(), http_only=False, max_age=max_age)
-    return me_from(load_principal(db, result.user, result.session_id))
+    principal = load_principal(db, result.user, result.session_id)
+    # The page then goes straight to the set-up when this account's role needs it (D-106).
+    return me_from(replace(principal, mfa_setup_required=needs_mfa_setup(settings, result.user)))
 
 
 @router.post("/logout", status_code=204)

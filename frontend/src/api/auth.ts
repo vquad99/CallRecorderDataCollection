@@ -8,6 +8,9 @@ export interface Me {
   permissions: string[];
   project_ids: string[];
   mfa_enabled: boolean;
+  /** This account's role needs two-step sign-in and it is not set up yet: only the set-up
+   * page works until it is (D-106). */
+  mfa_setup_required?: boolean;
   /** Set while a Super Admin views the app as this user; everything is read-only then (D-100). */
   viewer?: { id: string; display_name: string } | null;
 }

@@ -39,6 +39,9 @@ export interface RequestOptions {
 }
 
 export const UNAUTHENTICATED_EVENT = "ccp:unauthenticated";
+/** The server refused a request because this account must set up two-step sign-in first
+ * (D-106): for example a role given while the person was already signed in. */
+export const MFA_SETUP_EVENT = "ccp:mfa-setup-required";
 const CSRF_COOKIE = "csrf_token";
 const CSRF_HEADER = "X-CSRF-Token";
 
@@ -115,6 +118,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     // Lets the sign-in state react when a session ends mid-use (AUTH-016).
     window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT, { detail: { code: error.code } }));
   }
+  if (error.code === "MFA_SETUP_REQUIRED") window.dispatchEvent(new Event(MFA_SETUP_EVENT));
   throw error;
 }
 

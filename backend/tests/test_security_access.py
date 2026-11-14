@@ -470,6 +470,16 @@ CASES: list[Case] = [
         Perm.USERS_MANAGE,
         foreign=False,
     ),
+    # A lost authenticator (D-106): only the people who manage users may reset someone's
+    # two-step sign-in. (The spare user has none, so the Super Admin's answer is "not on".)
+    case(
+        "POST",
+        "/api/v1/users/{user_id}/mfa/reset",
+        lambda e, s: f"/api/v1/users/{e.spare_user}/mfa/reset",
+        {SA},
+        Perm.USERS_MANAGE,
+        foreign=False,
+    ),
     case(
         "GET", "/api/v1/roles", lambda e, s: "/api/v1/roles", {SA}, Perm.USERS_MANAGE, foreign=False
     ),

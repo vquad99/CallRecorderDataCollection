@@ -256,6 +256,16 @@ def revoke_sessions(
     )
 
 
+@router.post("/users/{user_id}/mfa/reset", response_model=RevokedOut)
+def reset_mfa(user_id: uuid.UUID, request: Request, admin: Admin, db: DbSession) -> RevokedOut:
+    """For someone who lost their authenticator: two-step sign-in off, signed out everywhere."""
+    return RevokedOut(
+        sessions_revoked=service.reset_mfa(
+            db, actor_id=admin.user_id, user_id=user_id, ip=client_ip(request)
+        )
+    )
+
+
 class RoleOut(BaseModel):
     code: str
     name: str

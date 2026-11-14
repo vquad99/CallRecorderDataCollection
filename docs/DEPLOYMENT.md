@@ -120,6 +120,7 @@ Commands (run where the backend's settings are available):
 
 | Command | When | What it does |
 |---|---|---|
+| `python -m app.cli reset-mfa <email>` | when an admin has lost their authenticator and no other Super Admin can reset it | Turns off that account's two-step sign-in and signs it out everywhere; they set it up again at the next sign-in (D-106) |
 | `python -m app.cli retention` | daily (scheduler) | Deletes stored files older than each project's retention rules, with audit entries |
 | `python -m app.cli recover-recordings` | on demand | Sends every recording left half-done by a stopped process to processing again; the web processes also do this at start-up and every `RECOVERY_INTERVAL_SECONDS` (D-055) |
 

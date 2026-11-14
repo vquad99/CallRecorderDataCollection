@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 
 import * as authApi from "../api/auth";
-import { ApiError, UNAUTHENTICATED_EVENT } from "../api/client";
+import { ApiError, MFA_SETUP_EVENT, UNAUTHENTICATED_EVENT } from "../api/client";
 
 type Status = "loading" | "anonymous" | "authenticated";
 
@@ -67,8 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setStatus("anonymous");
     };
+    // The server says this account must set up two-step sign-in first: go there (D-106).
+    const onSetup = () => setUser((u) => (u ? { ...u, mfa_setup_required: true } : u));
     window.addEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
-    return () => window.removeEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
+    window.addEventListener(MFA_SETUP_EVENT, onSetup);
+    return () => {
+      window.removeEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
+      window.removeEventListener(MFA_SETUP_EVENT, onSetup);
+    };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string, totpCode?: string) => {

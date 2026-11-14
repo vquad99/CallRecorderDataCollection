@@ -132,10 +132,13 @@ export function AppShell() {
   }
 
   const roles = (user?.roles ?? []).map((r) => ROLE_LABELS[r] ?? r).join(", ");
-  const groups = GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => i.permission === null || can(i.permission)),
-  })).filter((g) => g.items.length > 0);
+  // No menu until two-step sign-in is set up: nothing behind it would open (D-106).
+  const groups = (user?.mfa_setup_required ? [] : GROUPS)
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.permission === null || can(i.permission)),
+    }))
+    .filter((g) => g.items.length > 0);
   const current = groups
     .flatMap((g) => g.items.map((i) => ({ ...i, group: g.title })))
     .find((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`));

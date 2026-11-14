@@ -44,6 +44,9 @@ class Principal:
     permissions: frozenset[str]
     project_ids: frozenset[uuid.UUID]
     mfa_enabled: bool
+    # This account's role needs two-step sign-in and it is not set up yet (D-106): only the
+    # set-up itself is open to it.
+    mfa_setup_required: bool = False
     # Set while a Super Admin views the app as this user (D-100): who is really looking.
     viewer_id: uuid.UUID | None = None
     viewer_name: str | None = None
@@ -120,13 +123,39 @@ def current_principal(request: Request, db: DbSession) -> Principal:
     if now - session.last_seen_at >= _LAST_SEEN_WRITE_INTERVAL:
         session.last_seen_at = now
         db.commit()
+    setup_required = needs_mfa_setup(settings, user)
+    if setup_required and (request.method, request.url.path) not in _OPEN_BEFORE_MFA_SETUP:
+        raise AppError(
+            "Set up two-step sign-in to continue: your role needs it.",
+            code="MFA_SETUP_REQUIRED",
+            status_code=403,
+        )
     if session.view_as_user_id is not None:
         viewed = view_as_target(db, user, session)
         if viewed is not None:
             refuse_changes_while_viewing(request)
             db.info[VIEWER_KEY] = user.id
             return viewing(load_principal(db, viewed, session.id), user)
-    return load_principal(db, user, session.id)
+    return replace(load_principal(db, user, session.id), mfa_setup_required=setup_required)
+
+
+# Roles that must have two-step sign-in (D-106), and what an account that has not set it up yet
+# may still do: see who it is, set it up, and sign out.
+MFA_REQUIRED_ROLES = frozenset({Role.SUPER_ADMIN.value, Role.PROJECT_ADMIN.value})
+_OPEN_BEFORE_MFA_SETUP = {
+    ("GET", "/api/v1/auth/me"),
+    ("POST", "/api/v1/auth/logout"),
+    ("POST", "/api/v1/auth/mfa/enroll"),
+    ("POST", "/api/v1/auth/mfa/confirm"),
+}
+
+
+def needs_mfa_setup(settings: Settings, user: User) -> bool:
+    return (
+        settings.admin_mfa_required
+        and not user.mfa_enabled
+        and any(r.code in MFA_REQUIRED_ROLES for r in user.roles)
+    )
 
 
 # The only changes allowed while viewing as someone else: stop viewing, and sign out (D-100).

@@ -56,6 +56,10 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Home /> },
           {
+            path: "two-step-setup",
+            element: page(() => import("../auth/TwoStepSetupPage"), "TwoStepSetupPage"),
+          },
+          {
             element: <RequirePermission permission="dashboard.view" />,
             children: [
               {

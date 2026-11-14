@@ -43,10 +43,21 @@ click **Send reset link**. The emailed link works for 30 minutes. At most 3 link
 **Locked out.** After 5 wrong passwords in 15 minutes the account waits 15 minutes. You see
 **"Too many failed sign-in attempts. Try again later."**
 
-**Two-step sign-in (optional).** Click your name at the top right, then **My account → Two-step
-sign-in**. Type your password, click **Turn on two-step sign-in**, add the key shown to an
-authenticator app (Google Authenticator, Microsoft Authenticator), type the 6-digit code and click
-**Confirm**. From then on, sign-in asks for the code too.
+**Two-step sign-in.** With it, signing in needs your password and a 6-digit code from an
+authenticator app on your phone (Google Authenticator, Microsoft Authenticator or another one).
+
+- **Super Admin and Project Admin must have it.** The first time you sign in, the only page you
+  get is **Set up two-step sign-in**. Type your password and click **Turn on two-step sign-in**.
+  In the authenticator app add an account and type the **key** shown (**Copy key** copies it; on a
+  phone, **Open in an authenticator app on this device** adds it for you). Type the 6-digit code
+  the app shows and click **Confirm**. The application opens.
+- **Everyone else may turn it on**: click your name at the top right, then **My account →
+  Two-step sign-in**, and do the same.
+- **New phone:** on **My account**, turn it off with your password and a current code, then set
+  it up again with the new phone.
+- **Lost phone:** ask a Super Admin. On your user page they click **Reset two-step sign-in**. You
+  are signed out everywhere; sign in with your password and set it up again. (For the last Super
+  Admin, the person who runs the server uses `python -m app.cli reset-mfa <email>`.)
 
 **My account** also has **Change password** and **Signed-in devices** (sign out other devices).
 

@@ -1,0 +1,25 @@
+/* Setting up two-step sign-in (D-106): numbered steps and a key that is easy to read. */
+.twostep {
+  max-width: 720px;
+}
+.steps {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+.steps .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.twostep__key {
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}

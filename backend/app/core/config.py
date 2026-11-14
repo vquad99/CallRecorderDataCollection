@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     session_idle_minutes: int = Field(default=30, ge=5, le=24 * 60)
     session_absolute_hours: int = Field(default=12, ge=1, le=24 * 30)
     cookie_secure: bool | None = None
+    # Super Admin and Project Admin accounts must set up two-step sign-in before they can
+    # use anything else (D-106). Unset: required everywhere except development and test.
+    require_admin_mfa: bool | None = None
     password_min_length: int = Field(default=12, ge=8, le=64)
     password_reset_minutes: int = Field(default=30, ge=5, le=24 * 60)
     invite_hours: int = Field(default=72, ge=1, le=24 * 14)
@@ -251,6 +254,12 @@ class Settings(BaseSettings):
         if self.cookie_secure is None:
             return self.app_env not in ("development", "test")
         return self.cookie_secure
+
+    @property
+    def admin_mfa_required(self) -> bool:
+        if self.require_admin_mfa is None:
+            return self.app_env not in ("development", "test")
+        return self.require_admin_mfa
 
     @property
     def api_docs_enabled(self) -> bool:

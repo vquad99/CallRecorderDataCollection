@@ -171,7 +171,7 @@ const FORMS: Record<string, FormSpec> = {
     kept: "Current password",
   },
   "confirm two-step sign-in": {
-    source: "src/features/account/AccountPage.tsx",
+    source: "src/auth/TwoStepEnrol.tsx",
     url: "/account",
     ready: /Signed-in devices/,
     open: [type("Your password", "a-long-password"), click("Turn on two-step sign-in")],
@@ -186,7 +186,7 @@ const FORMS: Record<string, FormSpec> = {
     },
   },
   "start two-step sign-in": {
-    source: "src/features/account/AccountPage.tsx",
+    source: "src/auth/TwoStepEnrol.tsx",
     url: "/account",
     ready: /Signed-in devices/,
     fill: [type("Your password", "a-long-password")],

@@ -227,6 +227,18 @@ start, change or cancel a call (every change is refused while viewing).
 | A stored file that no longer matches its checksum is never exported | Each file is hashed while it is copied; a mismatch stops the export and removes the half-made bundle | test_export_jobs.py |
 | A table cell cannot run as a spreadsheet formula | Cells starting with `=`, `+`, `-`, `@` get an apostrophe | test_exports_zip.py |
 
+## 9g. Two-step sign-in for admins, 2026-11-14 (D-106)
+
+| Rule | Where it is kept | Test |
+|---|---|---|
+| A Super Admin or Project Admin without two-step sign-in can do nothing but set it up | Checked on every request, before anything else, in the same place that checks the session | test_admin_mfa.py, journeys/twostep.spec.ts |
+| A role given later brings the rule at once; other roles are not asked | The same check reads the account's roles on each request | test_admin_mfa.py |
+| Looking at the app as someone else needs the Super Admin's own two-step sign-in | The check is on the person who is really signed in | test_admin_mfa.py |
+| A lost authenticator is reset only by people who manage users, never for one's own account, and ends every session of that person | `POST /users/{id}/mfa/reset`; audited as `user.mfa_reset` | test_admin_mfa.py, test_security_access.py |
+| The last Super Admin has a way back that needs the server, not the application | `python -m app.cli reset-mfa <email>`; audited with no actor | test_admin_mfa.py |
+
+Open: the key is typed or copied; there is no QR code to scan (needs a library; DECISIONS D-106).
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

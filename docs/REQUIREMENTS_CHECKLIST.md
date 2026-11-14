@@ -184,7 +184,7 @@ process rule), 187 are built with passing automated tests (69 of them also verif
 | AUTH-005 | Built | Session expiry; an expired session requires login. |  |
 | AUTH-006 | Built | Passwords hashed with a modern adaptive algorithm. |  |
 | AUTH-007 | Built | Account active/disabled state; disabled users cannot log in. |  |
-| AUTH-008 | Built | Optional multi-factor authentication, added only after the base flow is secure. |  |
+| AUTH-008 | Built | Optional multi-factor authentication, added only after the base flow is secure. | D-106: required for Super Admin and Project Admin (owner decision); optional for other roles |
 | AUTH-009 | Built | Failed login throttling blocks repeated failures. |  |
 | AUTH-010 | Built | Session and device management, including revocation. |  |
 | AUTH-011 | Verified | Role and project access enforced; a moderator cannot open admin APIs by changing a URL or calling the API outside the UI. |  |
