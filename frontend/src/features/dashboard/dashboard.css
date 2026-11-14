@@ -351,3 +351,10 @@
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+
+/* Filters (D-108): the button that takes them off sits on the line of the fields and is as wide
+   as its words, not as its grid cell. */
+.filters > .button {
+  align-self: end;
+  justify-self: start;
+}

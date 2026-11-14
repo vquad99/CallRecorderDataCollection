@@ -1,0 +1,60 @@
+Dashboard filters, phone-call figures, and figures checked against their own SQL (D-108)
+DASH-001, DASH-002, DASH-003. 2026-11-14.
+
+NOT DONE
+- Cost estimates (DASH-005): there are no provider rates to estimate from.
+- No person compared the page with a spreadsheet of the data by hand; the comparison below is
+  by tests. Not run on the live site's data.
+No real personal data: demo accounts and made-up people.
+
+Where it ran
+------------
+A Windows 11 machine without Docker: PostgreSQL 16, SeaweedFS 4.51, the backend (uvicorn,
+Python 3.12, uv 0.13.1 frozen lockfile), the frontend (Vite dev server, Node 22), Microsoft Edge
+driven by Playwright.
+
+Automated checks (final run, 2026-11-14)
+----------------------------------------
+Backend   ruff format --check, ruff check (app tests loadtest) ... no problems
+          mypy (strict) app tests loadtest ..................... no issues in 162 source files
+          pip-audit ............................................. No known vulnerabilities found
+          pytest (PostgreSQL 16, REQUIRE_DB_TESTS=1) ............ 401 passed, 14 skipped, 4 failed
+                                                                  (Windows only, as before: 3 in
+                                                                  test_backup.py, 1 in test_tasks.py)
+Frontend  prettier --check ., tsc --noEmit, eslint . ............ no problems
+          vitest ................................................ 27 files, 453 tests passed
+          vite build + bundle budget ............................ first screen 123.4 KB (limit 125 KB)
+Journeys  playwright, real browser (Edge), real backend, database and storage:
+          boundaries, dashboard, interrupted, network, participant, password, phonecall,
+          recording, session ..................................... 9 passed (twostep skipped: it
+                                                                  needs a backend with that rule on)
+
+How the figures were checked (DASH-003)
+---------------------------------------
+backend/tests/test_dashboard_filters.py builds one project with three finished recordings whose
+lengths and moments are set in the database:
+
+  phone call, Hindi, moderator "mod" ........... 2.0 h, started 23:55 India time on day A
+  face-to-face, Hindi, "mod" ................... 1.5 h, started 00:05 India time on day A+1
+  face-to-face, Tamil (dialect Madurai), "mod2",
+  task approved ................................ 0.5 h, started 11:30 India time on day A+2
+
+The first two are ten minutes apart: neighbouring days in India, the same day in UTC (the test
+checks that too). test_every_figure_matches_sql_written_on_its_own compares the dashboard's
+answer with SQL written separately in the test for: hours, approved hours and recordings by
+mode; hours per day (the day taken in Asia/Kolkata); tasks by status; output per moderator;
+storage in use; phone calls placed and recorded.
+
+Filters (DASH-002): test_filters_narrow_every_figure (mode, language, dialect, status, staff,
+several together, storage follows, the lists offered, wrong values refused);
+test_chosen_days_count_in_india_time_and_are_bounded (one day, the next day, both, empty days,
+only a first or only a last day, no chosen days unchanged, first after last 422, more than 366
+days 422, exactly 366 accepted); test_filters_respect_who_is_asking (a moderator within their
+own work and never by person, a client viewer without people, another project's admin 404).
+
+In a real browser: frontend/journeys/dashboard.spec.ts, the administrator step: Recording type
+narrows the answer (telephony recordings 0, calls placed 0, the staff list present); Chosen days
+with two days gives exactly two days in the chart; days the wrong way round are caught on the
+page; Clear filters takes everything off.
+Page tests: frontend/src/features/dashboard/dashboard.test.tsx (each filter is sent; chosen
+days; the phone-call card; a client viewer has no status or staff filter).

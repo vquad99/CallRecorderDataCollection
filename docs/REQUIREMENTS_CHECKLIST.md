@@ -4,13 +4,13 @@ GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
 333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 187 are built with passing automated tests (69 of them also verified) - 64 %.
+process rule), 189 are built with passing automated tests (69 of them also verified) - 65 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 118 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 35 | some of it is built, or it needs a test that is not done yet |
+| Built | 120 | built and automated tests pass; not yet checked by hand |
+| Partly built / needs testing | 33 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
 | Not built | 21 | not started |
 | Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
@@ -43,7 +43,7 @@ process rule), 187 are built with passing automated tests (69 of them also verif
 | TRN |  |  |  |  |  |  | 12 |  |
 | TQC |  |  |  |  |  |  | 6 |  |
 | EXP |  | 8 | 2 |  |  |  |  |  |
-| DASH |  | 2 | 3 |  |  | 1 |  |  |
+| DASH |  | 4 | 1 |  |  | 1 |  |  |
 | SEC |  | 10 | 2 |  |  | 3 |  |  |
 | PWA |  |  |  |  | 9 |  |  |  |
 | OPS |  |  | 2 |  | 1 | 6 |  |  |
@@ -452,9 +452,9 @@ process rule), 187 are built with passing automated tests (69 of them also verif
 
 | ID | State | Requirement | Note |
 |---|---|---|---|
-| DASH-001 | Partly built / needs testing | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | Dashboard built (D-065); failed calls and provider usage wait for telephony |
-| DASH-002 | Partly built / needs testing | Filters: project, date range, language, dialect, mode, staff, status. | Project and period filters built; language, dialect, mode, staff and status filters not yet |
-| DASH-003 | Partly built / needs testing | Every metric reconciles with an independent SQL query, including date boundaries and timezone handling. | Figures tested against fixtures; independent SQL reconciliation and time-zone boundary test still to write |
+| DASH-001 | Partly built / needs testing | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | Everything listed except cost estimates, which need provider rates (DASH-005, B-01); phone calls added (D-108) |
+| DASH-002 | Built | Filters: project, date range, language, dialect, mode, staff, status. |  |
+| DASH-003 | Built | Every metric reconciles with an independent SQL query, including date boundaries and timezone handling. |  |
 | DASH-004 | Built | Role and project visibility enforced. |  |
 | DASH-005 | Blocked | Provider charges labelled as estimates with rate source and date. | Telephony provider (B-01): no charges yet |
 | DASH-006 | Built | Empty datasets and large date ranges handled. |  |

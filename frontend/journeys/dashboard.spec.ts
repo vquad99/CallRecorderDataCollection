@@ -1,5 +1,6 @@
 // Journey: every role opens the app on its own dashboard, and two-step sign-in asks for the
-// password before it starts (D-064, D-065). Requirements: DASH-001, DASH-004, ROLE-007, AUTH-008
+// password before it starts (D-064, D-065, D-108). Requirements: DASH-001, DASH-002, DASH-004,
+// ROLE-007, AUTH-008
 import { expect, test } from "@playwright/test";
 
 import { ADMIN_EMAIL, requireSetup, SEEDED, SEEDED_PASSWORD, signIn } from "./support";
@@ -47,6 +48,34 @@ test("each role lands on its own dashboard view", async ({ browser }) => {
     await asked;
     await page.getByText("Show as a table").click();
     await expect(page.getByRole("columnheader", { name: "Recorded" })).toBeVisible();
+
+    // The filters (D-108): each one narrows what the server is asked; the server answers with
+    // the lists to choose from and the figures for the choice.
+    const filters = page.getByRole("group", { name: "Filters" });
+    const byMode = page.waitForResponse((r) => r.url().includes("mode=FACE_TO_FACE"));
+    await filters.getByLabel("Recording type").selectOption("FACE_TO_FACE");
+    const narrowed = (await (await byMode).json()) as {
+      by_mode: { mode: string; recordings: number }[];
+      options: { languages: string[]; staff: { name: string }[] };
+      calls: { placed: number };
+    };
+    expect(narrowed.by_mode.find((m) => m.mode === "TELEPHONY")?.recordings).toBe(0);
+    expect(narrowed.calls.placed).toBe(0);
+    expect(Array.isArray(narrowed.options.staff)).toBe(true);
+    await page.getByLabel("Period").selectOption("custom");
+    const byDays = page.waitForResponse(
+      (r) => r.url().includes("date_from=2026-01-01") && r.url().includes("date_to=2026-01-02"),
+    );
+    await filters.getByLabel("From").fill("2026-01-01");
+    await filters.getByLabel("To").fill("2026-01-02");
+    const twoDays = (await (await byDays).json()) as { daily: unknown[]; recordings: number };
+    expect([twoDays.daily.length, twoDays.recordings]).toEqual([2, 0]);
+    await filters.getByLabel("To").fill("2025-12-01");
+    await expect(page.getByText("Must not be before the first day")).toBeVisible();
+    await filters.getByRole("button", { name: "Clear filters" }).click();
+    await expect(filters.getByLabel("Recording type")).toHaveValue("");
+    await expect(filters.getByLabel("From")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
   });
 
   await test.step("two-step sign-in does not start without the right password", async () => {

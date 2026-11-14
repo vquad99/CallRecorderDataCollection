@@ -212,7 +212,7 @@ apostrophe put before it. No transcripts: this version makes none.
 | Method | Path | Permission |
 |---|---|---|
 | GET | /dashboard?project_id=&days=7..90 | `dashboard.view` (built 2026-11-10, D-065). Answer shaped by role: `view` = `client` (progress only: hours recorded / approved, daily targets, per mode, per day), `worker` (the same for the caller's own tasks and recordings, plus tasks by status and QC counts) or `manager` (whole projects, plus `queues`, `team` output per moderator and `storage_bytes`). Fields a view does not get are `null`. A project the caller cannot see answers 404 like a missing one. Days are calendar days in `REPORT_TIMEZONE`. |
-| GET | /dashboard/productivity, /dashboard/failures, /dashboard/provider-usage | Phase 9: `dashboard.view`; filters: date range, language, dialect, mode, staff, status |
+| GET | /dashboard (filters, D-108) | The same address takes `mode` (FACE_TO_FACE / TELEPHONY), `language`, `dialect`, `status` (a task status), `staff_id` (managers only, 403 otherwise) and `date_from` / `date_to` (days in the report time zone, at most 366; 422 when the first is after the last). Without chosen days the totals count everything and `daily` holds the last `days` days; with them every figure counts those days only and `daily` holds exactly them. The answer adds `options` (`languages`, `dialects`, and for managers `staff` `[{id, name}]`), `date_from`, `date_to`, and for managers `calls` `{placed, recorded, could_not_be_placed, needs_a_person, open}`. Separate addresses for productivity, failures and provider usage are not built: this one carries them |
 
 ## Audit (SEC-*)
 

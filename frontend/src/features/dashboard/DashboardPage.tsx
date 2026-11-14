@@ -1,14 +1,23 @@
 // Dashboard (DASH-001..006). One page, three views decided by the server: a client sees collection
 // progress only; moderators and QC see their own work; managers also see what needs attention.
 import { useId, useMemo, useState } from "react";
+import { Link } from "react-router";
 
 import { TASK_STATUS_LABELS, type TaskStatus } from "../../api/work";
-import { getDashboard, type Dashboard, type DayTotals } from "../../api/dashboard";
+import {
+  getDashboard,
+  type Dashboard,
+  type DashboardFilters,
+  type DayTotals,
+} from "../../api/dashboard";
+import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
+import { TextField } from "../../components/form/TextField";
 import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useResource } from "../../hooks/useResource";
+import { languageLabel } from "../projects/choices";
 import "./dashboard.css";
 
 const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
@@ -488,6 +497,42 @@ function Body({ data }: { data: Dashboard }) {
         </section>
       ) : null}
 
+      {data.calls &&
+      (data.calls.placed > 0 ||
+        data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0)) ? (
+        <section className="card" aria-labelledby="calls-title">
+          <h2 id="calls-title" className="with-icon">
+            <IconTile name="phone" tone="violet" size={28} />
+            Phone calls
+          </h2>
+          <dl className="checks">
+            <div className="checks__row">
+              <dt>Placed</dt>
+              <dd>{data.calls.placed}</dd>
+            </div>
+            <div className="checks__row">
+              <dt>Recorded</dt>
+              <dd>{data.calls.recorded}</dd>
+            </div>
+            <div className="checks__row">
+              <dt>Could not be placed</dt>
+              <dd>{data.calls.could_not_be_placed}</dd>
+            </div>
+            <div className="checks__row">
+              <dt>Waiting for a person</dt>
+              <dd>{data.calls.needs_a_person}</dd>
+            </div>
+            <div className="checks__row">
+              <dt>Still open</dt>
+              <dd>{data.calls.open}</dd>
+            </div>
+          </dl>
+          <p className="muted">
+            More on the <Link to="/calls">Phone calls</Link> page.
+          </p>
+        </section>
+      ) : null}
+
       {data.team ? (
         <div className="split split--wide">
           <section className="card" aria-labelledby="team-title">
@@ -538,15 +583,43 @@ function Body({ data }: { data: Dashboard }) {
   );
 }
 
+const NO_FILTERS = { mode: "", language: "", dialect: "", status: "", staffId: "" };
+
 export function DashboardPage() {
   const [projectId, setProjectId] = useState("");
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState("30"); // 7, 30, 90 or "custom"
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const custom = period === "custom";
+  const backwards = custom && from !== "" && to !== "" && from > to;
+  const asked: DashboardFilters = {
+    project_id: projectId || undefined,
+    days: custom ? 30 : Number(period),
+    mode: filters.mode || undefined,
+    language: filters.language || undefined,
+    dialect: filters.dialect || undefined,
+    status: filters.status || undefined,
+    staff_id: filters.staffId || undefined,
+    date_from: custom ? from || undefined : undefined,
+    date_to: custom ? to || undefined : undefined,
+  };
+  const key = JSON.stringify(asked);
   const { state, reload } = useResource(
-    () => getDashboard({ project_id: projectId || undefined, days }),
-    [projectId, days],
+    () => (backwards ? Promise.resolve(null) : getDashboard(asked)),
+    [key, backwards],
   );
-  const view = state.status === "loaded" ? state.data.view : "manager";
-  const projects = state.status === "loaded" ? state.data.projects : [];
+  // What was loaded last stays on the page while the next answer is on its way, so the
+  // filters do not lose their lists and the figures do not jump away.
+  const [last, setLast] = useState<Dashboard | null>(null);
+  const fresh = state.status === "loaded" ? state.data : null;
+  if (fresh && fresh !== last) setLast(fresh);
+  const data = fresh ?? last;
+  const view = data?.view ?? "manager";
+  const projects = data?.projects ?? [];
+  const options = data?.options ?? {};
+  const narrowed = Object.values(filters).some(Boolean) || custom;
+  const set = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
   return (
     <section aria-labelledby="dash-title" className="stack">
       <div className="page-header">
@@ -561,7 +634,11 @@ export function DashboardPage() {
           <Select
             label="Project"
             value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              // Another project has other people and languages.
+              set({ language: "", dialect: "", staffId: "" });
+            }}
             options={[
               { value: "", label: "All my projects" },
               ...projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
@@ -569,19 +646,107 @@ export function DashboardPage() {
           />
           <Select
             label="Period"
-            value={String(days)}
-            onChange={(e) => setDays(Number(e.target.value))}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
             options={[
               { value: "7", label: "Last 7 days" },
               { value: "30", label: "Last 30 days" },
               { value: "90", label: "Last 90 days" },
+              { value: "custom", label: "Chosen days" },
             ]}
           />
         </div>
       </div>
+      <div className="filters" role="group" aria-label="Filters">
+        {custom ? (
+          <>
+            <TextField
+              label="From"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <TextField
+              label="To"
+              type="date"
+              value={to}
+              {...(backwards ? { error: "Must not be before the first day" } : {})}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </>
+        ) : null}
+        <Select
+          label="Recording type"
+          value={filters.mode}
+          onChange={(e) => set({ mode: e.target.value })}
+          options={[
+            { value: "", label: "Face-to-face and telephony" },
+            { value: "FACE_TO_FACE", label: "Face-to-face" },
+            { value: "TELEPHONY", label: "Telephony" },
+          ]}
+        />
+        <Select
+          label="Language"
+          value={filters.language}
+          onChange={(e) => set({ language: e.target.value })}
+          options={[
+            { value: "", label: "Every language" },
+            ...(options.languages ?? []).map((code) => ({
+              value: code,
+              label: languageLabel(code),
+            })),
+          ]}
+        />
+        {(options.dialects ?? []).length > 0 ? (
+          <Select
+            label="Dialect"
+            value={filters.dialect}
+            onChange={(e) => set({ dialect: e.target.value })}
+            options={[
+              { value: "", label: "Every dialect" },
+              ...(options.dialects ?? []).map((d) => ({ value: d, label: d })),
+            ]}
+          />
+        ) : null}
+        {view !== "client" ? (
+          <Select
+            label="Task status"
+            value={filters.status}
+            onChange={(e) => set({ status: e.target.value })}
+            options={[
+              { value: "", label: "Every status" },
+              ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+        ) : null}
+        {options.staff ? (
+          <Select
+            label="Staff"
+            value={filters.staffId}
+            onChange={(e) => set({ staffId: e.target.value })}
+            options={[
+              { value: "", label: "Everyone" },
+              ...options.staff.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+        ) : null}
+        {narrowed ? (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setFilters(NO_FILTERS);
+              setPeriod("30");
+              setFrom("");
+              setTo("");
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
+      </div>
       {state.status === "loading" ? <LoadingState label="Loading dashboard" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? <Body data={state.data} /> : null}
+      {data && state.status !== "failed" && !backwards ? <Body data={data} /> : null}
     </section>
   );
 }

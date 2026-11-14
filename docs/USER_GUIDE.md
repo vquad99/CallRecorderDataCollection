@@ -449,7 +449,28 @@ tab; the **Participant minutes** export gives the same numbers as a spreadsheet.
 
 The **Dashboard** (**Collection progress**) shows recorded and approved hours, today's hours
 against the daily target, and an hours-per-day chart. Choose a **Project** and a **Period** (last 7,
-30 or 90 days). Days are counted in India Standard Time.
+30 or 90 days, or **Chosen days** with a first and a last day). You can narrow it by **Recording
+type** and **Language** (and **Dialect**, when the project has any). Days are counted in India
+Standard Time.
+
+### Dashboard filters (everyone)
+
+Under the page title is a row of filters. Each one narrows every figure on the page:
+
+| Filter | Who has it | What it does |
+|---|---|---|
+| **Project**, **Period** | everyone | One project or all of yours; the last 7, 30 or 90 days, or **Chosen days** |
+| **From**, **To** (with Chosen days) | everyone | Counts only recordings started on those days; the chart shows exactly those days. At most 366 days |
+| **Recording type** | everyone | Face-to-face or telephony |
+| **Language**, **Dialect** | everyone | Conversations in which a participant speaks it |
+| **Task status** | staff | Tasks in that status |
+| **Staff** | Super Admin, Project Admin | One person's tasks and the recordings they made |
+
+**Clear filters** takes them all off. Without chosen days the totals at the top count
+everything ever recorded; with chosen days they count those days only.
+
+Managers also see **Phone calls**: placed, recorded, could not be placed, waiting for a person,
+still open.
 
 ---
 

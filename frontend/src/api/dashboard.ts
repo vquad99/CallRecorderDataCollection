@@ -45,7 +45,37 @@ export interface Dashboard {
   queues: Record<string, number> | null;
   team: { name: string; recordings: number; recorded_hours: number }[] | null;
   storage_bytes: number | null;
+  /** Phone calls, for managers (D-108). */
+  calls: {
+    placed: number;
+    recorded: number;
+    could_not_be_placed: number;
+    needs_a_person: number;
+    open: number;
+  } | null;
+  /** What the filters offer; `staff` for managers only. */
+  options: {
+    languages?: string[];
+    dialects?: string[];
+    staff?: { id: string; name: string }[];
+  };
+  /** The chosen days, when days were chosen. */
+  date_from: string | null;
+  date_to: string | null;
 }
 
-export const getDashboard = (params: { project_id?: string | undefined; days?: number }) =>
+/** What narrows the dashboard (D-108). Days are counted in the report's time zone. */
+export type DashboardFilters = {
+  project_id?: string | undefined;
+  days?: number;
+  mode?: string | undefined;
+  language?: string | undefined;
+  dialect?: string | undefined;
+  status?: string | undefined;
+  staff_id?: string | undefined;
+  date_from?: string | undefined;
+  date_to?: string | undefined;
+};
+
+export const getDashboard = (params: DashboardFilters) =>
   apiRequest<Dashboard>(`/api/v1/dashboard${query(params)}`);

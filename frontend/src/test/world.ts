@@ -318,6 +318,14 @@ export const DASHBOARD = {
   },
   team: [{ name: "Max Moderator", recordings: 30, recorded_hours: 12.5 }],
   storage_bytes: 3_200_000_000,
+  calls: { placed: 12, recorded: 9, could_not_be_placed: 2, needs_a_person: 1, open: 0 },
+  options: {
+    languages: ["hi", "ta"],
+    dialects: ["Awadhi"],
+    staff: [{ id: "u7", name: "Max Moderator" }],
+  },
+  date_from: null,
+  date_to: null,
 };
 
 export const ALL_PERMISSIONS = [
