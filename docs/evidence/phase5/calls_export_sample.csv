@@ -1,0 +1,4 @@
+started,closed,project,task,moderator,agent_seat,number_ends_in,state,cancel_reason,problem,call_seconds,recording_seconds,a_joined,b_joined,moderator_muted,quality_ok,provider,provider_reference,provider_call,tries_to_fetch,note
+2026-11-14 13:18:30,2026-11-14 13:18:52,V1HHEM,T000027,Demo Moderator,70001,00,NEEDS_MATCH,,SEVERAL_CALLS,22,,yes,yes,no,no,TXCONTACT,c8f5fe13-dfff-11f1-a58a-f854f6f7bedf,,1,
+2026-11-14 13:18:19,2026-11-14 13:18:21,V1HHEM,T000026,Demo Moderator,70001,23,RECORDED,,,2,12.0,yes,yes,yes,yes,TXCONTACT,c295498d-dfff-11f1-a2bc-f854f6f7bedf,c295498d-dfff-11f1-a2bc-f854f6f7bedf,1,"Clear line, both spoke Hindi"
+2026-11-14 13:18:18,2026-11-14 13:18:18,V1HHEM,T000028,Demo Moderator,70001,88,DIAL_FAILED,,PROVIDER_REFUSED,,,no,no,no,no,TXCONTACT,,,0,

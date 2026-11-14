@@ -55,6 +55,10 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Recording downloads only from the provider's allowed hosts through the authenticated provider API,
   never from an arbitrary URL in a webhook body (TEL-035).
 - Provider credentials only in the secret manager; `provider_accounts` stores a reference (TEL-025).
+- As built for TxContact (D-101): no webhooks exist, so the first three points do not apply; the
+  recording is downloaded only from `TXCONTACT_BASE_URL` by a checked file name, redirects are
+  refused, and the logins are environment secrets (`TXCONTACT_*_PASSWORD`), never in the database.
+  TxContact's dialer takes its password in the address: the platform never logs that address.
 
 ## 6. Web application hardening
 
@@ -175,6 +179,34 @@ by the hosting edge (Cloudflare error 1000). No known vulnerable package (npm au
 Accepted, not changed: the web server's main process runs as root inside its container (its
 workers do not; the unprivileged image lags one nginx patch release); the API trusts forwarded
 addresses from the private network, where only this platform's own services run.
+
+## 9d. Phone calls and site review, 2026-11-13 (D-103)
+
+An independent read of the telephony code, a real-browser run of every flow against a stand-in
+provider, and a check of the live site's answers. Fixed in this release:
+
+| Finding | Fix | Test |
+|---|---|---|
+| A closed call could wait for ever (wrong recording login) and could not be cancelled, blocking the task | A search that keeps failing ends with a person after the fetch window; a call can be cancelled at every stage | test_telephony.py |
+| An unexpected error while fetching left the call claimed and silent | Every error ends the step with the call waiting for its next try or shown to a person | test_telephony.py |
+| A redial within two minutes could take the dropped call's recording | After a redial on the same seat the time window opens only 10 s before dialling | test_telephony.py |
+| A download cut short was kept as the provider original | The length TxContact announced is checked; nothing of a failed try stays in storage | test_txcontact_adapter.py |
+| A cancel during a download was overwritten by the finished recording | The call row is locked and looked at again before a recording is made final | test_telephony.py |
+| A provider's call id or file name (may hold the caller's number) went into history, candidates and the details file | Shown and exported masked; choosing a candidate uses an opaque key | test_telephony.py |
+| Nothing limited repeat dialling of one participant | 6 calls an hour for a task; a participant who refused consent is not called again | test_telephony.py |
+| Redirects from the provider were followed with the sign-in token | Redirects are refused | test_txcontact_adapter.py |
+| An audio error message could carry a path on the server | The reason only | test_telephony.py |
+| `/.env`, `/.git/config` and any unknown file answered 200 with the app page | Hidden files and unknown files answer 404 (frontend/nginx.conf); pages still fall back to the app | tested with nginx 1.28 locally (docs/evidence/phase5) |
+| No robots.txt; the private tool could be listed by search engines | `robots.txt` (Disallow all) and a `noindex` tag | - |
+
+Checked and found in order on https://dubdesk.live (2026-11-13): Content-Security-Policy,
+Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy, Permissions-Policy and
+frame-ancestors are sent on every answer; the API documentation is off; `/health/ready` is private;
+API routes answer 401 without a session.
+
+Authorization of the new routes is in the route table of tests/test_security_access.py (every
+role against every route, own and foreign project). A Super Admin's "View as" session cannot
+start, change or cancel a call (every change is refused while viewing).
 
 ## 10. Open security questions
 

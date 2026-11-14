@@ -121,21 +121,41 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /assets/{id}/url | body `{purpose: play or download}`; play needs `recordings.view`, download `recordings.download`; signed link valid SIGNED_URL_SECONDS (300) |
 | GET | /storage/usage | `dashboard.view` + `projects.manage` (D-049); files and bytes per managed project and asset kind |
 
-## Telephony (TEL-*) - BLOCKED until Gate 5
+## Telephony (TEL-*) - built for TxContact (D-101, D-102, D-103); not yet tested on the account
 
-| Method | Path | Permission |
-|---|---|---|
-| POST | /tasks/{id}/calls | `calls.start` |
-| GET | /calls/{id} | `calls.start` or `tasks.view` |
-| POST | /calls/{id}/add-b | `calls.start` |
-| POST | /calls/{id}/moderator/join, /moderator/leave | `calls.start` |
-| POST | /calls/{id}/mute | `calls.start` |
-| POST | /calls/{id}/consent | `consent.capture` |
-| POST | /calls/{id}/end | `calls.end` |
-| GET | /calls/{id}/events | `tasks.view` |
-| POST | /webhooks/telephony/{provider} | provider signature only |
-| GET | /admin/webhook-events | `webhooks.view` |
-| POST | /admin/webhook-events/{id}/retry | `webhooks.view` |
+The moderator is the TxContact agent: the platform asks TxContact to ring participant A and
+connect them to the moderator's seat; the moderator adds B in TxContact's own screen. There are
+no provider webhooks: after the call is closed the platform looks for its recording itself.
+
+| Method | Path | Who | What |
+|---|---|---|---|
+| GET | /telephony/status | `tasks.view` | `{configured, provider}`; "Not configured" until the TxContact logins are set |
+| GET | /tasks/{id}/calls | sees the task | The task's newest 20 calls, each with its checklist, candidates and history |
+| POST | /tasks/{id}/calls | the assigned moderator (`calls.start`) | Rings A. Task must be telephony and In progress; the moderator needs an agent seat; a participant who refused consent is not called; at most `TELEPHONY_MAX_CALLS_PER_TASK_PER_HOUR` (6) calls an hour for a task (429 `TOO_MANY_CALLS`). 201 also when TxContact refused: the call is `DIAL_FAILED` with TxContact's answer |
+| POST | /calls/{id}/checklist | `calls.end`; the task's moderator or a manager | `{item, done}`: A_JOINED, B_JOINED, MODERATOR_MUTED, QUALITY_OK |
+| POST | /calls/{id}/close | same | Needs A_JOINED and B_JOINED ticked (409 `CHECKLIST_INCOMPLETE`) and consent Given for A and B (409 `CONSENT_MISSING`). The call waits for its recording |
+| POST | /calls/{id}/cancel | same | `{reason, note}`: NO_ANSWER, WRONG_NUMBER, CALL_DROPPED, POOR_QUALITY, CONSENT_REFUSED, OTHER (note needed). Allowed at every stage before the recording is stored |
+| POST | /calls/{id}/match | same | `{key}`: one of the listed candidates, when the platform could not tell which TxContact call is this one |
+| POST | /calls/{id}/retry | same | Look for the recording again |
+| PUT | /users/{id}/telephony-agent | `users.manage` | `{agent_id}`; one seat per person; empty removes it |
+| GET | /telephony/analytics | `tasks.view` | `?project_id&days` (1-90). Figures for the calls the caller may see: Super Admin all, people who assign tasks their projects, moderators their own calls |
+| GET | /calls | `tasks.view` | `?project_id&state&page&page_size` (max 100). `state=NEEDS_PERSON`: needs a match, failed to fetch, or left open |
+| GET | /calls/export | `tasks.view` | `?project_id&days`: the same calls as a CSV file (no phone numbers). Audited as `calls.exported` |
+| GET | /telephony/provider-traffic | `tasks.assign` | TxContact's own calls per hour of the day; `available: false` with the reason when TxContact does not answer |
+
+Call states: `DIALLING` (on the call), `DIAL_FAILED`, `CANCELLED`, `WAITING_FOR_RECORDING`,
+`NEEDS_MATCH`, `FETCH_FAILED`, `RECORDED`. A provider's call id and file name are only ever shown
+masked (a run of nine or more digits is cut to its last two): they may carry the caller's number.
+
+`GET /tasks/{id}/recordings` returns each recording **with its files** (`assets`), so the task page
+can offer Listen and the download (D-103; the page relied on this since D-092).
+`GET /recordings/{id}/metadata` has a `call` section for a phone recording: provider, call
+reference, agent seat, moderator, times, note, checklist, history.
+`GET /projects/{id}/export?content=progress` has two more columns: `phone_calls`, `last_call_state`.
+
+Not built (the specification's conference-by-API design; TxContact has no such API, D-101):
+`/calls/{id}/add-b`, `/moderator/join`, `/moderator/leave`, `/mute`, `/webhooks/telephony/{provider}`,
+`/admin/webhook-events`.
 
 ## Audio QC (AQC-*)
 

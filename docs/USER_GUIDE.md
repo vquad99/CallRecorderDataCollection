@@ -273,38 +273,57 @@ TxContact agent screen before you start.
 1. Open **Tasks** and click your **Telephony** task.
 2. Click **Start session**.
 3. Click **Start call**. TxContact rings participant A and connects them to your TxContact seat.
-   The card shows **On the call** once TxContact has accepted the request; if it refused,
-   the card says what TxContact answered.
-4. In your TxContact agent screen, add participant B to the call (conference).
-5. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
-6. Leave A and B to talk. When they have finished, click **Close call** (add a note if useful).
-   The call can only be closed once both consents are recorded; if someone refused, click
-   **Cancel this call** and choose **Consent refused**.
-7. The card shows **Fetching the recording**. The platform finds the call at TxContact and
-   downloads its recording, usually within a few minutes. The page updates on its own.
-8. When it arrives, the task moves to **Recorded**. Listen, then **Send to QC**, or **Call again**.
+   The card shows **On the call** once TxContact has accepted the request; if it refused, the
+   card says what TxContact answered.
+4. In your TxContact agent screen, add participant B to the call.
+5. Tick the **Call checklist** as you go: **Participant A is on the call**, **Participant B is on
+   the call** (both are needed to close the call), **I am muted and listening**, **Both voices are
+   clear**.
+6. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
+7. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
+   them, end the call, then click **Cancel this call** and choose **Poor line quality**.
+8. When they have finished, click **Close call** (add a note if useful). If someone refused
+   consent, click **Cancel this call** and choose **Consent refused**: they are not called again
+   for this task.
+9. The card shows **Fetching the recording**. The platform finds the call at TxContact and
+   downloads its recording, usually within a few minutes. The page updates on its own. You can
+   still cancel the call while it is being fetched.
+10. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
+    QC**; if not, **Call again**.
 
 If the call did not work (no answer, wrong number, dropped), click **Cancel this call** and choose
-the reason. You can then start a new call.
+the reason. You can then start a new call. A task can be called at most 6 times in an hour.
 
 **Needs a person to pick the recording.** If several TxContact calls fit the time, or none shows
 participant A's number, the card lists them with their start time, length and the last two digits
-of each number. Click **This is the call** on the right one. If none was found, click **Look for
-the recording again** later, or cancel the call. A project admin can do the same from the task's
-**Phone calls** history.
+of each number. Click **This is the call** on the right one. If none was found, or TxContact could
+not be searched (the card says why), click **Look for the recording again** later, or cancel the
+call. A project admin can do the same, and cancel a call, from the task's **Phone calls** history.
 
 **Phone calls page.** The menu has **Phone calls** (Super Admin, Project Admin, Moderator). Choose
-a **Project** and a **Period** (7, 30 or 90 days). It shows: number of calls and how many were
-recorded, failed or cancelled, or need a person; average call length; minutes of recorded audio
-and how long recordings take to arrive; **Calls per day** (recorded, still open, failed or
-cancelled); **Calls by hour of the day**; a table **By moderator**; why calls were cancelled; and
-problems getting recordings. Project admins also see **TxContact: calls per hour**, TxContact's own
-count for the whole account. At the bottom, **All calls** lists every call with a link to its
-task; **Show** filters it (for example **Needs a person**). Moderators see only their own calls.
+a **Project** and a **Period** (7, 30 or 90 days). It shows:
+
+- **Figures**: calls; recorded (and the share of calls); failed or cancelled; **needs a person**
+  (also calls left open); average call; recorded audio and how long recordings take to arrive;
+  **Today** against the project's daily telephony target; phone tasks **not called yet**.
+- **Calls per day** (recorded, still open, failed or cancelled), with a table view.
+- **From call to approval**: calls started, accepted by TxContact, closed by the moderator,
+  recording stored, tasks sent to QC, tasks approved.
+- **Phone tasks by status**, **Calls by hour of the day**, **By moderator**, and **By project**
+  when you look at all your projects.
+- **Automatic audio check** and **QC decisions** on call recordings.
+- **Why calls were cancelled**, **Problems getting the recording**, and the **Call checklist on
+  closed calls** (how often each box was ticked).
+- Project admins also see **TxContact: calls per hour**, TxContact's own count for the account.
+- **All calls**: every call with a link to its task; **Show** filters it (for example **Needs a
+  person**). **Download calls (CSV)** saves the period's calls as a spreadsheet.
+
+Moderators see only their own calls. No page shows a full phone number: the last two digits only.
 
 **Phone calls history.** Every task shows each call with every step: when it was requested, what
-TxContact answered, when it was closed, each search, which recording was chosen and when it was
-stored.
+TxContact answered, each checklist tick, when it was closed, each search, which recording was
+chosen and when it was stored. The recording's details file (in **Download with consent form** and
+in the project's metadata export) carries the same history in its **call** section.
 
 ---
 
@@ -397,7 +416,8 @@ The link works for 30 days. If it stops working, the project team sends a new on
 ## 11. Not available in this version
 
 - **Phone calls are new and not yet tested on the TxContact account.** Try one test call (section
-  7a) before real work.
+  7a) before real work. Whether a second person can be added to a call, and whether the two
+  speakers are recorded apart, is for TxContact to confirm.
 - **Transcription.**
 - **Installing as an app** on a phone or computer.
 

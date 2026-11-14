@@ -66,6 +66,7 @@ const LIVE_CALL = {
   next_fetch_at: null,
   failure_code: null,
   failure_detail: null,
+  checklist: {},
   candidates: [],
   events: [],
 };

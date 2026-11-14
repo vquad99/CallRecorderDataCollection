@@ -497,7 +497,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                     Recording {ready.length - i}
                   </span>
                 </td>
-                <td>{Math.round(r.saved_seconds / 60)} min</td>
+                <td>{rec.lengthLabel(r.saved_seconds)}</td>
                 <td>{r.assets.length} audio + consent record + details</td>
                 <td>
                   {rec.deliveryAsset(r.assets) ? (
@@ -610,7 +610,12 @@ export function TaskDetailPage() {
         <RecordCard task={task} onChange={replace} />
       ) : null}
       {task.recording_mode === "TELEPHONY" ? (
-        <PhoneCalls task={task} onChange={replace} onTaskStale={reload} />
+        <PhoneCalls
+          task={task}
+          onChange={replace}
+          // Quietly: the page stays as it is until the new task arrives (no loading flash).
+          onTaskStale={() => void work.getTask(task.id).then(replace)}
+        />
       ) : null}
       <AdminReviewCard task={task} onChange={replace} />
       {consentOpen ? <ConsentCapture task={task} onChange={replace} /> : null}

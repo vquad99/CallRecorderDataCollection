@@ -30,6 +30,14 @@ EQ, enhancement (AUDIO-004). QC measures; it never changes a file (AUDIO-018).
 5. Moderator introduction: excluded from the participant conversation (recording starts after consent)
    or stored separately as `CONSENT_RECORDING`, per the policy agreed at Gate 5 (AUDIO-008).
 
+6. As built for TxContact (D-101, D-103): TxContact has not said how it records a call with two
+   participants and an agent; one file with everyone on it is expected. The provider's file is kept
+   unchanged (`PROVIDER_ORIGINAL_MIXED`); the delivery file (`TELEPHONY_DERIVED_PCM`) is 16 kHz
+   16-bit with every channel the provider sent, never mixed and never copied to a second channel.
+   Points 2 and 3 (A left, B right) stay BLOCKED until a provider delivers one speaker per channel.
+   A project's telephony rule therefore expects 1 channel by default; set 2 on the project's Audio
+   rules tab when the provider delivers two. The moderator stays on the call muted and listens.
+
 Example join for two genuinely separate, aligned tracks (runbook O; tested on fixtures before use):
 
 ```bash

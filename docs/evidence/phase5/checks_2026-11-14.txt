@@ -1,0 +1,100 @@
+Phone calls (TxContact) and site review: what was run, and what it showed
+D-101, D-102, D-103. 2026-11-13 and 2026-11-14.
+
+NOT DONE: no call was placed to a real phone, and TxContact's recording service was not reached
+(it refuses the login we were given). Everything below ran against a stand-in for TxContact
+(backend/tests/fake_txcontact.py) that answers the way TxContact was seen or documented to
+(docs/integrations/txcontact/API_NOTES.md). No real personal data: demo accounts and made-up numbers.
+
+Where it ran
+------------
+A Windows 11 machine without Docker. The same parts CI uses, started by hand: PostgreSQL 16,
+SeaweedFS 4.51 (S3 storage), the backend (uvicorn, Python 3.12, uv 0.13.1 frozen lockfile), the
+frontend (Vite dev server, Node 22), Microsoft Edge driven by Playwright, nginx 1.28 for the web
+server rules, gitleaks 8.21 for the secret scan.
+
+Automated checks (final run, 2026-11-14)
+----------------------------------------
+Backend   ruff format --check app tests loadtest ............ 153 files already formatted
+          ruff check app tests loadtest ..................... All checks passed
+          mypy (strict) app tests loadtest .................. no issues in 153 source files
+          pytest (PostgreSQL 16, REQUIRE_DB_TESTS=1) ........ 380 passed, 13 skipped, 4 failed (Windows only, see below); one adapter test added after this run: that file 28 passed
+Frontend  tsc --noEmit ...................................... no errors
+          eslint --max-warnings 0 ........................... no problems
+          vitest ............................................ 24 files, 428 tests passed
+          vite build + bundle budget ........................ first screen 123.0 KB (limit 125 KB)
+          playwright e2e (console, recorder) ................ 2 passed
+Journeys  playwright, real browser (Edge), real backend, database and storage:
+          boundaries, dashboard, interrupted, network, participant, password, phonecall,
+          recording, session ................................. 9 passed
+          In CI the phone-call journey is skipped until the journeys job starts the stand-in
+          (a workflow change kept as a separate commit: pushing it needs GitHub's `workflow`
+          permission, which the sign-in on this machine does not have).
+Rules     tools/requirements_checklist.py --check ........... up to date
+          tools/check_repo.py ............................... only the two Windows path-separator
+                                                              reports for frontend\src\test\ (not on Linux)
+Secrets   gitleaks dir (every changed and new file) ......... no leaks found
+
+Tests that fail on this Windows machine only, and pass in CI on Linux (unchanged code):
+tests/test_backup.py (3: temporary-file locking), tests/test_tasks.py::
+test_task_status_only_changes_inside_the_task_service (path separators), and at times
+tests/test_storage_contract.py::test_an_unreachable_storage_fails_fast_with_an_error (timing).
+
+The phone-call journey (frontend/journeys/phonecall.spec.ts), step by step
+---------------------------------------------------------------------------
+1. Super Admin gives the moderator an agent seat on the user page ......... "Agent seat saved."
+2. A number the provider refuses: the card says the call could not be placed, with the
+   provider's answer; Start call is offered again.
+3. Start session, Start call: "On the call"; the history shows "TXCONTACT answered HTTP 200".
+4. Close call is disabled until Participant A and Participant B are ticked on the checklist.
+5. Close call without consent: refused with "Record consent for participant A and B...".
+6. Consent given for both, note typed, Close call: the recording arrives by itself;
+   "Recording stored: 8000 Hz, 1 channel(s), 12 s; delivery file made at 16000 Hz".
+7. Listen plays 12 s to the end; the automatic check shows no failure; Send to QC: "Audio QC".
+8. Phone calls page: the call is listed "Recording stored", the refused one "Call could not be
+   placed"; figures 2 calls, 1 recorded, 1 not placed, 1 task sent to QC; checklist counted.
+9. The recordings list carries both files; the details file has the call section (seat, note,
+   checklist times).
+
+Found by running it, and fixed (each has a test)
+-------------------------------------------------
+- Task page: Listen and "Download with consent form" never worked on a real server, for
+  face-to-face recordings too: the recordings list carried no files (unit tests faked them).
+- Every phone recording failed the automatic check (rule: 2 channels; recording: 1), so QC had
+  to justify every pass.
+- Ticking checklist boxes quickly lost ticks (four requests, last write won).
+- The 5-second refresh rebuilt the call card: an open cancel form and its note were lost.
+- A closed call could wait for ever when the provider could not be searched, and could not be
+  cancelled.
+- Phone width (375 px): the task page overflowed sideways by 393 px, the Phone calls page by
+  108 px. Now 0 px on both (screens/06, screens/07).
+- Dashboard: a React duplicate-key error with very small totals.
+- Site: /.env, /.git/config and unknown files answered 200 with the app page.
+
+Web server rules, tested with nginx 1.28 in front of the local backend
+-----------------------------------------------------------------------
+/, /projects/abc, /reset-password?token=x.y ........ 200 text/html (the app)
+/.env, /.git/config, /backup.zip, /wp-login.php .... 404
+/favicon.ico, /favicon.svg, /apple-touch-icon.png,
+/robots.txt, /recorder-worklet.js .................. 200 with their own types
+/assets/<hashed file> .............................. 200, Cache-Control: max-age=31536000
+/assets/nope.js .................................... 404
+/api/v1/version 200 JSON; /api/v1/nothing.json 404 JSON (from the API, not nginx)
+/health/live 200; every answer, the 404s too, carries the security headers.
+
+Live site, read-only checks on https://dubdesk.live (2026-11-13, before this release)
+--------------------------------------------------------------------------------------
+Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy and
+Permissions-Policy present; /api/v1/docs and /api/v1/openapi.json 404; /health/ready 403;
+/api/v1/users and /api/v1/calls 401 without a session.
+
+TxContact account, tried without ringing anyone (number 0000000000), 2026-11-13
+--------------------------------------------------------------------------------
+Dialer, real login ............ HTTP 200, body a UUID (the request's reference)
+Dialer, wrong password ........ HTTP 200, empty body
+Recording sign-in ............. HTTP 400 "invalid username/password" with the dialer login
+
+Screens (demo data): screens/02-on-the-call-checklist.png, 04-recorded-listen.png,
+05-needs-a-person.png, 06-phone-needs-a-person.png (375 px), 07-phone-calls-page.png (375 px),
+08-admin-task-download.png, 09-admin-calls-page.png. A sample of the calls spreadsheet:
+calls_export_sample.csv.

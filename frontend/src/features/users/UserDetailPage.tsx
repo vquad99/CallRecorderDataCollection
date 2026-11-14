@@ -167,7 +167,9 @@ export function UserDetailPage() {
             {state.data.password_set ? "set" : "invitation pending"}
           </p>
           <Editor key={state.data.id + state.data.status} user={state.data} onSaved={replace} />
-          {state.data.roles.includes("MODERATOR") ? (
+          {/* Also for someone who is no longer a moderator but still holds a seat: it can be
+              freed for the next person. */}
+          {state.data.roles.includes("MODERATOR") || state.data.telephony_agent_id ? (
             <AgentSeat key={`seat-${state.data.id}`} user={state.data} onSaved={replace} />
           ) : null}
         </>

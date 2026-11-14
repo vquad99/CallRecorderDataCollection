@@ -122,7 +122,18 @@ def task_recordings(
     recs = db.scalars(
         select(Recording).where(Recording.task_id == task.id).order_by(Recording.started_at.desc())
     ).all()
-    return [out(r) for r in recs]
+    # Each recording comes with its files, so the task page can offer Listen and the download
+    # without a request per recording. One query for all of them (the task page relied on this
+    # since D-092 and showed "No finished recording yet" without it).
+    files: dict[uuid.UUID, list[AudioAsset]] = {r.id: [] for r in recs}
+    if recs and principal.can_in_project(Perm.RECORDINGS_VIEW, task.project_id):
+        for asset in db.scalars(
+            select(AudioAsset)
+            .where(AudioAsset.recording_id.in_(list(files)), AudioAsset.deleted_at.is_(None))
+            .order_by(AudioAsset.kind, AudioAsset.version)
+        ):
+            files[asset.recording_id].append(asset)
+    return [out(r, files[r.id]) for r in recs]
 
 
 @router.get("/recordings/{recording_id}", response_model=RecordingOut)

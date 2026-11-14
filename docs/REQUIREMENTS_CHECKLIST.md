@@ -4,16 +4,16 @@ GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
 333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 170 are built with passing automated tests (69 of them also verified) - 59 %.
+process rule), 179 are built with passing automated tests (69 of them also verified) - 62 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 101 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 22 | some of it is built, or it needs a test that is not done yet |
+| Built | 110 | built and automated tests pass; not yet checked by hand |
+| Partly built / needs testing | 33 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
 | Not built | 31 | not started |
-| Blocked | 67 | waiting on a decision or account from the owner or client (see Note) |
+| Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
 | Withdrawn | 20 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
 
@@ -37,7 +37,7 @@ process rule), 170 are built with passing automated tests (69 of them also verif
 | STOR | 4 | 8 | 1 |  |  |  |  |  |
 | FTF | 13 |  | 2 |  |  |  |  |  |
 | AUDIO | 8 | 1 | 2 |  |  | 13 |  |  |
-| TEL |  |  |  |  |  | 38 |  |  |
+| TEL |  | 9 | 11 |  |  | 18 |  |  |
 | AQC |  | 8 | 2 |  |  |  |  |  |
 | ASR |  |  |  |  | 10 |  |  |  |
 | TRN |  |  |  |  |  |  | 12 |  |
@@ -336,44 +336,44 @@ process rule), 170 are built with passing automated tests (69 of them also verif
 
 | ID | State | Requirement | Note |
 |---|---|---|---|
-| TEL-001 | Blocked | All provider code behind one adapter interface (internal names, e.g. start_call_to_a, add_b_to_conference, join_moderator, start_recording, moderator_leave, end_conference, get_recording, verify_webhook); real calls implemented only from verified official documentation. | B-01 provider |
-| TEL-002 | Blocked | Create outbound call to Participant A. | B-01 provider |
-| TEL-003 | Blocked | Add Participant B to the same conference. | B-01 provider |
-| TEL-004 | Blocked | Join moderator to the conference. | B-01 provider |
-| TEL-005 | Blocked | Mute/unmute. | B-01 provider |
-| TEL-006 | Blocked | Moderator leaves the conference. | B-01 provider |
-| TEL-007 | Blocked | End participant conference. | B-01 provider |
-| TEL-008 | Blocked | Start/stop recording when the provider requires explicit control. | B-01 provider |
-| TEL-009 | Blocked | Receive call and recording webhooks. | B-01 provider |
-| TEL-010 | Blocked | Retrieve recording metadata and files. | B-01 provider |
-| TEL-011 | Blocked | Handle provider errors, timeouts and retries. | B-01 provider |
-| TEL-012 | Blocked | Verify webhook signatures; never trust an unsigned webhook. | B-01 provider |
-| TEL-013 | Blocked | Unique constraint on provider event ID; idempotent processing; duplicate webhooks create no duplicate sessions or files. | B-01 provider |
-| TEL-014 | Blocked | Call sequence implemented in the provider-allowed order: session + conference ID, call A, add B, moderator joins, consent, recording, moderator leaves, bridge continues, close, final event, secure download and validation, audio QC; no invented endpoints. | B-01 provider |
-| TEL-015 | Blocked | No participant conversation recorded before required consent for A and B is recorded. | B-01 provider |
-| TEL-016 | Blocked | Participant recording begins at the configured point. | B-01 provider |
-| TEL-017 | Blocked | Recording retrieval: recording ID validated against the session; fetched through the authenticated provider API; original saved; type and codec inspected; separate tracks retrieved; A/B mapped; final stereo built and validated; checksums and processing metadata saved; task ready for audio QC only after successful validation. | B-01 provider |
-| TEL-018 | Blocked | Failed calls visible and recoverable; call event history kept. | B-01 provider |
-| TEL-019 | Blocked | Provider acceptance: A and B stay connected after moderator leaves; recording continues; A and B recorded independently; channel mapping correct; recording retrievable through the API. | B-01 provider |
-| TEL-020 | Blocked | 50 simultaneous conferences supported by the purchased account, confirmed in writing, and tested. | B-01 provider |
-| TEL-021 | Blocked | At least two providers compared from official documentation and written answers: India outbound, API call creation, conference creation, add participant to active conference, moderator departure without ending, recording continues, separate tracks or verified dual-channel, recording retrieval API, webhooks and signatures, 50 concurrent conferences, call-leg limits, recording format/sample rate, retention and storage, per-minute and fixed costs, contract and compliance (incl. recording consent). | B-01 provider |
-| TEL-022 | Blocked | No provider selected on a cheap advertised plan or marketing page. | B-01 provider |
-| TEL-023 | Blocked | A provider failing any critical item is not accepted; telephony stays BLOCKED, alternatives presented, unrelated modules continue, no fake integration, no quiet workflow substitution. | B-01 provider |
-| TEL-024 | Blocked | Full telephony UI not built before the proof of capability passes. | B-01 provider |
-| TEL-025 | Blocked | Isolated proof-of-concept with test credentials stored server-side; test call IDs, provider event IDs and files saved as non-sensitive evidence. | B-01 provider |
-| TEL-026 | Blocked | Audio acceptance: A says 'This is participant A.', B says 'This is participant B.'; left alone, right alone, both, leakage, alignment, duration, sample rate, bit depth, PCM codec and moderator presence inspected; a mixed-only result fails. | B-01 provider |
-| TEL-027 | Blocked | Domain model stores task ID, provider call ID, conference ID, participant role (A, B, moderator), call state, start/end times, consent status, recording state, provider event IDs, failure code and safe diagnostics. | B-01 provider |
-| TEL-028 | Blocked | Server-side call states CREATED, CALLING_A, A_CONNECTED, ADDING_B, B_CONNECTED, MODERATOR_CONNECTED, CONSENT_PENDING, CONSENT_CONFIRMED, RECORDING, MODERATOR_LEFT, PARTICIPANTS_CONTINUING, COMPLETED, FAILED, CANCELLED; invalid transitions fail safely. | B-01 provider |
-| TEL-029 | Blocked | If A or B refuses consent the session ends or is cancelled per project policy. | B-01 provider |
-| TEL-030 | Blocked | Moderator departure does not end the conference; only an authorized action ends it. | B-01 provider |
-| TEL-031 | Blocked | Late and out-of-order webhooks handled correctly. | B-01 provider |
-| TEL-032 | Blocked | Webhooks acknowledged quickly; heavy work processed asynchronously; raw event metadata stored safely. | B-01 provider |
-| TEL-033 | Blocked | Transient webhook failures retried; permanent failures go to a dead-letter queue. | B-01 provider |
-| TEL-034 | Blocked | Admin webhook event viewer. | B-01 provider |
-| TEL-035 | Blocked | Recording never downloaded from an arbitrary URL in a webhook without validation. | B-01 provider |
-| TEL-036 | Blocked | Moderator call UI: assigned task, A/B details, start call, call state, add B, consent checklist for A and B, recording state, leave conference, permission-restricted end session, error/retry display, event timeline. | B-01 provider |
-| TEL-037 | Blocked | Every call UI action goes to the backend and shows the actual provider response; no optimistic 'connected' state. | B-01 provider |
-| TEL-038 | Blocked | Failure scenarios handled: A no answer, B no answer, B fails to join, moderator drops, participant disconnects, webhook repeats, webhook out of order, retrieval fails and retries, corrupt recording, one channel missing, 50 concurrent sessions. | B-01 provider |
+| TEL-001 | Built | All provider code behind one adapter interface (internal names, e.g. start_call_to_a, add_b_to_conference, join_moderator, start_recording, moderator_leave, end_conference, get_recording, verify_webhook); real calls implemented only from verified official documentation. |  |
+| TEL-002 | Built | Create outbound call to Participant A. | Real call to a phone not made yet (TM-TEL-01) |
+| TEL-003 | Blocked | Add Participant B to the same conference. | TxContact has no API for this: done in TxContact's own screen (D-101); not verified |
+| TEL-004 | Blocked | Join moderator to the conference. | D-101: the moderator is the TxContact agent the call is connected to; not verified |
+| TEL-005 | Blocked | Mute/unmute. | TxContact has no API for this: done in TxContact's own screen (D-101); not verified |
+| TEL-006 | Blocked | Moderator leaves the conference. | D-103: the moderator stays on the call, muted; leaving is TxContact's screen, not verified |
+| TEL-007 | Blocked | End participant conference. | Ended in TxContact's screen; the platform records Close call / Cancel (D-101) |
+| TEL-008 | Blocked | Start/stop recording when the provider requires explicit control. | TxContact records the whole call; no explicit control described |
+| TEL-009 | Blocked | Receive call and recording webhooks. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-010 | Built | Retrieve recording metadata and files. | TxContact's recording login not received; real download not made |
+| TEL-011 | Built | Handle provider errors, timeouts and retries. |  |
+| TEL-012 | Blocked | Verify webhook signatures; never trust an unsigned webhook. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-013 | Blocked | Unique constraint on provider event ID; idempotent processing; duplicate webhooks create no duplicate sessions or files. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-014 | Partly built / needs testing | Call sequence implemented in the provider-allowed order: session + conference ID, call A, add B, moderator joins, consent, recording, moderator leaves, bridge continues, close, final event, secure download and validation, audio QC; no invented endpoints. | D-101: A is rung by API, B is added by the moderator in TxContact; the order cannot be enforced |
+| TEL-015 | Partly built / needs testing | No participant conversation recorded before required consent for A and B is recorded. | A call is closed and its recording fetched only with both consents; a refusal cancels it. TxContact itself records from the start of the call |
+| TEL-016 | Blocked | Participant recording begins at the configured point. | Recording start is TxContact's; not described |
+| TEL-017 | Partly built / needs testing | Recording retrieval: recording ID validated against the session; fetched through the authenticated provider API; original saved; type and codec inspected; separate tracks retrieved; A/B mapped; final stereo built and validated; checksums and processing metadata saved; task ready for audio QC only after successful validation. | Fetched through the provider API, original kept, type inspected, checksums and history: built. Separate tracks, A/B mapping, stereo: not possible with TxContact as known (D-101) |
+| TEL-018 | Built | Failed calls visible and recoverable; call event history kept. |  |
+| TEL-019 | Blocked | Provider acceptance: A and B stay connected after moderator leaves; recording continues; A and B recorded independently; channel mapping correct; recording retrievable through the API. | Needs a real call on the TxContact account |
+| TEL-020 | Blocked | 50 simultaneous conferences supported by the purchased account, confirmed in writing, and tested. | TxContact's written answer on concurrency |
+| TEL-021 | Partly built / needs testing | At least two providers compared from official documentation and written answers: India outbound, API call creation, conference creation, add participant to active conference, moderator departure without ending, recording continues, separate tracks or verified dual-channel, recording retrieval API, webhooks and signatures, 50 concurrent conferences, call-leg limits, recording format/sample rate, retention and storage, per-minute and fixed costs, contract and compliance (incl. recording consent). | Twelve providers read from official pages plus TxContact; written answers outstanding |
+| TEL-022 | Partly built / needs testing | No provider selected on a cheap advertised plan or marketing page. | TxContact came through DesiCrew, chosen by the owner (D-101) |
+| TEL-023 | Partly built / needs testing | A provider failing any critical item is not accepted; telephony stays BLOCKED, alternatives presented, unrelated modules continue, no fake integration, no quiet workflow substitution. | D-101: the owner accepted TxContact's limits; Gate 5 proof outstanding |
+| TEL-024 | Partly built / needs testing | Full telephony UI not built before the proof of capability passes. | D-101: the owner chose to build the call screen before the proof of capability |
+| TEL-025 | Partly built / needs testing | Isolated proof-of-concept with test credentials stored server-side; test call IDs, provider event IDs and files saved as non-sensitive evidence. | Dialer tried on the account without ringing anyone (results in API_NOTES.md); credentials are environment secrets |
+| TEL-026 | Blocked | Audio acceptance: A says 'This is participant A.', B says 'This is participant B.'; left alone, right alone, both, leakage, alignment, duration, sample rate, bit depth, PCM codec and moderator presence inspected; a mixed-only result fails. | Needs a real call on the TxContact account |
+| TEL-027 | Partly built / needs testing | Domain model stores task ID, provider call ID, conference ID, participant role (A, B, moderator), call state, start/end times, consent status, recording state, provider event IDs, failure code and safe diagnostics. | Task, provider call id and reference, seat, state, times, failure code and safe detail, history: stored. Conference id and per-leg roles do not exist with TxContact |
+| TEL-028 | Partly built / needs testing | Server-side call states CREATED, CALLING_A, A_CONNECTED, ADDING_B, B_CONNECTED, MODERATOR_CONNECTED, CONSENT_PENDING, CONSENT_CONFIRMED, RECORDING, MODERATOR_LEFT, PARTICIPANTS_CONTINUING, COMPLETED, FAILED, CANCELLED; invalid transitions fail safely. | States are the ones this flow has (D-101), each change checked on the server; not the specification's list |
+| TEL-029 | Built | If A or B refuses consent the session ends or is cancelled per project policy. |  |
+| TEL-030 | Blocked | Moderator departure does not end the conference; only an authorized action ends it. | D-103: the moderator stays, muted. Whether leaving ends the call is TxContact's to answer |
+| TEL-031 | Blocked | Late and out-of-order webhooks handled correctly. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-032 | Blocked | Webhooks acknowledged quickly; heavy work processed asynchronously; raw event metadata stored safely. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-033 | Blocked | Transient webhook failures retried; permanent failures go to a dead-letter queue. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-034 | Blocked | Admin webhook event viewer. | TxContact has no webhooks: the platform polls instead (D-101) |
+| TEL-035 | Built | Recording never downloaded from an arbitrary URL in a webhook without validation. |  |
+| TEL-036 | Built | Moderator call UI: assigned task, A/B details, start call, call state, add B, consent checklist for A and B, recording state, leave conference, permission-restricted end session, error/retry display, event timeline. | Add B and mute are in TxContact's screen; walk-through with a real call open (TM-TEL-05) |
+| TEL-037 | Built | Every call UI action goes to the backend and shows the actual provider response; no optimistic 'connected' state. |  |
+| TEL-038 | Partly built / needs testing | Failure scenarios handled: A no answer, B no answer, B fails to join, moderator drops, participant disconnects, webhook repeats, webhook out of order, retrieval fails and retries, corrupt recording, one channel missing, 50 concurrent sessions. | Tested: no answer and dropped (cancel), provider refuses, retrieval fails and retries, unreadable file, cut-short download, redial, hold, cancel while fetching. Not tested: 50 at once, a missing channel |
 
 ## AQC
 

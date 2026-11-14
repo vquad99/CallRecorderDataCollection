@@ -50,6 +50,22 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 | Number format | The example dials 10 digits with no country code. | Only Indian mobile numbers (+91, 10 digits from 6-9) are dialled; others are refused before calling. |
 | Limits, cost, data location, retention | Not described. | Ask TxContact (see questions below). |
 
+## How the platform behaves around these limits (D-103)
+
+- The moderator confirms on a checklist that A and B joined; the platform cannot see it.
+- The moderator stays on the call, muted, and cancels with "Poor line quality" when needed.
+- A call can be cancelled at every stage. A search that keeps failing (for example the recording
+  login refused, as on 2026-11-13) ends with a person after the fetch window.
+- After a redial on the same seat within two minutes, only calls that started from 10 s before
+  the redial are considered, so a dropped first attempt is not taken for the second.
+- A download is checked against the length TxContact announces; redirects are refused.
+- TxContact's call ids and file names are shown masked: they may carry the caller's number.
+- At most 6 calls an hour for a task; a participant who refused consent is not called again.
+- A stand-in that answers like the real service (as seen and documented above) is in
+  `backend/tests/fake_txcontact.py`; the browser journey `frontend/journeys/phonecall.spec.ts`
+  runs the whole flow against it (locally, and in CI once the journeys job starts the stand-in;
+  without a configured provider the journey is skipped).
+
 ## Questions sent / to send to TxContact
 
 1. What does `contact/add` answer on success and on failure? Does it return a call ID?

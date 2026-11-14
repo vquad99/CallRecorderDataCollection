@@ -27,13 +27,25 @@ CALL_STATES = (
     "RECORDED",
 )
 OPEN_STATES = ("DIALLING", "WAITING_FOR_RECORDING")
-CANCEL_REASONS = ("NO_ANSWER", "WRONG_NUMBER", "CALL_DROPPED", "CONSENT_REFUSED", "OTHER")
+CANCEL_REASONS = (
+    "NO_ANSWER",
+    "WRONG_NUMBER",
+    "CALL_DROPPED",
+    "POOR_QUALITY",
+    "CONSENT_REFUSED",
+    "OTHER",
+)
+# What the moderator confirms while on the call (D-103). The first two are needed to close a
+# call: a conversation needs both people. The other two are reminders, recorded when ticked.
+CHECKLIST_ITEMS = ("A_JOINED", "B_JOINED", "MODERATOR_MUTED", "QUALITY_OK")
+CHECKLIST_REQUIRED = ("A_JOINED", "B_JOINED")
 EVENT_KINDS = (
     "DIAL_REQUESTED",
     "DIAL_ACCEPTED",
     "DIAL_FAILED",
     "CALL_CLOSED",
     "CALL_CANCELLED",
+    "CHECKLIST",
     "SEARCHING",
     "MATCHED",
     "MATCH_CHOSEN",
@@ -81,6 +93,8 @@ class Call(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text("state = 'WAITING_FOR_RECORDING'"),
         ),
         Index("ix_calls_task_created", "task_id", "created_at"),
+        # Analytics and the list of all calls read by time (D-102).
+        Index("ix_calls_dialled_at", "dialled_at"),
     )
     task_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=False
@@ -104,6 +118,8 @@ class Call(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     provider_reference: Mapped[str | None] = mapped_column(String(100))
     provider_session_id: Mapped[str | None] = mapped_column(String(100))
     provider_file: Mapped[str | None] = mapped_column(String(300))
+    # Checklist items the moderator ticked, with the time of each (JSON object: item -> ISO time).
+    checklist: Mapped[str] = mapped_column(Text, nullable=False, server_default="{}")
     # Calls the platform could not choose between (JSON list of safe fields; no phone numbers).
     candidates: Mapped[str] = mapped_column(Text, nullable=False, server_default="[]")
     fetch_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

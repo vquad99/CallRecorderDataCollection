@@ -1,30 +1,33 @@
 """TxContact (Telenetix) behind the telephony interface (TEL-001, D-101).
 
-Only what TxContact has documented is used (GEN-005; docs/integrations/txcontact/API_NOTES.md):
+Only what TxContact has documented or shown is used (GEN-005;
+docs/integrations/txcontact/API_NOTES.md):
 - Dialer, from TxContact's email of 2026-11-13: GET /txdialer/api/contact/add with username,
   password, cmp-ref, phone, preferred-agent and source in the query string. TxContact's own design
   puts the password in the address, so no request address is ever logged here.
 - Recording service, from its published API description (/txrecord/swagger.json, read 2026-11-13):
   POST /txrecord/api/v1/auth/ for a token, GET /txrecord/api/search for calls,
-  GET /txrecord/download/{filename} for the file.
+  GET /txrecord/download/{filename} for the file, and
+  GET /txrecord/api/v1/record/mostcallshour/ for calls per hour of the day.
 
-NOT VERIFIED until tested on the account: the dialer's answer format, the Authorization header
-word (TXCONTACT_AUTH_SCHEME), the time zone of reported times, what sl_from/sl_to hold, and the
-recording file format.
+NOT VERIFIED until tested on the account: the Authorization header word (TXCONTACT_AUTH_SCHEME),
+the time zone of reported times, what sl_from/sl_to hold, and the recording file format.
 """
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import IO, Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
 from app.adapters.telephony import DialResult, ProviderError, ProviderSession
@@ -33,9 +36,12 @@ from app.core.config import Settings
 logger = logging.getLogger("app.telephony")
 
 MAX_SEARCH_PAGES = 20
+# The same seat and day are asked for by every waiting call in one sweep: one answer serves them.
+SEARCH_CACHE_SECONDS = 20.0
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._@+()-]{0,250}$")
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 _FAILURE_WORDS = ("error", "invalid", "fail", "denied", "unauthor")
+_READ_ERRORS = (OSError, http.client.HTTPException)
 
 
 class UnsupportedNumber(ProviderError):
@@ -53,10 +59,29 @@ class _Response(Protocol):
 Opener = Callable[[urllib.request.Request, float], _Response]
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is refused, not followed: the sign-in token and the dialer password are only
+    ever sent to the address in TXCONTACT_BASE_URL."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _default_open(request: urllib.request.Request, timeout: float) -> _Response:
     try:
         # The address is built here from TXCONTACT_BASE_URL (http or https only, config.py).
-        return cast(_Response, urllib.request.urlopen(request, timeout=timeout))  # noqa: S310
+        return cast(_Response, _OPENER.open(request, timeout=timeout))
     except urllib.error.HTTPError as err:
         return cast(_Response, err)  # an error answer is still an answer
 
@@ -82,6 +107,7 @@ class TxContact:
         self._open = opener or _default_open
         self._token: str | None = None
         self._tz = ZoneInfo(settings.txcontact_timezone)
+        self._searches: dict[tuple[str, date], tuple[float, list[ProviderSession]]] = {}
 
     # ------------------------------------------------------------------ helpers
 
@@ -108,19 +134,35 @@ class TxContact:
     def _call(self, request: urllib.request.Request, what: str) -> tuple[int, _Response]:
         try:
             response = self._open(request, float(self._s.txcontact_timeout_seconds))
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (urllib.error.URLError, OSError) as exc:
+            timed_out = isinstance(exc, TimeoutError) or isinstance(
+                getattr(exc, "reason", None), TimeoutError
+            )
             logger.warning(
                 "txcontact_unreachable", extra={"what": what, "error": type(exc).__name__}
             )
+            if timed_out:
+                raise ProviderError(f"TxContact did not answer in time ({what})") from None
             raise ProviderError(f"TxContact could not be reached ({what})") from None
         return int(response.status), response
 
-    def _read_json(self, request: urllib.request.Request, what: str) -> Any:
-        status, response = self._call(request, what)
+    @staticmethod
+    def _read(response: _Response, limit: int, what: str) -> bytes:
+        """The answer's body. A connection that drops mid-answer is a provider error like any
+        other, never an exception that escapes."""
         try:
-            body = response.read(5_000_000)
+            return response.read(limit)
+        except _READ_ERRORS as exc:
+            logger.warning(
+                "txcontact_read_failed", extra={"what": what, "error": type(exc).__name__}
+            )
+            raise ProviderError(f"TxContact's answer was cut short ({what})") from None
         finally:
             response.close()
+
+    def _read_json(self, request: urllib.request.Request, what: str) -> Any:
+        status, response = self._call(request, what)
+        body = self._read(response, 5_000_000, what)
         if status == 401 or status == 403:
             raise _AuthRejected
         if not 200 <= status < 300:
@@ -147,6 +189,13 @@ class TxContact:
                 body = self._read_json(request, "recording sign-in")
             except _AuthRejected:
                 raise ProviderError("TxContact refused the recording sign-in") from None
+            except ProviderError as exc:
+                if "answered 400" in str(exc):
+                    # TxContact answers 400 for a wrong user or password (seen 2026-11-13).
+                    raise ProviderError(
+                        "TxContact refused the recording sign-in (wrong user or password)"
+                    ) from None
+                raise
             token = body.get("auth_token") if isinstance(body, dict) else None
             if not isinstance(token, str) or not token:
                 raise ProviderError("TxContact's recording sign-in returned no token")
@@ -196,11 +245,7 @@ class TxContact:
             f"{self._s.txcontact_base_url}/txdialer/api/contact/add?{query}", method="GET"
         )
         status, response = self._call(request, "dial")
-        try:
-            body = response.read(20_000)
-        finally:
-            response.close()
-        text = body.decode("utf-8", errors="replace").strip()
+        text = self._read(response, 20_000, "dial").decode("utf-8", errors="replace").strip()
         excerpt = self._scrub(text, [phone, phone_e164])
         # Tested 2026-11-13: an accepted request answers 200 with a UUID as plain text; a wrong
         # username or password answers 200 with an empty body. Empty therefore means refused.
@@ -213,6 +258,9 @@ class TxContact:
         )
 
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]:
+        cached = self._searches.get((agent_id, day))
+        if cached is not None and time.monotonic() - cached[0] < SEARCH_CACHE_SECONDS:
+            return list(cached[1])
         found: list[ProviderSession] = []
         for page in range(1, MAX_SEARCH_PAGES + 1):
             query = urllib.parse.urlencode(
@@ -229,6 +277,9 @@ class TxContact:
                     found.append(self._session(row))
             if not (isinstance(body, dict) and body.get("next")):
                 break
+        if len(self._searches) > 200:
+            self._searches.clear()
+        self._searches[(agent_id, day)] = (time.monotonic(), list(found))
         return found
 
     def _session(self, row: dict[str, Any]) -> ProviderSession:
@@ -279,14 +330,27 @@ class TxContact:
                 if not 200 <= status < 300:
                     raise ProviderError(f"TxContact answered {status} to the recording download")
                 size = 0
-                with dest.open("wb") as handle:
-                    while part := response.read(1 << 20):
-                        size += len(part)
-                        if size > max_bytes:
-                            raise ProviderError("The recording is larger than the allowed maximum")
-                        handle.write(part)
+                try:
+                    with dest.open("wb") as handle:
+                        while part := response.read(1 << 20):
+                            size += len(part)
+                            if size > max_bytes:
+                                raise ProviderError(
+                                    "The recording is larger than the allowed maximum"
+                                )
+                            handle.write(part)
+                except _READ_ERRORS:
+                    raise ProviderError("The recording download was cut short") from None
                 if size == 0:
                     raise ProviderError("TxContact sent an empty recording")
+                # A connection closed early gives a short file without an error: the length the
+                # provider announced is the check (a cut-off file must never be kept as the
+                # original).
+                announced = _announced_length(response)
+                if announced is not None and announced != size:
+                    raise ProviderError(
+                        f"The recording download was cut short ({size} of {announced} bytes)"
+                    )
                 return size
             finally:
                 response.close()
@@ -295,6 +359,15 @@ class TxContact:
 
 class _AuthRejected(Exception):
     pass
+
+
+def _announced_length(response: _Response) -> int | None:
+    headers = getattr(response, "headers", None)
+    value = headers.get("Content-Length") if headers is not None else None
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _says_failure(text: str) -> bool:

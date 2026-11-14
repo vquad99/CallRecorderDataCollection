@@ -57,10 +57,32 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | F | Private link | Open a participant's consent link in a private window after they answered. | Their own page only: no other participant, no staff pages. |
 | G | Many tasks at once | **Tasks → New task**, choose Test project. Under **Add many tasks**, paste the first line `participant_a,participant_b,mode,priority,due_date,moderator` and one line with your two participant codes and `test.moderator@dubdesk.live` as moderator. **Check rows**, then **Add 1 tasks**. | **1 tasks added**; the new task is **Assigned** to Test Moderator. |
 
+## Phone-call test (needs the TxContact logins and one agent seat)
+
+Use two phones you own. The Moderator must be signed in to their TxContact agent screen.
+
+| # | Sign in as | Do this | You should see |
+|---|---|---|---|
+| P1 | Super Admin | **Users → Test Moderator → Phone calls**. Type the TxContact agent seat (for example 70001). Click **Save agent seat**. | **Agent seat saved.** |
+| P2 | Project Admin | Add two participants **with phone numbers** (Indian mobile numbers, +91). **Tasks → New task**, mode **Telephony**. Assign Test Moderator. | Status **Assigned**. |
+| P3 | Moderator | Open the task. **Start session**, then **Start call**. | **On the call**, and the first phone rings. The history shows what TxContact answered. |
+| P4 | Moderator | In the TxContact screen, add the second number. In the platform tick **Participant A is on the call** and **Participant B is on the call**. Mute yourself; tick **I am muted and listening**. | The ticks stay. **Close call** becomes active. |
+| P5 | Moderator | **Record consent**: **Consent given** for both. Let them talk for a minute. Click **Close call**. | **Fetching the recording**; within a few minutes **Check the call recording**. |
+| P6 | Moderator | Click **Listen**, then **Send to QC**. | The recording plays. Status **Audio QC**. The automatic check does not fail on channels. |
+| P7 | Project Admin | Open **Phone calls** in the menu. | The call is counted; **All calls** lists it with **Recording stored**. **Download calls (CSV)** saves the list. |
+| P8 | Project Admin | Continue from step 12 of the main test (QC, approval, download). | The details file (.json) has a **call** section. |
+
+Extra phone checks: start a call and click **Cancel this call → No answer** (a new call can be
+started); let a call sit after **Close call** with TxContact's recording login wrong (after the
+search window the call shows **Needs a person** with the reason, and can be cancelled).
+
+Please tell us what you see at P3 to P5: whether the second number can be added, whether both
+people hear each other with the moderator muted, and whether the recording has both voices.
+
 ## Not in this version
 
-Phone-call recording, downloads for the Client Viewer, transcription and installing as an app.
-Telephony appears in some forms but cannot be used yet.
+Downloads for the Client Viewer, transcription and installing as an app. Phone calls are built but
+have not been tried on the TxContact account yet: treat the phone-call test above as the first trial.
 
 ## Reporting a problem
 

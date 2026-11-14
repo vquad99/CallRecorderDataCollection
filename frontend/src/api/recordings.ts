@@ -122,7 +122,16 @@ export const DELIVERY_KINDS: readonly string[] = [
   "TELEPHONY_FINAL_STEREO",
 ];
 export const deliveryAsset = (assets: readonly Asset[]): Asset | undefined =>
-  assets.find((a) => DELIVERY_KINDS.includes(a.kind));
+  assets
+    .filter((a) => DELIVERY_KINDS.includes(a.kind))
+    .reduce<Asset | undefined>(
+      (best, a) => (!best || a.version > best.version ? a : best),
+      undefined,
+    );
+
+/** A recording's length for people: seconds under a minute, minutes after. */
+export const lengthLabel = (seconds: number): string =>
+  seconds < 60 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
 
 /** Saves the delivery file and, with it, the consent record (D-068) and the details file with
  * every measurement and the audio check (D-079). */

@@ -7,6 +7,8 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// 2026-11-13 (D-103): fifteen icons no page used any more were dropped (about 2 KB of the first
+// screen). Add an icon here when a page needs it, then run this script.
 const ICONS = {
   chart: "ChartBar",
   projects: "FolderSimple",
@@ -26,7 +28,6 @@ const ICONS = {
   warning: "WarningCircle",
   ok: "CheckCircle",
   failed: "XCircle",
-  empty: "Tray",
   next: "CaretRight",
   previous: "CaretLeft",
   waveform: "Waveform",
@@ -34,31 +35,17 @@ const ICONS = {
   stop: "Stop",
   play: "Play",
   phone: "Phone",
-  calendar: "CalendarBlank",
   clock: "Clock",
   check: "Check",
-  database: "Database",
-  storage: "HardDrives",
-  flag: "Flag",
   comment: "ChatCircleText",
   user: "User",
-  language: "Translate",
-  timer: "Timer",
-  sliders: "SlidersHorizontal",
   record: "Record",
   target: "Target",
-  trend: "TrendUp",
-  history: "ClockCounterClockwise",
   id: "IdentificationCard",
   mail: "Envelope",
-  key: "Key",
   info: "Info",
   refresh: "ArrowsClockwise",
-  pause: "PauseCircle",
-  headphones: "Headphones",
-  arrow: "ArrowRight",
   people: "Users",
-  cloud: "CloudCheck",
   trash: "Trash",
 };
 // Every icon gets "regular"; these also get the weights they are shown in.
@@ -75,18 +62,13 @@ const FILLED = [
   "phone",
   "target",
   "clock",
-  "database",
-  "storage",
   "record",
-  "flag",
   "ok",
   "warning",
   "failed",
   "play",
   "stop",
   "people",
-  "cloud",
-  "timer",
   "user",
   "lock",
 ];

@@ -40,8 +40,12 @@ REASON_REQUIRED = {
 
 # Format defaults come from the specification (spec 4.1 / 4.2). Silence 25 % is the spec's initial
 # QC rule (QC-001). No clipping or duration limit is invented: they stay unset until configured.
+# Telephony: one channel (D-103). The specification asked for A-left/B-right stereo, but the phone
+# provider in use (TxContact, D-101) records the whole call together; with 2 here every phone
+# recording failed the automatic check and QC had to justify each pass. A project sets 2 on its
+# Audio rules tab once the provider delivers one speaker per channel.
 DEFAULT_AUDIO = {
-    "TELEPHONY": {"sample_rate": 16000, "bit_depth": 16, "channels": 2},
+    "TELEPHONY": {"sample_rate": 16000, "bit_depth": 16, "channels": 1},
     "FACE_TO_FACE": {"sample_rate": 16000, "bit_depth": 16, "channels": 1},
 }
 DEFAULT_MAX_SILENCE_PCT = Decimal("25")

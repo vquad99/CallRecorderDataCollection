@@ -933,6 +933,14 @@ CASES: list[Case] = [
     ),
     case(
         "POST",
+        "/api/v1/calls/{call_id}/checklist",
+        lambda e, s: f"/api/v1/calls/{s.call}/checklist",
+        {SA, PA, MO},
+        Perm.CALLS_END,
+        lambda e, s, who: {"item": "A_JOINED"},  # the call is not live: 409 after access
+    ),
+    case(
+        "POST",
         "/api/v1/calls/{call_id}/close",
         lambda e, s: f"/api/v1/calls/{s.call}/close",
         {SA, PA, MO},
@@ -953,7 +961,7 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/calls/{s.call}/match",
         {SA, PA, MO},
         Perm.CALLS_END,
-        lambda e, s, who: {"session_id": "not-listed"},
+        lambda e, s, who: {"key": "not-listed"},
     ),
     case(
         "POST",
@@ -976,6 +984,13 @@ CASES: list[Case] = [
         "GET",
         "/api/v1/calls",
         lambda e, s: f"/api/v1/calls?project_id={s.project}",
+        {SA, PA, MO, MO2, QC},
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "GET",
+        "/api/v1/calls/export",
+        lambda e, s: f"/api/v1/calls/export?project_id={s.project}",
         {SA, PA, MO, MO2, QC},
         Perm.TASKS_VIEW,
     ),

@@ -125,6 +125,9 @@ def check_pending_audio(app: FastAPI) -> int:
 def start_recovery_loop(app: FastAPI) -> threading.Event:
     """Sweep at start-up, then every RECOVERY_INTERVAL_SECONDS (0: start-up only). Set to stop."""
     stop = threading.Event()
+    if app.state.settings.recovery_interval_seconds == 0 and getattr(app.state, "telephony", None):
+        # Closed phone calls are looked at by this sweep only: without it no recording arrives.
+        logger.warning("call_recordings_need_the_sweep: RECOVERY_INTERVAL_SECONDS is 0")
 
     def loop() -> None:
         while True:

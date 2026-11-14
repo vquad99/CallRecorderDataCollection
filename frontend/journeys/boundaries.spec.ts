@@ -26,7 +26,7 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
   await test.step("a moderator sees only moderator pages", async () => {
     const page = await (await browser.newContext()).newPage();
     await signIn(page, SEEDED.moderator, SEEDED_PASSWORD);
-    expect(await menu(page)).toEqual(["Dashboard", "Projects", "Tasks"]);
+    expect(await menu(page)).toEqual(["Dashboard", "Projects", "Tasks", "Phone calls"]);
     for (const path of [
       "/admin/users",
       "/admin/audit",

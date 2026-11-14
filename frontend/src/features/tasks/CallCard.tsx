@@ -1,9 +1,9 @@
-// Phone calls on a telephony task (D-101): the moderator starts the call, TxContact rings participant
-// A and connects them to the moderator's TxContact seat, the moderator adds B from the TxContact
-// screen, and closes the call here when A and B have finished. The platform then fetches the
-// recording. Every state shown comes from the server; nothing is shown as connected on its own
-// (TEL-037).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// Phone calls on a telephony task (D-101, D-103): the moderator starts the call, TxContact rings
+// participant A and connects them to the moderator's TxContact seat, the moderator adds B from the
+// TxContact screen, ticks the checklist, and closes the call here when A and B have finished. The
+// platform then fetches the recording. Every state shown comes from the server; nothing is shown
+// as connected on its own (TEL-037).
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ApiError } from "../../api/client";
 import * as rec from "../../api/recordings";
@@ -16,31 +16,41 @@ import { Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { toApiError, useResource } from "../../hooks/useResource";
+import { CallBadge, when, words } from "../calls/callUi";
 import { Player } from "./AudioQcPanel";
 
 const REFRESH_MS = 5000;
 
-/** Calls of a task, refreshed every few seconds while one is still moving on its own. */
+/** Calls of a task. While one is still moving on its own the list is fetched again every few
+ * seconds, quietly: what is on screen stays (an open form, a typed note) until the new answer
+ * replaces it. */
 function useCalls(taskId: string) {
-  const resource = useResource(() => tel.listCalls(taskId), [taskId]);
-  const { state, reload } = resource;
+  const { state, reload, replace } = useResource(() => tel.listCalls(taskId), [taskId]);
+  // Answers can come back out of order (several ticks in a row): only the newest request's
+  // answer is shown, so an older list never replaces a newer one.
+  const newest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++newest.current;
+    return tel
+      .listCalls(taskId)
+      .then((data) => {
+        if (mine === newest.current) replace(data);
+      })
+      .catch(() => undefined);
+  }, [taskId, replace]);
   const moving = state.status === "loaded" && state.data.some((c) => tel.MOVING.includes(c.state));
   useEffect(() => {
     if (!moving) return;
-    const timer = window.setInterval(reload, REFRESH_MS);
+    const timer = window.setInterval(() => void refresh(), REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [moving, reload]);
-  return resource;
+  }, [moving, refresh]);
+  return { state, reload, refresh };
 }
 
 type Calls = ReturnType<typeof useCalls>;
 
-function when(at: string | null): string {
-  return at ? new Date(at).toLocaleString() : "-";
-}
-
-/** Pick the right TxContact call, look again, or give up: for the moderator and project admins. */
-function CallFixer({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call) => void }) {
+/** Pick the right TxContact call or look again: for the moderator and project admins. */
+function CallFixer({ call, onChange }: { call: tel.Call; onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const act = (key: string, action: () => Promise<tel.Call>) => {
@@ -55,41 +65,42 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call)
     <div className="stack">
       {call.failure_detail ? <p>{call.failure_detail}</p> : null}
       {call.state === "NEEDS_MATCH" && call.candidates.length > 0 ? (
-        <table className="table">
-          <caption className="muted">TxContact calls at the time of this call</caption>
-          <thead>
-            <tr>
-              <th scope="col">Started</th>
-              <th scope="col">Length</th>
-              <th scope="col">Numbers end in</th>
-              <th scope="col">File</th>
-              <th scope="col">
-                <span className="visually-hidden">Choose</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {call.candidates.map((c) => (
-              <tr key={c.session_id}>
-                <td>{when(c.start)}</td>
-                <td>{c.duration ? `${c.duration} s` : "-"}</td>
-                <td>
-                  {c.from_hint || "?"} / {c.to_hint || "?"}
-                </td>
-                <td>{c.file}</td>
-                <td>
-                  <Button
-                    variant="secondary"
-                    busy={busy === c.session_id}
-                    onClick={() => act(c.session_id, () => tel.chooseMatch(call.id, c.session_id))}
-                  >
-                    This is the call
-                  </Button>
-                </td>
+        <div className="table-wrap">
+          <table className="table call-candidates">
+            <caption className="muted">TxContact calls at the time of this call</caption>
+            <thead>
+              <tr>
+                {/* The choice comes first: on a narrow screen it is visible without scrolling. */}
+                <th scope="col">Choose</th>
+                <th scope="col">Started</th>
+                <th scope="col">Length</th>
+                <th scope="col">Numbers end in</th>
+                <th scope="col">File</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {call.candidates.map((c) => (
+                <tr key={c.key}>
+                  <td>
+                    <Button
+                      variant="secondary"
+                      busy={busy === c.key}
+                      onClick={() => act(c.key, () => tel.chooseMatch(call.id, c.key))}
+                    >
+                      This is the call
+                    </Button>
+                  </td>
+                  <td>{when(c.start)}</td>
+                  <td>{c.duration ? `${c.duration} s` : "-"}</td>
+                  <td>
+                    {c.from_hint || "?"} / {c.to_hint || "?"}
+                  </td>
+                  <td className="call-file">{c.file}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
       <div className="actions">
         <Button
@@ -97,6 +108,7 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call)
           busy={busy === "retry"}
           onClick={() => act("retry", () => tel.retryCall(call.id))}
         >
+          <Icon name="refresh" size={15} />
           Look for the recording again
         </Button>
       </div>
@@ -106,7 +118,7 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call)
 }
 
 /** "The call did not work": a reason from the fixed list, and a note for Other. */
-function CancelForm({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call) => void }) {
+function CancelForm({ call, onChange }: { call: tel.Call; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<tel.CancelReason>("NO_ANSWER");
   const [note, setNote] = useState("");
@@ -121,7 +133,7 @@ function CancelForm({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call
   }
   return (
     <form
-      className="stack"
+      className="stack call-cancel"
       onSubmit={(e) => {
         e.preventDefault();
         setBusy(true);
@@ -150,6 +162,45 @@ function CancelForm({ call, onChange }: { call: tel.Call; onChange: (c: tel.Call
       </div>
       <ErrorNotice error={error} />
     </form>
+  );
+}
+
+/** What the moderator confirms while on the call; each tick is saved and kept in the history.
+ * The box shows the tick at once (it is the moderator's own answer, not the provider's state) and
+ * takes it back, with the reason, if the server refuses it. */
+function Checklist({ call, onChange }: { call: tel.Call; onChange: () => Promise<unknown> }) {
+  const [pending, setPending] = useState<Partial<Record<tel.ChecklistItem, boolean>>>({});
+  const [error, setError] = useState<ApiError | null>(null);
+  const settle = (item: tel.ChecklistItem) =>
+    setPending((p) => Object.fromEntries(Object.entries(p).filter(([k]) => k !== item)));
+  return (
+    <fieldset className="call-checklist">
+      <legend>Call checklist</legend>
+      {tel.CHECKLIST.map((c) => (
+        <label key={c.item} className="checkbox">
+          <input
+            type="checkbox"
+            checked={pending[c.item] ?? c.item in call.checklist}
+            disabled={c.item in pending}
+            onChange={(e) => {
+              const done = e.target.checked;
+              setPending((p) => ({ ...p, [c.item]: done }));
+              setError(null);
+              tel
+                .tickChecklist(call.id, c.item, done)
+                .then(onChange)
+                .catch((err: unknown) => setError(toApiError(err)))
+                .finally(() => settle(c.item));
+            }}
+          />
+          <span>
+            {c.label}
+            {c.required ? <span className="muted"> (needed to close the call)</span> : null}
+          </span>
+        </label>
+      ))}
+      <ErrorNotice error={error} />
+    </fieldset>
   );
 }
 
@@ -192,17 +243,17 @@ function CallCard({
       .catch((err: unknown) => setError(toApiError(err)))
       .finally(() => setBusy(null));
   };
+  const refresh = () => void calls.refresh();
   const callAction = (key: string, action: () => Promise<tel.Call>) => {
     setBusy(key);
     setError(null);
     action()
-      .then(() => calls.reload())
+      .then(refresh)
       .catch((err: unknown) => setError(toApiError(err)))
       .finally(() => setBusy(null));
   };
 
   const latest = calls.state.status === "loaded" ? calls.state.data[0] : undefined;
-  const configured = status.state.status === "loaded" && status.state.data.configured;
 
   let title = "Start the session";
   let body: ReactNode = (
@@ -218,6 +269,7 @@ function CallCard({
     title = "Check the call recording";
     body = (
       <div className="record-card__listen">
+        <p>Listen to the recording. If it is good, send it to QC; if not, call again.</p>
         <ListenLatest taskId={task.id} />
       </div>
     );
@@ -242,7 +294,11 @@ function CallCard({
     if (calls.state.status === "failed") {
       return <ErrorState error={calls.state.error} onRetry={calls.reload} />;
     }
-    if (!configured) {
+    if (status.state.status === "failed") {
+      // Not knowing is not the same as "not set up": say what happened and offer to try again.
+      return <ErrorState error={status.state.error} onRetry={status.reload} />;
+    }
+    if (!status.state.data.configured) {
       title = "Phone calls are not set up";
       body = (
         <p>
@@ -257,12 +313,12 @@ function CallCard({
         <>
           <ol className="record-card__steps">
             <li className="is-now">
-              Click Start call. TxContact rings participant A ({task.participant_a.participant_code}
-              ) and connects them to your TxContact seat.
+              Sign in to your TxContact screen, then click Start call. TxContact rings participant A
+              ({task.participant_a.participant_code}) and connects them to you.
             </li>
-            <li>Add participant B from your TxContact screen.</li>
+            <li>Add participant B from your TxContact screen, and tick the checklist.</li>
             <li>Record each person&apos;s consent below.</li>
-            <li>When A and B have finished, close the call here.</li>
+            <li>Stay on the call, muted, and listen. When they have finished, close the call.</li>
           </ol>
           {latest?.state === "DIAL_FAILED" ? (
             <p role="alert">
@@ -282,34 +338,40 @@ function CallCard({
         </Button>
       );
     } else if (latest.state === "DIALLING") {
+      const ready = tel.CHECKLIST.every((c) => !c.required || c.item in latest.checklist);
       title = "On the call";
       body = (
         <>
-          <ol className="record-card__steps">
-            <li className="is-done">
-              TxContact is ringing participant A (number ending {latest.phone_hint}) on seat{" "}
-              {latest.agent_id}.
-            </li>
-            <li className="is-now">Add participant B from your TxContact screen.</li>
-            <li className="is-now">Record each person&apos;s consent below.</li>
-            <li>When A and B have finished, close the call.</li>
-          </ol>
+          <p>
+            TxContact was asked to ring participant A (number ending {latest.phone_hint}) on seat{" "}
+            {latest.agent_id}. Add participant B from your TxContact screen. Stay on the call,
+            muted, and listen: if the line is poor, cancel the call and choose{" "}
+            <strong>Poor line quality</strong>.
+          </p>
+          <Checklist call={latest} onChange={calls.refresh} />
           <TextField
             label="Note for the record (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+          {ready ? null : (
+            <p className="muted">
+              Tick both people on the call, and record their consent below, to close the call.
+            </p>
+          )}
         </>
       );
       go = (
         <>
           <Button
             busy={busy === "close"}
+            disabled={!ready}
             onClick={() => callAction("close", () => tel.closeCall(latest.id, note))}
           >
+            <Icon name="check" size={16} weight="bold" />
             Close call
           </Button>
-          <CancelForm call={latest} onChange={() => calls.reload()} />
+          <CancelForm call={latest} onChange={refresh} />
         </>
       );
     } else if (latest.state === "WAITING_FOR_RECORDING") {
@@ -320,11 +382,11 @@ function CallCard({
           its own. Tries so far: {latest.fetch_attempts}.
         </p>
       );
-      go = null;
+      go = <CancelForm call={latest} onChange={refresh} />;
     } else {
       title = tel.CALL_STATE_LABELS[latest.state];
-      body = <CallFixer call={latest} onChange={() => calls.reload()} />;
-      go = <CancelForm call={latest} onChange={() => calls.reload()} />;
+      body = <CallFixer call={latest} onChange={refresh} />;
+      go = <CancelForm call={latest} onChange={refresh} />;
     }
   }
 
@@ -340,13 +402,16 @@ function CallCard({
   );
 }
 
-/** Every call of a telephony task with its full history, for everyone who sees the task.
- * Project admins can also pick the recording or look again when a call needs a person. */
+/** Every call of a telephony task with its full history, for everyone who sees the task. A
+ * project admin can also pick the recording, look again, or end a call that is stuck. */
 function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
   const { state, reload } = calls;
+  const manages = task.can_assign && !task.is_moderator;
   return (
     <section className="card" aria-labelledby="calls-title">
-      <h2 id="calls-title">Phone calls</h2>
+      <h2 id="calls-title">
+        <Icon name="phone" size={18} /> Phone calls
+      </h2>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.length === 0 ? (
@@ -356,20 +421,26 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
         ? state.data.map((c, i) => (
             <details key={c.id} open={i === 0} className="call">
               <summary>
-                Call {state.data.length - i} · {tel.CALL_STATE_LABELS[c.state]} ·{" "}
-                {when(c.dialled_at)} · {c.moderator_name ?? "Moderator"} · seat {c.agent_id}
+                <span className="call__summary">
+                  Call {state.data.length - i} <CallBadge state={c.state} />
+                  <span className="muted">
+                    {when(c.dialled_at)} · {c.moderator_name ?? "Moderator"} · seat {c.agent_id}
+                  </span>
+                </span>
               </summary>
-              {task.can_assign &&
-              !task.is_moderator &&
-              ["NEEDS_MATCH", "FETCH_FAILED"].includes(c.state) ? (
-                <CallFixer call={c} onChange={() => reload()} />
+              {manages && tel.CANCELLABLE.includes(c.state) ? (
+                <div className="call__manage">
+                  {["NEEDS_MATCH", "FETCH_FAILED"].includes(c.state) ? (
+                    <CallFixer call={c} onChange={() => void calls.refresh()} />
+                  ) : null}
+                  <CancelForm call={c} onChange={() => void calls.refresh()} />
+                </div>
               ) : null}
               <ol className="list timeline">
                 {c.events.map((e, n) => (
                   <li key={`${e.at}-${n}`}>
                     <span className="muted">
-                      {when(e.at)} · {e.actor ?? "Platform"} ·{" "}
-                      {e.kind.toLowerCase().replace(/_/g, " ")}
+                      {when(e.at)} · {e.actor ?? "Platform"} · {words(e.kind)}
                     </span>
                     <div>{e.text}</div>
                   </li>
@@ -384,7 +455,7 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
 
 /** The phone-call part of a telephony task page: the moderator's card and the call history share
  * one list of calls. When a call's recording is stored, the server has moved the task to Recorded,
- * so the task is loaded again. */
+ * so the page is told to fetch the task again. */
 export function PhoneCalls({
   task,
   onChange,

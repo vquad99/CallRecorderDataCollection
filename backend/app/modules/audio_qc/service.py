@@ -1196,7 +1196,63 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
             },
         },
     }
+    if rec.mode == "TELEPHONY":
+        body["call"] = _call_details(db, rec)
     return body
+
+
+def _call_details(db: Session, rec: Recording) -> dict[str, Any] | None:
+    """The phone call a recording came from, for its details file (D-103): who called from which
+    seat and when, what the moderator confirmed on the call, and every step until the file was
+    stored. No phone number: the last two digits only."""
+    # Imported here: the telephony service itself imports this module.
+    from app.modules.telephony import service as telephony
+    from app.modules.telephony.models import Call, CallEvent
+
+    call = db.scalar(select(Call).where(Call.recording_id == rec.id))
+    if call is None:
+        return None
+    moderator = db.get(User, call.moderator_id)
+    events = db.scalars(
+        select(CallEvent).where(CallEvent.call_id == call.id).order_by(CallEvent.created_at)
+    ).all()
+    actors = (
+        {
+            uid: name
+            for uid, name in db.execute(
+                select(User.id, User.display_name).where(
+                    User.id.in_({e.actor_id for e in events if e.actor_id})
+                )
+            ).all()
+        }
+        if any(e.actor_id for e in events)
+        else {}
+    )
+    return {
+        "id": str(call.id),
+        "provider": call.provider,
+        "provider_reference": call.provider_reference,
+        "provider_call": telephony.mask(call.provider_session_id or "") or None,
+        "agent_seat": call.agent_id,
+        "moderator": moderator.display_name if moderator else None,
+        "number_ends_in": call.phone_hint,
+        "dialled_at": _iso(call.dialled_at),
+        "closed_at": _iso(call.closed_at),
+        "note": call.note,
+        "checklist": {
+            item: telephony.checklist_of(call).get(item)
+            for item in ("A_JOINED", "B_JOINED", "MODERATOR_MUTED", "QUALITY_OK")
+        },
+        "history": [
+            {
+                "at": _iso(e.created_at),
+                "kind": e.kind,
+                "by": actors.get(e.actor_id) if e.actor_id else None,
+                "text": e.detail,
+            }
+            for e in events
+        ],
+    }
 
 
 def ensure_checked(db: Session, task: Task) -> None:

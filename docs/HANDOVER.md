@@ -63,6 +63,7 @@ later syncs.
 | `TXCONTACT_DIALER_USERNAME`, `TXCONTACT_DIALER_PASSWORD` (secret) | TxContact dialer login (D-101). Empty: phone calls show "Not configured". The worker copies them from `ccp-api`. |
 | `TXCONTACT_RECORD_USER`, `TXCONTACT_RECORD_PASSWORD` (secret) | TxContact recording-service login (may differ from the dialer's) |
 | `TXCONTACT_BASE_URL`, `TXCONTACT_CAMPAIGN_REF` | `https://amber.txcontact.com`, `dc-record-call` |
+| `TELEPHONY_FETCH_MINUTES`, `TELEPHONY_FIRST_LOOK_SECONDS`, `TELEPHONY_MAX_CALLS_PER_TASK_PER_HOUR` | Optional; defaults 60, 30 and 6. Closed calls are fetched by the recovery sweep: `RECOVERY_INTERVAL_SECONDS` must not be 0 |
 
 The application refuses to start in production without real email, Redis, an https address and
 storage keys (`backend/app/core/config.py`).

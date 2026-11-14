@@ -126,7 +126,10 @@ describe("users admin", () => {
     expect(calls.find((c) => c.path === "/api/v1/auth/view-as")?.body).toEqual({ user_id: "id1" });
     await userEvent.click(screen.getByRole("button", { name: "Stop viewing" }));
     expect(await screen.findByRole("link", { name: "Person 1" })).toBeInTheDocument();
-    expect(screen.queryByText(/Read-only: nothing can be changed/)).not.toBeInTheDocument();
+    // The strip goes once the answer to "Stop viewing" is in: wait for it, do not race it.
+    await waitFor(() =>
+      expect(screen.queryByText(/Read-only: nothing can be changed/)).not.toBeInTheDocument(),
+    );
   });
 
   it("offers View as only to a Super Admin", async () => {

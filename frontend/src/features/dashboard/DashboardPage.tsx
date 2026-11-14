@@ -168,7 +168,9 @@ function DailyChart({ days, target }: { days: DayTotals[]; target: number }) {
   const slot = plotW / days.length;
   const barW = Math.max(3, Math.min(18, slot - 4));
   const y = (v: number) => 8 + plotH - (v / top) * plotH;
-  const ticks = [0, top / 2, top].map((t) => Math.round(t * 10) / 10);
+  // Each tick once: with very small totals the three round to the same number, and two grid
+  // lines with one label (and one React key) are a mistake.
+  const ticks = Array.from(new Set([0, top / 2, top].map((t) => Math.round(t * 10) / 10)));
   const labelEvery = days.length > 31 ? 14 : days.length > 14 ? 7 : 1;
   const shown = hover === null ? null : days[hover];
 

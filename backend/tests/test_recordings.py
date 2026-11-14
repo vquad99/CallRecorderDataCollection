@@ -435,3 +435,26 @@ def test_retention_deletes_expired_files_and_usage_counts_live_ones(
         db.scalar(select(Recording.state).where(Recording.id == __import__("uuid").UUID(rid)))
         == "READY"
     )
+
+
+def test_the_task_list_carries_each_recordings_files(world: dict[str, Any]) -> None:
+    """The task page offers Listen and the download from this list (D-092): every recording comes
+    with its files, and a second processing shows its newer version too."""
+    rid = _record(world, chunks())
+    listed = world["mod"].get(f"/api/v1/tasks/{world['task']['id']}/recordings")
+    assert listed.status_code == 200, listed.text
+    (rec,) = listed.json()
+    assert rec["id"] == rid
+    assert sorted(a["kind"] for a in rec["assets"]) == ["BROWSER_ORIGINAL", "FTF_DERIVED_PCM"]
+    delivery = next(a for a in rec["assets"] if a["kind"] == "FTF_DERIVED_PCM")
+    assert (delivery["sample_rate"], delivery["channels"]) == (16000, 1)
+    # A file removed by retention is not offered.
+    db = world["db"]
+    db.execute(
+        update(AudioAsset)
+        .where(AudioAsset.id == delivery["id"])
+        .values(deleted_at=datetime.now(UTC))
+    )
+    db.commit()
+    again = world["mod"].get(f"/api/v1/tasks/{world['task']['id']}/recordings").json()
+    assert [a["kind"] for a in again[0]["assets"]] == ["BROWSER_ORIGINAL"]

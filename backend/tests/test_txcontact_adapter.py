@@ -6,13 +6,15 @@ Requirements: TEL-001, TEL-002, TEL-010, TEL-011, TEL-035
 
 from __future__ import annotations
 
+import http.client
+import io
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -260,3 +262,97 @@ def test_the_real_answers_seen_on_2026_11_13() -> None:
     assert refused.accepted is False
     assert refused.reference is None
     assert "wrong dialer username or password" in refused.response_excerpt
+
+
+def test_a_download_cut_short_is_refused_not_kept(tmp_path: Path) -> None:
+    """A connection closed early gives a short file without an error; the length TxContact
+    announced is what catches it."""
+
+    class Short(FakeResponse):
+        headers: ClassVar[dict[str, str]] = {"Content-Length": "5000"}
+
+    class Server(FakeServer):
+        def __call__(self, request: urllib.request.Request, timeout: float) -> FakeResponse:
+            if "/download/" in request.full_url:
+                return Short(200, b"RIFF....only-the-start")
+            return super().__call__(request, timeout)
+
+    server = Server()
+    server.answer("/txrecord/api/v1/auth/", 200, {"auth_token": "tok"})
+    with pytest.raises(ProviderError, match="cut short"):
+        make(server).download(_session(), tmp_path / "x.wav", 10_000)
+
+
+def test_a_connection_that_drops_mid_answer_is_a_provider_error(tmp_path: Path) -> None:
+    class Dropping(FakeResponse):
+        def read(self, amt: int = -1) -> bytes:
+            raise ConnectionResetError("peer reset")
+
+    class Server(FakeServer):
+        def __call__(self, request: urllib.request.Request, timeout: float) -> FakeResponse:
+            return Dropping(200, b"")
+
+    with pytest.raises(ProviderError, match="cut short"):
+        make(Server()).dial(PHONE, "70001")
+    with pytest.raises(ProviderError, match="cut short"):
+        make(Server()).sessions("70001", date(2026, 11, 13))
+
+
+def test_no_answer_in_time_says_so() -> None:
+    def slow(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        raise TimeoutError("timed out")
+
+    settings = build_settings(
+        txcontact_dialer_username="u",
+        txcontact_dialer_password=DIAL_PASSWORD,
+        txcontact_record_user="r",
+        txcontact_record_password=RECORD_PASSWORD,
+    )
+    with pytest.raises(ProviderError, match="did not answer in time") as caught:
+        TxContact(settings, opener=slow).dial(PHONE, "70001")
+    assert DIAL_PASSWORD not in str(caught.value)
+
+
+def test_one_search_answer_serves_every_call_of_a_sweep() -> None:
+    server = FakeServer()
+    server.answer("/txrecord/api/v1/auth/", 200, {"auth_token": "tok"})
+    server.answer("/txrecord/api/search", 200, {"next": None, "results": [_row()]})
+    provider = make(server)
+    first = provider.sessions("70001", date(2026, 11, 13))
+    second = provider.sessions("70001", date(2026, 11, 13))
+    assert [s.session_id for s in first] == [s.session_id for s in second] == ["S1"]
+    assert sum("search" in r.full_url for r in server.requests) == 1
+    provider.sessions("70002", date(2026, 11, 13))  # another seat is asked for separately
+    assert sum("search" in r.full_url for r in server.requests) == 2
+
+
+def test_redirects_are_refused_so_credentials_stay_with_txcontact() -> None:
+    from app.adapters.txcontact import _NoRedirect
+
+    request = urllib.request.Request("https://amber.txcontact.com/txrecord/api/search")
+    assert (
+        _NoRedirect().redirect_request(
+            request,
+            io.BytesIO(),
+            302,
+            "Found",
+            http.client.HTTPMessage(),
+            "https://elsewhere.example/",
+        )
+        is None
+    )
+
+
+def test_provider_calls_live_only_in_the_adapter_package() -> None:
+    """TA-TEL-01: nothing outside app/adapters talks to the provider or names its addresses."""
+    app = Path(__file__).resolve().parents[1] / "app"
+    offenders = []
+    for path in sorted(app.rglob("*.py")):
+        if "adapters" in path.relative_to(app).parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if any(
+            mark in text for mark in ("urllib.request", "http.client", "/txdialer/", "/txrecord/")
+        ):
+            offenders.append(str(path.relative_to(app)))
+    assert offenders == []

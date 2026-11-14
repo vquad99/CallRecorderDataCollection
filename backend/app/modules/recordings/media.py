@@ -183,8 +183,12 @@ def decode_to_float_wav(src: Path, out: Path) -> ProviderAudio:
 
     try:
         handle = soundfile.SoundFile(str(src))
-    except (RuntimeError, soundfile.LibsndfileError) as exc:
-        raise ValueError(f"the provider's file cannot be read as audio ({exc})") from None
+    except (RuntimeError, soundfile.LibsndfileError):
+        # The library's own message names a path on this server; people get the reason only.
+        raise ValueError(
+            "The provider's file is not audio this platform can read (WAV, MP3, FLAC or Ogg): "
+            "the format is not supported or the file is damaged"
+        ) from None
     raw = out.with_suffix(".f32")
     with handle, raw.open("wb") as dst:
         rate, channels = int(handle.samplerate), int(handle.channels)

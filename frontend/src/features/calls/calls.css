@@ -57,12 +57,77 @@
 .calls-list__head {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.calls-list__head h2 {
+  margin: 0;
 }
 .calls-raw {
   overflow: auto;
   max-height: 240px;
   font-size: 0.75rem;
+}
+
+/* Rows of label, bar, number: room for longer labels and a small note after the number. */
+.calls-bars li {
+  grid-template-columns: minmax(120px, 1.2fr) minmax(0, 1fr) minmax(64px, auto);
+}
+.calls-bars__note {
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+/* On a narrow screen the day chart keeps a readable width and scrolls sideways inside its card. */
+.calls-plot {
+  overflow-x: auto;
+}
+@media (max-width: 640px) {
+  .calls-plot svg {
+    min-width: 560px;
+  }
+}
+
+/* The call card on the task page (D-103). */
+.call-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 2px 20px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.call-checklist legend {
+  padding: 0 6px;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.call-cancel {
+  min-width: 220px;
+}
+.call__summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.call__manage {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+/* A provider's file name is one long word: it wraps instead of pushing the page wide. */
+.call-file {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.call-candidates caption {
+  padding: 6px 0;
+  text-align: left;
 }

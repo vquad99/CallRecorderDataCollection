@@ -134,3 +134,25 @@ replicas and export bundles are extra.
 - `projects.consent_text`: the consent form participants answer.
 - `consent_records.captured_by` may be empty: the participant's own answer (method DIGITAL).
 
+## Phone calls (migrations 0018-0020, D-101, D-103)
+
+Built for the flow TxContact allows; the planned `provider_accounts`, `call_sessions`,
+`call_participants` and `provider_webhook_events` tables above are not created (no conference API,
+no webhooks).
+
+| Table | Key columns | Constraints / indexes | On delete |
+|---|---|---|---|
+| calls | task_id, project_id, provider, moderator_id, agent_id, phone_hint (last two digits only), state, dialled_at, closed_at, cancel_reason, note, checklist (JSON: item -> time ticked), provider_reference (the dialer's id for the request), provider_session_id, provider_file, candidates (JSON), fetch_attempts, next_fetch_at, failure_code, failure_detail, recording_id | check state and cancel_reason; unique (task_id) where state is DIALLING or WAITING_FOR_RECORDING (one live call per task); unique (provider, provider_session_id) where set (a provider recording belongs to one call); index next_fetch_at where waiting; index (task_id, created_at); index dialled_at | restrict |
+| call_events | call_id, kind, actor_id (null = the platform), detail | check kind; index (call_id, created_at) | restrict |
+
+`users.telephony_agent_id`: the moderator's seat at the provider (one person per seat, checked by
+the service). `audio_assets.kind` and the retention rules gain `TELEPHONY_DERIVED_PCM` (the 16 kHz
+delivery file of a phone call); the provider's file is `PROVIDER_ORIGINAL_MIXED`.
+
+No full phone number is stored in these tables: `calls.phone_hint` holds the last two digits, and a
+provider's call id or file name (which may carry the number) is masked wherever it is shown or
+exported; `calls.provider_session_id`, `provider_file` and `candidates` keep the real names because
+the download needs them, and no API returns them unmasked.
+
+Migration 0020 also sets telephony audio rules from 2 channels to 1 (D-103).
+

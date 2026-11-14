@@ -711,7 +711,9 @@ def asset_url(
     if not principal.can_in_project(needed, asset.project_id):
         raise forbidden()
     seconds = settings.signed_url_seconds
-    name = f"{asset.kind.lower()}_{asset.id}.wav" if purpose == "download" else None
+    # The file's own extension: a provider original may be an MP3, not a WAV.
+    extension = asset.file_extension or "wav"
+    name = f"{asset.kind.lower()}_{asset.id}.{extension}" if purpose == "download" else None
     url = storage.signed_get_url(asset.storage_key, seconds=seconds, download_name=name)
     audit.record(
         db,

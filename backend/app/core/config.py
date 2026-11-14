@@ -110,6 +110,12 @@ class Settings(BaseSettings):
     # After the moderator closes a call, look for its recording for this long before asking a
     # person to pick it or try again.
     telephony_fetch_minutes: int = Field(default=60, ge=5, le=24 * 60)
+    # The first look for a closed call's recording waits this long: the provider writes the file
+    # after the call ends.
+    telephony_first_look_seconds: int = Field(default=30, ge=0, le=600)
+    # A participant's phone is not rung over and over: at most this many calls for one task in
+    # an hour, counting refused and cancelled ones.
+    telephony_max_calls_per_task_per_hour: int = Field(default=6, ge=1, le=100)
     telephony_max_download_bytes: int = Field(default=500_000_000, ge=1_000_000)
 
     @field_validator("data_encryption_key")

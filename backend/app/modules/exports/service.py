@@ -42,6 +42,7 @@ from app.modules.projects.service import get_visible as get_visible_project
 from app.modules.recordings import consent_form
 from app.modules.recordings.models import Recording
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
+from app.modules.telephony.models import Call
 
 CONTENTS = ("audio", "metadata", "both", "progress", "participants")
 REPORTS = ("progress", "participants")  # a CSV, not a ZIP of recordings
@@ -170,8 +171,27 @@ def progress_csv(db: Session, project: Project) -> str:
             "automatic_check",
             "qc_decision",
             "approved_at",
+            "phone_calls",
+            "last_call_state",
         ]
     )
+    # Phone calls per task, and the state of the newest one (D-103): two queries for the project,
+    # not two per task.
+    call_counts = {
+        tid: int(n)
+        for tid, n in db.execute(
+            select(Call.task_id, func.count())
+            .where(Call.project_id == project.id)
+            .group_by(Call.task_id)
+        ).all()
+    }
+    last_call: dict[uuid.UUID, str] = {}
+    for tid, state in db.execute(
+        select(Call.task_id, Call.state)
+        .where(Call.project_id == project.id)
+        .order_by(Call.dialled_at)
+    ).all():
+        last_call[tid] = state
     for task in db.scalars(
         select(Task).where(Task.project_id == project.id).order_by(Task.task_code)
     ):
@@ -235,6 +255,8 @@ def progress_csv(db: Session, project: Project) -> str:
                     automatic.outcome if automatic else "",
                     decision.outcome if decision else "",
                     _iso(approved_at) if task.status == "APPROVED" else "",
+                    call_counts.get(task.id, 0) if task.recording_mode == "TELEPHONY" else "",
+                    last_call.get(task.id, ""),
                 )
             ]
         )
