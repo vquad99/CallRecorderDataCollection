@@ -4,6 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // PW_EDGE=1 adds a second run in the installed Microsoft Edge (CI sets it; Edge is on its runners).
 const channel = process.env.PW_CHANNEL;
 const port = 5180;
+const builtPort = 5182;
 // A built-in fake microphone so the recorder can be exercised without hardware.
 const fakeMedia = {
   launchOptions: {
@@ -28,10 +29,20 @@ export default defineConfig({
       ? [{ name: "edge", use: { ...devices["Desktop Edge"], channel: "msedge", ...fakeMedia } }]
       : []),
   ],
-  webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
-    url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: false,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+      url: `http://127.0.0.1:${port}`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
+      // The built application (dist/, made by `npm run build`), for what exists only there: the
+      // service worker and the web app manifest (e2e/pwa.spec.ts).
+      command: `npm run preview -- --host 127.0.0.1 --port ${builtPort} --strictPort`,
+      url: `http://127.0.0.1:${builtPort}`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+  ],
 });

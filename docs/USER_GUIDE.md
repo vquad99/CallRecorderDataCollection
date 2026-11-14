@@ -62,6 +62,17 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
 
 **My account** also has **Change password** and **Signed-in devices** (sign out other devices).
 
+**Install the application.** On **My account**, **Install the application** puts Conversation
+Collection among your applications: it then opens in its own window from the desktop or the
+phone's home screen. Click **Install** when the button is there; otherwise the card says how to do
+it in your browser (Chrome or Edge on a computer, Chrome on Android, Safari on iPhone). It still
+needs a connection: nothing is kept on the device. Without a connection you see **You are
+offline**; click **Try again** when it is back.
+
+**A new version.** When the application has been updated while your page was open, a bar at the
+bottom says **A new version of the application is ready**. Click **Reload** when you are not in
+the middle of a recording, or **Later**.
+
 **Sign out**: the **Sign out** button at the top right.
 
 ---

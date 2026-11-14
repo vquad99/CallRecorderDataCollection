@@ -4,15 +4,15 @@ GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
 333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 189 are built with passing automated tests (69 of them also verified) - 65 %.
+process rule), 193 are built with passing automated tests (69 of them also verified) - 67 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 120 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 34 | some of it is built, or it needs a test that is not done yet |
+| Built | 124 | built and automated tests pass; not yet checked by hand |
+| Partly built / needs testing | 39 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
-| Not built | 20 | not started |
+| Not built | 11 | not started |
 | Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
 | Withdrawn | 20 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
@@ -23,7 +23,7 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | GEN |  |  |  |  |  |  |  | 14 |
 | PROC |  |  |  |  |  |  |  | 9 |
-| PROD |  | 1 | 2 |  | 1 |  |  |  |
+| PROD |  | 1 | 3 |  |  |  |  |  |
 | CAP |  | 3 |  |  |  | 2 |  |  |
 | ARCH | 1 | 3 |  |  |  | 1 |  |  |
 | FND | 13 | 16 |  |  |  |  |  |  |
@@ -45,7 +45,7 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 | EXP |  | 8 | 2 |  |  |  |  |  |
 | DASH |  | 4 | 1 |  |  | 1 |  |  |
 | SEC |  | 10 | 2 |  |  | 3 |  |  |
-| PWA |  |  |  |  | 9 |  |  |  |
+| PWA |  | 4 | 4 |  | 1 |  |  |  |
 | OPS |  |  | 3 |  |  | 6 |  |  |
 | LOAD |  |  | 2 |  |  | 3 |  |  |
 
@@ -87,7 +87,7 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 | ID | State | Requirement | Note |
 |---|---|---|---|
 | PROD-001 | Partly built / needs testing | One cloud-hosted, responsive web application used through a browser. | Runs as a web application; cloud hosting waits for B-04 |
-| PROD-002 | Not built | Installable as a PWA from the browser's install option. | PWA in Phase 10 |
+| PROD-002 | Partly built / needs testing | Installable as a PWA from the browser's install option. | Built (D-110); not installed by a person yet (TM-PWA-01) |
 | PROD-003 | Built | No native Android or iOS app; participants install nothing; no physical GSM gateway. |  |
 | PROD-004 | Partly built / needs testing | Two recording modes - telephony and face-to-face - with assets in separate folders/prefixes. | Face-to-face prefix built; telephony prefix with telephony (B-01) |
 
@@ -483,15 +483,15 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 
 | ID | State | Requirement | Note |
 |---|---|---|---|
-| PWA-001 | Not built | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. |  |
-| PWA-002 | Not built | Install prompt where supported; standalone launch. |  |
+| PWA-001 | Built | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. |  |
+| PWA-002 | Partly built / needs testing | Install prompt where supported; standalone launch. | Built (D-110); Chromium finds nothing against installing; not installed by a person yet (TM-PWA-01) |
 | PWA-003 | Not built | Responsive layouts. |  |
-| PWA-004 | Not built | Service worker caches only safe static assets; no private audio or participant data in shared browser storage. |  |
-| PWA-005 | Not built | Update detection with reload prompt; a published update reaches the user. |  |
-| PWA-006 | Not built | Offline message for unsupported actions. |  |
-| PWA-007 | Not built | Logout clears sensitive local session state. |  |
-| PWA-008 | Not built | Installation tested on desktop Chrome and a supported mobile browser. |  |
-| PWA-009 | Not built | Install guidance for supported browsers. |  |
+| PWA-004 | Built | Service worker caches only safe static assets; no private audio or participant data in shared browser storage. |  |
+| PWA-005 | Partly built / needs testing | Update detection with reload prompt; a published update reaches the user. | Built and unit-tested (D-110); a published update not yet seen arriving on the live site (TM-PWA-03) |
+| PWA-006 | Built | Offline message for unsupported actions. |  |
+| PWA-007 | Built | Logout clears sensitive local session state. | Nothing sensitive is kept on the device to clear: the session is a cookie the server ends at sign-out (D-110) |
+| PWA-008 | Partly built / needs testing | Installation tested on desktop Chrome and a supported mobile browser. | Checked by program in Chromium and Edge; not installed by a person on desktop Chrome and a phone (TM-PWA-01) |
+| PWA-009 | Partly built / needs testing | Install guidance for supported browsers. | Guidance on My account (D-110); not read through by a person on each browser (TM-PWA-04) |
 
 ## OPS
 

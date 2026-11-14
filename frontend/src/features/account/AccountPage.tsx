@@ -5,6 +5,7 @@ import * as authApi from "../../api/auth";
 import type { ApiError } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { TwoStepEnrol } from "../../auth/TwoStepEnrol";
+import { InstallCard } from "../../pwa/InstallCard";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
@@ -198,6 +199,7 @@ export function AccountPage() {
       <ChangePassword />
       <TwoStep />
       <Sessions />
+      <InstallCard />
     </section>
   );
 }

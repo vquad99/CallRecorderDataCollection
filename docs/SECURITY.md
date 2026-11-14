@@ -240,6 +240,15 @@ start, change or cancel a call (every change is refused while viewing).
 The set-up shows the authenticator link as a QR code made in the browser by the application's
 own code (D-107): the secret is sent to no other service to draw it.
 
+## 9h. The installable application, 2026-11-14 (D-110)
+
+| Rule | Where it is kept | Test |
+|---|---|---|
+| The service worker keeps built files and the offline page only; nothing from `/api/`, no recording, no page | `frontend/pwa/sw.template.js`: it answers only GET requests for `/assets/` and the offline files, and pages only to pass them on | src/pwa/pwa.test.tsx; e2e/pwa.spec.ts (the browser's stores after loading) |
+| Nothing private in the browser's own stores | The application keeps no token or personal data in local or session storage (the session is a cookie the page cannot read) | e2e/pwa.spec.ts |
+| A new version never reloads a page by itself | The page reloads only after the person clicks Reload | src/pwa/pwa.test.tsx |
+| The worker and the manifest come from the same address only | The site's rules (`default-src 'self'`) cover workers and manifests | checked with nginx 1.28 (docs/evidence/phase10/pwa_2026-11-14.txt) |
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

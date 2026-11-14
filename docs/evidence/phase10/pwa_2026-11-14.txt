@@ -1,0 +1,66 @@
+The installable application (D-110): what was run, and what it showed
+PWA-001..009, PROD-002. 2026-11-14.
+
+NOT DONE
+- Nobody has installed it by hand on desktop Chrome or on a phone (PWA-002, PWA-008,
+  TM-PWA-01), read the install help through in each browser (TM-PWA-04), or checked the layouts
+  on a phone (PWA-003, TM-PWA-02).
+- A published update has not been watched arriving on the live site (PWA-005, TM-PWA-03): the
+  first release with a service worker is this one, so the bar can first appear with the next.
+- Checked in Chromium and Microsoft Edge only (by program). Safari and Firefox not run.
+
+Automated checks (final run, 2026-11-14)
+----------------------------------------
+Frontend  prettier --check ., tsc --noEmit, eslint . ........ no problems
+          vitest ............................................ 28 files, 463 tests passed
+          vite build + bundle budget ........................ first screen 123.6 KB (limit 125 KB)
+          playwright e2e (console, recorder, pwa), Edge ...... 3 passed
+Journeys  playwright, real browser (Edge), real backend, database and storage ... 9 passed
+          (twostep skipped: it needs a backend with that rule on)
+Backend   not changed by this work (last full run: 405 passed, 14 skipped, 4 Windows-only failures)
+
+The built files
+---------------
+`vite build` writes dist/sw.js, whose first line names the build:
+  const BUILD = "b7cfdce9717c3b20";
+followed by frontend/pwa/sw.template.js. dist/ also holds manifest.webmanifest, offline.html,
+offline.css, icon-192.png, icon-512.png, icon-maskable-512.png.
+
+In a real browser, against the built application (frontend/e2e/pwa.spec.ts; runs in CI)
+---------------------------------------------------------------------------------------
+- The page links the manifest; it names "Conversation Collection", display "standalone",
+  start "/", and icons 192x192 any, 512x512 any, 512x512 maskable; each icon is served as a PNG.
+- A service worker from /sw.js becomes active and takes the page on the next load.
+- The browser's stores then hold one cache, ccp-static-<build>, with files under /assets/ and
+  the four offline files, and nothing else. The API was asked (who am I) and nothing of it is
+  in the cache. localStorage is empty; sessionStorage has no key about a token, session or user.
+- Chromium's own judgement (DevTools protocol): Page.getAppManifest reports no errors;
+  Page.getInstallabilityErrors reports nothing except, at most, that the test window is private.
+- Without a connection, opening /projects shows "You are offline"; a request to /api/v1/version
+  fails (it is not answered from a store); with the connection back, "Try again" opens the
+  application.
+
+Unit tests (frontend/src/pwa/pwa.test.tsx)
+------------------------------------------
+- Manifest: fields, the theme colour equal to the page's, each icon file has the size it says.
+- The service worker's own text, run against stand-ins: install keeps the four offline files;
+  /api/, /health/, a POST, another address and other files are left alone (no request made);
+  a built file is fetched once and then served from the store; a page is always fetched and
+  never stored; offline, a page gets the offline page; activating drops older ccp-static
+  stores and keeps unrelated ones; it takes over only when sent "skip-waiting".
+- A new version: the bar appears only when a newer worker is installed while one is in charge;
+  not on a first visit; the page reloads only after the person clicks Reload; Later hides it.
+- Signing out: nothing about the person in local or session storage, before or after.
+- Install card: the browser's offer is caught (its own bar suppressed) and used once; without
+  an offer the card says how in each browser; in the installed application it says so.
+
+Web server rules (nginx 1.28, the project's nginx.conf with its variables filled in, serving dist/)
+---------------------------------------------------------------------------------------------------
+  /manifest.webmanifest    200 application/manifest+json   Cache-Control: no-cache
+  /sw.js                   200 application/javascript      Cache-Control: no-cache
+  /offline.html            200 text/html                   Cache-Control: no-cache
+  /offline.css             200 text/css                    Cache-Control: no-cache
+  /icon-512.png            200 image/png                   Cache-Control: no-cache
+  /nothing.webmanifest     404
+  /projects                200 text/html (the application)  Cache-Control: no-cache
+`nginx -t` accepts the file. The security headers are on these answers as on every other.

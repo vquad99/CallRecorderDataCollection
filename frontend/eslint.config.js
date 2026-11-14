@@ -12,6 +12,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
   },
   {
+    // The service worker's text; the build puts `const BUILD = ...` before it.
+    files: ["pwa/sw.template.js"],
+    languageOptions: { globals: { ...globals.serviceworker, BUILD: "readonly" } },
+  },
+  {
     files: ["public/recorder-worklet.js"],
     languageOptions: {
       globals: { AudioWorkletProcessor: "readonly", registerProcessor: "readonly" },

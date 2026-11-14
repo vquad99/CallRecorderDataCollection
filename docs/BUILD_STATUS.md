@@ -29,7 +29,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | Exports | EXP | 10 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | D-105: built ahead of Gates 5-6 by owner decision; transcripts in exports wait for ASR (B-06, B-07); spreadsheet check TM-EXP-01 to do by a person |
 | Dashboard | DASH | 6 | Yes | Yes | n/a | Yes | Yes | No | IN PROGRESS | Filters, phone calls and SQL reconciliation built (D-108); cost estimates wait for provider rates (DASH-005) |
 | Security and audit | SEC | 15 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | Remaining items in Phases 4 and 10 |
-| PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
+| PWA | PWA | 9 | Yes | n/a | n/a | Yes | Yes | No | IN PROGRESS | Built (D-110); installing by a person, a live update and phone layouts still to check |
 | Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 approved; FND-027 done in Phase 2 |
 | Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
 | Deployment and operations | OPS | 9 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | Self-check, alerts and runbooks built (D-109); the rest waits for hosting decisions (B-04, B-14) |
@@ -98,7 +98,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PROC-008 | Ask only for truly blocking decisions or credentials; owner approval before major architectural changes or deleting code; stop after Phase 0 and request approval. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
 | PROC-009 | Project called complete or production-ready only when the definition of done (spec 15) and every final release checklist item (runbook R) are met. | All | n/a | n/a | n/a | n/a | [ ] TM-GEN-03 | - | NOT STARTED | - |
 | PROD-001 | One cloud-hosted, responsive web application used through a browser. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PROD-01 | - | IN PROGRESS | Runs as a web application; cloud hosting waits for B-04 |
-| PROD-002 | Installable as a PWA from the browser's install option. | 1, 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | PWA in Phase 10 |
+| PROD-002 | Installable as a PWA from the browser's install option. | 1, 10 | n/a | n/a | [x] | n/a | [ ] TM-PWA-01 | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IN PROGRESS | Built (D-110); not installed by a person yet (TM-PWA-01) |
 | PROD-003 | No native Android or iOS app; participants install nothing; no physical GSM gateway. | 1, 10 | n/a | n/a | [x] | n/a | [ ] TM-PROD-02 | docs/evidence/phase1/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | PROD-004 | Two recording modes - telephony and face-to-face - with assets in separate folders/prefixes. | 1, 10 | n/a | n/a | [ ] | [ ] TA-STOR-02 | [ ] TM-PROD-02 | - | IN PROGRESS | Face-to-face prefix built; telephony prefix with telephony (B-01) |
 | CAP-001 | Capacity settings (50 staff, 50 concurrent conferences, 2 participants, 250 h/day, 125 h/day each mode, cloud, web + PWA) stored as editable configuration, not source constants. | 2, 10 | [x] | [x] | [x] | [x] TA-CAP-01, TA-USER-09 | n/a | docs/evidence/phase2/make_check.txt; docs/evidence/option_o/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
@@ -384,15 +384,15 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | SEC-013 | Output encoding and secure HTTP headers. | 3, 10 | [x] | [x] | [x] | [x] TA-SEC-08, TA-SEC-13, TA-SEC-16 | n/a | docs/evidence/option_b/make_check.txt | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | SEC-014 | Least-privilege cloud roles. | 3, 10 | [ ] | [ ] | [ ] | n/a | [ ] TM-SEC-05 | - | BLOCKED | Hosting (B-04) |
 | SEC-015 | Dependency vulnerability scan. | 3, 10 | [ ] | [ ] | [ ] | [x] TA-SEC-09 | n/a | docs/evidence/phase1/ci_run.txt | IMPLEMENTED — AUTOMATED TESTS PASS | Moderate dev-only advisory recorded |
-| PWA-001 | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-01 | n/a | - | NOT STARTED | - |
-| PWA-002 | Install prompt where supported; standalone launch. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
+| PWA-001 | manifest.webmanifest with app name, short name, standalone display, theme/background colours, icons in required sizes. | 10 | n/a | n/a | [x] | [x] TA-PWA-01 | n/a | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PWA-002 | Install prompt where supported; standalone launch. | 10 | n/a | n/a | [x] | n/a | [ ] TM-PWA-01 | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IN PROGRESS | Built (D-110); Chromium finds nothing against installing; not installed by a person yet (TM-PWA-01) |
 | PWA-003 | Responsive layouts. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-02 | - | NOT STARTED | - |
-| PWA-004 | Service worker caches only safe static assets; no private audio or participant data in shared browser storage. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-02 | n/a | - | NOT STARTED | - |
-| PWA-005 | Update detection with reload prompt; a published update reaches the user. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-03 | - | NOT STARTED | - |
-| PWA-006 | Offline message for unsupported actions. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-03 | n/a | - | NOT STARTED | - |
-| PWA-007 | Logout clears sensitive local session state. | 10 | n/a | n/a | [ ] | [ ] TA-PWA-04 | n/a | - | NOT STARTED | - |
-| PWA-008 | Installation tested on desktop Chrome and a supported mobile browser. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-01 | - | NOT STARTED | - |
-| PWA-009 | Install guidance for supported browsers. | 10 | n/a | n/a | [ ] | n/a | [ ] TM-PWA-04 | - | NOT STARTED | - |
+| PWA-004 | Service worker caches only safe static assets; no private audio or participant data in shared browser storage. | 10 | n/a | n/a | [x] | [x] TA-PWA-02 | n/a | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PWA-005 | Update detection with reload prompt; a published update reaches the user. | 10 | n/a | n/a | [x] | n/a | [ ] TM-PWA-03 | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IN PROGRESS | Built and unit-tested (D-110); a published update not yet seen arriving on the live site (TM-PWA-03) |
+| PWA-006 | Offline message for unsupported actions. | 10 | n/a | n/a | [x] | [x] TA-PWA-03 | n/a | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| PWA-007 | Logout clears sensitive local session state. | 10 | n/a | n/a | [x] | [x] TA-PWA-04 | n/a | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | Nothing sensitive is kept on the device to clear: the session is a cookie the server ends at sign-out (D-110) |
+| PWA-008 | Installation tested on desktop Chrome and a supported mobile browser. | 10 | n/a | n/a | [x] | n/a | [ ] TM-PWA-01 | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IN PROGRESS | Checked by program in Chromium and Edge; not installed by a person on desktop Chrome and a phone (TM-PWA-01) |
+| PWA-009 | Install guidance for supported browsers. | 10 | n/a | n/a | [x] | n/a | [ ] TM-PWA-04 | docs/evidence/phase10/pwa_2026-11-14.txt; frontend/src/pwa/pwa.test.tsx; frontend/e2e/pwa.spec.ts | IN PROGRESS | Guidance on My account (D-110); not read through by a person on each browser (TM-PWA-04) |
 | OPS-001 | Separate local, test/staging and production environments. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-01 | - | BLOCKED | Hosting (B-04) |
 | OPS-002 | Deployed components: frontend, backend, PostgreSQL, Redis, workers, private object storage, reverse proxy/ingress, monitoring and logs; infrastructure configuration in the repository. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-01 | - | BLOCKED | Hosting (B-04) |
 | OPS-003 | Secrets created in a cloud secret manager. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-02 | - | BLOCKED | Hosting (B-04) |

@@ -1,0 +1,23 @@
+/* The bar that offers a new version (PWA-005). */
+.pwa-update {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #333847;
+  color: #fff;
+  box-shadow: 0 8px 28px rgb(30 33 42 / 0.28);
+}
+.pwa-update span {
+  flex: 1;
+  min-width: 220px;
+}
