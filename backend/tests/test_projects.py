@@ -60,6 +60,11 @@ def test_a_project_without_a_code_gets_the_next_prj_code(admin: Api) -> None:
     codes = [first.json()["code"], second.json()["code"]]
     assert all(c.startswith("PRJ") and c[3:].isdigit() and len(c) >= 7 for c in codes)
     assert int(codes[1][3:]) > int(codes[0][3:])
+    # The list shows the newest project first, so one just created is on the first page however
+    # many there are.
+    codes = [p["code"] for p in admin.get("/api/v1/projects").json()["items"]]
+    assert codes == sorted(codes, reverse=True)
+    assert codes[0].startswith("PRJ")
 
 
 def test_mode_and_target_validation(admin: Api) -> None:

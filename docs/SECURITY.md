@@ -216,6 +216,17 @@ start, change or cancel a call (every change is refused while viewing).
 | Everything about one participant (`/details`) is for people who manage participants in that project; other projects the person is in are named only when the caller may see them | The service checks `participants.manage` in the project | test_security_access.py, test_telephony.py |
 | A project's tabs after Overview are for people who manage projects | A rule of the pages only: the API behind the tabs is as before and keeps hiding names and contact details from people who may not see them | participants.test.tsx, journeys/boundaries.spec.ts |
 
+## 9f. Exports, 2026-11-14 (D-105)
+
+| Rule | Where it is kept | Test |
+|---|---|---|
+| Names, phone numbers and email addresses are not in an export unless asked for by someone with `participants.export` (Super Admin) | The selection is checked when the export is asked for, and again when a link is given | test_export_jobs.py |
+| Original recordings only for people who manage the project | The same check | test_export_jobs.py |
+| A bundle is handed only to someone who could have asked for it; a project that is not the caller's answers 404 | The link request re-checks the job's own choice | test_export_jobs.py, test_security_access.py |
+| A download link works for 5 minutes; each one is audited; a bundle leaves storage after 24 hours | `SIGNED_URL_SECONDS`, `EXPORT_BUNDLE_HOURS`; the recovery sweep removes expired bundles | test_export_jobs.py |
+| A stored file that no longer matches its checksum is never exported | Each file is hashed while it is copied; a mismatch stops the export and removes the half-made bundle | test_export_jobs.py |
+| A table cell cannot run as a spreadsheet formula | Cells starting with `=`, `+`, `-`, `@` get an apostrophe | test_exports_zip.py |
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

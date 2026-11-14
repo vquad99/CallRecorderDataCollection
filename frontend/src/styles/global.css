@@ -1844,55 +1844,6 @@ code,
   gap: 8px;
 }
 
-/* Project export (D-094). */
-.export__choices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.export__choices legend {
-  margin-bottom: 8px;
-}
-.export__choice {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 3px 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  cursor: pointer;
-}
-.export__choice:has(input:checked) {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-.export__choice input {
-  grid-row: span 2;
-  margin-top: 3px;
-  accent-color: var(--primary);
-}
-.export__choice .muted {
-  font-size: 0.8125rem;
-}
-.export__go {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 24px;
-}
-.export__summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 14px;
-  margin: 0;
-}
 .button.is-disabled {
   opacity: 0.5;
   pointer-events: none;

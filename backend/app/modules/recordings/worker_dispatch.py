@@ -69,6 +69,7 @@ def recover(app: FastAPI) -> int:
         logger.info("recovery_dispatched", extra={"count": len(stalled)})
     check_pending_audio(app)
     fetch_call_recordings(app)
+    sweep_exports(app)
     return len(stalled)
 
 
@@ -104,6 +105,42 @@ def fetch_call_recordings(app: FastAPI) -> int:
             except Exception:
                 logger.exception("call_fetch_failed", extra={"call_id": str(call_id)})
     return len(due)
+
+
+def run_export_inline(app: FastAPI, job_id: uuid.UUID) -> None:
+    from app.modules.exports import jobs
+
+    try:
+        with app.state.session_factory() as db:
+            jobs.run(db, app.state.settings, app.state.storage, app.state.cipher, job_id)
+    except Exception:
+        logger.exception("inline_export_failed", extra={"export_id": str(job_id)})
+
+
+def dispatch_export(app: FastAPI, job_id: uuid.UUID, background: BackgroundTasks | None) -> None:
+    """Hand an export to the worker; without one it is made in this process, after the answer
+    has been sent. A hand-off that fails is repeated by the sweep."""
+    celery: Any = getattr(app.state, "celery", None)
+    if celery is not None:
+        try:
+            celery.send_task("exports.build", args=[str(job_id)])
+        except Exception:
+            logger.exception("export_dispatch_failed", extra={"export_id": str(job_id)})
+    elif background is not None:
+        background.add_task(run_export_inline, app, job_id)
+    else:
+        run_export_inline(app, job_id)
+
+
+def sweep_exports(app: FastAPI) -> int:
+    """Remove bundles past their time, and send waiting exports to a worker again (D-105)."""
+    from app.modules.exports import jobs
+
+    with app.state.session_factory() as db:
+        waiting = jobs.sweep(db, app.state.settings, app.state.storage)
+    for job_id in waiting:
+        dispatch_export(app, job_id, None)
+    return len(waiting)
 
 
 def check_pending_audio(app: FastAPI) -> int:

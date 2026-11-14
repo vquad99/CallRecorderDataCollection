@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # an hour, counting refused and cancelled ones.
     telephony_max_calls_per_task_per_hour: int = Field(default=6, ge=1, le=100)
     telephony_max_download_bytes: int = Field(default=500_000_000, ge=1_000_000)
+    # Export bundles (D-105): how long a finished bundle stays in storage, after how long a
+    # job that stopped half-way is tried again, and how long a waiting job is left to the
+    # worker it was first sent to before the sweep sends it again.
+    export_bundle_hours: int = Field(default=24, ge=1, le=24 * 30)
+    export_stale_minutes: int = Field(default=60, ge=1, le=24 * 60)
+    export_requeue_seconds: int = Field(default=120, ge=0, le=3600)
 
     @field_validator("data_encryption_key")
     @classmethod

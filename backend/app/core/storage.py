@@ -7,6 +7,8 @@ SHA-256 in metadata so integrity can be re-checked without downloading (STOR-006
 
 from __future__ import annotations
 
+import hashlib
+import io
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,6 +50,9 @@ TRANSFER = TransferConfig(
 class ObjectStorage(Protocol):
     def put_bytes(self, key: str, data: bytes, *, content_type: str, sha256: str) -> None: ...
     def put_file(self, key: str, path: Path, *, content_type: str, sha256: str) -> None: ...
+    def put_stream(
+        self, key: str, parts: Iterator[bytes], *, content_type: str
+    ) -> tuple[int, str]: ...
     def get_to_file(self, key: str, path: Path) -> None: ...
     def append_to(self, key: str, handle: Any) -> int: ...
     def iter_bytes(self, key: str, part_size: int = 1 << 20) -> Iterator[bytes]: ...
@@ -56,6 +61,37 @@ class ObjectStorage(Protocol):
     def delete(self, key: str) -> None: ...
     def list_objects(self, prefix: str = "") -> Iterator[ListedObject]: ...
     def ping(self) -> None: ...
+
+
+class _PartsReader(io.RawIOBase):
+    """An iterator of byte parts, read as a file; counts and hashes what passes through."""
+
+    def __init__(self, parts: Iterator[bytes]) -> None:
+        self._parts = parts
+        self._rest = b""
+        self._hash = hashlib.sha256()
+        self.size = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any, /) -> int:
+        while not self._rest:
+            try:
+                self._rest = next(self._parts)
+            except StopIteration:
+                return 0
+        count = min(len(buffer), len(self._rest))
+        piece = self._rest[:count]
+        buffer[:count] = piece
+        self._rest = self._rest[count:]
+        self._hash.update(piece)
+        self.size += count
+        return count
+
+    @property
+    def sha256(self) -> str:
+        return self._hash.hexdigest()
 
 
 class S3Storage:
@@ -108,6 +144,20 @@ class S3Storage:
             ExtraArgs={"ContentType": content_type, "Metadata": {"sha256": sha256}},
             Config=TRANSFER,
         )
+
+    def put_stream(self, key: str, parts: Iterator[bytes], *, content_type: str) -> tuple[int, str]:
+        """Stores an object that is produced while it is sent (an export bundle): nothing is
+        held whole in memory or on disk. Returns its size and SHA-256. A failure while the parts
+        are produced ends the upload and leaves no object behind."""
+        reader = _PartsReader(parts)
+        self._client.upload_fileobj(
+            reader,
+            self._bucket,
+            self._key(key),
+            ExtraArgs={"ContentType": content_type},
+            Config=TRANSFER,
+        )
+        return reader.size, reader.sha256
 
     def get_to_file(self, key: str, path: Path) -> None:
         self._client.download_file(self._bucket, self._key(key), str(path), Config=TRANSFER)

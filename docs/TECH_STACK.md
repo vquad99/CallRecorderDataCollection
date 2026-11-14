@@ -31,6 +31,7 @@ or `npm audit` in CI) takes its fixed release at once, through `exclude-newer-pa
 | WAV reading (libsndfile) | soundfile | 0.14.0 | uv.lock |
 | Background jobs | celery | 5.6.3 | uv.lock |
 | Fake S3 for tests | moto | 5.2.4 | uv.lock |
+| JSON Schema check in tests | jsonschema | 4.26.0 | uv.lock |
 | Backend tests | pytest | 9.1.1 | uv.lock |
 | Test HTTP client | httpx2 | 2.16.0 | uv.lock |
 | Python lint/format | ruff | 0.17.2 | uv.lock |

@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2>=2.16.0",
+    "jsonschema>=4.26.0",
     "moto[s3]>=5.2.4",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
@@ -60,7 +61,16 @@ mypy_path = "."
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["alembic.*", "boto3.*", "botocore.*", "soxr.*", "celery.*", "moto.*", "soundfile.*"]
+module = [
+    "alembic.*",
+    "boto3.*",
+    "botocore.*",
+    "soxr.*",
+    "celery.*",
+    "moto.*",
+    "soundfile.*",
+    "jsonschema.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

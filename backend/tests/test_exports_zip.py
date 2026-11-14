@@ -1,60 +1,71 @@
-"""The export ZIP is streamed in parts and carries its manifest (D-094). No database needed.
+"""The tables of an export open in spreadsheet software, a selection survives being stored, and
+a bundle goes to storage as it is written (D-105). No database needed.
 
-Requirements: EXP-002, EXP-005
+Requirements: EXP-002, EXP-003, EXP-007
 """
 
 from __future__ import annotations
 
-import contextlib
 import csv
+import hashlib
 import io
-import uuid
-import zipfile
-from collections.abc import Iterator
+import json
+from datetime import date
 
-from app.modules.exports import service
-from app.modules.projects.models import Project
+import jsonschema
+
+from app.core.storage import _PartsReader
+from app.modules.exports import bundle, schemas
+
+ROWS: list[list[object]] = [["आशा राव", "=1+1", 7], ["Bina", "a,b\tc", None], ["Chitra", "-2", 0]]
+EXPECTED = [
+    ["name", "note", "count"],
+    ["आशा राव", "'=1+1", "7"],
+    ["Bina", "a,b\tc", ""],
+    ["Chitra", "'-2", "0"],
+]
 
 
-class _Store:
-    def __init__(self, files: dict[str, bytes]) -> None:
-        self.files = files
+def test_tables_carry_the_utf8_mark_and_never_a_formula() -> None:
+    as_csv = bundle.table(["name", "note", "count"], ROWS, "csv")
+    # The mark makes spreadsheet software read the file as UTF-8, so names in any script show.
+    assert as_csv.encode("utf-8")[:3] == b"\xef\xbb\xbf"
+    assert list(csv.reader(io.StringIO(as_csv.lstrip("\ufeff")))) == EXPECTED
+    as_tsv = bundle.table(["name", "note", "count"], ROWS, "tsv")
+    assert as_tsv.splitlines()[0] == "\ufeffname\tnote\tcount"
+    assert list(csv.reader(io.StringIO(as_tsv.lstrip("\ufeff")), delimiter="\t")) == EXPECTED
 
-    def iter_bytes(self, key: str, part_size: int = 4) -> Iterator[bytes]:
-        data = self.files[key]
-        for i in range(0, len(data), part_size):
-            yield data[i : i + part_size]
 
-
-def test_the_zip_streams_in_parts_and_opens_with_its_manifest() -> None:
-    entries = [
-        service.Entry(
-            task_id=uuid.uuid4(),
-            recording_id=uuid.uuid4(),
-            task_code=code,
-            audio_key=f"k/{code}",
-            audio_size=12,
-            audio_sha256="ab" * 32,
-            duration_ms=4000,
-        )
-        for code in ("T000001", "T000002")
-    ]
-    plan = service.Plan(
-        project=Project(code="VOICE", name="Voice"),
+def test_a_selection_is_stored_and_read_back_unchanged() -> None:
+    sel = bundle.Selection(
         content="audio",
-        scope="approved",
-        entries=entries,
-        total_bytes=24,
+        scope="finished",
+        table_format="tsv",
+        mode="TELEPHONY",
+        language="hi",
+        recorded_from=date(2026, 11, 1),
+        recorded_to=date(2026, 11, 14),
+        originals=True,
     )
-    store = _Store({"k/T000001": b"RIFF-one-wav", "k/T000002": b"RIFF-two-wav"})
-    parts = list(service.stream_zip(plan, store, lambda: contextlib.nullcontext(None)))  # type: ignore[arg-type,return-value]
-    assert len(parts) > 2, "sent in parts, not built whole"
-    archive = zipfile.ZipFile(io.BytesIO(b"".join(parts)))
-    names = sorted(archive.namelist())
-    assert names[-1] == "manifest.csv"
-    audio = [n for n in names if n.startswith("audio/")]
-    assert len(audio) == 2
-    assert archive.read(audio[0]) in (b"RIFF-one-wav", b"RIFF-two-wav")
-    rows = list(csv.DictReader(io.StringIO(archive.read("manifest.csv").decode())))
-    assert [r["task_code"] for r in rows] == ["T000001", "T000002"]
-    assert rows[0]["metadata_file"] == "", "audio only"
+    assert bundle.Selection.from_filters(json.loads(json.dumps(sel.as_filters()))) == sel
+    assert bundle.Selection.from_filters({}) == bundle.Selection()
+
+
+def test_the_schemas_are_valid_and_name_every_column_once() -> None:
+    for schema in schemas.FILES.values():
+        jsonschema.Draft202012Validator.check_schema(schema)
+    columns = schemas.RECORDING_COLUMNS
+    assert columns[0] == "task_code"
+    assert len(set(columns)) == len(columns)
+    assert set(columns) == set(schemas.RECORDING_ROW["required"])
+
+
+def test_parts_are_read_as_one_file_with_its_size_and_checksum() -> None:
+    reader = _PartsReader(iter([b"abc", b"", b"defgh"]))
+    first = bytearray(2)
+    assert reader.readinto(first) == 2
+    assert bytes(first) == b"ab"
+    rest = reader.read()
+    assert rest == b"cdefgh"
+    assert reader.read() == b""
+    assert (reader.size, reader.sha256) == (8, hashlib.sha256(b"abcdefgh").hexdigest())

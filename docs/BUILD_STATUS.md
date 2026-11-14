@@ -26,7 +26,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | AI transcription | ASR | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Human transcription | TRN | 12 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
 | Transcript QC | TQC | 6 | Yes | No | No | No | No | No | WITHDRAWN | D-062: no manual transcription |
-| Exports | EXP | 10 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Exports | EXP | 10 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | D-105: built ahead of Gates 5-6 by owner decision; transcripts in exports wait for ASR (B-06, B-07); spreadsheet check TM-EXP-01 to do by a person |
 | Dashboard | DASH | 6 | Yes | Yes | n/a | Yes | Yes | No | IN PROGRESS | Built 2026-11-10 (D-065); Phase 9 completes it |
 | Security and audit | SEC | 15 | Yes | Yes | Yes | Yes | Yes | Partly | IN PROGRESS | Remaining items in Phases 4 and 10 |
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
@@ -54,7 +54,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | 6 Full telephony module | IN PROGRESS | 6 | - (D-101: call flow built ahead of Gate 5 by owner decision) |
 | 7 Audio QC, optional AI transcription | IN PROGRESS | 7 | - |
 | 8 Human transcription, transcript QC | WITHDRAWN | 8 | D-062: owner 2026-11-10, no manual transcription |
-| 9 Exports, dashboards | NOT STARTED | 9 | - |
+| 9 Exports, dashboards | IN PROGRESS | 9 | - (D-105: exports built ahead of Gates 5-6 by owner decision) |
 | 10 Security, PWA, deployment, operations | NOT STARTED | 10 | - |
 
 ## Gate 0 checklist (runbook C0.4, spec Gate 0)
@@ -353,16 +353,16 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | TQC-004 | WITHDRAWN (D-062): Error categories, reviewer comments, QC history. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-03 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
 | TQC-005 | WITHDRAWN (D-062): Final lock after approval; reopening needs permission, reason and audit entry. | 8 | [ ] | [ ] | [ ] | [ ] TA-TQC-04 | n/a | - | WITHDRAWN | D-062 owner 2026-11-10 |
 | TQC-006 | WITHDRAWN (D-062): One task completed end to end (recording, audio QC, ASR, human correction, transcript QC, approval) with evidence for each transition. | 8 | [ ] | [ ] | [ ] | n/a | [ ] TM-TQC-02 | - | WITHDRAWN | D-062 owner 2026-11-10 |
-| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-01 | n/a | - | NOT STARTED | - |
-| EXP-002 | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-02 | n/a | - | NOT STARTED | - |
-| EXP-003 | JSON matches its schema. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-03 | n/a | - | NOT STARTED | - |
-| EXP-004 | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-04 | n/a | - | NOT STARTED | - |
-| EXP-005 | Counts match selected records; ZIP contents match manifest; hashes match. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-05 | n/a | - | NOT STARTED | - |
-| EXP-006 | Face-to-face and telephony audio and transcripts in separate folders. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-06 | n/a | - | NOT STARTED | - |
-| EXP-007 | CSV/TSV open correctly in spreadsheet software. | 9 | [ ] | [ ] | [ ] | n/a | [ ] TM-EXP-01 | - | NOT STARTED | - |
-| EXP-008 | Export filters validated and export permissions checked. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-07 | n/a | - | NOT STARTED | - |
-| EXP-009 | Large exports generated asynchronously; export status stored. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-08 | n/a | - | NOT STARTED | - |
-| EXP-010 | Short-lived download link; export creation and download audited; temporary bundles expire. | 9 | [ ] | [ ] | [ ] | [ ] TA-EXP-09 | n/a | - | NOT STARTED | - |
+| EXP-001 | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. | 9 | [x] | n/a | [x] | [x] TA-EXP-01 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IN PROGRESS | Everything listed except transcript text, segments and speaker labels: this version makes no transcripts (ASR: B-06, B-07) |
+| EXP-002 | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. | 9 | [x] | n/a | [x] | [x] TA-EXP-02 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-003 | JSON matches its schema. | 9 | [x] | n/a | [x] | [x] TA-EXP-03 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-004 | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. | 9 | [x] | n/a | [x] | [x] TA-EXP-04 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-005 | Counts match selected records; ZIP contents match manifest; hashes match. | 9 | [x] | n/a | [x] | [x] TA-EXP-05 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py; frontend/journeys/recording.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-006 | Face-to-face and telephony audio and transcripts in separate folders. | 9 | [x] | n/a | [x] | [x] TA-EXP-06 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-007 | CSV/TSV open correctly in spreadsheet software. | 9 | [x] | n/a | [x] | n/a | [ ] TM-EXP-01 | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IN PROGRESS | Tables carry the UTF-8 mark and guard formulas (backend/tests/test_exports_zip.py); opening them in spreadsheet software (TM-EXP-01) is to do by a person |
+| EXP-008 | Export filters validated and export permissions checked. | 9 | [x] | n/a | [x] | [x] TA-EXP-07 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-009 | Large exports generated asynchronously; export status stored. | 9 | [x] | [x] | [x] | [x] TA-EXP-08 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py; frontend/journeys/recording.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
+| EXP-010 | Short-lived download link; export creation and download audited; temporary bundles expire. | 9 | [x] | [x] | [x] | [x] TA-EXP-09 | n/a | docs/evidence/phase9/exports_2026-11-14.txt; backend/tests/test_export_jobs.py; frontend/journeys/recording.spec.ts | IMPLEMENTED — AUTOMATED TESTS PASS | - |
 | DASH-001 | Metrics: total tasks, tasks by status, recording hours by mode, daily/monthly target progress, moderator output, QC pass/fail, pending queues, failed calls, failed uploads, storage usage, provider usage and cost estimates. | 9 | [x] | [x] | [x] | [x] TA-DASH-01 | n/a | docs/evidence/participant_page/journeys.txt | IN PROGRESS | Dashboard built (D-065); failed calls and provider usage wait for telephony |
 | DASH-002 | Filters: project, date range, language, dialect, mode, staff, status. | 9 | [x] | [x] | [x] | [x] TA-DASH-02 | n/a | docs/evidence/participant_page/journeys.txt | IN PROGRESS | Project and period filters built; language, dialect, mode, staff and status filters not yet |
 | DASH-003 | Every metric reconciles with an independent SQL query, including date boundaries and timezone handling. | 9 | [x] | [x] | [x] | [x] TA-DASH-03 | n/a | docs/evidence/participant_page/journeys.txt | IN PROGRESS | Figures tested against fixtures; independent SQL reconciliation and time-zone boundary test still to write |

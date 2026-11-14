@@ -12,6 +12,7 @@ from app.core.logging import configure_logging
 from app.core.storage import build_storage
 from app.db.session import create_db_engine, make_session_factory
 from app.modules.auth.security import FieldCipher
+from app.modules.exports import jobs as export_jobs
 from app.modules.recordings import service
 from app.modules.telephony import service as telephony
 
@@ -47,3 +48,11 @@ def fetch_call_recording(call_id: str) -> None:
         raise RuntimeError("storage or telephony is not configured for the worker")
     with _sessions() as db:
         telephony.fetch(db, settings, _storage, _telephony, _cipher, uuid.UUID(call_id))
+
+
+@celery_app.task(name="exports.build")  # type: ignore[untyped-decorator]
+def build_export(job_id: str) -> None:
+    """Make one export bundle and put it into storage (D-105). A job is claimed inside `run`,
+    so one sent twice is made once; the sweep sends a job again when a worker stopped half-way."""
+    with _sessions() as db:
+        export_jobs.run(db, settings, _storage, _cipher, uuid.UUID(job_id))

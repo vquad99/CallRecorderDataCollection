@@ -64,8 +64,8 @@ export const PAGES: Record<string, PageSpec> = {
   },
   "/projects/:projectId/export": {
     url: "/projects/p1/export",
-    shows: /both_HINDI_20261111\.zip/,
-    data: "GET /api/v1/projects/p1/export/summary",
+    shows: /both_HINDI_20261111_0900\.zip/,
+    data: "GET /api/v1/projects/p1/exports",
   },
   "/projects/:projectId/participants/:participantId/page": {
     url: "/projects/p1/participants/a1/page",

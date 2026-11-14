@@ -112,7 +112,9 @@ def list_projects(
         query = query.where(Project.status == status)
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     items = db.scalars(
-        query.order_by(Project.code).offset((page - 1) * page_size).limit(page_size)
+        query.order_by(Project.created_at.desc(), Project.code.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
     return list(items), int(total)
 

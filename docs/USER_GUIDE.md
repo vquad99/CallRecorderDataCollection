@@ -384,20 +384,44 @@ page). A bar appears with:
 ### Export a project
 
 Open the project and click the **Export** tab (Super Admin and Project Admin).
-Choose what to export:
 
-| Choice | You get |
+**Recordings** are exported as one ZIP, prepared in the background:
+
+1. Choose **What to export**: **Audio + metadata**, **Audio only** or **Metadata only**.
+2. Choose **Which recordings**: **Approved tasks only** (the delivery) or **Every finished
+   recording**. You can narrow it by **Recording type** (face-to-face or telephony), **Language**,
+   and the days it was recorded (**Recorded from**, **Recorded to**; days in India time).
+3. Choose **Tables as** CSV or TSV.
+4. Optional: **Also include the original recordings** (as recorded, before any processing; much
+   larger). Super Admin only: **Also include names, phone numbers and email addresses**. Without
+   it, participants appear by code only.
+5. The page shows how many recordings fit and how much audio. Click **Prepare export**.
+6. The export appears under **Prepared exports**: **Waiting**, **Being prepared**, then **Ready**.
+   The page checks by itself; you can leave it and come back.
+7. Click **Download**. The link works for 5 minutes; click again for a new one. A prepared
+   export is kept for 24 hours, then removed. **Remove** takes it away sooner.
+
+If an export shows **Failed**, the reason is written under its name. Prepare it again; if it
+fails again, tell the Super Admin.
+
+What is in the ZIP:
+
+| Folder or file | What it is |
 |---|---|
-| **Audio + metadata** | One ZIP: `audio/` (16 kHz WAV), `metadata/` (details file, JSON), `consent/` (consent record) |
-| **Audio only** | One ZIP with the `audio/` folder |
-| **Metadata only** | One ZIP with the `metadata/` and `consent/` folders |
-| **Progress report** | One spreadsheet (CSV): a row per task with status, participants, moderator, QC, recording length, checks and approval date |
-| **Participant minutes** | One spreadsheet (CSV): a row per participant with conversations, recorded minutes, approved minutes and payable minutes |
+| `face_to_face/`, `telephony/` | One folder per kind of recording. Inside each: `audio/` (16 kHz WAV), `originals/` (if asked for), `metadata/` (details file, JSON), `consent/` (consent record) |
+| `recordings.csv` or `.tsv`, `recordings.json` | One row per recording: task, mode, language, people by code, consent, length, checks, file names and checksum |
+| `participants.csv` or `.tsv` | The people in these recordings, by code |
+| `manifest.json`, `manifest.csv`, `SHA256SUMS` | Every file with its size and checksum. The receiver can check the files with `sha256sum -c SHA256SUMS` |
+| `schema/`, `README.txt` | The description of the JSON files, and a short explanation |
 
-For the ZIPs, choose **Which recordings**: **Approved tasks only** (the delivery) or **Every
-finished recording**. The page shows how many recordings and how much audio before you click
-**Download**. Every ZIP also holds `manifest.csv`, one row per recording with its file names and
-checksum. A large project streams straight to your Downloads folder.
+There are no transcripts in an export: this version makes none.
+
+**Reports** are one table each, saved at once as **CSV** or **TSV**:
+
+| Report | You get |
+|---|---|
+| **Progress report** | A row per task with status, participants, moderator, QC, recording length, checks, approval date and phone calls |
+| **Participant minutes** | A row per participant with conversations, recorded minutes, approved minutes and payable minutes |
 
 ### Participant minutes (payment)
 

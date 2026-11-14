@@ -146,6 +146,27 @@ export const CALL_ROW = {
   recording_id: "r1",
 };
 
+export const EXPORT_JOB = {
+  id: "x1",
+  state: "READY",
+  content: "both",
+  scope: "approved",
+  table_format: "csv",
+  filters: { content: "both", scope: "approved", table_format: "csv", mode: null },
+  file_name: "both_HINDI_20261111_0900.zip",
+  recordings: 3,
+  files: 20,
+  size_bytes: 240_000_000,
+  sha256: "ab".repeat(32),
+  error: null,
+  requested_by: "Priya Admin",
+  created_at: "2026-11-11T09:00:00Z",
+  finished_at: "2026-11-11T09:01:00Z",
+  expires_at: "2026-11-12T09:01:00Z",
+  downloads: 0,
+  last_downloaded_at: null,
+};
+
 export const TASK = {
   id: "t1",
   task_code: "T000001",
@@ -343,9 +364,12 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects/p1/members": ok([MEMBER, MEMBER_2]),
     "GET /api/v1/projects/p1/export/summary": ok({
       recordings: 1,
+      face_to_face: 1,
+      telephony: 0,
       audio_bytes: 1_000_000,
-      file_name: "both_HINDI_20261111.zip",
+      file_name: "both_HINDI_20261111_0900.zip",
     }),
+    "GET /api/v1/projects/p1/exports": ok(page([EXPORT_JOB])),
     "GET /api/v1/projects/p1/member-candidates": ok([
       { user_id: "u3", email: "tara@example.org", display_name: "Tara", roles: ["QC_EXECUTIVE"] },
     ]),

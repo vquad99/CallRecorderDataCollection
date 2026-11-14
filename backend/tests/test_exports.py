@@ -1,4 +1,4 @@
-"""Project exports (D-094): audio, metadata, both or a progress report, for the project as a whole.
+"""Project exports (D-094, D-105): recordings as a bundle, and reports, for the project as a whole.
 
 Requirements: EXP-001, EXP-002, EXP-004, EXP-005, EXP-008
 """
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import csv
 import io
-import zipfile
 from typing import Any
 
 import pytest
@@ -22,7 +21,7 @@ audio_rule = test_audio_qc.audio_rule
 
 
 @pytest.mark.db
-def test_a_project_exports_audio_metadata_both_or_progress(world: dict[str, Any]) -> None:
+def test_a_project_exports_its_recordings_and_a_progress_report(world: dict[str, Any]) -> None:
     tid = world["task"]["id"]
     test_audio_qc._record(world)
     qc = test_audio_qc._assign_qc(world)
@@ -32,48 +31,37 @@ def test_a_project_exports_audio_metadata_both_or_progress(world: dict[str, Any]
     )
     pa: Api = world["pa"]
     assert pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"}).status_code == 200
-    base = f"/api/v1/projects/{world['project'].id}/export"
+    base = f"/api/v1/projects/{world['project'].id}"
 
-    summary = pa.get(f"{base}/summary", params={"content": "audio"}).json()
-    assert summary["recordings"] == 1
+    summary = pa.get(f"{base}/export/summary", params={"content": "audio"}).json()
+    assert (summary["recordings"], summary["face_to_face"], summary["telephony"]) == (1, 1, 0)
     assert summary["audio_bytes"] > 0
     assert summary["file_name"].startswith("audio_VOICE_")
 
-    def archive(content: str) -> zipfile.ZipFile:
-        got = pa.get(base, params={"content": content})
-        assert got.status_code == 200, got.text
-        assert got.headers["content-type"] == "application/zip"
-        return zipfile.ZipFile(io.BytesIO(got.content))
+    # Recordings are asked for as a bundle; approved tasks only unless asked otherwise. What a
+    # bundle holds is checked in test_export_jobs.py.
+    asked = pa.post(f"{base}/exports", json={"content": "both"})
+    assert asked.status_code == 202, asked.text
+    job = pa.get(f"{base}/exports/{asked.json()['id']}").json()
+    assert (job["state"], job["recordings"], job["scope"]) == ("READY", 1, "approved")
+    assert job["file_name"].startswith("both_VOICE_")
+    assert job["file_name"].endswith(".zip")
 
-    audio = archive("audio").namelist()
-    assert [n.split("/")[0] for n in audio] == ["audio", "manifest.csv"]
-    meta = archive("metadata").namelist()
-    assert sorted(n.split("/")[0] for n in meta) == ["consent", "manifest.csv", "metadata"]
-    both = archive("both")
-    assert sorted(n.split("/")[0] for n in both.namelist()) == [
-        "audio",
-        "consent",
-        "manifest.csv",
-        "metadata",
-    ]
-    meta_name = next(n for n in both.namelist() if n.startswith("metadata/"))
-    assert b'"format": "ccp.recording-metadata/1"' in both.read(meta_name)
-
-    progress = pa.get(base, params={"content": "progress"})
+    progress = pa.get(f"{base}/export", params={"content": "progress"})
     assert progress.headers["content-type"].startswith("text/csv")
-    rows = list(csv.DictReader(io.StringIO(progress.text)))
+    rows = list(csv.DictReader(io.StringIO(progress.content.decode("utf-8-sig"))))
     assert rows[0]["task_code"] == world["task"]["task_code"]
     assert rows[0]["status"] == "APPROVED"
     assert rows[0]["approved_at"]
 
     # Who may export: the project's admin and client viewer; not its moderator; no other project.
-    assert world["mod"].get(f"{base}/summary").status_code == 403
+    assert world["mod"].get(f"{base}/export/summary").status_code == 403
     make_user(world["db"], "cv@example.org", ["CLIENT_VIEWER"], projects=[world["project"]])
     client = world["api"]("cv@example.org")
-    assert client.get(f"{base}/summary").json()["recordings"] == 1
+    assert client.get(f"{base}/export/summary").json()["recordings"] == 1
     make_user(world["db"], "pa.other@example.org", ["PROJECT_ADMIN"])
     outsider = world["api"]("pa.other@example.org")
-    assert outsider.get(f"{base}/summary").status_code == 404
+    assert outsider.get(f"{base}/export/summary").status_code == 404
 
 
 @pytest.mark.db
@@ -113,16 +101,13 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
     got = pa.get(f"/api/v1/projects/{pid}/export", params={"content": "participants"})
     assert got.status_code == 200, got.text
     assert got.headers["content-type"].startswith("text/csv")
-    rows = list(csv.DictReader(io.StringIO(got.text)))
+    assert "participants_VOICE_" in got.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(got.content.decode("utf-8-sig"))))
     assert len(rows) == 2
     for row in rows:
         assert float(row["payable_minutes"]) == pytest.approx(
             float(row["approved_minutes"]) / 2, abs=0.01
         )
-    summary = pa.get(
-        f"/api/v1/projects/{pid}/export/summary", params={"content": "participants"}
-    ).json()
-    assert summary["file_name"].startswith("participants_VOICE_")
 
     # A moderator sees the people, not the payment minutes.
     assert all(

@@ -101,7 +101,10 @@ export const routes: RouteObject[] = [
                   { path: "audio", element: page(tabs, "AudioRulesTab") },
                   { path: "languages", element: page(tabs, "LanguagesTab") },
                   { path: "retention", element: page(tabs, "RetentionTab") },
-                  { path: "export", element: page(tabs, "ExportTab") },
+                  {
+                    path: "export",
+                    element: page(() => import("../features/projects/ExportTab"), "ExportTab"),
+                  },
                 ],
               },
               {

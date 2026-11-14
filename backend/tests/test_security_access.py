@@ -102,6 +102,7 @@ class Side:
     recording_open: str
     asset: str
     call: str  # a phone call on task_open, waiting for a person to pick its recording (D-101)
+    export: str = ""  # an export bundle that is ready to download (D-105)
 
     def object_ids(self) -> list[str]:
         return [
@@ -114,6 +115,7 @@ class Side:
             self.recording_open,
             self.asset,
             self.call,
+            self.export,
         ]
 
 
@@ -129,8 +131,10 @@ class Estate:
 
 def _ghost() -> Side:
     """Identifiers that exist nowhere: the answer for these is what 'not found' looks like."""
-    ids = [str(uuid.uuid4()) for _ in range(9)]
-    return Side(ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7], ids[8])
+    ids = [str(uuid.uuid4()) for _ in range(10)]
+    return Side(
+        ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7], ids[8], ids[9]
+    )
 
 
 def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moderator: str) -> Side:
@@ -207,6 +211,21 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         ),
         {"t": open_task, "p": project_id, "m": mod_id, "a": f"seat-{code}"},
     ).scalar_one()
+    export = db.execute(
+        text(
+            "INSERT INTO export_jobs (project_id, requested_by, content, scope, table_format,"
+            " state, file_name, storage_key, sha256, expires_at) VALUES (:p, (SELECT id FROM users"
+            " WHERE email = :e), 'metadata', 'finished', 'csv', 'READY', :n, :k, :h,"
+            " now() + interval '1 day') RETURNING id"
+        ),
+        {
+            "p": project_id,
+            "e": admin,
+            "n": f"metadata_{code}.zip",
+            "k": f"exports/{project_id}/ready.zip",
+            "h": "0" * 64,
+        },
+    ).scalar_one()
     db.commit()
     return Side(
         project=str(project_id),
@@ -219,6 +238,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         recording_open=open_rec["id"],
         asset=asset,
         call=str(call),
+        export=str(export),
     )
 
 
@@ -305,6 +325,18 @@ def case(
     before: Callable[[Estate], Any] | None = None,
 ) -> Case:
     return Case(method, template, path, frozenset(allowed), perm, body, raw, foreign, before)
+
+
+def _export_ready(e: Estate) -> None:
+    """A removed bundle is ready again, so each caller meets the same export."""
+    e.db.execute(
+        text(
+            "UPDATE export_jobs SET state = 'READY', storage_key = :k,"
+            " expires_at = now() + interval '1 day' WHERE id = :id"
+        ),
+        {"k": f"exports/{e.own.project}/ready.zip", "id": e.own.export},
+    )
+    e.db.commit()
 
 
 def _project_body(_: Estate, __: Side, ___: str) -> dict[str, Any]:
@@ -599,6 +631,46 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/projects/{s.project}/export?content=progress",
         {SA, PA, CV},
         Perm.EXPORTS_CREATE,
+    ),
+    # Export bundles (D-105): the people who may export the project. What a bundle may hold
+    # (original files, personal data) is checked per request in test_export_jobs.py.
+    case(
+        "POST",
+        P + "/exports",
+        lambda e, s: f"/api/v1/projects/{s.project}/exports",
+        {SA, PA, CV},
+        Perm.EXPORTS_CREATE,
+        lambda e, s, who: {"content": "metadata", "scope": "finished"},
+    ),
+    case(
+        "GET",
+        P + "/exports",
+        lambda e, s: f"/api/v1/projects/{s.project}/exports",
+        {SA, PA, CV},
+        Perm.EXPORTS_CREATE,
+    ),
+    case(
+        "GET",
+        P + "/exports/{job_id}",
+        lambda e, s: f"/api/v1/projects/{s.project}/exports/{s.export}",
+        {SA, PA, CV},
+        Perm.EXPORTS_CREATE,
+    ),
+    case(
+        "POST",
+        P + "/exports/{job_id}/download-link",
+        lambda e, s: f"/api/v1/projects/{s.project}/exports/{s.export}/download-link",
+        {SA, PA, CV},
+        Perm.EXPORTS_CREATE,
+        before=_export_ready,
+    ),
+    case(
+        "DELETE",
+        P + "/exports/{job_id}",
+        lambda e, s: f"/api/v1/projects/{s.project}/exports/{s.export}",
+        {SA, PA, CV},
+        Perm.EXPORTS_CREATE,
+        before=_export_ready,
     ),
     case(
         "GET",

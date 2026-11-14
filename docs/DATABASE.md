@@ -156,3 +156,13 @@ the download needs them, and no API returns them unmasked.
 
 Migration 0020 also sets telephony audio rules from 2 channels to 1 (D-103).
 
+## Export bundles (migration 0021, D-105)
+
+| Table | Key columns | Constraints / indexes | On delete |
+|---|---|---|---|
+| export_jobs | project_id, requested_by, content (audio / metadata / both), scope (approved / finished), table_format (csv / tsv), filters (JSON: what was chosen), state (QUEUED, RUNNING, READY, FAILED, EXPIRED), file_name, recordings, files, size_bytes, storage_key, sha256, error, attempts, claimed_at, finished_at, expires_at, downloads, last_downloaded_at | checks on state, content, scope, table_format; index (project_id, created_at); partial index on state for QUEUED / RUNNING / READY | restrict |
+
+The bundle itself is an object in storage under `exports/{project_id}/{job_id}.zip`; the row keeps
+its size and SHA-256. A bundle is removed from storage when it expires (`EXPORT_BUNDLE_HOURS`,
+default 24) or when a person removes it; the row stays as the record of what was exported.
+

@@ -76,7 +76,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | /projects | member |
+| GET | /projects | member. Newest first (D-105) |
 | POST | /projects | `projects.create` |
 | GET, PATCH | /projects/{id} | member / `projects.manage` |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
@@ -183,13 +183,28 @@ Built 2026-11-10 (D-079). The QC Executive's queue is the task list (`mine=true`
 No endpoints: nobody transcribes or reviews transcripts by hand. AI transcripts (when a project turns
 them on) are read with the recording.
 
-## Exports (EXP-*)
+## Exports (EXP-*) - built (D-094, D-105)
 
-| Method | Path | Permission |
+All under `/projects/{id}` and for people with `exports.create` in the project (Super Admin,
+Project Admin, Client Viewer). Recordings are exported as a bundle made in the background;
+reports are one table each.
+
+| Method | Path | What |
 |---|---|---|
-| POST | /exports | `exports.create` (filters validated; personal data needs explicit grant) |
-| GET | /exports/{id} | `exports.create` |
-| POST | /exports/{id}/download-url | `exports.create` (short-lived; audited) |
+| GET | /projects/{id}/export/summary | `?content=audio/metadata/both&scope=approved/finished&mode&language&recorded_from&recorded_to&originals`: `{recordings, face_to_face, telephony, audio_bytes, file_name}` for that choice. 422 for a choice that makes no sense (unknown language, days the wrong way round, originals with metadata only) |
+| GET | /projects/{id}/export | `?content=progress/participants&format=csv/tsv`: one report as a table, as an attachment. Audited as `project.exported` |
+| POST | /projects/{id}/exports | `{content, scope, table_format, mode?, language?, recorded_from?, recorded_to?, originals?, contact?}`: 202 with the job (`QUEUED`). `originals` needs `projects.manage` and `contact` needs `participants.export` (403). 422 `NOTHING_TO_EXPORT`, `TOO_LARGE` (more than 5000 recordings); 409 `TOO_MANY_EXPORTS` (3 open per project). Audited as `export.requested` |
+| GET | /projects/{id}/exports | `?page&page_size` (max 50), newest first |
+| GET | /projects/{id}/exports/{job_id} | The job: `state` (QUEUED, RUNNING, READY, FAILED, EXPIRED), `recordings`, `files`, `size_bytes`, `sha256`, `error`, `expires_at`, `downloads`, `requested_by` |
+| POST | /projects/{id}/exports/{job_id}/download-link | `{url, valid_seconds, file_name, sha256}`: a link that works for `SIGNED_URL_SECONDS` (300). The caller must be allowed to ask for the job's own choice (403). 409 `EXPORT_NOT_READY`, `EXPORT_EXPIRED`. Audited as `export.download_link` |
+| DELETE | /projects/{id}/exports/{job_id} | Takes a READY bundle out of storage now, or withdraws a QUEUED one (state `EXPIRED`); 409 while it is being made. Audited as `export.removed` |
+
+A bundle holds `face_to_face/` and `telephony/` (each with `audio/`, `originals/` when asked for,
+`metadata/`, `consent/`), `recordings.csv` or `.tsv`, `recordings.json`, `participants.csv` or
+`.tsv`, `schema/` (JSON Schemas: `ccp.export-recordings/1`, `ccp.export-manifest/1`,
+`ccp.recording-metadata/1`), `README.txt`, `manifest.json`, `manifest.csv` and `SHA256SUMS`.
+Tables are UTF-8 with a byte-order mark; a cell that starts with `=`, `+`, `-` or `@` has an
+apostrophe put before it. No transcripts: this version makes none.
 
 ## Dashboards (DASH-*)
 

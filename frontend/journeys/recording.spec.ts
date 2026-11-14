@@ -1,7 +1,10 @@
 // Journey: from an empty project to a recorded face-to-face conversation, through the interface
 // only, by the people who would do it (owner's test list, Option D).
 // Requirements: USER-001, USER-002, AUTH-004, PROJ-001, PROJ-002, PROJ-009, PART-001, TASK-001,
-// TASK-002, TASK-003, PART-006, FTF-001..FTF-014, AUDIO-014, STOR-005, SEC-001
+// TASK-002, TASK-003, PART-006, FTF-001..FTF-014, AUDIO-014, STOR-005, SEC-001, EXP-005,
+// EXP-009, EXP-010
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import {
@@ -224,6 +227,46 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     }
   });
 
+  await test.step("the Super Admin exports the project as a bundle with its checksum (D-105)", async () => {
+    await admin.goto(`${projectUrl}/export`);
+    // Nothing is approved yet: the default choice has nothing, every finished recording has one.
+    await expect(admin.getByText(/Nothing to export/)).toBeVisible();
+    await expect(admin.getByRole("button", { name: "Prepare export" })).toBeDisabled();
+    await admin.getByLabel("Which recordings").selectOption("finished");
+    await expect(admin.getByText("1 recording", { exact: true })).toBeVisible();
+    await expect(admin.getByText(/1 face-to-face, 0 telephony/)).toBeVisible();
+    await admin.getByRole("button", { name: "Prepare export" }).click();
+    const list = admin.getByRole("table", { name: "Prepared exports" });
+    await expect(list.getByText("Ready", { exact: true })).toBeVisible({ timeout: 60_000 });
+    const projectId = projectUrl.split("/").pop() ?? "";
+    const listed = await api<{
+      items: { id: string; state: string; sha256: string; size_bytes: number; files: number }[];
+    }>(admin, "GET", `/api/v1/projects/${projectId}/exports`);
+    const job = listed.items[0];
+    expect(job?.state).toBe("READY");
+    // The button gets a short-lived link and the browser saves the file from storage.
+    const [download] = await Promise.all([
+      admin.waitForEvent("download"),
+      list.getByRole("button", { name: /^Download both_/ }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^both_PRJ\d+_\d{8}_\d{4}\.zip$/);
+    const body = readFileSync(await download.path());
+    expect(body.subarray(0, 2).toString()).toBe("PK");
+    expect(body.length).toBe(job?.size_bytes);
+    expect(sha256(body)).toBe(job?.sha256);
+    await expect(admin.getByText(/The link works for 5 minutes/)).toBeVisible();
+    await expect(list.getByText("Downloaded 1 time")).toBeVisible();
+    // A report is one table, saved straight away.
+    const [report] = await Promise.all([
+      admin.waitForEvent("download"),
+      admin.getByRole("link", { name: "Progress report as TSV" }).click(),
+    ]);
+    expect(report.suggestedFilename()).toMatch(/^progress_PRJ\d+_\d{8}\.tsv$/);
+    const table = readFileSync(await report.path()).toString("utf8");
+    expect(table.charCodeAt(0)).toBe(0xfeff);
+    expect(table.split("\n")[0]).toContain("task_code\tstatus\tmode");
+  });
+
   await test.step("the audit log shows what happened", async () => {
     await admin
       .getByRole("navigation", { name: "Main" })
@@ -234,6 +277,8 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       "consent.recorded",
       "recording.started",
       "recording.completed",
+      "export.requested",
+      "export.download_link",
     ]) {
       await admin.getByLabel("Action").fill(action);
       await expect(admin.getByText(action).first()).toBeVisible();

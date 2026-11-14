@@ -4,15 +4,15 @@ GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
 333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 179 are built with passing automated tests (69 of them also verified) - 62 %.
+process rule), 187 are built with passing automated tests (69 of them also verified) - 64 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 110 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 33 | some of it is built, or it needs a test that is not done yet |
+| Built | 118 | built and automated tests pass; not yet checked by hand |
+| Partly built / needs testing | 35 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
-| Not built | 31 | not started |
+| Not built | 21 | not started |
 | Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
 | Withdrawn | 20 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
@@ -42,7 +42,7 @@ process rule), 179 are built with passing automated tests (69 of them also verif
 | ASR |  |  |  |  | 10 |  |  |  |
 | TRN |  |  |  |  |  |  | 12 |  |
 | TQC |  |  |  |  |  |  | 6 |  |
-| EXP |  |  |  |  | 10 |  |  |  |
+| EXP |  | 8 | 2 |  |  |  |  |  |
 | DASH |  | 2 | 3 |  |  | 1 |  |  |
 | SEC |  | 10 | 2 |  |  | 3 |  |  |
 | PWA |  |  |  |  | 9 |  |  |  |
@@ -437,16 +437,16 @@ process rule), 179 are built with passing automated tests (69 of them also verif
 
 | ID | State | Requirement | Note |
 |---|---|---|---|
-| EXP-001 | Not built | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. |  |
-| EXP-002 | Not built | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. |  |
-| EXP-003 | Not built | JSON matches its schema. |  |
-| EXP-004 | Not built | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. |  |
-| EXP-005 | Not built | Counts match selected records; ZIP contents match manifest; hashes match. |  |
-| EXP-006 | Not built | Face-to-face and telephony audio and transcripts in separate folders. |  |
-| EXP-007 | Not built | CSV/TSV open correctly in spreadsheet software. |  |
-| EXP-008 | Not built | Export filters validated and export permissions checked. |  |
-| EXP-009 | Not built | Large exports generated asynchronously; export status stored. |  |
-| EXP-010 | Not built | Short-lived download link; export creation and download audited; temporary bundles expire. |  |
+| EXP-001 | Partly built / needs testing | Export: final WAV, original recordings where permitted, face-to-face recordings, transcript text, timestamped segments, speaker labels, participant IDs, project/task metadata, language/dialect, consent metadata subject to permission, audio QC, processing/model provenance. | Everything listed except transcript text, segments and speaker labels: this version makes no transcripts (ASR: B-06, B-07) |
+| EXP-002 | Built | Formats CSV, TSV, JSON, WAV, ZIP with manifest and checksums. |  |
+| EXP-003 | Built | JSON matches its schema. |  |
+| EXP-004 | Built | Phone numbers excluded by default; unauthorized data excluded; unauthorized roles cannot export restricted personal data. |  |
+| EXP-005 | Built | Counts match selected records; ZIP contents match manifest; hashes match. |  |
+| EXP-006 | Built | Face-to-face and telephony audio and transcripts in separate folders. |  |
+| EXP-007 | Partly built / needs testing | CSV/TSV open correctly in spreadsheet software. | Tables carry the UTF-8 mark and guard formulas (backend/tests/test_exports_zip.py); opening them in spreadsheet software (TM-EXP-01) is to do by a person |
+| EXP-008 | Built | Export filters validated and export permissions checked. |  |
+| EXP-009 | Built | Large exports generated asynchronously; export status stored. |  |
+| EXP-010 | Built | Short-lived download link; export creation and download audited; temporary bundles expire. |  |
 
 ## DASH
 

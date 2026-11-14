@@ -1,28 +1,15 @@
-"""Project-level exports (D-094).
+"""Project reports (D-094, D-095, D-105): one table per download, as CSV or TSV.
 
-One download per project, in one of four forms:
-- "audio": the delivery WAV of each recording, in a ZIP;
-- "metadata": the details file (JSON) and consent record (HTML) of each recording, in a ZIP;
-- "both": audio and metadata together, in a ZIP;
-- "progress": one CSV row per task (status, people, recording length, checks, decisions, dates);
-- "participants": one CSV row per participant with recorded, approved and payable minutes (D-095).
+- "progress": one row per task (status, people, recording length, checks, decisions, dates);
+- "participants": one row per participant with recorded, approved and payable minutes (D-095).
 
-Every ZIP also holds manifest.csv, one row per recording with its files and checksum. Recordings
-are the newest finished one of each task, from approved tasks only unless the caller asks for
-every finished recording. Files are read from storage part by part and streamed out, so a large
-project never sits in the server's memory. Access: exports.create in the project (Project Admin,
-Client Viewer, Super Admin), the project visible to the caller. Every export is audited.
+Recordings themselves are exported as a bundle made in the background: see bundle.py and jobs.py.
+Access: exports.create in the project, the project visible to the caller. Every export is audited.
 """
 
 from __future__ import annotations
 
-import csv
-import io
-import json
 import uuid
-import zipfile
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -30,130 +17,78 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.permissions import Perm
-from app.core.storage import ObjectStorage
 from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
 from app.modules.auth.models import User
 from app.modules.exports import minutes
+from app.modules.exports.bundle import table
+from app.modules.exports.models import TABLE_FORMATS
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_visible as get_visible_project
-from app.modules.recordings import consent_form
 from app.modules.recordings.models import Recording
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
 from app.modules.telephony.models import Call
 
-CONTENTS = ("audio", "metadata", "both", "progress", "participants")
-REPORTS = ("progress", "participants")  # a CSV, not a ZIP of recordings
-SCOPES = ("approved", "finished")
-MAX_RECORDINGS = 5000  # one export; more is split by asking for a smaller scope
-
-
-@dataclass(frozen=True)
-class Entry:
-    task_id: uuid.UUID
-    recording_id: uuid.UUID
-    task_code: str
-    audio_key: str | None
-    audio_size: int
-    audio_sha256: str | None
-    duration_ms: int | None
-
-
-@dataclass(frozen=True)
-class Plan:
-    project: Project
-    content: str
-    scope: str
-    entries: list[Entry]
-    total_bytes: int
-
-
-def _safe_cell(value: object) -> str:
-    text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+REPORTS = ("progress", "participants")
 
 
 def _iso(value: datetime | None) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M") if value else ""
 
 
-def plan(
-    db: Session, principal: Principal, project_id: uuid.UUID, content: str, scope: str
-) -> Plan:
-    if content not in CONTENTS or scope not in SCOPES:
+def report_project(
+    db: Session, principal: Principal, project_id: uuid.UUID, content: str, table_format: str
+) -> Project:
+    """The project of a report this person may download (EXP-008)."""
+    if content not in REPORTS or table_format not in TABLE_FORMATS:
         raise AppError("Choose what to export", code="VALIDATION_ERROR", status_code=422)
     project = get_visible_project(db, principal, project_id)
     if not principal.can_in_project(Perm.EXPORTS_CREATE, project.id):
         raise forbidden()
-    entries: list[Entry] = []
-    if content not in REPORTS:
-        statuses = ("APPROVED",) if scope == "approved" else None
-        query = select(Task).where(Task.project_id == project.id).order_by(Task.task_code)
-        if statuses:
-            query = query.where(Task.status.in_(statuses))
-        for task in db.scalars(query):
-            rec = db.scalar(
-                select(Recording)
-                .where(Recording.task_id == task.id, Recording.state == "READY")
-                .order_by(Recording.started_at.desc())
-                .limit(1)
-            )
-            if rec is None:
-                continue
-            asset = audio_qc.delivery_asset(db, rec.id)
-            entries.append(
-                Entry(
-                    task_id=task.id,
-                    recording_id=rec.id,
-                    task_code=task.task_code,
-                    audio_key=asset.storage_key if asset else None,
-                    audio_size=int(asset.size_bytes or 0) if asset else 0,
-                    audio_sha256=asset.sha256 if asset else None,
-                    duration_ms=asset.duration_ms if asset else None,
-                )
-            )
-            if len(entries) > MAX_RECORDINGS:
-                raise AppError(
-                    f"More than {MAX_RECORDINGS} recordings: export approved ones only, or ask "
-                    "for a split export",
-                    code="TOO_LARGE",
-                    status_code=422,
-                )
-    total = sum(e.audio_size for e in entries) if content in ("audio", "both") else 0
-    return Plan(project=project, content=content, scope=scope, entries=entries, total_bytes=total)
+    return project
 
 
-def record(db: Session, principal: Principal, p: Plan, ip: str | None) -> None:
+def record(
+    db: Session,
+    principal: Principal,
+    project: Project,
+    content: str,
+    table_format: str,
+    ip: str | None,
+) -> None:
     audit.record(
         db,
         action="project.exported",
         entity_type="project",
-        entity_id=p.project.id,
-        project_id=p.project.id,
+        entity_id=project.id,
+        project_id=project.id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"content": p.content, "scope": p.scope, "recordings": len(p.entries)},
+        after={"content": content, "format": table_format},
     )
     db.commit()
 
 
-def file_name(p: Plan) -> str:
+def file_name(project: Project, content: str, table_format: str) -> str:
     day = datetime.now(UTC).strftime("%Y%m%d")
-    if p.content in REPORTS:
-        return f"{p.content}_{p.project.code}_{day}.csv"
-    return f"{p.content}_{p.project.code}_{day}.zip"
+    return f"{content}_{project.code}_{day}.{table_format}"
+
+
+def report(db: Session, project: Project, content: str, table_format: str) -> str:
+    if content == "progress":
+        return progress_table(db, project, table_format)
+    return participants_table(db, project, table_format)
 
 
 # ---------------------------------------------------------------- progress report
 
 
-def progress_csv(db: Session, project: Project) -> str:
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(
-        [
+def progress_table(db: Session, project: Project, table_format: str = "csv") -> str:
+    rows: list[list[object]] = []
+    columns = [
+        *[
             "task_code",
             "status",
             "mode",
@@ -174,7 +109,7 @@ def progress_csv(db: Session, project: Project) -> str:
             "phone_calls",
             "last_call_state",
         ]
-    )
+    ]
     # Phone calls per task, and the state of the newest one (D-103): two queries for the project,
     # not two per task.
     call_counts = {
@@ -234,10 +169,9 @@ def progress_csv(db: Session, project: Project) -> str:
                 TaskStatusHistory.task_id == task.id, TaskStatusHistory.to_status == "APPROVED"
             )
         )
-        writer.writerow(
+        rows.append(
             [
-                _safe_cell(v)
-                for v in (
+                *(
                     task.task_code,
                     task.status,
                     task.recording_mode,
@@ -260,10 +194,10 @@ def progress_csv(db: Session, project: Project) -> str:
                 )
             ]
         )
-    return out.getvalue()
+    return table(columns, rows, table_format)
 
 
-def participants_csv(db: Session, project: Project) -> str:
+def participants_table(db: Session, project: Project, table_format: str = "csv") -> str:
     """Minutes per participant (D-095): each conversation is split equally between its two
     participants, so payable minutes are half of the approved conversation minutes."""
     totals = minutes.per_participant(db, project.id)
@@ -272,27 +206,23 @@ def participants_csv(db: Session, project: Project) -> str:
         if totals
         else {}
     )
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(
-        [
-            "participant_code",
-            "language",
-            "conversations_recorded",
-            "recorded_minutes",
-            "conversations_approved",
-            "approved_minutes",
-            "payable_minutes",
-        ]
-    )
+    rows: list[list[object]] = []
+    columns = [
+        "participant_code",
+        "language",
+        "conversations_recorded",
+        "recorded_minutes",
+        "conversations_approved",
+        "approved_minutes",
+        "payable_minutes",
+    ]
     for pid, t in sorted(
         totals.items(), key=lambda kv: people[kv[0]].participant_code if kv[0] in people else ""
     ):
         person = people.get(pid)
-        writer.writerow(
+        rows.append(
             [
-                _safe_cell(v)
-                for v in (
+                *(
                     person.participant_code if person else "",
                     person.language_code if person else "",
                     t.conversations,
@@ -303,105 +233,4 @@ def participants_csv(db: Session, project: Project) -> str:
                 )
             ]
         )
-    return out.getvalue()
-
-
-# ---------------------------------------------------------------- ZIP, streamed
-
-
-class _Sink:
-    """A write-only target for ZipFile; what was written is taken out piece by piece."""
-
-    def __init__(self) -> None:
-        self._parts: list[bytes] = []
-
-    def write(self, data: bytes, /) -> int:
-        self._parts.append(bytes(data))
-        return len(data)
-
-    def flush(self) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-    def take(self) -> bytes:
-        data = b"".join(self._parts)
-        self._parts.clear()
-        return data
-
-
-def stream_zip(
-    p: Plan, storage: ObjectStorage, open_session: Callable[[], Session]
-) -> Iterator[bytes]:
-    """The export ZIP, produced while it is sent. Metadata is read in its own database session,
-    since the request's session may already be closed while the file is still streaming."""
-    sink = _Sink()
-    with_audio = p.content in ("audio", "both")
-    with_meta = p.content in ("metadata", "both")
-    manifest = io.StringIO()
-    writer = csv.writer(manifest)
-    writer.writerow(
-        [
-            "task_code",
-            "recording_id",
-            "audio_file",
-            "audio_sha256",
-            "duration_seconds",
-            "metadata_file",
-            "consent_file",
-        ]
-    )
-    zf = zipfile.ZipFile(sink, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=1)
-    with open_session() as db:
-        for e in p.entries:
-            stem = f"{e.task_code}_{str(e.recording_id)[:8]}"
-            audio_name = meta_name = consent_name = ""
-            if with_audio and e.audio_key:
-                audio_name = f"audio/{stem}.wav"
-                with zf.open(
-                    zipfile.ZipInfo(audio_name, _zip_time()), "w", force_zip64=True
-                ) as dest:
-                    for part in storage.iter_bytes(e.audio_key):
-                        dest.write(part)
-                        chunk = sink.take()
-                        if chunk:
-                            yield chunk
-            if with_meta:
-                rec = db.get(Recording, e.recording_id)
-                task = db.get(Task, e.task_id)
-                project = db.get(Project, p.project.id)
-                if rec is not None and task is not None and project is not None:
-                    meta_name = f"metadata/{stem}.json"
-                    body = json.dumps(
-                        audio_qc.metadata_body(db, rec, task, project), indent=2
-                    ).encode()
-                    zf.writestr(zipfile.ZipInfo(meta_name, _zip_time()), body)
-                    consent_name = f"consent/{stem}.html"
-                    html = consent_form.render(db, rec, task, project).encode()
-                    zf.writestr(zipfile.ZipInfo(consent_name, _zip_time()), html)
-            writer.writerow(
-                [
-                    _safe_cell(v)
-                    for v in (
-                        e.task_code,
-                        e.recording_id,
-                        audio_name,
-                        e.audio_sha256 if audio_name else "",
-                        round((e.duration_ms or 0) / 1000, 1) if e.duration_ms else "",
-                        meta_name,
-                        consent_name,
-                    )
-                ]
-            )
-            chunk = sink.take()
-            if chunk:
-                yield chunk
-    zf.writestr(zipfile.ZipInfo("manifest.csv", _zip_time()), manifest.getvalue().encode())
-    zf.close()
-    yield sink.take()
-
-
-def _zip_time() -> tuple[int, int, int, int, int, int]:
-    now = datetime.now(UTC)
-    return (now.year, now.month, now.day, now.hour, now.minute, now.second)
+    return table(columns, rows, table_format)

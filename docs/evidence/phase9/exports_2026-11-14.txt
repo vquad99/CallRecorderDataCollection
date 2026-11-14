@@ -1,0 +1,101 @@
+Exports (EXP-001..010): what was run, and what it showed
+D-105. 2026-11-14.
+
+NOT DONE
+- No person has opened the CSV and TSV tables in spreadsheet software (TM-EXP-01): none is
+  installed on the build machine. The automated part is done: the tables carry the UTF-8 mark,
+  and a cell that starts with = + - or @ is written as text.
+- Transcript text, segments and speaker labels are not in an export (part of EXP-001): this
+  version makes no transcripts.
+- Not run on the live site's storage (Wasabi) or with a large project. The largest bundle made
+  here was 20 MB (storage contract test) against SeaweedFS and the fake S3.
+No real personal data: demo accounts and made-up people.
+
+Where it ran
+------------
+A Windows 11 machine without Docker. The same parts CI uses, started by hand: PostgreSQL 16,
+SeaweedFS 4.51 (S3 storage), the backend (uvicorn, Python 3.12, uv 0.13.1 frozen lockfile), the
+frontend (Vite dev server, Node 22), Microsoft Edge driven by Playwright.
+
+Automated checks (final run, 2026-11-14)
+----------------------------------------
+Backend   ruff format --check app tests loadtest ............ 160 files already formatted
+          ruff check app tests loadtest ..................... All checks passed
+          mypy (strict) app tests loadtest .................. no issues in 160 source files
+          pip-audit ......................................... No known vulnerabilities found
+          pytest (PostgreSQL 16, REQUIRE_DB_TESTS=1) ........ 393 passed, 14 skipped, 4 failed
+                                                              (Windows only, as before: 3 in
+                                                              test_backup.py, 1 in test_tasks.py)
+Frontend  prettier --check, tsc --noEmit, eslint ............ no problems
+          vitest ............................................ 24 files, 432 tests passed
+          vite build + bundle budget ........................ first screen 123.0 KB (limit 125 KB)
+Journeys  playwright, real browser (Edge), real backend, database and storage:
+          boundaries, dashboard, interrupted, network, participant, password, phonecall,
+          recording, session ................................. 9 passed
+Storage   tests/test_storage_contract.py against SeaweedFS (CONTRACT_STORAGE_* set by hand):
+          a 20 MB stream stored while it is produced; a stream that breaks leaves no object ... passed
+
+Which test shows which requirement
+----------------------------------
+EXP-001  backend/tests/test_export_jobs.py::test_a_bundle_is_made_in_the_background_with_every_file_listed_and_checked
+         (delivery WAV, details file with people by code, consent, checks and processing history;
+         original files in ::test_original_files_and_personal_data_need_the_right_to_export_them)
+EXP-002  the same test: CSV, JSON, WAV, ZIP with manifest and checksums; TSV in
+         ::test_filters_choose_the_recordings_and_bad_ones_are_refused and
+         ::test_reports_come_as_csv_or_tsv_that_spreadsheets_read
+EXP-003  the same test: recordings.json, manifest.json and every details file are checked with
+         jsonschema against the schemas inside the bundle; a wrong value is caught
+EXP-004  ::test_original_files_and_personal_data_need_the_right_to_export_them (no phone number in
+         any file by default; contact details 403 for a Project Admin and a Client Viewer; a
+         bundle with them is not handed to a Project Admin)
+EXP-005  the first test: every file in the manifest, size and SHA-256 recalculated, SHA256SUMS,
+         counts; ::test_a_job_that_stopped_is_tried_again_and_a_damaged_file_stops_the_export
+         (a stored file that no longer matches its checksum stops the export)
+EXP-006  the first test: face_to_face/ and telephony/ folders, one phone and one face-to-face
+         recording in the same project
+EXP-007  backend/tests/test_exports_zip.py (UTF-8 mark, formula guard, TSV) - automated part only
+EXP-008  ::test_filters_choose_the_recordings_and_bad_ones_are_refused (mode, language, days,
+         scope; unknown language, wrong days, wrong values refused; moderator 403, other project 404);
+         backend/tests/test_security_access.py (every role against every export route)
+EXP-009  the first test (asked for: QUEUED; then READY with size and checksum);
+         ::test_a_job_that_stopped_is_tried_again_and_a_damaged_file_stops_the_export (a job left
+         RUNNING is queued again by the sweep, fails after three tries; a try that was overtaken
+         writes nothing); ::test_the_bundle_is_written_in_parts_not_held_whole
+EXP-010  ::test_links_are_short_lived_and_audited_and_bundles_expire (link valid 300 s, each link
+         audited, expired bundle refused and removed from storage by the sweep, removal by a person)
+In a real browser: frontend/journeys/recording.spec.ts, step "the Super Admin exports the
+project as a bundle with its checksum" (prepare, Ready, download through the link, size and
+SHA-256 of the saved file equal the stored ones, a TSV report saved, audit entries shown).
+
+A real bundle, downloaded from the local stack through its short-lived link
+---------------------------------------------------------------------------
+export both_PRJ0004_20261114_0954.zip: 307790 bytes, link valid 300 s
+sha256 stored                 1ad3e89ab6029d50af00774ca6c72d59ac2f59845be845de7905950c36b457b1
+sha256 of the downloaded file 1ad3e89ab6029d50af00774ca6c72d59ac2f59845be845de7905950c36b457b1
+counts: {"recordings": 1, "face_to_face": 1, "telephony": 0, "files": 10, "bytes": 300066}
+selection: {"content": "both", "scope": "finished", "table_format": "csv", "mode": null,
+            "language": null, "recorded_from": null, "recorded_to": null, "originals": false,
+            "contact": false}
+files listed in the manifest: 10; not matching their checksum or size: 0
+     267650  face_to_face/audio/T000045_xxxxxxxx.wav
+       7426  face_to_face/metadata/T000045_xxxxxxxx.json
+       2448  face_to_face/consent/T000045_xxxxxxxx.html
+        767  recordings.csv
+       1024  recordings.json
+         89  participants.csv
+       3376  schema/recordings.schema.json
+       4199  schema/manifest.schema.json
+      12006  schema/recording-metadata.schema.json
+       1081  README.txt
+       3452  manifest.json
+       1311  manifest.csv
+       1101  SHA256SUMS
+
+Found and fixed while testing
+-----------------------------
+- A very long export could have been taken for a stopped one and started a second time, the two
+  writing the same object. Each try now writes its own object and says it is alive every 30
+  seconds; a try that was overtaken writes nothing.
+- The projects list was ordered by code: with more than one page of projects a project just
+  created was not on the first page (the browser run failed on the build machine's 36 projects).
+  The list is now newest first.

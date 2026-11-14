@@ -134,6 +134,32 @@ def test_large_file_round_trip_uses_multipart_and_stays_intact(
     assert _sha((tmp_path / "back.wav").read_bytes()) == _sha(data)
 
 
+def test_a_stream_is_stored_as_it_is_produced_and_a_broken_one_leaves_nothing(
+    store: Store,
+) -> None:
+    """An export bundle goes to storage while it is written (D-105)."""
+    parts = [os.urandom(5 * 1024 * 1024) for _ in range(4)]  # 20 MB: more than one upload part
+    size, digest = store.storage.put_stream(
+        "exports/bundle.zip", iter(parts), content_type="application/zip"
+    )
+    whole = b"".join(parts)
+    assert (size, digest) == (len(whole), _sha(whole))
+    info = store.storage.head("exports/bundle.zip")
+    assert info is not None
+    assert (info.size, info.content_type) == (len(whole), "application/zip")
+    assert _sha(b"".join(store.storage.iter_bytes("exports/bundle.zip"))) == _sha(whole)
+    small = store.storage.put_stream("exports/small.zip", iter([b"PK", b"-x"]), content_type="a/b")
+    assert small == (4, _sha(b"PK-x"))
+
+    def broken() -> Iterator[bytes]:
+        yield os.urandom(17 * 1024 * 1024)
+        raise RuntimeError("the bundle could not be written")
+
+    with pytest.raises(RuntimeError, match="could not be written"):
+        store.storage.put_stream("exports/half.zip", broken(), content_type="application/zip")
+    assert store.storage.head("exports/half.zip") is None
+
+
 def test_missing_objects_and_repeated_deletes(store: Store) -> None:
     assert store.storage.head("never/written.bin") is None
     store.storage.put_bytes(

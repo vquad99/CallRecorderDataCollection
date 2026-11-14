@@ -121,19 +121,79 @@ export const setRetention = (id: string, rules: RetentionRule[]) =>
   apiRequest<Project>(`${base(id)}/retention`, { method: "PUT", body: { rules } });
 export const listMembers = (id: string) => apiRequest<Member[]>(`${base(id)}/members`);
 
-export type ExportContent = "audio" | "metadata" | "both" | "progress" | "participants";
+export type BundleContent = "audio" | "metadata" | "both";
+export type ReportContent = "progress" | "participants";
 export type ExportScope = "approved" | "finished";
+export type TableFormat = "csv" | "tsv";
+export type ExportState = "QUEUED" | "RUNNING" | "READY" | "FAILED" | "EXPIRED";
+/** What goes into a bundle of recordings (D-105). */
+export interface ExportChoice {
+  content: BundleContent;
+  scope: ExportScope;
+  table_format: TableFormat;
+  mode: "FACE_TO_FACE" | "TELEPHONY" | null;
+  language: string | null;
+  recorded_from: string | null; // YYYY-MM-DD, counted in India Standard Time
+  recorded_to: string | null;
+  originals: boolean; // what was recorded before processing; project managers only
+  contact: boolean; // names, phone numbers, email addresses; needs participants.export
+}
 export interface ExportSummary {
   recordings: number;
+  face_to_face: number;
+  telephony: number;
   audio_bytes: number;
   file_name: string;
 }
-/** What a project export would hold (D-094). */
-export const exportSummary = (id: string, content: ExportContent, scope: ExportScope) =>
-  apiRequest<ExportSummary>(`${base(id)}/export/summary${query({ content, scope })}`);
-/** The export itself is a plain link, so a large ZIP streams to disk instead of into memory. */
-export const exportPath = (id: string, content: ExportContent, scope: ExportScope) =>
-  `${base(id)}/export${query({ content, scope })}`;
+export interface ExportJob {
+  id: string;
+  state: ExportState;
+  content: BundleContent;
+  scope: ExportScope;
+  table_format: TableFormat;
+  filters: Partial<ExportChoice>;
+  file_name: string;
+  recordings: number;
+  files: number;
+  size_bytes: number;
+  sha256: string | null;
+  error: string | null;
+  requested_by: string | null;
+  created_at: string;
+  finished_at: string | null;
+  expires_at: string | null;
+  downloads: number;
+  last_downloaded_at: string | null;
+}
+/** What a bundle would hold, before asking for it. */
+export const exportSummary = (id: string, choice: ExportChoice) =>
+  apiRequest<ExportSummary>(
+    `${base(id)}/export/summary${query({
+      content: choice.content,
+      scope: choice.scope,
+      mode: choice.mode ?? undefined,
+      language: choice.language ?? undefined,
+      recorded_from: choice.recorded_from ?? undefined,
+      recorded_to: choice.recorded_to ?? undefined,
+      originals: choice.originals ? "true" : undefined,
+    })}`,
+  );
+/** A report is a plain link: one table, as CSV or TSV. */
+export const reportPath = (id: string, content: ReportContent, format: TableFormat) =>
+  `${base(id)}/export${query({ content, format })}`;
+/** Ask for a bundle; it is prepared in the background and appears in the list of exports. */
+export const requestExport = (id: string, choice: ExportChoice) =>
+  apiRequest<ExportJob>(`${base(id)}/exports`, { method: "POST", body: choice });
+export const listExports = (id: string) =>
+  apiRequest<Page<ExportJob>>(`${base(id)}/exports${query({ page_size: 20 })}`);
+/** A link to a prepared bundle that works for a few minutes; every link is audited. */
+export const exportLink = (id: string, jobId: string) =>
+  apiRequest<{ url: string; valid_seconds: number; file_name: string; sha256: string | null }>(
+    `${base(id)}/exports/${jobId}/download-link`,
+    { method: "POST" },
+  );
+export const removeExport = (id: string, jobId: string) =>
+  apiRequest<ExportJob>(`${base(id)}/exports/${jobId}`, { method: "DELETE" });
 export const listCandidates = (id: string, search: string) =>
   apiRequest<Candidate[]>(`${base(id)}/member-candidates${query({ search })}`);
 export const addMember = (id: string, userId: string) =>

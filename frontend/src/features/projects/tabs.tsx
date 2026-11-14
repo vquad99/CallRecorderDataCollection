@@ -2,7 +2,7 @@
 // enforces the same rules (PROJ-002..011, USER-003).
 import { useState, type FormEvent } from "react";
 
-import { apiBase, type ApiError } from "../../api/client";
+import type { ApiError } from "../../api/client";
 import { ROLE_LABELS } from "../../api/admin";
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
@@ -497,129 +497,5 @@ export function RetentionTab() {
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
     </form>
-  );
-}
-
-const EXPORT_CHOICES: { value: api.ExportContent; label: string; detail: string }[] = [
-  {
-    value: "both",
-    label: "Audio + metadata",
-    detail: "Each recording's audio, its details file and its consent record, in one ZIP.",
-  },
-  { value: "audio", label: "Audio only", detail: "Each recording's 16 kHz WAV, in one ZIP." },
-  {
-    value: "metadata",
-    label: "Metadata only",
-    detail: "Each recording's details file (JSON) and consent record, in one ZIP.",
-  },
-  {
-    value: "progress",
-    label: "Progress report",
-    detail: "One spreadsheet row per task: status, people, length, checks, approval date.",
-  },
-  {
-    value: "participants",
-    label: "Participant minutes",
-    detail:
-      "One row per participant: recorded, approved and payable minutes. Each approved " +
-      "conversation is split equally, so 5 minutes gives each participant 2.5.",
-  },
-];
-
-const megabytes = (n: number) =>
-  n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.ceil(n / 1e6)} MB`;
-
-/** The whole project in one download (D-094). Every ZIP also holds manifest.csv. */
-export function ExportTab() {
-  const { project } = useProject();
-  const [content, setContent] = useState<api.ExportContent>("both");
-  const [scope, setScope] = useState<api.ExportScope>("approved");
-  const summary = useResource(
-    () => api.exportSummary(project.id, content, scope),
-    [project.id, content, scope],
-  );
-  const files = content !== "progress" && content !== "participants";
-  const ready = summary.state.status === "loaded" ? summary.state.data : null;
-  const empty = files && ready !== null && ready.recordings === 0;
-  return (
-    <div className="stack export">
-      <fieldset className="export__choices">
-        <legend className="field__label">What to export</legend>
-        {EXPORT_CHOICES.map((c) => (
-          <label key={c.value} className="export__choice">
-            <input
-              type="radio"
-              name="export-content"
-              value={c.value}
-              checked={content === c.value}
-              onChange={() => setContent(c.value)}
-            />
-            <strong>{c.label}</strong>
-            <span className="muted">{c.detail}</span>
-          </label>
-        ))}
-      </fieldset>
-      {files ? (
-        <Select
-          label="Which recordings"
-          value={scope}
-          onChange={(e) => setScope(e.target.value as api.ExportScope)}
-          options={[
-            { value: "approved", label: "Approved tasks only" },
-            { value: "finished", label: "Every finished recording, approved or not" },
-          ]}
-        />
-      ) : null}
-      <div className="card export__go">
-        <div>
-          {summary.state.status === "loading" ? (
-            <LoadingState label="Loading what the export holds" />
-          ) : null}
-          {summary.state.status === "failed" ? (
-            <ErrorState error={summary.state.error} onRetry={summary.reload} />
-          ) : null}
-          {ready ? (
-            <p className="export__summary">
-              {files ? (
-                <>
-                  <strong>
-                    {ready.recordings} recording{ready.recordings === 1 ? "" : "s"}
-                  </strong>
-                  {content !== "metadata" && ready.audio_bytes > 0
-                    ? ` · about ${megabytes(ready.audio_bytes)} of audio`
-                    : ""}
-                </>
-              ) : (
-                <strong>
-                  {content === "participants"
-                    ? `Every participant in ${project.code}`
-                    : `Every task in ${project.code}`}
-                </strong>
-              )}
-              <span className="muted mono">{ready.file_name}</span>
-            </p>
-          ) : null}
-          {empty ? (
-            <p className="muted">
-              Nothing to export yet: no {scope === "approved" ? "approved " : ""}task has a finished
-              recording.
-            </p>
-          ) : null}
-        </div>
-        {ready && !empty ? (
-          <a
-            className="button button--primary"
-            href={`${apiBase()}${api.exportPath(project.id, content, scope)}`}
-            download={ready.file_name}
-          >
-            Download
-          </a>
-        ) : (
-          <span className="button button--primary is-disabled" aria-disabled="true">
-            Download
-          </span>
-        )}
-      </div>
-    </div>
   );
 }

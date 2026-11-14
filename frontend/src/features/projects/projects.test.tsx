@@ -1,11 +1,39 @@
-// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003
-import { screen, waitFor } from "@testing-library/react";
+// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 
 afterEach(() => vi.unstubAllGlobals());
+
+const SUMMARY = {
+  recordings: 3,
+  face_to_face: 2,
+  telephony: 1,
+  audio_bytes: 240_000_000,
+  file_name: "audio_HINDI_20261111_0900.zip",
+};
+const JOB = {
+  id: "x1",
+  state: "READY",
+  content: "audio",
+  scope: "finished",
+  table_format: "tsv",
+  filters: {},
+  file_name: "audio_HINDI_20261111_0900.zip",
+  recordings: 3,
+  files: 12,
+  size_bytes: 240_000_000,
+  sha256: "ab".repeat(32),
+  error: null,
+  requested_by: "Priya Admin",
+  created_at: "2026-11-11T09:00:00Z",
+  finished_at: "2026-11-11T09:01:00Z",
+  expires_at: "2026-11-12T09:01:00Z",
+  downloads: 0,
+  last_downloaded_at: null,
+};
 
 const project = {
   id: "p1",
@@ -147,40 +175,140 @@ describe("project detail", () => {
     );
   });
 
-  it("exports the project as audio, metadata, both or a progress report (D-094)", async () => {
+  it("prepares a bundle with the chosen filters and follows it until it is ready (D-105)", async () => {
+    const jobs: Record<string, unknown>[] = [];
+    let looks = 0;
     const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "exports.create"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/export/summary": () => [200, SUMMARY],
+        "GET /api/v1/projects/p1/exports": () => {
+          // The first look after asking finds it being prepared, the next one ready.
+          if (jobs[0]) jobs[0].state = ++looks === 1 ? "RUNNING" : "READY";
+          return [200, { items: jobs, total: jobs.length, page: 1, page_size: 20 }];
+        },
+        "POST /api/v1/projects/p1/exports": (body) => {
+          const choice = body as Record<string, unknown>;
+          jobs.unshift({ ...JOB, ...choice, filters: choice, state: "QUEUED" });
+          return [202, jobs[0]];
+        },
+        "POST /api/v1/projects/p1/exports/x1/download-link": () => [
+          200,
+          { url: "#bundle", valid_seconds: 300, file_name: JOB.file_name, sha256: JOB.sha256 },
+        ],
+        "DELETE /api/v1/projects/p1/exports/x1": () => {
+          jobs.length = 0;
+          return [200, { ...JOB, state: "EXPIRED" }];
+        },
+      }),
+    );
+    renderAt("/projects/p1/export");
+    expect(await screen.findByText("3 recordings")).toBeInTheDocument();
+    expect(screen.getByText(/2 face-to-face, 1 telephony · about 240 MB of audio/)).toBeVisible();
+    expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("radio", { name: /Audio only/ }));
+    await userEvent.selectOptions(screen.getByLabelText("Which recordings"), "finished");
+    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "TELEPHONY");
+    await userEvent.selectOptions(screen.getByLabelText("Language"), "hi");
+    await userEvent.selectOptions(screen.getByLabelText("Tables as"), "tsv");
+    await userEvent.click(screen.getByRole("checkbox", { name: /original recordings/ }));
+    // The count follows the choice.
+    await waitFor(() =>
+      expect(
+        calls.some((c) =>
+          c.path.includes("content=audio&scope=finished&mode=TELEPHONY&language=hi&originals=true"),
+        ),
+      ).toBe(true),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Prepare export" }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.path === "/api/v1/projects/p1/exports" && c.method === "POST")?.body,
+      ).toEqual({
+        content: "audio",
+        scope: "finished",
+        table_format: "tsv",
+        mode: "TELEPHONY",
+        language: "hi",
+        recorded_from: null,
+        recorded_to: null,
+        originals: true,
+        contact: false,
+      }),
+    );
+    const list = await screen.findByRole("table", { name: "Prepared exports" });
+    expect(await within(list).findByText("Being prepared")).toBeInTheDocument();
+    expect(list).toHaveTextContent(
+      "Audio only · every finished recording · Telephony · Hindi (hi) · with originals · TSV",
+    );
+    expect(within(list).queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
+    // It is looked at again by itself until it is ready.
+    expect(await within(list).findByText("Ready", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(list).toHaveTextContent("about 240 MB");
+
+    await userEvent.click(within(list).getByRole("button", { name: `Download ${JOB.file_name}` }));
+    expect(
+      await screen.findByText(`Downloading ${JOB.file_name}. The link works for 5 minutes.`),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: `Remove ${JOB.file_name}` }));
+    expect(await screen.findByText(`${JOB.file_name} removed.`)).toBeInTheDocument();
+    expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
+  }, 20000);
+
+  it("gives reports as CSV or TSV, and says why an export failed or cannot be asked for", async () => {
+    fakeApi(
       signedInAs(["projects.view", "projects.manage", "exports.create"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/export/summary": (_b, url) => [
           200,
+          url.searchParams.get("mode") === "FACE_TO_FACE"
+            ? { ...SUMMARY, recordings: 0, face_to_face: 0, telephony: 0, audio_bytes: 0 }
+            : SUMMARY,
+        ],
+        "GET /api/v1/projects/p1/exports": () => [
+          200,
           {
-            recordings: 3,
-            audio_bytes: 240_000_000,
-            file_name: `${url.searchParams.get("content")}_HINDI_20261111.zip`,
+            items: [
+              {
+                ...JOB,
+                state: "FAILED",
+                error: "A stored file of T000004 does not match its checksum: export stopped",
+              },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 20,
           },
         ],
       }),
     );
     renderAt("/projects/p1/export");
-    expect(await screen.findByText("3 recordings")).toBeInTheDocument();
-    expect(screen.getByText(/about 240 MB of audio/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("radio", { name: /Audio only/ }));
-    const link = await screen.findByRole("link", { name: "Download" });
-    await waitFor(() =>
-      expect(link).toHaveAttribute(
-        "href",
-        "/api/v1/projects/p1/export?content=audio&scope=approved",
-      ),
+    expect(await screen.findByRole("link", { name: "Progress report as CSV" })).toHaveAttribute(
+      "href",
+      "/api/v1/projects/p1/export?content=progress&format=csv",
     );
-    await userEvent.selectOptions(screen.getByLabelText("Which recordings"), "finished");
-    await waitFor(() =>
-      expect(calls.some((c) => c.path.includes("content=audio&scope=finished"))).toBe(true),
+    expect(screen.getByRole("link", { name: "Participant minutes as TSV" })).toHaveAttribute(
+      "href",
+      "/api/v1/projects/p1/export?content=participants&format=tsv",
     );
-    await userEvent.click(screen.getByRole("radio", { name: /Progress report/ }));
-    expect(screen.queryByLabelText("Which recordings")).not.toBeInTheDocument();
-    expect(await screen.findByText("Every task in HINDI")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("radio", { name: /Participant minutes/ }));
-    expect(screen.queryByLabelText("Which recordings")).not.toBeInTheDocument();
-    expect(await screen.findByText("Every participant in HINDI")).toBeInTheDocument();
+    // A failed export says why, and has nothing to download.
+    const list = await screen.findByRole("table", { name: "Prepared exports" });
+    expect(list).toHaveTextContent("Failed");
+    expect(list).toHaveTextContent("A stored file of T000004 does not match its checksum");
+    expect(within(list).queryByRole("button", { name: /Download|Remove/ })).toBeNull();
+    // Personal data is offered only to people who may export it.
+    expect(screen.getByRole("checkbox", { name: /original recordings/ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /phone numbers/ })).not.toBeInTheDocument();
+    // Nothing fits: said in words, and nothing to prepare.
+    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "FACE_TO_FACE");
+    expect(await screen.findByText(/Nothing to export/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prepare export" })).toBeDisabled();
+    // Days the wrong way round are caught before anything is asked.
+    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "");
+    await userEvent.type(screen.getByLabelText("Recorded from"), "2026-11-10");
+    await userEvent.type(screen.getByLabelText("Recorded to"), "2026-11-01");
+    expect(await screen.findByText("Must not be before the first day")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prepare export" })).toBeDisabled();
   });
 });
