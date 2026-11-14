@@ -1,0 +1,71 @@
+The platform checks itself and tells the people who run it; runbooks (D-109)
+OPS-006, OPS-008. 2026-11-14.
+
+NOT DONE
+- No alert address is set on the live copy yet (ALERT_EMAIL on ccp-api): until it is, what the
+  platform finds is on the System status page only. No alert has been sent through the real
+  mail service (Resend); the emails below were written by the development mail writer.
+- Nobody has rehearsed docs/OPERATIONS_RUNBOOK.md on the live copy (TM-OPS-04). Its steps for
+  Render's rollback and Render's database recovery are marked NOT VERIFIED there.
+- No error-tracking service and no metrics dashboards (they need an account at such a service).
+- Found while writing the runbook, and open: no database dump is scheduled on Render; recordings
+  have no second copy (B-14).
+
+Automated checks (final run, 2026-11-14)
+----------------------------------------
+Backend   ruff format --check, ruff check (app tests loadtest) ... no problems
+          mypy (strict) app tests loadtest ..................... no issues in 167 source files
+          pip-audit ............................................. No known vulnerabilities found
+          pytest (PostgreSQL 16, REQUIRE_DB_TESTS=1) ............ 405 passed, 14 skipped, 4 failed
+                                                                  (Windows only, as before: 3 in
+                                                                  test_backup.py, 1 in test_tasks.py)
+Frontend  prettier --check ., tsc --noEmit, eslint . ............ no problems
+          vitest ................................................ 27 files, 454 tests passed
+          vite build + bundle budget ............................ first screen 123.4 KB (limit 125 KB)
+Journeys  playwright, real browser (Edge), real backend, database and storage ... 9 passed
+          (twostep skipped: it needs a backend with that rule on)
+
+What the tests show (backend/tests/test_operation_alerts.py)
+------------------------------------------------------------
+- Nothing wrong: nothing kept, no email.
+- An export fails: both alert addresses get one email, "1 thing needs attention", with the
+  sentence, since when, the address of the status page and where the runbook is.
+- The same thing still wrong, and more of it: no second email; the count on record follows.
+- Something else goes wrong (storage does not answer): an email at once naming both.
+- Still wrong 25 hours after the last email: one reminder, not two.
+- The Super Admin's status page (GET /system/status) lists the same, with how many addresses
+  are told.
+- Everything put right: one "All clear" email, then quiet; the rows stay, marked resolved.
+- No alert address: no email, the status page still lists what is wrong.
+- Another process holds the review (a database lock): this one leaves everything alone.
+- The mail server is down: the problem is kept and nobody counts as told; the email goes out
+  with the next look once mail works.
+- What it looks for in recordings and calls: a failed recording, an upload that waited 3 hours,
+  a call waiting for a person are found; an upload only just made is not "stuck".
+
+On the local stack, for real
+----------------------------
+The backend was started with ALERT_EMAIL=ops@example.org against the development database, which
+held three phone calls left waiting for a person by earlier test runs. Within eight seconds one
+email was written:
+
+  To: ops@example.org
+  Subject: [Conversation Collection] 1 thing needs attention
+
+  The platform checked itself and found:
+
+  - 3 phone calls wait for a person to pick or fetch the recording. (since 2026-11-14 11:27 UTC)
+
+  System status: http://127.0.0.1:5181/status
+  What to do for each of these is in docs/OPERATIONS_RUNBOOK.md, section 4.
+
+  This message is repeated every 24 hours while anything is still wrong, and you get one more
+  when all is clear.
+
+Runbook facts checked against the code
+--------------------------------------
+Button names (Disable account, Sign out everywhere, Send password link, Reset two-step sign-in,
+Look for the recording again), commands (prepare-deploy, create-admin --reset-password,
+reset-mfa, rotate-keys, recover-recordings, verify-assets, storage-orphans, backup-list), the
+log names slow_request and slow_query, and that DATA_ENCRYPTION_KEY takes several keys with the
+first one encrypting. A sentence that named a "Process again" button was removed: there is none.

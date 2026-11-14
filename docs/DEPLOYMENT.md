@@ -120,6 +120,7 @@ Commands (run where the backend's settings are available):
 
 | Command | When | What it does |
 |---|---|---|
+| (no command) | every minute, by itself | The API looks for things that need a person and emails `ALERT_EMAIL` (set it on `ccp-api`; D-109). What each message means: OPERATIONS_RUNBOOK.md section 4 |
 | `python -m app.cli reset-mfa <email>` | when an admin has lost their authenticator and no other Super Admin can reset it | Turns off that account's two-step sign-in and signs it out everywhere; they set it up again at the next sign-in (D-106) |
 | `python -m app.cli retention` | daily (scheduler) | Deletes stored files older than each project's retention rules, with audit entries |
 | `python -m app.cli recover-recordings` | on demand | Sends every recording left half-done by a stopped process to processing again; the web processes also do this at start-up and every `RECOVERY_INTERVAL_SECONDS` (D-055) |
@@ -145,7 +146,7 @@ Recovery settings: `PROCESSING_PICKUP_SECONDS` (60), `PROCESSING_STALE_MINUTES` 
 | Object storage lifecycle | OPS-004 | NOT STARTED |
 | Health checks, TLS, domain, DNS | OPS-005 | NOT STARTED (domain: B-09) |
 | Alerting and log retention | OPS-006 | NOT STARTED |
-| Rollback procedure | OPS-008 | NOT STARTED |
+| Rollback procedure | OPS-008 | Written (OPERATIONS_RUNBOOK.md); not rehearsed |
 | Disaster recovery runbook | OPS-008 | NOT STARTED |
 | Incident runbook | OPS-008 | NOT STARTED |
 | Clean deployment reproduced from this document | OPS-009 | NOT STARTED |

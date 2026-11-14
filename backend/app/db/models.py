@@ -4,6 +4,7 @@ from app.modules.audio_qc import models as audio_qc_models
 from app.modules.audit import models as audit_models
 from app.modules.auth import models as auth_models
 from app.modules.exports import models as export_models
+from app.modules.operations import models as operation_models
 from app.modules.participants import models as participant_models
 from app.modules.projects import models as project_models
 from app.modules.recordings import models as recording_models
@@ -16,6 +17,7 @@ __all__ = [
     "audit_models",
     "auth_models",
     "export_models",
+    "operation_models",
     "participant_models",
     "project_models",
     "recording_models",

@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     export_bundle_hours: int = Field(default=24, ge=1, le=24 * 30)
     export_stale_minutes: int = Field(default=60, ge=1, le=24 * 60)
     export_requeue_seconds: int = Field(default=120, ge=0, le=3600)
+    # Operation alerts (D-109): who is told by email when the platform finds something
+    # wrong with itself (comma-separated addresses; unset: shown on the status page only),
+    # and after how many hours the message is repeated while anything is still wrong.
+    alert_email: str | None = None
+    alert_repeat_hours: int = Field(default=24, ge=1, le=24 * 7)
 
     @field_validator("data_encryption_key")
     @classmethod

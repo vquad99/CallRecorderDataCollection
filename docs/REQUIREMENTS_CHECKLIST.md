@@ -10,9 +10,9 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
 | Built | 120 | built and automated tests pass; not yet checked by hand |
-| Partly built / needs testing | 33 | some of it is built, or it needs a test that is not done yet |
+| Partly built / needs testing | 34 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
-| Not built | 21 | not started |
+| Not built | 20 | not started |
 | Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
 | Withdrawn | 20 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
@@ -46,7 +46,7 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 | DASH |  | 4 | 1 |  |  | 1 |  |  |
 | SEC |  | 10 | 2 |  |  | 3 |  |  |
 | PWA |  |  |  |  | 9 |  |  |  |
-| OPS |  |  | 2 |  | 1 | 6 |  |  |
+| OPS |  |  | 3 |  |  | 6 |  |  |
 | LOAD |  |  | 2 |  |  | 3 |  |  |
 
 ## GEN
@@ -502,9 +502,9 @@ process rule), 189 are built with passing automated tests (69 of them also verif
 | OPS-003 | Blocked | Secrets created in a cloud secret manager. | Hosting (B-04) |
 | OPS-004 | Partly built / needs testing | Database backups and object storage lifecycle configured. | Backup commands and restore tested in CI; production schedule and lifecycle wait for B-04, B-14 |
 | OPS-005 | Blocked | Health checks, TLS, domain and DNS configured. | Hosting and domain (B-04, B-09) |
-| OPS-006 | Partly built / needs testing | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | Structured logs and slow-request warnings built; error tracking and alerts wait for B-04 |
+| OPS-006 | Partly built / needs testing | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | Self-check, status page and alert emails built (D-109); error tracking and metrics need a service account (B-04); alert address to be set on the live copy; TM-SEC-04, TM-OPS-02 to do |
 | OPS-007 | Blocked | Database migrations run as a controlled release step. | Hosting (B-04) |
-| OPS-008 | Not built | Rollback procedure, disaster recovery runbook and incident runbook exist. | Rollback, disaster-recovery and incident runbooks to write in Phase 10 |
+| OPS-008 | Partly built / needs testing | Rollback procedure, disaster recovery runbook and incident runbook exist. | Runbooks written (D-109); nobody has rehearsed them (TM-OPS-04) |
 | OPS-009 | Blocked | Clean deployment reproduced from docs/DEPLOYMENT.md; backup restore tested. | Hosting (B-04) |
 
 ## LOAD

@@ -158,6 +158,10 @@ Project tabs:
   enforced; it stops new accounts above the number.
 - **System status**: shows whether the database, the work queue (redis) and file storage are
   reachable. Click **Check again** to refresh.
+  **Needs attention** lists what the platform found wrong at its last look (it looks every
+  minute): failed recordings, phone calls waiting for a person, failed exports, storage or the
+  work queue not answering. When an alert address is set on the server, the same goes out
+  by email.
 - **Audit log**: every change, who made it and when. Read only.
 
 ---

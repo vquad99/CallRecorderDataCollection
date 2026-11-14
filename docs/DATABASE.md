@@ -166,3 +166,12 @@ The bundle itself is an object in storage under `exports/{project_id}/{job_id}.z
 its size and SHA-256. A bundle is removed from storage when it expires (`EXPORT_BUNDLE_HOURS`,
 default 24) or when a person removes it; the row stays as the record of what was exported.
 
+## Operation alerts (migration 0022, D-109)
+
+| Table | Key columns | Constraints / indexes | On delete |
+|---|---|---|---|
+| operation_alerts | code (one row per kind of problem), active, count, summary, first_seen_at, last_seen_at, last_emailed_at, resolved_at | unique code | - |
+
+A row stays after the problem is gone (`active` false, `resolved_at` set): the record of when it
+was seen. No personal data: counts and fixed sentences only.
+

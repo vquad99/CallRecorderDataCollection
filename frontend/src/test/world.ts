@@ -366,6 +366,7 @@ export function worldHandlers(): Record<string, Handler> {
       status: "ready",
       checks: { database: "ok", redis: "ok" },
       version: { name: "ccp", version: "1.0.0", environment: "test" },
+      alerts: { email_configured: true, recipients: 1, active: [] },
     }),
     "GET /api/v1/projects": ok(page([PROJECT])),
     "GET /api/v1/projects/p1": ok(PROJECT),

@@ -70,6 +70,7 @@ def recover(app: FastAPI) -> int:
     check_pending_audio(app)
     fetch_call_recordings(app)
     sweep_exports(app)
+    check_operations(app)
     return len(stalled)
 
 
@@ -141,6 +142,22 @@ def sweep_exports(app: FastAPI) -> int:
     for job_id in waiting:
         dispatch_export(app, job_id, None)
     return len(waiting)
+
+
+def check_operations(app: FastAPI) -> str | None:
+    """Look for things that need a person, keep them for the status page and email the people
+    who run the platform when there is something new to say (D-109)."""
+    from app.api.health import readiness
+    from app.modules.operations import service as operations
+
+    try:
+        checks, _ = readiness(app)
+        with app.state.session_factory() as db:
+            problems = operations.find_problems(db, app.state.settings, checks["checks"])
+            return operations.review(db, app.state.settings, app.state.email_sender, problems)
+    except Exception:
+        logger.exception("operation_check_failed")
+        return None
 
 
 def check_pending_audio(app: FastAPI) -> int:

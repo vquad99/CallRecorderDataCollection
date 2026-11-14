@@ -46,6 +46,36 @@ describe("StatusPage", () => {
     expect(screen.getByText("Not reachable")).toBeInTheDocument();
   });
 
+  it("lists what the platform found wrong, and says whether anyone is told by email (D-109)", async () => {
+    const answer = (alerts: unknown) =>
+      vi.fn(() => Promise.resolve(json(200, { status: "ready", checks: {}, version, alerts })));
+    vi.stubGlobal(
+      "fetch",
+      answer({
+        email_configured: false,
+        recipients: 0,
+        active: [
+          {
+            code: "EXPORTS_FAILED",
+            summary: "2 exports failed in the last 24 hours.",
+            count: 2,
+            since: "2026-11-14T10:00:00Z",
+          },
+        ],
+      }),
+    );
+    const first = render(<StatusPage />);
+    const list = await screen.findByRole("list", { name: "What needs attention" });
+    expect(list).toHaveTextContent("2 exports failed in the last 24 hours.");
+    expect(screen.getByText(/Nobody is told by email yet: set ALERT_EMAIL/)).toBeInTheDocument();
+    first.unmount();
+
+    vi.stubGlobal("fetch", answer({ email_configured: true, recipients: 2, active: [] }));
+    render(<StatusPage />);
+    expect(await screen.findByText(/found nothing wrong at its last look/)).toBeInTheDocument();
+    expect(screen.getByText(/emails 2 addresses when something new is wrong/)).toBeInTheDocument();
+  });
+
   it("shows an error with retry when the server cannot be reached", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);

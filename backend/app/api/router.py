@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
@@ -16,6 +18,7 @@ from app.modules.auth.deps import csrf_protect, require
 from app.modules.auth.router import router as auth_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.exports.router import router as exports_router
+from app.modules.operations import service as operations
 from app.modules.participants.router import router as participants_router
 from app.modules.portal.router import admin_view_router as portal_admin_view_router
 from app.modules.portal.router import public_router as portal_public_router
@@ -48,10 +51,26 @@ def version(request: Request) -> VersionInfo:
     )
 
 
+class AlertOut(BaseModel):
+    code: str
+    summary: str
+    count: int
+    since: datetime
+
+
+class AlertsOut(BaseModel):
+    # Whether anyone is told by email (ALERT_EMAIL), and to how many addresses.
+    email_configured: bool
+    recipients: int
+    active: list[AlertOut]
+
+
 class SystemStatus(BaseModel):
     status: str
     checks: dict[str, str]
     version: VersionInfo
+    # What the platform found wrong with itself at its last look (D-109).
+    alerts: AlertsOut
 
 
 @api_router.get(
@@ -64,7 +83,18 @@ def system_status(request: Request) -> SystemStatus:
     """Component health for the Super Admin's System status page (owner 2026-11-11: only the
     Super Admin sees it). /health/ready stays for the load balancer, private networks only."""
     body, _ = readiness(request.app)
-    return SystemStatus(status=body["status"], checks=body["checks"], version=version(request))
+    to = operations.recipients(request.app.state.settings)
+    with request.app.state.session_factory() as db:
+        found = [
+            AlertOut(code=a.code, summary=a.summary, count=a.count, since=a.first_seen_at)
+            for a in operations.active(db)
+        ]
+    return SystemStatus(
+        status=body["status"],
+        checks=body["checks"],
+        version=version(request),
+        alerts=AlertsOut(email_configured=bool(to), recipients=len(to), active=found),
+    )
 
 
 api_router.include_router(auth_router)

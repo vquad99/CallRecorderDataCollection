@@ -32,7 +32,7 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | PWA | PWA | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Foundation (Phase 1) | FND | 29 | Yes | Yes | Yes | Yes | Yes | Yes | IN PROGRESS | Gate 1 approved; FND-027 done in Phase 2 |
 | Database model | DB | 6 | Yes | No | Yes | No | Yes | No | IN PROGRESS | Tables arrive phase by phase |
-| Deployment and operations | OPS | 9 | Yes | No | No | No | No | No | NOT STARTED | - |
+| Deployment and operations | OPS | 9 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | Self-check, alerts and runbooks built (D-109); the rest waits for hosting decisions (B-04, B-14) |
 | Load and performance | LOAD | 5 | Yes | No | No | No | No | No | NOT STARTED | - |
 | Capacity and configuration | CAP | 5 | Yes | Yes | Yes | Yes | Yes | No | IN PROGRESS | Load-test parts in Phase 10 |
 | Architecture and stack | ARCH | 5 | Yes | No | No | No | Yes | No | IN PROGRESS | Region decision open (B-04) |
@@ -398,9 +398,9 @@ test in TEST_PLAN.md. It does not mean anything is built.
 | OPS-003 | Secrets created in a cloud secret manager. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-02 | - | BLOCKED | Hosting (B-04) |
 | OPS-004 | Database backups and object storage lifecycle configured. | 10 | n/a | n/a | n/a | [x] TA-STOR-14 | [ ] TM-SEC-03, TM-STOR-02 | docs/evidence/option_o/make_check.txt | IN PROGRESS | Backup commands and restore tested in CI; production schedule and lifecycle wait for B-04, B-14 |
 | OPS-005 | Health checks, TLS, domain and DNS configured. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-02, TM-SEC-01 | - | BLOCKED | Hosting and domain (B-04, B-09) |
-| OPS-006 | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | 10 | n/a | n/a | n/a | [x] TA-FND-22 | [ ] TM-SEC-04, TM-OPS-02 | docs/evidence/option_o/make_check.txt | IN PROGRESS | Structured logs and slow-request warnings built; error tracking and alerts wait for B-04 |
+| OPS-006 | Monitoring (logs, metrics, error tracking), alerting and log retention configured; alerts work. | 10 | n/a | n/a | n/a | [x] TA-FND-22 | [ ] TM-SEC-04, TM-OPS-02 | docs/evidence/option_o/make_check.txt; docs/evidence/phase10/operations_2026-11-14.txt; backend/tests/test_operation_alerts.py | IN PROGRESS | Self-check, status page and alert emails built (D-109); error tracking and metrics need a service account (B-04); alert address to be set on the live copy; TM-SEC-04, TM-OPS-02 to do |
 | OPS-007 | Database migrations run as a controlled release step. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-03 | - | BLOCKED | Hosting (B-04) |
-| OPS-008 | Rollback procedure, disaster recovery runbook and incident runbook exist. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-04 | - | NOT STARTED | Rollback, disaster-recovery and incident runbooks to write in Phase 10 |
+| OPS-008 | Rollback procedure, disaster recovery runbook and incident runbook exist. | 10 | n/a | n/a | n/a | n/a | [ ] TM-OPS-04 | docs/OPERATIONS_RUNBOOK.md | IN PROGRESS | Runbooks written (D-109); nobody has rehearsed them (TM-OPS-04) |
 | OPS-009 | Clean deployment reproduced from docs/DEPLOYMENT.md; backup restore tested. | 10 | n/a | n/a | n/a | n/a | [ ] TM-ARCH-03, TM-SEC-03 | - | BLOCKED | Hosting (B-04) |
 | LOAD-001 | Load test: 50 simultaneous call setups, 50 active conferences, moderator departure from all 50. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-01 | - | BLOCKED | Telephony provider (B-01) |
 | LOAD-002 | 100 participant legs when moderators join by web/VoIP; leg count recalculated if moderators use phone legs. | 10 | n/a | n/a | n/a | n/a | [ ] TM-LOAD-01, TM-TEL-04 | - | BLOCKED | Telephony provider (B-01) |
