@@ -36,6 +36,10 @@ dev = [
 package = false
 # Only resolve releases at least two weeks old at lock time (stability; TECH_STACK.md).
 exclude-newer = "2026-10-26T00:00:00Z"
+# Security fixes are not held back by the two-week rule: these two had vulnerabilities published
+# on 2026-11-14 (dnspython CVE-2026-128089, opentelemetry-api CVE-2026-126360; found by pip-audit in
+# CI) and take the fixed release at once. Remove a line once the date above has passed it.
+exclude-newer-package = { dnspython = "2026-11-15T00:00:00Z", opentelemetry-api = "2026-11-15T00:00:00Z" }
 
 [tool.ruff]
 line-length = 100

@@ -65,6 +65,38 @@ describe("project detail", () => {
     });
   });
 
+  it("makes a paused project active again without choosing anything else first", async () => {
+    let current = { ...project, status: "ACTIVE", accepts_new_work: true };
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "projects.members"], {
+        "GET /api/v1/projects/p1": () => [200, current],
+        "POST /api/v1/projects/p1/status": (body) => {
+          const status = (body as { status: string }).status;
+          if (!["PAUSED", "ACTIVE"].includes(status) || status === current.status)
+            return [409, { error: { code: "INVALID_TRANSITION", message: "Cannot change" } }];
+          current = { ...current, status, accepts_new_work: status === "ACTIVE" };
+          return [200, current];
+        },
+      }),
+    );
+    renderAt("/projects/p1");
+    // Active -> Paused (the first choice offered for an active project).
+    await userEvent.click(await screen.findByRole("button", { name: "Change status" }));
+    expect(
+      await screen.findByText("This project does not accept new work until it is active."),
+    ).toBeInTheDocument();
+    // The box now offers Active first; one more click sends it.
+    expect(screen.getByLabelText("Change status to")).toHaveValue("ACTIVE");
+    await userEvent.click(screen.getByRole("button", { name: "Change status" }));
+    expect(await screen.findByText("This project accepts new work.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/projects/p1/status").map((c) => c.body)).toEqual(
+      [
+        { status: "PAUSED", reason: null },
+        { status: "ACTIVE", reason: null },
+      ],
+    );
+  });
+
   it("shows a read-only project to a member without manage rights", async () => {
     fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
     renderAt("/projects/p1");

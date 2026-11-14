@@ -5,6 +5,10 @@ two weeks earlier: `exclude-newer = 2026-10-26` in `backend/pyproject.toml`, `np
 (DECISIONS.md D-023). `tools/check_repo.py` (TA-ARCH-01) fails CI when a version below differs from
 the lockfile or image tag it names.
 
+Security fixes are the exception: a package with a published vulnerability (found by `pip-audit`
+or `npm audit` in CI) takes its fixed release at once, through `exclude-newer-package` in
+`backend/pyproject.toml` (2026-11-14: dnspython 2.9.2, opentelemetry-api 1.45.2).
+
 ## Pinned versions
 
 | Component | Package | Version | Source |

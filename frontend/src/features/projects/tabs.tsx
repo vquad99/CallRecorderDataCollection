@@ -46,7 +46,12 @@ export function OverviewTab() {
   const canManage = can("projects.manage");
   const { busy, error, message, run } = useAction();
   const next = api.NEXT_STATUSES[project.status];
-  const [target, setTarget] = useState<api.ProjectStatus>(next[0] ?? project.status);
+  const [chosen, setTarget] = useState<api.ProjectStatus>(next[0] ?? project.status);
+  // What will be sent is always one of the choices on screen. After a change the list is a new
+  // one (Paused offers Active and Archived): the earlier choice is not in it, so the first of the
+  // new list counts. Before this the box showed "Active" but still sent the old choice, and a
+  // paused project could not be made active again without picking something else first.
+  const target = next.includes(chosen) ? chosen : (next[0] ?? project.status);
   const [reason, setReason] = useState("");
 
   return (
