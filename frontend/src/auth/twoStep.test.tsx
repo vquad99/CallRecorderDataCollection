@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, ME, renderAt, signedInAs } from "../test/fakeApi";
 import { ALL_PERMISSIONS, USER, worldHandlers } from "../test/world";
+import { qrCode, qrPath } from "./qr";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -50,7 +51,15 @@ describe("two-step sign-in for admins", () => {
 
     await userEvent.type(screen.getByLabelText(/^Your password/), "a-long-password");
     await userEvent.click(screen.getByRole("button", { name: "Turn on two-step sign-in" }));
-    // The key is shown in groups, with a way to copy it and a link for a phone.
+    // A code to scan, made from the very link the server gave.
+    const code = await screen.findByRole("img", { name: "QR code for your authenticator app" });
+    const size = qrCode(`otpauth://totp/CCP:admin@example.org?secret=${KEY}`).size;
+    expect(code).toHaveAttribute("viewBox", `0 0 ${size + 8} ${size + 8}`);
+    expect(code.querySelector("path")?.getAttribute("d")).toBe(
+      qrPath(qrCode(`otpauth://totp/CCP:admin@example.org?secret=${KEY}`)),
+    );
+    // For someone who cannot scan: the key in groups, a way to copy it, a link for a phone.
+    await userEvent.click(screen.getByText("Cannot scan? Type the key instead"));
     expect(await screen.findByText("AAAA BBBB CCCC DDDD EEEE FFFF")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open in an authenticator app on this device" }),

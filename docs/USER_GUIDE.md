@@ -48,8 +48,9 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
 
 - **Super Admin and Project Admin must have it.** The first time you sign in, the only page you
   get is **Set up two-step sign-in**. Type your password and click **Turn on two-step sign-in**.
-  In the authenticator app add an account and type the **key** shown (**Copy key** copies it; on a
-  phone, **Open in an authenticator app on this device** adds it for you). Type the 6-digit code
+  In the authenticator app choose to add an account and **scan the code** on the page. (No
+  camera? Click **Cannot scan? Type the key instead**: type the key shown, or **Copy key**; on a
+  phone, **Open in an authenticator app on this device** adds it for you.) Type the 6-digit code
   the app shows and click **Confirm**. The application opens.
 - **Everyone else may turn it on**: click your name at the top right, then **My account →
   Two-step sign-in**, and do the same.

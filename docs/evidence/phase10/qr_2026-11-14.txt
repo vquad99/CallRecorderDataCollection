@@ -1,0 +1,59 @@
+QR code on the two-step set-up (D-107): how it was checked
+2026-11-14.
+
+NOT DONE: nobody has scanned the code with a phone yet. Everything below was done by programs.
+
+What is checked
+---------------
+frontend/src/auth/qr.ts makes the QR code itself (no library): Model 2, byte mode, error
+correction level M, versions 1 to 40, the mask chosen by the standard's penalty rules.
+
+1. Against an independent generator
+   Twelve texts were encoded by qr.ts and by the Python library `qrcode` (byte mode, level M,
+   the same mask). Every module must be equal.
+
+   version  1    1 bytes: same as the reference generator: True (modules differing 0)
+   version  1   11 bytes: same as the reference generator: True (modules differing 0)
+   version  2   21 bytes: same as the reference generator: True (modules differing 0)
+   version  9  163 bytes: same as the reference generator: True (modules differing 0)   an otpauth link
+   version 10  201 bytes: same as the reference generator: True (modules differing 0)   an otpauth link, long name
+   version 13  300 bytes: same as the reference generator: True (modules differing 0)
+   version 21  680 bytes: same as the reference generator: True (modules differing 0)   Devanagari text
+   version 18  520 bytes: same as the reference generator: True (modules differing 0)
+   version 24  900 bytes: same as the reference generator: True (modules differing 0)
+   version 31 1400 bytes: same as the reference generator: True (modules differing 0)
+   version 35 1800 bytes: same as the reference generator: True (modules differing 0)
+   version 40 2300 bytes: same as the reference generator: True (modules differing 0)
+
+   The first run of this check failed for versions 9 and up (216 to 5028 modules differing):
+   one alignment square was misplaced from version 7 (a rounding mistake in its position). After
+   the fix all twelve are equal.
+
+2. Against an independent decoder
+   Each code was drawn as a picture at seven sizes and read with both of OpenCV's QR decoders
+   (14 settings). Every code was read back as exactly its text by at least 7 settings; none was
+   unreadable. (One of the two decoders misses some codes at some sizes; the other read all.)
+
+3. As the browser draws it
+   The two-step journey (frontend/journeys/twostep.spec.ts, Microsoft Edge, a backend that
+   requires two-step sign-in) was stopped at the set-up page and the page photographed. OpenCV
+   read the code from the picture of the code alone and from the picture of the whole page, with
+   6 of 6 settings:
+
+   otpauth://totp/Conversation%20Collection%3Ademo.project-admin%40example.org?secret=<32 letters>&issuer=Conversation%20Collection&digits=6&period=30
+
+   That is the link the server gave for the account (the secret is left out here; the account's
+   two-step sign-in was turned off again at the end of the journey). The journey then entered
+   the code an authenticator would show for that secret and the application opened.
+
+4. Kept fixed
+   frontend/src/auth/qr.test.ts holds, for seven of the checked texts, the version, the mask,
+   the number of dark modules and a number that depends on the place of every dark module. A
+   change to a single module fails the test.
+
+Automated checks (2026-11-14)
+-----------------------------
+Frontend  prettier --check ., tsc --noEmit, eslint . ........ no problems
+          vitest ............................................ 26 files, 449 tests passed
+          vite build + bundle budget ........................ first screen 123.3 KB (limit 125 KB)
+Journey   twostep.spec.ts, Edge, backend with the rule on ... 1 passed

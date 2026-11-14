@@ -237,7 +237,8 @@ start, change or cancel a call (every change is refused while viewing).
 | A lost authenticator is reset only by people who manage users, never for one's own account, and ends every session of that person | `POST /users/{id}/mfa/reset`; audited as `user.mfa_reset` | test_admin_mfa.py, test_security_access.py |
 | The last Super Admin has a way back that needs the server, not the application | `python -m app.cli reset-mfa <email>`; audited with no actor | test_admin_mfa.py |
 
-Open: the key is typed or copied; there is no QR code to scan (needs a library; DECISIONS D-106).
+The set-up shows the authenticator link as a QR code made in the browser by the application's
+own code (D-107): the secret is sent to no other service to draw it.
 
 ## 10. Open security questions
 

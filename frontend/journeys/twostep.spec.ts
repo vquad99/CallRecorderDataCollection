@@ -75,6 +75,11 @@ test("an admin sets up two-step sign-in before anything else and then signs in w
   await test.step("the admin adds the key to an authenticator app and enters its code", async () => {
     await page.getByLabel(/^Your password/).fill(SEEDED_PASSWORD);
     await page.getByRole("button", { name: "Turn on two-step sign-in" }).click();
+    // A code to scan is shown; the key behind it can be typed instead.
+    const code = page.getByRole("img", { name: "QR code for your authenticator app" });
+    await expect(code).toBeVisible();
+    expect(((await code.locator("path").getAttribute("d")) ?? "").length).toBeGreaterThan(2000);
+    await page.getByText("Cannot scan? Type the key instead").click();
     key = ((await page.locator(".twostep__key").textContent()) ?? "").replace(/\s/g, "");
     expect(key).toMatch(/^[A-Z2-7]{16,}$/);
     await expect(
