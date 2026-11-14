@@ -370,7 +370,7 @@ function ProviderTraffic({ days }: { days: number }) {
   );
 }
 
-function CallList({ projectId }: { projectId: string }) {
+function CallList({ projectId, title }: { projectId: string; title: string }) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState("");
   const list = useResource(
@@ -386,7 +386,7 @@ function CallList({ projectId }: { projectId: string }) {
   return (
     <section className="card" aria-labelledby="all-calls">
       <div className="calls-list__head">
-        <h2 id="all-calls">All calls</h2>
+        <h2 id="all-calls">{title}</h2>
         <Select
           label="Show"
           value={state}
@@ -669,8 +669,49 @@ function Body({ data, allProjects }: { data: tel.CallAnalytics; allProjects: boo
   );
 }
 
+/** For people who make calls but do not assign tasks (moderators): their own calls, as a list
+ * with links to the tasks. The figures above are for the people who run the project (D-104). */
+function MyCalls() {
+  const [projectId, setProjectId] = useState("");
+  const projects = useResource(() => listProjects({ page_size: 100 }), []);
+  return (
+    <section aria-labelledby="calls-title" className="stack">
+      <div className="page-header">
+        <div className="page-header__text">
+          <h1 id="calls-title">
+            <IconTile name="phone" tone="blue" />
+            My phone calls
+          </h1>
+          <p className="page-header__lead">
+            The calls you made, newest first. Open a task to continue with its call.
+          </p>
+        </div>
+        <div className="toolbar">
+          <Select
+            label="Project"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            options={[
+              { value: "", label: "All my projects" },
+              ...(projects.state.status === "loaded" ? projects.state.data.items : []).map((p) => ({
+                value: p.id,
+                label: `${p.code} · ${p.name}`,
+              })),
+            ]}
+          />
+        </div>
+      </div>
+      <CallList key={projectId} projectId={projectId} title="My calls" />
+    </section>
+  );
+}
+
 export function CallsPage() {
   const { can } = useAuth();
+  return can("tasks.assign") ? <CallFigures /> : <MyCalls />;
+}
+
+function CallFigures() {
   const [projectId, setProjectId] = useState("");
   const [days, setDays] = useState(30);
   const [saving, setSaving] = useState(false);
@@ -736,9 +777,9 @@ export function CallsPage() {
       {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? <Body data={state.data} allProjects={projectId === ""} /> : null}
-      {can("tasks.assign") ? <ProviderTraffic days={days} /> : null}
+      <ProviderTraffic days={days} />
       {/* A new list for each project: it starts again at its first page. */}
-      <CallList key={projectId} projectId={projectId} />
+      <CallList key={projectId} projectId={projectId} title="All calls" />
     </section>
   );
 }

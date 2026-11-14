@@ -289,3 +289,51 @@ export const consentForm = (projectId: string, participantId: string) =>
   apiRequest<ConsentFormView>(`${pp(projectId)}/${participantId}/consent-form`);
 export const consentFormFileUrl = (projectId: string, participantId: string) =>
   `${pp(projectId)}/${participantId}/consent-form/file`;
+
+/** One session (task) a participant was part of, as the details view lists it (D-104). */
+export interface ParticipantSession {
+  task_id: string;
+  task_code: string;
+  mode: "TELEPHONY" | "FACE_TO_FACE";
+  slot: "A" | "B";
+  status: TaskStatus;
+  created_at: string;
+  other_participant_code: string;
+  moderator: string | null;
+  /** The consent noted for this person in this session; empty when none was noted yet. */
+  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | null;
+  consent_method: string | null;
+  consent_at: string | null;
+  recordings: number;
+  recording_seconds: number | null;
+  recorded_at: string | null;
+  phone_calls: number;
+}
+/** Everything the platform holds about one participant in one project (D-104). */
+export interface ParticipantDetails {
+  participant: Participant;
+  updated_at: string;
+  added_by: string | null;
+  projects: { id: string; code: string; name: string }[];
+  removed: { at: string; by: string | null; reason: string | null } | null;
+  link: {
+    active: boolean;
+    created_at: string;
+    created_by: string | null;
+    expires_at: string;
+    last_used_at: string | null;
+    handed_out: boolean;
+  } | null;
+  consent_form: ConsentFormView | null;
+  sessions: ParticipantSession[];
+  sessions_total: number;
+  minutes: ParticipantMinutes | null;
+  calls: {
+    total: number;
+    recorded: number;
+    last_at: string | null;
+    last_state: string | null;
+  } | null;
+}
+export const participantDetails = (projectId: string, participantId: string) =>
+  apiRequest<ParticipantDetails>(`${pp(projectId)}/${participantId}/details`);

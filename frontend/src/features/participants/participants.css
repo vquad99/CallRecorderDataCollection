@@ -1,0 +1,68 @@
+/* Participant details panel (D-104): a header, figures at a glance, then one block per subject. */
+.pd {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}
+.pd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.pd-head__text {
+  flex: 1;
+  min-width: 220px;
+}
+.pd-head__text h2 {
+  margin: 0;
+}
+.pd-head__text p {
+  margin: 2px 0 0;
+}
+.pd-head__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pd-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.pd-tiles .checks__row {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.pd-tiles .checks__row dd {
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+.pd-tiles .checks__row dd small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.pd-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.pd-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
+}
+.pd-section > h3 .icon {
+  color: var(--muted);
+}
+.pd-section > h4 {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}

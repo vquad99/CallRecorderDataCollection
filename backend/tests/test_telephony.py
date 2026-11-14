@@ -3,7 +3,7 @@ the call, ticks the checklist, closes it after consent, the platform finds the p
 recording, stores it and moves the task to Recorded; unclear matches wait for a person; every
 failure is visible, recoverable and cancellable; figures, the list and the CSV count what happened.
 
-Requirements: TEL-002, TEL-010, TEL-011, TEL-015, TEL-018, TEL-027, TEL-036, TEL-037, TEL-038, GEN-004
+Requirements: TEL-002, TEL-010, TEL-011, TEL-015, TEL-018, TEL-027, TEL-036, TEL-037, TEL-038, GEN-004, PART-008, PART-016
 """
 
 from __future__ import annotations
@@ -760,7 +760,7 @@ def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[st
     sent = w["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
     assert sent.status_code == 200, sent.text
 
-    for who in ("pa", "mod"):
+    for who in ("pa", "sa"):
         a = w[who].get("/api/v1/telephony/analytics?days=7")
         assert a.status_code == 200, a.text
         body = a.json()
@@ -797,9 +797,13 @@ def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[st
         assert sum(body["automatic_checks"].values()) == 1
         assert body["checklist"]["A_JOINED"] == body["checklist"]["closed_calls"] == 1
         assert [p["code"] for p in body["by_project"]] == ["PHONE"]
-    # A project's target belongs to those who manage it.
     assert w["pa"].get("/api/v1/telephony/analytics").json()["target_minutes_per_day"] is not None
-    assert w["mod"].get("/api/v1/telephony/analytics").json()["target_minutes_per_day"] is None
+    # Figures and the spreadsheet are for the people who run the project (D-104): a moderator
+    # has neither, only the list of their own calls.
+    assert w["mod"].get("/api/v1/telephony/analytics").status_code == 403
+    assert w["mod"].get("/api/v1/calls/export").status_code == 403
+    mine = w["mod"].get("/api/v1/calls").json()
+    assert mine["total"] == 3
 
     page = w["pa"].get("/api/v1/calls?page_size=2").json()
     assert page["total"] == 3
@@ -827,9 +831,8 @@ def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[st
 
     # Another moderator in the same project sees none of these calls.
     mod2 = w["api"]("mod2@example.org")
-    assert mod2.get("/api/v1/telephony/analytics").json()["calls"] == 0
     assert mod2.get("/api/v1/calls").json()["total"] == 0
-    assert len(list(csv.DictReader(io.StringIO(mod2.get("/api/v1/calls/export").text)))) == 0
+    assert mod2.get("/api/v1/telephony/analytics").status_code == 403
 
 
 def test_a_call_left_open_is_counted_as_needing_a_person(world: dict[str, Any]) -> None:
@@ -866,6 +869,82 @@ def test_the_progress_report_lists_each_tasks_calls(world: dict[str, Any]) -> No
         "1",
         "RECORDED",
     )
+
+
+def test_participant_details_tell_everything_about_the_person_to_those_who_manage_them(
+    world: dict[str, Any],
+) -> None:
+    """The Participants page's View shows the whole person, not only the consent form (D-104):
+    profile, who added them, their sessions with consent and recording, minutes, phone calls."""
+    w = world
+    tid, call = started_and_closed(w)
+    w["provider"].listed = [session("PD1", datetime.now(UTC))]
+    due_now(w, call["id"])
+    sweep(w)
+    w["new_task"]()  # a second session, not called yet
+    base = f"/api/v1/projects/{w['project_id']}/participants"
+
+    got = w["pa"].get(f"{base}/{w['a']['id']}/details")
+    assert got.status_code == 200, got.text
+    d = got.json()
+    person = d["participant"]
+    assert (person["participant_code"], person["display_label"], person["language_code"]) == (
+        w["a"]["participant_code"],
+        "Asha",
+        "hi",
+    )
+    assert person["phone"] == A_PHONE  # a project admin may see contact details
+    assert d["added_by"] == "pa"
+    assert [p["code"] for p in d["projects"]] == ["PHONE"]
+    assert d["removed"] is None
+    assert d["link"] is None  # no personal link was made
+    assert d["sessions_total"] == 2
+    newest, first = d["sessions"]
+    assert (first["task_id"], first["slot"], first["mode"], first["status"]) == (
+        tid,
+        "A",
+        "TELEPHONY",
+        "RECORDED",
+    )
+    assert first["other_participant_code"] == w["b"]["participant_code"]
+    assert first["moderator"] == "mod"
+    assert (first["consent_status"], first["consent_method"]) == ("GIVEN", "VERBAL_NOTED")
+    assert (first["recordings"], first["recording_seconds"], first["phone_calls"]) == (1, 4.0, 1)
+    assert (newest["status"], newest["recordings"], newest["consent_status"]) == (
+        "IN_PROGRESS",
+        0,
+        None,
+    )
+    assert d["minutes"]["conversations"] == 1
+    assert d["calls"] == {
+        "total": 1,
+        "recorded": 1,
+        "last_at": d["calls"]["last_at"],
+        "last_state": "RECORDED",
+    }
+    assert d["consent_form"]["answered"] is False  # they did not answer the form themselves
+
+    # Participant B is in the same sessions as B; phone calls ring A only.
+    b = w["pa"].get(f"{base}/{w['b']['id']}/details").json()
+    assert [s["slot"] for s in b["sessions"]] == ["B", "B"]
+    assert b["calls"] is None
+
+    # Only those who manage participants: not the moderator of the session, not another one.
+    assert w["mod"].get(f"{base}/{w['a']['id']}/details").status_code == 403
+    assert w["api"]("mod2@example.org").get(f"{base}/{w['a']['id']}/details").status_code == 403
+    # A removed participant says so, with who and why.
+    extra = w["pa"].post(base, json={"display_label": "Chitra", "language_code": "hi"})
+    assert extra.status_code == 201, extra.text
+    cid = extra.json()["id"]
+    fresh = w["pa"].get(f"{base}/{cid}/details").json()
+    assert (fresh["sessions"], fresh["sessions_total"], fresh["calls"]) == ([], 0, None)
+    gone = w["pa"].post(f"{base}/{cid}/delete", json={"reason": "Asked to be removed"})
+    assert gone.status_code == 200, gone.text
+    after = w["sa"].get(f"{base}/{cid}/details")
+    assert after.status_code == 200, after.text
+    removed = after.json()["removed"]
+    assert (removed["by"], removed["reason"]) == ("pa", "Asked to be removed")
+    assert after.json()["participant"]["deleted"] is True
 
 
 def test_provider_traffic_is_passed_on_for_managers_only(world: dict[str, Any]) -> None:

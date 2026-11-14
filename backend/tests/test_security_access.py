@@ -905,6 +905,14 @@ CASES: list[Case] = [
         Perm.RECORDINGS_VIEW,
         lambda e, s, who: {"purpose": "play"},
     ),
+    # Everything about one participant (D-104): the people who manage participants only.
+    case(
+        "GET",
+        PP + "/details",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/details",
+        {SA, PA},
+        Perm.PARTICIPANTS_VIEW,
+    ),
     # Phone calls (D-101): anyone who sees tasks sees whether calls are set up; a task's calls are
     # seen by those who see the task; only the assigned moderator starts a call; the moderator who
     # made it, or a manager of the project, changes it; agent seats are user administration.
@@ -971,14 +979,14 @@ CASES: list[Case] = [
         Perm.CALLS_END,
         before=lambda e: _reopen_call(e),
     ),
-    # Call analytics and the list of calls: managers see their projects, moderators their own
-    # calls (D-102); TxContact's account-wide traffic is for people who assign tasks.
+    # Call figures, the CSV and TxContact's account-wide traffic are for people who assign tasks;
+    # the list of calls is also open to moderators, who get their own calls only (D-104).
     case(
         "GET",
         "/api/v1/telephony/analytics",
         lambda e, s: f"/api/v1/telephony/analytics?project_id={s.project}",
-        {SA, PA, MO, MO2, QC},
-        Perm.TASKS_VIEW,
+        {SA, PA},
+        Perm.TASKS_ASSIGN,
     ),
     case(
         "GET",
@@ -991,8 +999,8 @@ CASES: list[Case] = [
         "GET",
         "/api/v1/calls/export",
         lambda e, s: f"/api/v1/calls/export?project_id={s.project}",
-        {SA, PA, MO, MO2, QC},
-        Perm.TASKS_VIEW,
+        {SA, PA},
+        Perm.TASKS_ASSIGN,
     ),
     case(
         "GET",

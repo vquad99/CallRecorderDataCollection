@@ -3,7 +3,7 @@
 // of each participant's own consent answer (approve, reject with a note, resend the form).
 import { useState } from "react";
 
-import { apiDownload, type ApiError } from "../../api/client";
+import type { ApiError } from "../../api/client";
 import { getProject, listProjects } from "../../api/projects";
 import * as work from "../../api/work";
 import { Button } from "../../components/form/Button";
@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { StatusBadge } from "../../components/StatusBadge";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { ConsentList, EMPTY, ParticipantForm } from "../projects/ParticipantsTab";
+import { ParticipantDetailsPanel } from "./ParticipantDetails";
 
 const ANSWER: Record<string, [string, string]> = {
   NONE: ["DRAFT", "Not answered"],
@@ -129,104 +130,6 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
               </tbody>
             </table>
           </div>
-        </>
-      ) : null}
-    </section>
-  );
-}
-
-const ANSWER_WORDS: Record<string, string> = {
-  GIVEN: "Agreed",
-  REFUSED: "Did not agree",
-  WITHDRAWN: "Withdrew consent",
-};
-const when = (iso: string) => new Date(iso).toLocaleString();
-
-/** One participant's consent form as they answered it, with a printable download. */
-function ConsentFormPanel({
-  projectId,
-  participantId,
-  onClose,
-}: {
-  projectId: string;
-  participantId: string;
-  onClose: () => void;
-}) {
-  const { state, reload } = useResource(
-    () => work.consentForm(projectId, participantId),
-    [projectId, participantId],
-  );
-  const [error, setError] = useState<ApiError | null>(null);
-  return (
-    <section className="card stack stack--tight" aria-label="Consent form">
-      {state.status === "loading" ? <LoadingState label="Loading the consent form" /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? (
-        <>
-          <div className="page-header">
-            <h2>Consent form of {state.data.participant_code}</h2>
-            <div className="actions">
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  void apiDownload(
-                    work.consentFormFileUrl(projectId, participantId),
-                    `consent_${state.data.project_code}_${state.data.participant_code}.html`,
-                  ).catch((err: unknown) => setError(toApiError(err)))
-                }
-              >
-                <Icon name="upload" size={15} />
-                Download
-              </Button>
-              <Button variant="secondary" onClick={onClose}>
-                Close
-              </Button>
-            </div>
-          </div>
-          <dl className="checks">
-            <div className="checks__row">
-              <dt>Answer</dt>
-              <dd>
-                {state.data.current ? ANSWER_WORDS[state.data.current.status] : "Not answered yet"}
-              </dd>
-            </div>
-            {state.data.current ? (
-              <div className="checks__row">
-                <dt>Answered on</dt>
-                <dd>{when(state.data.current.answered_at)}</dd>
-              </div>
-            ) : null}
-            <div className="checks__row">
-              <dt>Form version</dt>
-              <dd>{state.data.form_version}</dd>
-            </div>
-            {state.data.current?.review_status ? (
-              <div className="checks__row">
-                <dt>Review</dt>
-                <dd>
-                  {REVIEW[state.data.current.review_status]?.[1]}
-                  {state.data.current.review_note ? `: ${state.data.current.review_note}` : ""}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-          <h3>{state.data.answered ? "Form text they answered" : "Form text they will see"}</h3>
-          <div className="consent-doc">
-            {state.data.form_text.trim() || "No consent form has been written for this project."}
-          </div>
-          {state.data.earlier.length > 0 ? (
-            <>
-              <h3>Earlier answers</h3>
-              <ul className="list">
-                {state.data.earlier.map((a) => (
-                  <li key={a.answered_at}>
-                    {when(a.answered_at)} · {ANSWER_WORDS[a.status]} · version {a.policy_version}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          <ErrorNotice error={error} />
         </>
       ) : null}
     </section>
@@ -603,7 +506,7 @@ export function ParticipantsPage() {
             </table>
           </div>
           {viewing ? (
-            <ConsentFormPanel
+            <ParticipantDetailsPanel
               key={viewing}
               projectId={projectId}
               participantId={viewing}

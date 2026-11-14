@@ -2,7 +2,7 @@
 // would do it (D-101, D-103). The backend talks to a stand-in for TxContact
 // (backend/tests/fake_txcontact.py): no phone rings, everything else is real (browser, backend,
 // database, file storage). Skipped when the backend has no phone provider configured.
-// Requirements: TEL-002, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038
+// Requirements: TEL-002, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038, PART-016
 import { expect, test, type Page } from "@playwright/test";
 
 import {
@@ -185,5 +185,38 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     expect(details.call.note).toBe("clear line");
     expect(details.call.checklist.A_JOINED).toBeTruthy();
     expect(details.call.checklist.QUALITY_OK).toBeNull();
+  });
+
+  await test.step("the admin opens everything about the person who was called (D-104)", async () => {
+    await admin.goto("/participants");
+    await admin.getByLabel("Project", { exact: true }).selectOption(project.id);
+    const row = admin.getByRole("row").filter({ hasText: asha.participant_code });
+    await row.getByRole("button", { name: "View" }).click();
+    const panel = admin.getByRole("region", { name: "Participant details" });
+    await expect(panel.getByRole("heading", { name: "Sessions" })).toBeVisible();
+    for (const title of ["Profile", "Work in this project", "Personal link", "Consent form"]) {
+      await expect(panel.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    }
+    await expect(panel).toContainText(`Asha ${code}`);
+    await expect(panel).toContainText("Phone calls to them1");
+    await expect(panel).toContainText("Calls with a recording1");
+    const session = panel.getByRole("row").filter({ hasText: main.task_code });
+    await expect(session).toContainText("Telephony");
+    await expect(session).toContainText("Participant A");
+    await expect(session).toContainText(bina.participant_code);
+    await expect(session).toContainText("Agreed");
+    await expect(session).toContainText("12 s");
+    await session.getByRole("link", { name: main.task_code }).click();
+    await expect(admin).toHaveURL(new RegExp(`/tasks/${main.id}$`));
+  });
+
+  await test.step("the moderator has a list of their own calls, and no figures (D-104)", async () => {
+    await moderator.goto("/calls");
+    await expect(moderator.getByRole("heading", { name: "My phone calls" })).toBeVisible();
+    await expect(moderator.getByRole("link", { name: main.task_code })).toBeVisible();
+    await expect(moderator.getByRole("heading", { name: "Calls per day" })).toHaveCount(0);
+    await expect(moderator.getByRole("button", { name: "Download calls (CSV)" })).toHaveCount(0);
+    const figures = await moderator.request.get("/api/v1/telephony/analytics");
+    expect(figures.status()).toBe(403);
   });
 });

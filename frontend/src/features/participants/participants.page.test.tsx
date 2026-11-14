@@ -4,11 +4,106 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, worldHandlers } from "../../test/world";
+import { ALL_PERMISSIONS, PARTICIPANT, worldHandlers } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
 const wait = { timeout: 5000 };
+
+const DETAILS = {
+  participant: { ...PARTICIPANT, notes: "Prefers evening calls" },
+  updated_at: "2026-11-12T10:00:00Z",
+  added_by: "Priya Admin",
+  projects: [
+    { id: "p1", code: "HINDI", name: "Hindi conversations" },
+    { id: "p2", code: "TAMIL", name: "Tamil talks" },
+  ],
+  removed: null,
+  link: {
+    active: true,
+    created_at: "2026-11-09T06:00:00Z",
+    created_by: "Priya Admin",
+    expires_at: "2026-12-09T06:00:00Z",
+    last_used_at: "2026-11-10T08:00:00Z",
+    handed_out: false,
+  },
+  consent_form: {
+    participant_code: "P000001",
+    project_code: "HINDI",
+    project_name: "Hindi conversations",
+    form_text: "I agree that my voice is recorded.",
+    form_version: "2",
+    answered: true,
+    current: {
+      status: "GIVEN",
+      answered_at: "2026-11-10T08:00:00Z",
+      policy_version: "2",
+      review_status: "REJECTED",
+      review_note: "Wrong person",
+      reviewed_at: "2026-11-10T09:00:00Z",
+    },
+    earlier: [
+      {
+        status: "REFUSED",
+        answered_at: "2026-11-09T08:00:00Z",
+        policy_version: "1",
+        review_status: null,
+        review_note: "",
+        reviewed_at: null,
+      },
+    ],
+  },
+  sessions: [
+    {
+      task_id: "t7",
+      task_code: "T000007",
+      mode: "TELEPHONY",
+      slot: "A",
+      status: "RECORDED",
+      created_at: "2026-11-11T05:00:00Z",
+      other_participant_code: "P000002",
+      moderator: "Mohan",
+      consent_status: "GIVEN",
+      consent_method: "VERBAL_NOTED",
+      consent_at: "2026-11-11T05:10:00Z",
+      recordings: 1,
+      recording_seconds: 420,
+      recorded_at: "2026-11-11T05:12:00Z",
+      phone_calls: 3,
+    },
+    {
+      task_id: "t3",
+      task_code: "T000003",
+      mode: "FACE_TO_FACE",
+      slot: "B",
+      status: "ASSIGNED",
+      created_at: "2026-11-10T05:00:00Z",
+      other_participant_code: "P000004",
+      moderator: null,
+      consent_status: null,
+      consent_method: null,
+      consent_at: null,
+      recordings: 0,
+      recording_seconds: null,
+      recorded_at: null,
+      phone_calls: 0,
+    },
+  ],
+  sessions_total: 2,
+  minutes: {
+    conversations: 1,
+    recorded_minutes: 7,
+    approved_conversations: 1,
+    approved_minutes: 7,
+    payable_minutes: 3.5,
+  },
+  calls: {
+    total: 3,
+    recorded: 1,
+    last_at: "2026-11-11T05:05:00Z",
+    last_state: "RECORDED",
+  },
+};
 
 function open(extra: Parameters<typeof signedInAs>[1] = {}) {
   return fakeApi(signedInAs(ALL_PERMISSIONS, { ...worldHandlers(), ...extra }));
@@ -130,49 +225,96 @@ describe("participants section", () => {
     ).toEqual([false, true]);
   });
 
-  it("opens one participant's consent form as they answered it", async () => {
+  it("opens everything about one participant, not only the consent form (D-104)", async () => {
+    const { calls } = open({
+      "GET /api/v1/projects/p1/participants/a1/details": () => [200, DETAILS],
+    });
+    renderAt("/participants");
+    const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "View" }));
+    const panel = await screen.findByRole("region", { name: "Participant details" });
+    expect(await within(panel).findByRole("heading", { name: "P000001 · Asha" })).toBeVisible();
+    for (const title of [
+      "Profile",
+      "Work in this project",
+      "Personal link",
+      "Consent form",
+      "Sessions",
+    ]) {
+      expect(within(panel).getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    // Profile: who they are, who added them, where else they are.
+    expect(panel).toHaveTextContent("Added byPriya Admin");
+    expect(panel).toHaveTextContent("ProjectsHINDI · Hindi conversations, TAMIL · Tamil talks");
+    expect(panel).toHaveTextContent("NotesPrefers evening calls");
+    // Work: minutes and the phone calls made to them.
+    expect(panel).toHaveTextContent("Sessions2");
+    expect(panel).toHaveTextContent("Payable minutes3.5 min");
+    expect(panel).toHaveTextContent("Phone calls to them3");
+    expect(panel).toHaveTextContent("Calls with a recording1");
+    // Personal link.
+    expect(panel).toHaveTextContent("StateWorking");
+    expect(panel).toHaveTextContent("Given byEmail only");
+    // The consent form, as before.
+    expect(within(panel).getByText("I agree that my voice is recorded.")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Sent back: Wrong person");
+    expect(panel).toHaveTextContent("Did not agree · version 1");
+    expect(within(panel).getByRole("button", { name: "Download consent form" })).toBeEnabled();
+    // Every session, with a way to the task.
+    const sessions = within(panel).getByRole("table", { name: "Sessions of this participant" });
+    const first = within(sessions).getByRole("link", { name: "T000007" }).closest("tr");
+    expect(within(sessions).getByRole("link", { name: "T000007" })).toHaveAttribute(
+      "href",
+      "/tasks/t7",
+    );
+    expect(first).toHaveTextContent("Telephony");
+    expect(first).toHaveTextContent("Participant A");
+    expect(first).toHaveTextContent("P000002");
+    expect(first).toHaveTextContent("Mohan");
+    expect(first).toHaveTextContent("Agreed");
+    expect(first).toHaveTextContent("verbal noted");
+    expect(first).toHaveTextContent("7.0 min");
+    const second = within(sessions).getByRole("link", { name: "T000003" }).closest("tr");
+    expect(second).toHaveTextContent("Face-to-face");
+    expect(second).toHaveTextContent("Participant B");
+    expect(second).toHaveTextContent("Nobody yet");
+    expect(second).toHaveTextContent("Not noted");
+    // One request brings it all.
+    expect(calls.filter((c) => c.path.includes("/participants/a1/")).map((c) => c.path)).toEqual([
+      "/api/v1/projects/p1/participants/a1/details",
+    ]);
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Participant details" })).toBeNull();
+  });
+
+  it("says so when a participant has no link, no calls and no sessions yet", async () => {
     open({
-      "GET /api/v1/projects/p1/participants/a1/consent-form": () => [
+      "GET /api/v1/projects/p1/participants/a1/details": () => [
         200,
         {
-          participant_code: "P000001",
-          project_code: "HINDI",
-          project_name: "Hindi conversations",
-          form_text: "I agree that my voice is recorded.",
-          form_version: "2",
-          answered: true,
-          current: {
-            status: "GIVEN",
-            answered_at: "2026-11-10T08:00:00Z",
-            policy_version: "2",
-            review_status: "REJECTED",
-            review_note: "Wrong person",
-            reviewed_at: "2026-11-10T09:00:00Z",
-          },
-          earlier: [
-            {
-              status: "REFUSED",
-              answered_at: "2026-11-09T08:00:00Z",
-              policy_version: "1",
-              review_status: null,
-              review_note: "",
-              reviewed_at: null,
-            },
-          ],
+          ...DETAILS,
+          link: null,
+          calls: null,
+          minutes: null,
+          consent_form: null,
+          sessions: [],
+          sessions_total: 0,
         },
       ],
     });
     renderAt("/participants");
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "View" }));
-    const panel = await screen.findByRole("region", { name: "Consent form" });
+    const panel = await screen.findByRole("region", { name: "Participant details" });
     expect(
-      await within(panel).findByText("I agree that my voice is recorded."),
+      await within(panel).findByText("No personal link has been made for this participant."),
     ).toBeInTheDocument();
-    expect(panel).toHaveTextContent("Sent back: Wrong person");
-    expect(panel).toHaveTextContent("Did not agree · version 1");
-    expect(within(panel).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("region", { name: "Consent form" })).toBeNull();
+    expect(
+      within(panel).getByText("This participant has not been part of a session yet."),
+    ).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Phone calls to them0");
+    expect(panel).not.toHaveTextContent("Payable minutes");
+    expect(within(panel).queryByRole("heading", { name: "Consent form" })).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Download consent form" })).toBeNull();
   });
 });

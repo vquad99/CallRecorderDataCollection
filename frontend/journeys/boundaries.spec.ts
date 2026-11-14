@@ -59,8 +59,14 @@ test("each role reaches only its own pages and records", async ({ browser }, inf
     await signIn(page, SEEDED.qcExecutive, SEEDED_PASSWORD);
     await page.goto(`/tasks/${setup.taskId}`);
     await expect(page.getByRole("heading", { name: "Not found" })).toBeVisible();
-    await page.goto(`/projects/${setup.projectId}/participants`);
-    await expect(page.getByRole("cell", { name: "Hidden" }).first()).toBeVisible();
+    // Only a project's administrators have its tabs (D-104): the overview is all others see.
+    await page.goto(`/projects/${setup.projectId}`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Journey");
+    await expect(page.getByRole("navigation", { name: "Project sections" })).toHaveCount(0);
+    for (const tab of ["team", "participants", "audio", "languages", "retention", "export"]) {
+      await page.goto(`/projects/${setup.projectId}/${tab}`);
+      await expect(page.getByRole("heading", { name: "No access" }), tab).toBeVisible();
+    }
     await expect(page.getByRole("button", { name: "Add participant" })).toHaveCount(0);
   });
 

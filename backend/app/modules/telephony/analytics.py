@@ -1,9 +1,10 @@
 """Phone-call analytics, the list of every call and its CSV (D-101, D-102, D-103).
 
-Who sees what:
-- Super Admin: every project.
-- People who assign tasks in a project (Project Admin): every call in that project.
-- Everyone else who can see tasks (moderators): their own calls, in projects they belong to.
+Who sees what (D-104):
+- Figures and the CSV: people who assign tasks only. Super Admin: every project; Project Admin:
+  the projects they manage.
+- The list of calls: the same people for their projects; everyone else who can see tasks
+  (moderators): their own calls, in projects they belong to, and nothing else.
 
 Figures come from the platform's own call records, so they are exact for calls made here. The
 provider's own traffic figure (calls per hour of the day) comes from TxContact's recording service
@@ -49,6 +50,12 @@ DELIVERY_KIND = "TELEPHONY_DERIVED_PCM"
 
 def _check(principal: Principal) -> None:
     if not principal.can(Perm.TASKS_VIEW):
+        raise forbidden()
+
+
+def _check_manager(principal: Principal) -> None:
+    """Figures and the spreadsheet are for people who assign tasks (D-104)."""
+    if not principal.can(Perm.TASKS_ASSIGN):
         raise forbidden()
 
 
@@ -153,7 +160,7 @@ def analytics(
     days: int,
     now: datetime | None = None,
 ) -> Analytics:
-    _check(principal)
+    _check_manager(principal)
     days = max(1, min(MAX_DAYS, days))
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)
@@ -559,7 +566,7 @@ def calls_csv(
 ) -> tuple[str, int]:
     """Every call of the period as a CSV (newest first, at most MAX_CSV_ROWS) and the row count.
     Times are in the report time zone. No phone numbers: the last two digits only."""
-    _check(principal)
+    _check_manager(principal)
     days = max(1, min(MAX_DAYS, days))
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)

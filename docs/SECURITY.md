@@ -208,6 +208,14 @@ Authorization of the new routes is in the route table of tests/test_security_acc
 role against every route, own and foreign project). A Super Admin's "View as" session cannot
 start, change or cancel a call (every change is refused while viewing).
 
+## 9e. Who sees what, 2026-11-14 (D-104)
+
+| Rule | Where it is kept | Test |
+|---|---|---|
+| Call figures and the calls CSV are for people who assign tasks (Super Admin, Project Admin); a moderator gets 403 and has only the list of their own calls | The routes need `tasks.assign`; the service checks it again | test_security_access.py, test_telephony.py |
+| Everything about one participant (`/details`) is for people who manage participants in that project; other projects the person is in are named only when the caller may see them | The service checks `participants.manage` in the project | test_security_access.py, test_telephony.py |
+| A project's tabs after Overview are for people who manage projects | A rule of the pages only: the API behind the tabs is as before and keeps hiding names and contact details from people who may not see them | participants.test.tsx, journeys/boundaries.spec.ts |
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

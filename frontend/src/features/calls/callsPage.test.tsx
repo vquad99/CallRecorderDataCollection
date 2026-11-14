@@ -101,7 +101,7 @@ describe("phone calls page", () => {
     ).toBe(false);
   });
 
-  it("hides TxContact's account-wide count from people who do not assign tasks", async () => {
+  it("gives a moderator a plain list of their own calls, and no figures (D-104)", async () => {
     const api = fakeApi(
       signedInAs(
         ALL_PERMISSIONS.filter((p) => p !== "tasks.assign"),
@@ -109,9 +109,21 @@ describe("phone calls page", () => {
       ),
     );
     renderAt("/calls");
-    expect(await screen.findByText("Calls per day", {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(api.calls.some((c) => c.path.startsWith("/api/v1/telephony/provider-traffic"))).toBe(
-      false,
+    expect(
+      await screen.findByRole("heading", { name: "My phone calls" }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "T000001" })).toHaveAttribute(
+      "href",
+      "/tasks/t1",
     );
+    expect(screen.queryByText("Calls per day")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download calls (CSV)" })).not.toBeInTheDocument();
+    for (const path of [
+      "/api/v1/telephony/analytics",
+      "/api/v1/telephony/provider-traffic",
+      "/api/v1/calls/export",
+    ]) {
+      expect(api.calls.some((c) => c.path.startsWith(path))).toBe(false);
+    }
   });
 });

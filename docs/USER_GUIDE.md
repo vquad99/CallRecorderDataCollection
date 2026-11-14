@@ -14,14 +14,17 @@ Words in **bold** are the exact labels you see on screen.
 
 | Role | What they do | Menu they see |
 |---|---|---|
-| Super Admin | Everything: users, projects, settings | Dashboard, Projects, Tasks, Participants, Users, Settings, Audit log, System status |
-| Project Admin | Runs projects they belong to: participants, tasks, who records, who checks, downloads | Dashboard, Projects, Tasks, Participants, Audit log |
-| Moderator | Records conversations on tasks given to them | Dashboard, Projects, Tasks |
+| Super Admin | Everything: users, projects, settings | Dashboard, Projects, Tasks, Phone calls, Participants, Users, Settings, Audit log, System status |
+| Project Admin | Runs projects they belong to: participants, tasks, who records, who checks, downloads | Dashboard, Projects, Tasks, Phone calls, Participants, Audit log |
+| Moderator | Records conversations on tasks given to them | Dashboard, Projects, Tasks, Phone calls |
 | QC Executive | Listens to recordings and approves or rejects them | Dashboard, Projects, Tasks |
 | Client Viewer | Sees the progress of their projects | Dashboard, Projects |
 | Participant | The person being recorded; has no login, uses a private link | (their own private page) |
 
 People only see projects they have been added to. The Super Admin sees every project.
+
+A project's page has tabs (Team, Participants, Audio rules, Languages, Retention, Export) for
+the Super Admin and Project Admin only. Everyone else sees the project's **Overview**.
 
 ---
 
@@ -178,8 +181,24 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
 3. The **Consent form** column shows **Not answered**, **Agreed**, **Did not agree** or
    **Withdrawn**. When the answer is Agreed, click **Approve**, or **Reject** with a note that the
    participant will see.
-4. **View** shows the form and the answer, and **Download** saves it. **History** shows earlier
-   answers.
+4. **History** shows earlier answers.
+
+### Everything about one participant
+
+Click **View** on a participant's row. One panel shows all the platform holds about them in the
+project:
+
+- **Profile**: code, name, phone, email, language, notes, who added them and when, when they
+  were last changed, and the projects they are in.
+- **Work in this project**: sessions, recorded and approved conversations and minutes, payable
+  minutes, phone calls made to them, calls with a recording, and the last call.
+- **Personal link**: whether it works, who made it and when, until when it works, when it was
+  last opened, and whether it was emailed or passed on by staff.
+- **Consent form**: the answer, when, the form version, the review and its note, the form text,
+  and earlier answers. **Download consent form** saves it.
+- **Sessions**: every task they were part of, with their role (A or B), the other participant,
+  the moderator, the status, the consent noted in that session, the recording length, and the
+  number of phone calls. Click the task code to open the task.
 
 A project's **Participants** tab also has **Personal link**: a link you can copy and give the
 participant yourself (it works for 30 days; making a new one ends the old one).
@@ -300,8 +319,9 @@ of each number. Click **This is the call** on the right one. If none was found, 
 not be searched (the card says why), click **Look for the recording again** later, or cancel the
 call. A project admin can do the same, and cancel a call, from the task's **Phone calls** history.
 
-**Phone calls page.** The menu has **Phone calls** (Super Admin, Project Admin, Moderator). Choose
-a **Project** and a **Period** (7, 30 or 90 days). It shows:
+**Phone calls page.** The menu has **Phone calls** (Super Admin, Project Admin, Moderator). A
+moderator's page is **My phone calls**: the list of their own calls, newest first, each with a
+link to its task. Admins choose a **Project** and a **Period** (7, 30 or 90 days) and see:
 
 - **Figures**: calls; recorded (and the share of calls); failed or cancelled; **needs a person**
   (also calls left open); average call; recorded audio and how long recordings take to arrive;
@@ -318,7 +338,8 @@ a **Project** and a **Period** (7, 30 or 90 days). It shows:
 - **All calls**: every call with a link to its task; **Show** filters it (for example **Needs a
   person**). **Download calls (CSV)** saves the period's calls as a spreadsheet.
 
-Moderators see only their own calls. No page shows a full phone number: the last two digits only.
+Moderators have no figures, charts or CSV: only the list of their own calls. No page shows a
+full phone number: the last two digits only.
 
 **Phone calls history.** Every task shows each call with every step: when it was requested, what
 TxContact answered, each checklist tick, when it was closed, each search, which recording was
@@ -362,7 +383,7 @@ page). A bar appears with:
 
 ### Export a project
 
-Open the project and click the **Export** tab (Super Admin, Project Admin and Client Viewer).
+Open the project and click the **Export** tab (Super Admin and Project Admin).
 Choose what to export:
 
 | Choice | You get |

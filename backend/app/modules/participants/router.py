@@ -15,7 +15,7 @@ from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client
 from app.modules.auth.router import AppSettings, Cipher
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import minutes as minutes_report
-from app.modules.participants import consent_view, manage, service
+from app.modules.participants import consent_view, details, manage, service
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 
@@ -470,4 +470,108 @@ def consent_form_file(
         content=html,
         media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+# ------------------------------------------------- everything about one participant (D-104)
+
+
+class ProjectRefOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+
+
+class RemovedOut(BaseModel):
+    at: datetime
+    by: str | None
+    reason: str | None
+
+
+class LinkOut(BaseModel):
+    active: bool
+    created_at: datetime
+    created_by: str | None
+    expires_at: datetime
+    last_used_at: datetime | None
+    handed_out: bool
+
+
+class SessionOut(BaseModel):
+    task_id: uuid.UUID
+    task_code: str
+    mode: str
+    slot: Literal["A", "B"]
+    status: str
+    created_at: datetime
+    other_participant_code: str
+    moderator: str | None
+    consent_status: str | None
+    consent_method: str | None
+    consent_at: datetime | None
+    recordings: int
+    recording_seconds: float | None
+    recorded_at: datetime | None
+    phone_calls: int
+
+
+class ParticipantCallsOut(BaseModel):
+    total: int
+    recorded: int
+    last_at: datetime | None
+    last_state: str | None
+
+
+class ParticipantDetailsOut(BaseModel):
+    participant: ParticipantOut
+    updated_at: datetime
+    added_by: str | None
+    projects: list[ProjectRefOut]
+    removed: RemovedOut | None
+    link: LinkOut | None
+    # The consent form and its answers; empty for someone who may not see consent.
+    consent_form: ConsentFormOut | None
+    sessions: list[SessionOut]
+    sessions_total: int
+    # Only for people who may export the project (the same rule as the list).
+    minutes: MinutesOut | None
+    calls: ParticipantCallsOut | None
+
+
+@router.get("/{participant_id}/details", response_model=ParticipantDetailsOut)
+def participant_details(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    cipher: Cipher,
+) -> ParticipantDetailsOut:
+    """One answer with everything the platform holds about a participant in this project, for
+    the people who manage participants there."""
+    d = details.get(db, principal, project_id, participant_id)
+    overview = manage.consent_overview(db, d.project, [d.participant.id])
+    shown = present(db, principal, cipher, d.project, d.participant, None, overview)
+    can_export = principal.can_in_project(Perm.EXPORTS_CREATE, d.project.id)
+    if can_export:
+        totals = minutes_report.per_participant(db, d.project.id, [d.participant.id])
+        shown.minutes = minutes_out(totals.get(d.participant.id))
+    form = (
+        ConsentFormOut.model_validate(
+            consent_view.get(db, principal, project_id, participant_id), from_attributes=True
+        )
+        if shown.consent_visible
+        else None
+    )
+    return ParticipantDetailsOut(
+        participant=shown,
+        updated_at=d.participant.updated_at,
+        added_by=d.added_by,
+        projects=[ProjectRefOut(**vars(p)) for p in d.projects],
+        removed=RemovedOut(**vars(d.removed)) if d.removed else None,
+        link=LinkOut(**vars(d.link)) if d.link else None,
+        consent_form=form,
+        sessions=[SessionOut(**vars(s)) for s in d.sessions],
+        sessions_total=d.sessions_total,
+        minutes=shown.minutes,
+        calls=ParticipantCallsOut(**vars(d.calls)) if d.calls else None,
     )

@@ -149,7 +149,7 @@ describe("project detail", () => {
 
   it("exports the project as audio, metadata, both or a progress report (D-094)", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "exports.create"], {
+      signedInAs(["projects.view", "projects.manage", "exports.create"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/export/summary": (_b, url) => [
           200,

@@ -138,9 +138,9 @@ no provider webhooks: after the call is closed the platform looks for its record
 | POST | /calls/{id}/match | same | `{key}`: one of the listed candidates, when the platform could not tell which TxContact call is this one |
 | POST | /calls/{id}/retry | same | Look for the recording again |
 | PUT | /users/{id}/telephony-agent | `users.manage` | `{agent_id}`; one seat per person; empty removes it |
-| GET | /telephony/analytics | `tasks.view` | `?project_id&days` (1-90). Figures for the calls the caller may see: Super Admin all, people who assign tasks their projects, moderators their own calls |
-| GET | /calls | `tasks.view` | `?project_id&state&page&page_size` (max 100). `state=NEEDS_PERSON`: needs a match, failed to fetch, or left open |
-| GET | /calls/export | `tasks.view` | `?project_id&days`: the same calls as a CSV file (no phone numbers). Audited as `calls.exported` |
+| GET | /telephony/analytics | `tasks.assign` | `?project_id&days` (1-90). Figures for the calls the caller may see: Super Admin all, Project Admin their projects. 403 for everyone else (D-104) |
+| GET | /calls | `tasks.view` | `?project_id&state&page&page_size` (max 100). `state=NEEDS_PERSON`: needs a match, failed to fetch, or left open. Super Admin all, Project Admin their projects, moderators their own calls only |
+| GET | /calls/export | `tasks.assign` | `?project_id&days`: the same calls as a CSV file (no phone numbers). Audited as `calls.exported`. 403 for everyone else (D-104) |
 | GET | /telephony/provider-traffic | `tasks.assign` | TxContact's own calls per hour of the day; `available: false` with the reason when TxContact does not answer |
 
 Call states: `DIALLING` (on the call), `DIAL_FAILED`, `CANCELLED`, `WAITING_FOR_RECORDING`,
@@ -230,4 +230,5 @@ history, `captured_by` is `null` for the participant's own answers.
 | POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |
 | GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer with review, earlier answers. |
 | GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |
+| GET | /projects/{id}/participants/{id}/details | `participants.manage` in the project (403 otherwise; D-104). Everything about the participant there: `participant` (as in the list), `updated_at`, `added_by`, `projects` (only those the caller may see), `removed` `{at, by, reason}`, `link` `{active, created_at, created_by, expires_at, last_used_at, handed_out}`, `consent_form` (as above), `minutes` (for people who may export), `calls` `{total, recorded, last_at, last_state}`, `sessions` (newest 200: `task_id, task_code, mode, slot, status, other_participant_code, moderator, consent_status, consent_method, consent_at, recordings, recording_seconds, recorded_at, phone_calls, created_at`) and `sessions_total`. |
 | GET | /system/status | `settings.manage` (Super Admin only, D-075). `{status, checks, version}` for the System status page. |

@@ -89,6 +89,7 @@ const HEADING: Record<string, string> = {
   Dashboard: "Dashboard|My work|Collection progress",
   Projects: "Projects",
   Tasks: "Tasks",
+  "Phone calls": "Phone calls|My phone calls",
   Users: "Users",
   Settings: "Capacity targets",
   "Audit log": "Audit log",

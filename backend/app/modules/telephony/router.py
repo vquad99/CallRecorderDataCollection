@@ -352,7 +352,11 @@ class AnalyticsOut(BaseModel):
 Days = Annotated[int, Query(ge=1, le=analytics.MAX_DAYS)]
 
 
-@router.get("/telephony/analytics", response_model=AnalyticsOut)
+@router.get(
+    "/telephony/analytics",
+    response_model=AnalyticsOut,
+    dependencies=[Depends(require(Perm.TASKS_ASSIGN))],
+)
 def call_analytics(
     principal: CurrentPrincipal,
     db: DbSession,
@@ -440,7 +444,7 @@ def all_calls(
     )
 
 
-@router.get("/calls/export")
+@router.get("/calls/export", dependencies=[Depends(require(Perm.TASKS_ASSIGN))])
 def export_calls(
     request: Request,
     principal: CurrentPrincipal,

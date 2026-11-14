@@ -51,10 +51,29 @@ const hidden = {
 };
 
 describe("participants tab", () => {
+  it("is not for people who do not manage the project: they have the overview only (D-104)", async () => {
+    const { calls } = fakeApi(
+      // What a moderator or client viewer holds: sees projects and participants, manages neither.
+      signedInAs(["projects.view", "participants.view", "tasks.view", "exports.create"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    expect(await screen.findByRole("heading", { name: "No access" })).toBeInTheDocument();
+    expect(screen.queryByText("P000001")).not.toBeInTheDocument();
+    expect(calls.some((c) => c.path.startsWith("/api/v1/projects/p1/participants"))).toBe(false);
+    // No tab bar at all: the overview is the only part they have.
+    expect(screen.queryByRole("navigation", { name: "Project sections" })).not.toBeInTheDocument();
+  });
+
   it("shows hidden fields as hidden and offers no editing without manage rights", async () => {
     fakeApi(
       // consent.view is held, but the server says this person's consent is not this user's to see.
-      signedInAs(["projects.view", "participants.view", "consent.view"], {
+      signedInAs(["projects.view", "projects.manage", "participants.view", "consent.view"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
@@ -79,7 +98,7 @@ describe("participants tab", () => {
       payable_minutes: 2.5,
     };
     fakeApi(
-      signedInAs(["projects.view", "participants.view"], {
+      signedInAs(["projects.view", "projects.manage", "participants.view"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
@@ -97,7 +116,7 @@ describe("participants tab", () => {
 
   it("adds a participant and deletes one with a reason", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "participants.view", "participants.manage"], {
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
@@ -134,7 +153,7 @@ describe("participants tab", () => {
 
   it("takes a 10-digit phone number with the country code chosen from a list", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "participants.view", "participants.manage"], {
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
@@ -172,7 +191,7 @@ describe("participants tab", () => {
       dialect: "Awadhi",
     };
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "participants.view", "participants.manage"], {
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "GET /api/v1/projects/p1/participants": () => [
           200,
