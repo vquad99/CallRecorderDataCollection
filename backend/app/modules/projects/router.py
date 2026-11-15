@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.core.permissions import Perm
-from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
+from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, forbidden, require
 from app.modules.projects import service
 from app.modules.projects.models import ASSET_KINDS, Project
 
@@ -268,6 +268,11 @@ class MemberOut(BaseModel):
 def list_members(
     project_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> list[MemberOut]:
+    """The project's team, for the people who run it (D-112): moderators, QC and clients see
+    their own work, not who else works on the project."""
+    members = service.list_members(db, principal, project_id)  # 404 for a project not theirs
+    if not principal.can_in_project(Perm.TASKS_ASSIGN, project_id):
+        raise forbidden()
     show_email = principal.can_in_project(Perm.PROJECTS_MEMBERS, project_id)
     return [
         MemberOut(
@@ -278,7 +283,7 @@ def list_members(
             status=u.status,
             added_at=m.created_at,
         )
-        for m, u in service.list_members(db, principal, project_id)
+        for m, u in members
     ]
 
 

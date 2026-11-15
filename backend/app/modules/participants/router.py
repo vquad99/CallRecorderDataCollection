@@ -11,7 +11,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.core.permissions import Perm
-from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
+from app.modules.auth.deps import (
+    CurrentPrincipal,
+    DbSession,
+    Principal,
+    client_ip,
+    forbidden,
+    require,
+)
 from app.modules.auth.router import AppSettings, Cipher
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import minutes as minutes_report
@@ -131,6 +138,10 @@ def list_participants(
     project, items, total = service.list_participants(
         db, principal, project_id, search=search, page=page, page_size=page_size
     )
+    # The whole list is for the people who manage participants (D-112); everyone else meets
+    # the participants of their own tasks on those tasks.
+    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
+        raise forbidden()
     assigned = service.assigned_participants(db, principal.user_id, project.id)
     overview = manage.consent_overview(db, project, [p.id for p in items])
     shown = [present(db, principal, cipher, project, p, assigned, overview) for p in items]

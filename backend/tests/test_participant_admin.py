@@ -166,11 +166,9 @@ def test_a_consent_answer_is_approved_or_sent_back(world: dict[str, Any]) -> Non
         world["mod"].post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"}).status_code
         == 403
     )
+    # A client viewer has no list of the project's people at all (D-112).
     make_user(db, "cv@example.org", ["CLIENT_VIEWER"], projects=[world["project"]])
-    client_row = next(
-        p for p in world["api"]("cv@example.org").get(base).json()["items"] if p["id"] == a
-    )
-    assert (client_row["consent_status"], client_row["consent_review"]) == (None, None)
+    assert world["api"]("cv@example.org").get(base).status_code == 403
 
 
 def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) -> None:

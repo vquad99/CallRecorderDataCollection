@@ -214,7 +214,7 @@ start, change or cancel a call (every change is refused while viewing).
 |---|---|---|
 | Call figures and the calls CSV are for people who assign tasks (Super Admin, Project Admin); a moderator gets 403 and has only the list of their own calls | The routes need `tasks.assign`; the service checks it again | test_security_access.py, test_telephony.py |
 | Everything about one participant (`/details`) is for people who manage participants in that project; other projects the person is in are named only when the caller may see them | The service checks `participants.manage` in the project | test_security_access.py, test_telephony.py |
-| A project's tabs after Overview are for people who manage projects | A rule of the pages only: the API behind the tabs is as before and keeps hiding names and contact details from people who may not see them | participants.test.tsx, journeys/boundaries.spec.ts |
+| A project's tabs after Overview are for people who manage projects | The pages hide them; since D-112 the server also refuses the team list and the participant list to everyone else (403) | participants.test.tsx, journeys/boundaries.spec.ts, test_security_access.py, test_permissions.py |
 
 ## 9f. Exports, 2026-11-14 (D-105)
 

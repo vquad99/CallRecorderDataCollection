@@ -140,7 +140,7 @@ def test_team_emails_and_the_people_picker_are_limited(db: Any, new_api: Any) ->
     cv.login("cv@example.org")
     members = f"/api/v1/projects/{project.id}/members"
     assert all(m["email"] for m in pa.get(members).json())
-    assert all(m["email"] is None for m in cv.get(members).json())
+    assert cv.get(members).status_code == 403  # the team is for admins only (D-112)
     picker = f"/api/v1/projects/{project.id}/member-candidates"
     assert pa.get(picker, params={"search": "free"}).json() == []
     assert pa.get(picker, params={"search": "@example.org"}).json() == []

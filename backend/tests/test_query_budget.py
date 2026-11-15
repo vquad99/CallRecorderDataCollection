@@ -74,7 +74,6 @@ PAGES = [
     ("sa", "/api/v1/projects/{project}/members"),
     ("sa", "/api/v1/projects/{project}/member-candidates"),
     ("sa", "/api/v1/projects/{project}/participants?page_size=100"),
-    ("mod", "/api/v1/projects/{project}/participants?page_size=100"),
     ("sa", "/api/v1/projects/{project}/participants/export"),
     ("sa", "/api/v1/tasks?page_size=100"),
     ("mod", "/api/v1/tasks?page_size=100"),

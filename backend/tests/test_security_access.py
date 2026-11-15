@@ -574,7 +574,7 @@ CASES: list[Case] = [
         "GET",
         P + "/members",
         lambda e, s: f"/api/v1/projects/{s.project}/members",
-        EVERY_MEMBER,
+        {SA, PA},  # the team is for the people who run the project (D-112)
         Perm.PROJECTS_VIEW,
     ),
     case(
@@ -609,7 +609,7 @@ CASES: list[Case] = [
         "GET",
         P + "/participants",
         lambda e, s: f"/api/v1/projects/{s.project}/participants",
-        EVERY_MEMBER,
+        {SA, PA},  # the whole list: people who manage participants only (D-112)
         Perm.PARTICIPANTS_VIEW,
     ),
     case(

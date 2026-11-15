@@ -110,11 +110,8 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
     for row in rows:
         assert float(row["payable_minutes"]) == float(row["approved_minutes"])
 
-    # A moderator sees the people, not the payment minutes.
-    assert all(
-        p["minutes"] is None
-        for p in world["mod"].get(f"/api/v1/projects/{pid}/participants").json()["items"]
-    )
+    # A moderator has no list of the project's people at all (D-112), so no minutes either.
+    assert world["mod"].get(f"/api/v1/projects/{pid}/participants").status_code == 403
 
 
 def test_a_conversation_is_split_equally_between_its_two_participants() -> None:

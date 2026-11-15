@@ -83,14 +83,14 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
-| GET, POST, DELETE | /projects/{id}/members | GET: `projects.view`; POST/DELETE: `projects.members` |
+| GET, POST, DELETE | /projects/{id}/members | GET: `tasks.assign` in the project (Super Admin, Project Admin; 403 for others, D-112); POST/DELETE: `projects.members` |
 | GET | /projects/{id}/member-candidates | `projects.members` (D-032) |
 
 ## Participants (PART-*)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /projects/{id}/participants | `participants.view` / `participants.manage` |
+| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks |
 | POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code) |
 | GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |

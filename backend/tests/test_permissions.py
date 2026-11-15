@@ -183,8 +183,9 @@ def _endpoints(p1: str, p2: str, other_user: str, n: int) -> list[tuple[str, str
             Perm.PROJECTS_MANAGE,
             "member",
         ),
-        ("GET", f"/api/v1/projects/{p1}/members", None, Perm.PROJECTS_VIEW, "member"),
-        ("GET", f"/api/v1/projects/{p1}/participants", None, Perm.PARTICIPANTS_VIEW, "member"),
+        # The team and the participant list are for the people who run the project (D-112).
+        ("GET", f"/api/v1/projects/{p1}/members", None, Perm.TASKS_ASSIGN, "member"),
+        ("GET", f"/api/v1/projects/{p1}/participants", None, Perm.PARTICIPANTS_MANAGE, "member"),
         (
             "GET",
             f"/api/v1/projects/{p1}/participants/export",
@@ -251,8 +252,5 @@ def test_client_viewer_project_view_carries_no_internal_fields(db: Any, new_api:
     api.login("client@example.org")
     body = api.get(f"/api/v1/projects/{p1.id}").json()
     assert "created_by" not in body
-    members = api.get(f"/api/v1/projects/{p1.id}/members").json()
-    assert all(
-        set(m) == {"user_id", "email", "display_name", "roles", "status", "added_at"}
-        for m in members
-    )
+    # The team is not shown to a client at all (D-112).
+    assert api.get(f"/api/v1/projects/{p1.id}/members").status_code == 403
