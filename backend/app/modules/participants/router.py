@@ -29,8 +29,8 @@ MASK = "••••••"
 
 
 class MinutesOut(BaseModel):
-    """Recorded, approved and payable minutes in this project (D-095): payable is half of the
-    approved conversation minutes, since every conversation has two participants."""
+    """This participant's share of the minutes in this project (D-095, D-111): every
+    conversation's length is split equally between its two participants."""
 
     conversations: int
     recorded_minutes: float

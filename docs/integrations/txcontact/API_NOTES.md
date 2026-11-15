@@ -23,6 +23,26 @@ No phone was rung: the dialer was only sent the invalid number `0000000000`.
 | Dialer, wrong password | HTTP 200, `text/html`, **empty body** | A wrong login is not an HTTP error. The platform treats an empty answer as refused ("usually a wrong dialer username or password"). |
 | Recording sign-in (`/auth/`, `/getjwt/`, `/base64token/`) with the dialer login | HTTP 400 `{"status": "ERROR", "message": "invalid username/password"}`; once, a 500 with a MySQL error on TxContact's side | The recording service needs **its own login**: ask TxContact for it. The search, time zone, number format and recording format cannot be tested until then. |
 
+## Tested on the account, 2026-11-15 (read only; no phone was rung)
+
+TxContact sent new details: campaigns `dc-new-call` (ring A) and `dc-attach-call` (ring a number
+into the call on the seat), a test agent seat, and a token for the recording service.
+
+| Test | Result | What it settles |
+|---|---|---|
+| Recording search with `Authorization: Basic <token>` | 200 JSON `{count, next, previous, results}`; without the header 403 | The recording service takes the record login itself (the token is base64 of user:password). No sign-in request is needed |
+| Search of 13-14 Nov, any seat | 21 records of earlier test calls made by TxContact's staff on seats 80001, 80002 | The fields are filled as below |
+| Download of one earlier recording | 200 `audio/x-wav`, Content-Length given; RIFF WAV, PCM, 1 channel, 8000 Hz, 16-bit (deleted after the check) | The download works; the file is one channel, so the speakers are mixed |
+
+What the records show (numbers not copied here): times carry the zone (`+05:30`); `sl_rec_filename`
+holds the tenant, the agent's name and seat, numbers, the queue and the session id, and the
+download takes it with `.` and `sl_rec_filename_ext` (`mp3` earlier, `wav` later);
+`sl_rec_status` is `D` or `E`; every `sl_ref_field1..20` is empty. Each test call appears as two
+records: one in queue `Outbound` (from a short extension to the participant's number, a session
+id different from the transaction id) and one in the campaign's queue (`dcrecordcall`) where
+`sl_from` and `sl_to` both hold the participant's number. The id the dialer returns (a
+time-based UUID) is not the session id (random UUIDs): a call cannot be found by it.
+
 ## Calls used
 
 | Purpose | Request | Notes |
@@ -40,7 +60,7 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 
 | Topic | What we know | Consequence |
 |---|---|---|
-| Adding participant B | The dialer rings one number and connects it to an agent seat. No API to add a second number or make a conference. | The moderator is the TxContact agent and adds B from the TxContact agent screen (owner, D-101). The platform cannot see or control that step. |
+| Adding participant B | TxContact's email of 2026-11-15: the same dialer request with `cmp-ref=dc-attach-call` rings a number into the call on that seat (A is rung with `dc-new-call`). | The moderator clicks **Call participant B** once A is on the line (D-111). NOT VERIFIED until one real call: that B joins the call already on the seat, and how its recording is listed. |
 | Moderator leaving | Not described. | Whether A and B stay connected and recorded after the moderator leaves is NOT VERIFIED. |
 | Linking our call to TxContact's | The dial answer gives no call ID (NOT VERIFIED); the dialer takes no reference of ours. | The platform finds the call by agent seat, time (dial to close, ±2 min) and A's number in `sl_from`/`sl_to`. If several fit, or the number is not shown, a person picks the call. |
 | Callbacks | None in the description. | The platform asks every minute or so after the call is closed (backing off to 5 minutes), for `TELEPHONY_FETCH_MINUTES` (default 60), then asks a person. |

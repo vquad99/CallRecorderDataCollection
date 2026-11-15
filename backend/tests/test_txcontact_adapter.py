@@ -101,7 +101,7 @@ def test_dial_sends_the_documented_request_and_keeps_no_secret() -> None:
     assert query == {
         "username": "dsc_user",
         "password": DIAL_PASSWORD,
-        "cmp-ref": "dc-record-call",
+        "cmp-ref": "dc-new-call",
         "phone": "9876543210",
         "preferred-agent": "70001",
         "source": "webapi",
@@ -163,7 +163,7 @@ def test_search_signs_in_pages_through_results_and_reads_times_in_the_provider_z
         200,
         {"count": 2, "next": None, "results": [_row(sl_session_id="S2", sl_start_time=None)]},
     )
-    found = make(server).sessions("70001", date(2026, 11, 13))
+    found = make(server, txcontact_auth_scheme="Token").sessions("70001", date(2026, 11, 13))
     assert [s.session_id for s in found] == ["S1", "S2"]
     # Naive provider times are read in TXCONTACT_TIMEZONE (Asia/Kolkata, UTC+05:30).
     assert found[0].start == datetime(2026, 11, 13, 4, 30, tzinfo=UTC)
@@ -193,7 +193,7 @@ def test_a_refused_sign_in_is_reported() -> None:
     server = FakeServer()
     server.answer("/txrecord/api/v1/auth/", 400, {"detail": "invalid username/password"})
     with pytest.raises(ProviderError, match=r"refused|answered 400"):
-        make(server).sessions("70001", date.today())
+        make(server, txcontact_auth_scheme="Token").sessions("70001", date.today())
 
 
 def _session(filename: str = "call_S1", ext: str = "wav") -> ProviderSession:
@@ -356,3 +356,44 @@ def test_provider_calls_live_only_in_the_adapter_package() -> None:
         ):
             offenders.append(str(path.relative_to(app)))
     assert offenders == []
+
+
+def test_basic_sign_in_sends_the_record_login_and_fetches_no_token() -> None:
+    """TxContact, 2026-11-15 (tested that day): the recording service takes the login itself in
+    a Basic Authorization header; there is no token to ask for."""
+    import base64
+
+    server = FakeServer()
+    server.answer("/txrecord/api/search", 200, {"count": 0, "next": None, "results": []})
+    assert make(server).sessions("80003", date(2026, 11, 15)) == []
+    assert [urllib.parse.urlsplit(r.full_url).path for r in server.requests] == [
+        "/txrecord/api/search"
+    ]
+    header = server.requests[0].get_header("Authorization")
+    assert header == "Basic " + base64.b64encode(f"rec_user:{RECORD_PASSWORD}".encode()).decode()
+    # A refused Basic login is not retried with a fresh token: it is reported.
+    refused = FakeServer()
+    refused.answer("/txrecord/api/search", 403, b"forbidden")
+    with pytest.raises(ProviderError, match="refused"):
+        make(refused).sessions("80003", date(2026, 11, 15))
+    assert len(refused.requests) == 2
+
+
+def test_attach_rings_b_through_the_attach_campaign_on_the_same_seat() -> None:
+    """D-111: the same dialer request, with the attach campaign (TxContact, 2026-11-15)."""
+    server = FakeServer()
+    server.answer("/txdialer/api/contact/add", 200, b"6f1c2c3e-c2a1-11f1-9b6e-bc24110b2437")
+    adapter = make(server)
+    result = adapter.attach("+919812345678", "80003")
+    assert result.accepted
+    assert result.reference == "6f1c2c3e-c2a1-11f1-9b6e-bc24110b2437"
+    query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(server.requests[0].full_url).query))
+    assert (query["cmp-ref"], query["phone"], query["preferred-agent"]) == (
+        "dc-attach-call",
+        "9812345678",
+        "80003",
+    )
+    adapter.dial("+919876543210", "80003")
+    first = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(server.requests[1].full_url).query))
+    assert first["cmp-ref"] == "dc-new-call"
+    assert "9812345678" not in result.response_excerpt

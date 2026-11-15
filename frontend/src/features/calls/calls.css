@@ -131,3 +131,20 @@
   padding: 6px 0;
   text-align: left;
 }
+
+/* Participant B rung into the call (D-111). */
+.call-b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.call-b p {
+  margin: 2px 0 0;
+}

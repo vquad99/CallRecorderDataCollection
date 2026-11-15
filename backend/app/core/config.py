@@ -100,13 +100,17 @@ class Settings(BaseSettings):
     txcontact_base_url: str = "https://amber.txcontact.com"
     txcontact_dialer_username: str | None = None
     txcontact_dialer_password: SecretStr | None = None
-    txcontact_campaign_ref: str = "dc-record-call"
+    # The campaign that rings participant A and connects them to the moderator's seat, and the
+    # one that rings participant B into the call already on that seat (TxContact, 2026-11-15).
+    txcontact_campaign_ref: str = "dc-new-call"
+    txcontact_attach_campaign_ref: str = "dc-attach-call"
     txcontact_source: str = "webapi"
     txcontact_record_user: str | None = None
     txcontact_record_password: SecretStr | None = None
-    # Word sent before the token in the Authorization header; TxContact's API description does not
-    # say which one it expects (NOT VERIFIED), so it can be changed without a release.
-    txcontact_auth_scheme: str = Field(default="Token", max_length=20)
+    # How the recording service is signed in to. "Basic" (TxContact, 2026-11-15; tested that
+    # day): the record user and password in the Authorization header, no token to fetch. Any
+    # other word: a token from the recording service's sign-in, sent after that word.
+    txcontact_auth_scheme: str = Field(default="Basic", max_length=20)
     # Time zone of the times TxContact reports when they carry none (NOT VERIFIED).
     txcontact_timezone: str = "Asia/Kolkata"
     txcontact_timeout_seconds: int = Field(default=20, ge=1, le=120)

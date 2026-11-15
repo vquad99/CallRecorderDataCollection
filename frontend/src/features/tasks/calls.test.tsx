@@ -77,6 +77,18 @@ describe("phone calls on the task page", () => {
           calls = [call("DIALLING", { checklist: ticked })];
           return [200, calls[0]];
         },
+        "POST /api/v1/calls/c1/call-b": () => {
+          calls = [
+            call("DIALLING", {
+              checklist: calls[0]?.checklist,
+              b_dial_attempts: 1,
+              b_dial_status: "ACCEPTED",
+              b_phone_hint: "78",
+              b_dialled_at: "2026-11-13T10:02:00Z",
+            }),
+          ];
+          return [200, calls[0]];
+        },
         "POST /api/v1/calls/c1/close": () => {
           calls = [call("WAITING_FOR_RECORDING", { closed_at: "2026-11-13T10:20:00Z" })];
           return [200, calls[0]];
@@ -91,9 +103,24 @@ describe("phone calls on the task page", () => {
     expect(screen.getAllByText(/Contact queued/).length).toBeGreaterThan(0);
     // Both people must be confirmed on the call before it can be closed.
     expect(screen.getByRole("button", { name: "Close call" })).toBeDisabled();
+    // B is rung from here once A is on the line (D-111).
+    const ringB = screen.getByRole("button", { name: "Call participant B" });
+    expect(ringB).toBeDisabled();
     await userEvent.click(screen.getByRole("checkbox", { name: /Participant A is on the call/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Call participant B" })).toBeEnabled(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Call participant B" }));
+    expect(
+      await screen.findByText(/TxContact is ringing participant B \(number ending 78/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ring B again (2 left)" })).toBeEnabled();
     await userEvent.click(
       await screen.findByRole("checkbox", { name: /Participant B is on the call/ }),
+    );
+    // B is on: nothing left to ring.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Ring B again/ })).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(screen.getByRole("button", { name: "Close call" })).toBeEnabled());
     expect(
@@ -102,6 +129,7 @@ describe("phone calls on the task page", () => {
       { item: "A_JOINED", done: true },
       { item: "B_JOINED", done: true },
     ]);
+    expect(api.calls.filter((c) => c.path === "/api/v1/calls/c1/call-b")).toHaveLength(1);
     await userEvent.type(screen.getByLabelText("Note for the record (optional)"), "clear line");
     await userEvent.click(screen.getByRole("button", { name: "Close call" }));
     expect(

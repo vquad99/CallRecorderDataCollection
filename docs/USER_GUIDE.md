@@ -321,10 +321,11 @@ TxContact agent screen before you start.
 3. Click **Start call**. TxContact rings participant A and connects them to your TxContact seat.
    The card shows **On the call** once TxContact has accepted the request; if it refused, the
    card says what TxContact answered.
-4. In your TxContact agent screen, add participant B to the call.
-5. Tick the **Call checklist** as you go: **Participant A is on the call**, **Participant B is on
-   the call** (both are needed to close the call), **I am muted and listening**, **Both voices are
-   clear**.
+4. When A answers, tick **Participant A is on the call**. Then click **Call participant B**:
+   TxContact rings B into the same call. The card says what TxContact answered; if B does not
+   answer, click **Ring B again** (3 times at most in one call).
+5. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
+   call), then **I am muted and listening** and **Both voices are clear**.
 6. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
 7. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
    them, end the call, then click **Cancel this call** and choose **Poor line quality**.
@@ -452,9 +453,9 @@ There are no transcripts in an export: this version makes none.
 
 ### Participant minutes (payment)
 
-Payment follows **approved** audio. Every conversation has two participants, so each one is
-credited with half of it: a 5-minute approved conversation gives each participant **2.5 payable
-minutes**. A re-recorded task counts once (its newest finished recording). Project Admins see the
+Every conversation has two participants, and its length is **split equally** between them: a
+5-minute conversation gives each participant **2.5 minutes**. The recorded, approved and payable
+minutes shown for a participant are all their share. Payment follows **approved** audio. A re-recorded task counts once (its newest finished recording). Project Admins see the
 **Recorded min**, **Approved min** and **Payable min** columns on the project's **Participants**
 tab; the **Participant minutes** export gives the same numbers as a spreadsheet.
 

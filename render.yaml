@@ -131,7 +131,9 @@ services:
       - key: TXCONTACT_BASE_URL
         value: https://amber.txcontact.com
       - key: TXCONTACT_CAMPAIGN_REF
-        value: dc-record-call
+        value: dc-new-call
+      - key: TXCONTACT_ATTACH_CAMPAIGN_REF
+        value: dc-attach-call
       - key: TXCONTACT_DIALER_USERNAME
         sync: false
       - key: TXCONTACT_DIALER_PASSWORD
@@ -231,7 +233,9 @@ services:
       - key: TXCONTACT_BASE_URL
         value: https://amber.txcontact.com
       - key: TXCONTACT_CAMPAIGN_REF
-        value: dc-record-call
+        value: dc-new-call
+      - key: TXCONTACT_ATTACH_CAMPAIGN_REF
+        value: dc-attach-call
       - key: TXCONTACT_DIALER_USERNAME
         fromService:
           type: pserv

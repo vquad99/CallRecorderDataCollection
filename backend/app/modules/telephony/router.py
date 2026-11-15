@@ -85,6 +85,11 @@ class CallOut(BaseModel):
     failure_detail: str | None
     # Checklist items the moderator ticked, each with the time (D-103).
     checklist: dict[str, str]
+    # Participant B rung into the call by the platform (D-111).
+    b_dial_attempts: int
+    b_dialled_at: datetime | None
+    b_dial_status: str | None
+    b_phone_hint: str | None
     candidates: list[CandidateOut]
     events: list[EventOut]
 
@@ -134,6 +139,10 @@ def _out(db: DbSession, calls: list[Call]) -> list[CallOut]:
             failure_code=c.failure_code,
             failure_detail=c.failure_detail,
             checklist=service.checklist_of(c),
+            b_dial_attempts=c.b_dial_attempts,
+            b_dialled_at=c.b_dialled_at,
+            b_dial_status=c.b_dial_status,
+            b_phone_hint=c.b_phone_hint,
             candidates=[
                 CandidateOut(
                     **{
@@ -185,6 +194,21 @@ def tick(
     call_id: uuid.UUID, body: TickBody, request: Request, principal: CurrentPrincipal, db: DbSession
 ) -> CallOut:
     call = service.tick(db, principal, call_id, body.item, body.done, client_ip(request))
+    return _out(db, [call])[0]
+
+
+@router.post("/calls/{call_id}/call-b", response_model=CallOut)
+def call_b(
+    call_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    cipher: Cipher,
+) -> CallOut:
+    """Ring participant B into the call on the moderator's seat (D-111)."""
+    call = service.call_b(
+        db, request.app.state.telephony, cipher, principal, call_id, client_ip(request)
+    )
     return _out(db, [call])[0]
 
 

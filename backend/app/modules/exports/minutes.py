@@ -1,7 +1,8 @@
-"""Recorded, approved and payable minutes per participant (D-095).
+"""Recorded, approved and payable minutes per participant (D-095, D-111).
 
-Every conversation has two participants, so each one is credited with half of it: a 5-minute
-approved conversation gives each participant 2.5 payable minutes. A conversation's length is the
+Every conversation has two participants, and its length is split equally between them (owner,
+2026-11-15): a 5-minute conversation gives each participant 2.5 recorded minutes, and 2.5
+approved and payable minutes once the task is approved. A conversation's length is the
 newest finished recording of its task (the one an export delivers), so a re-recorded task is
 counted once. Approved means the task is APPROVED. Lengths stay counted after retention deletes
 the file, as on the dashboard.
@@ -32,7 +33,8 @@ class Minutes:
 
     @property
     def payable_ms(self) -> int:
-        return self.approved_ms // SPEAKERS
+        # Each participant's share of the approved conversations (already split equally).
+        return self.approved_ms
 
 
 def as_minutes(ms: int) -> float:
@@ -73,7 +75,7 @@ def per_participant(
         query = query.where(Task.participant_a_id.in_(wanted) | Task.participant_b_id.in_(wanted))
     totals: dict[uuid.UUID, Minutes] = {}
     for row in db.execute(query):
-        ms = int(row.ms or 0)
+        ms = int(row.ms or 0) // SPEAKERS  # each participant's equal share
         for pid in (row.participant_a_id, row.participant_b_id):
             if wanted is not None and pid not in wanted:
                 continue

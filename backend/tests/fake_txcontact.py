@@ -4,7 +4,8 @@ It answers the four requests the platform makes, the way TxContact was seen or d
 (docs/integrations/txcontact/API_NOTES.md), so the phone-call flow can be driven end to end in a
 real browser without ringing anyone:
 
-- GET  /txdialer/api/contact/add        200 + a UUID as text; wrong login: 200 + empty body
+- GET  /txdialer/api/contact/add        200 + a UUID as text; wrong login: 200 + empty body;
+                                        cmp-ref ...attach-call rings B into the call (D-111)
 - POST /txrecord/api/v1/auth/           {"status": "OK", "auth_token": ...}; wrong login: 400
 - GET  /txrecord/api/search             the calls "made" through the dialer, one page
 - GET  /txrecord/download/<file>        a short 8 kHz mono WAV (two alternating tones)
@@ -18,6 +19,7 @@ Standard library only. Never imported by the application.
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import math
@@ -93,7 +95,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(body).encode(), "application/json")
 
     def _authorised(self) -> bool:
-        if self.headers.get("Authorization", "") == f"Token {TOKEN}":
+        # Basic with the record login, as TxContact signs in since 2026-11-15; or the older token.
+        basic = base64.b64encode(f"{RECORD_USER}:{RECORD_PASSWORD}".encode()).decode()
+        if self.headers.get("Authorization", "") in (f"Token {TOKEN}", f"Basic {basic}"):
             return True
         self._json(401, {"detail": "Invalid token."})
         return False
@@ -124,6 +128,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             call_id = str(uuid.uuid1())
             agent = query.get("preferred-agent", "")
+            if query.get("cmp-ref", "").endswith("attach-call"):
+                # Participant B rung into the call on that seat: the recording is the call's own.
+                self._send(200, call_id.encode(), "text/html; charset=utf-8")
+                return
             now = datetime.now(IST)
             if not phone.endswith("9999"):
                 CALLS.append(_row(call_id, phone, agent, now))

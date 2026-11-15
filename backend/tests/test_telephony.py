@@ -52,7 +52,11 @@ class StandIn:
     def __init__(self, audio: Path) -> None:
         self.audio = audio
         self.dials: list[tuple[str, str]] = []
+        self.attaches: list[tuple[str, str]] = []
         self.accept = True
+        self.attach_answer: DialResult | Exception = DialResult(
+            True, 200, "Contact queued", "B-REF"
+        )
         self.listed: list[ProviderSession] = []
         self.search_error: str | None = None
         self.download_error: str | None = None
@@ -64,6 +68,12 @@ class StandIn:
         if self.accept:
             return DialResult(True, 200, "Contact queued", REFERENCE)
         return DialResult(False, 200, "error: agent not logged in")
+
+    def attach(self, phone_e164: str, agent_id: str) -> DialResult:
+        self.attaches.append((phone_e164, agent_id))
+        if isinstance(self.attach_answer, Exception):
+            raise self.attach_answer
+        return self.attach_answer
 
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]:
         self.searches += 1
@@ -954,3 +964,81 @@ def test_provider_traffic_is_passed_on_for_managers_only(world: dict[str, Any]) 
     assert t.json()["available"] is True
     assert t.json()["data"] == {"10": 3, "11": 5}
     assert w["mod"].get("/api/v1/telephony/provider-traffic").status_code == 403
+
+
+def test_the_moderator_rings_participant_b_into_the_call_once_a_is_on(
+    world: dict[str, Any],
+) -> None:
+    """D-111: after A is confirmed on the line, the moderator rings B through the attach
+    campaign; it is on record, limited, and only the task's moderator can do it."""
+    w = world
+    give_seat(w)
+    tid = w["new_task"]()
+    call = start(w, tid)
+    ring = f"/api/v1/calls/{call['id']}/call-b"
+
+    # Not before A is confirmed on the call.
+    early = w["mod"].post(ring)
+    assert (early.status_code, early.json()["error"]["code"]) == (409, "A_NOT_JOINED")
+    assert w["provider"].attaches == []
+
+    joined_a = w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "A_JOINED"})
+    assert joined_a.status_code == 200
+    # Not by a project admin, not by another moderator.
+    assert w["pa"].post(ring).status_code == 403
+    assert w["api"]("mod2@example.org").post(ring).status_code in (403, 404)
+
+    rung = w["mod"].post(ring)
+    assert rung.status_code == 200, rung.text
+    body = rung.json()
+    assert (body["b_dial_attempts"], body["b_dial_status"], body["b_phone_hint"]) == (
+        1,
+        "ACCEPTED",
+        B_PHONE[-2:],
+    )
+    assert body["state"] == "DIALLING"
+    # B's number, on the moderator's seat; A was rung once, by the other campaign.
+    assert w["provider"].attaches == [(B_PHONE, SEAT)]
+    assert w["provider"].dials == [(A_PHONE, SEAT)]
+    kinds = [e["kind"] for e in body["events"]]
+    assert kinds[-2:] == ["B_DIAL_REQUESTED", "B_DIAL_ACCEPTED"]
+    text = " ".join(e["text"] for e in body["events"])
+    assert B_PHONE not in text
+    assert B_PHONE[3:] not in text
+
+    # Refused by TxContact, then not reachable: said so, and B can be rung again.
+    w["provider"].attach_answer = DialResult(False, 200, "")
+    refused = w["mod"].post(ring).json()
+    assert (refused["b_dial_status"], refused["events"][-1]["kind"]) == ("REFUSED", "B_DIAL_FAILED")
+    w["provider"].attach_answer = ProviderError("TxContact did not answer in time (attach)")
+    lost = w["mod"].post(ring).json()
+    assert lost["b_dial_status"] == "UNREACHABLE"
+    assert "may still ring" in lost["events"][-1]["text"]
+    # Three rings in one call at most.
+    w["provider"].attach_answer = DialResult(True, 200, "ok", "B2")
+    many = w["mod"].post(ring)
+    assert (many.status_code, many.json()["error"]["code"]) == (429, "TOO_MANY_CALLS")
+    assert len(w["provider"].attaches) == 3
+
+    # Once the call is closed or cancelled, B is not rung.
+    cancelled = w["mod"].post(
+        f"/api/v1/calls/{call['id']}/cancel", json={"reason": "OTHER", "note": "test"}
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert w["mod"].post(ring).json()["error"]["code"] == "CALL_STATE"
+
+
+def test_participant_b_who_refused_consent_is_not_rung(world: dict[str, Any]) -> None:
+    w = world
+    give_seat(w)
+    tid = w["new_task"]()
+    call = start(w, tid)
+    w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "A_JOINED"})
+    refused = w["mod"].post(
+        f"/api/v1/tasks/{tid}/consent",
+        json={"participant_id": w["b"]["id"], "status": "REFUSED", "method": "VERBAL_NOTED"},
+    )
+    assert refused.status_code == 201, refused.text
+    answer = w["mod"].post(f"/api/v1/calls/{call['id']}/call-b")
+    assert (answer.status_code, answer.json()["error"]["code"]) == (409, "CONSENT_REFUSED")
+    assert w["provider"].attaches == []

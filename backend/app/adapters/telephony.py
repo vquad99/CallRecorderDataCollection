@@ -1,7 +1,7 @@
 """The one interface the platform uses for phone calls (TEL-001).
 
-The flow it serves (D-101): the platform asks the provider to ring participant A and connect them to
-the moderator's agent seat; the moderator adds participant B from the provider's own agent screen;
+The flow it serves (D-101, D-111): the platform asks the provider to ring participant A and connect
+them to the moderator's agent seat; when the moderator asks, it rings participant B into that call;
 after the moderator closes the call, the platform finds the call's recording and downloads it.
 """
 
@@ -49,6 +49,9 @@ class TelephonyProvider(Protocol):
     name: str
 
     def dial(self, phone_e164: str, agent_id: str) -> DialResult: ...
+
+    # Rings a second person into the call that is already on this agent seat (D-111).
+    def attach(self, phone_e164: str, agent_id: str) -> DialResult: ...
 
     def sessions(self, agent_id: str, day: date) -> list[ProviderSession]: ...
 

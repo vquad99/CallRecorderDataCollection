@@ -204,6 +204,69 @@ function Checklist({ call, onChange }: { call: tel.Call; onChange: () => Promise
   );
 }
 
+const B_DIALS = 3; // as the server allows in one call
+const B_WORDS: Record<string, string> = {
+  ACCEPTED: "TxContact is ringing participant B",
+  REFUSED: "TxContact did not take the request to ring participant B",
+  UNREACHABLE: "TxContact did not answer; B's phone may still ring",
+};
+
+/** Ring participant B into the call once A is on the line (D-111). */
+function CallB({
+  call,
+  task,
+  onChange,
+}: {
+  call: tel.Call;
+  task: work.TaskDetail;
+  onChange: () => Promise<unknown>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const aOn = "A_JOINED" in call.checklist;
+  const bOn = "B_JOINED" in call.checklist;
+  const tries = call.b_dial_attempts ?? 0;
+  const left = B_DIALS - tries;
+  return (
+    <div className="call-b" role="group" aria-label="Participant B">
+      <div>
+        <strong>Participant B ({task.participant_b.participant_code})</strong>
+        <p className="muted">
+          {tries === 0
+            ? aOn
+              ? "A is on the call. Ring B now: TxContact connects B to this call."
+              : "Tick that participant A is on the call first."
+            : `${B_WORDS[call.b_dial_status ?? ""] ?? "Asked to ring B"} (number ending ${
+                call.b_phone_hint ?? "?"
+              }${call.b_dialled_at ? `, at ${new Date(call.b_dialled_at).toLocaleTimeString()}` : ""}).${
+                bOn ? "" : " When B answers, tick that B is on the call."
+              }`}
+        </p>
+      </div>
+      {bOn ? null : (
+        <Button
+          variant={tries === 0 ? "primary" : "secondary"}
+          busy={busy}
+          disabled={!aOn || left <= 0}
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            tel
+              .callParticipantB(call.id)
+              .then(onChange)
+              .catch((err: unknown) => setError(toApiError(err)))
+              .finally(() => setBusy(false));
+          }}
+        >
+          <Icon name="phone" size={16} weight="fill" />
+          {tries === 0 ? "Call participant B" : `Ring B again (${left} left)`}
+        </Button>
+      )}
+      <ErrorNotice error={error} />
+    </div>
+  );
+}
+
 /** The newest finished recording's delivery file, to listen to before sending it to QC. */
 function ListenLatest({ taskId }: { taskId: string }) {
   const { state } = useResource(() => rec.listRecordings(taskId), [taskId]);
@@ -316,7 +379,10 @@ function CallCard({
               Sign in to your TxContact screen, then click Start call. TxContact rings participant A
               ({task.participant_a.participant_code}) and connects them to you.
             </li>
-            <li>Add participant B from your TxContact screen, and tick the checklist.</li>
+            <li>
+              When A is on the line, tick it and click Call participant B: TxContact rings B into
+              the same call.
+            </li>
             <li>Record each person&apos;s consent below.</li>
             <li>Stay on the call, muted, and listen. When they have finished, close the call.</li>
           </ol>
@@ -344,11 +410,12 @@ function CallCard({
         <>
           <p>
             TxContact was asked to ring participant A (number ending {latest.phone_hint}) on seat{" "}
-            {latest.agent_id}. Add participant B from your TxContact screen. Stay on the call,
-            muted, and listen: if the line is poor, cancel the call and choose{" "}
+            {latest.agent_id}. When A is on the line, tick it, then call participant B. Stay on the
+            call, muted, and listen: if the line is poor, cancel the call and choose{" "}
             <strong>Poor line quality</strong>.
           </p>
           <Checklist call={latest} onChange={calls.refresh} />
+          <CallB call={latest} task={task} onChange={calls.refresh} />
           <TextField
             label="Note for the record (optional)"
             value={note}

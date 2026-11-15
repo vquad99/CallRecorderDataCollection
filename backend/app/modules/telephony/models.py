@@ -46,6 +46,9 @@ EVENT_KINDS = (
     "CALL_CLOSED",
     "CALL_CANCELLED",
     "CHECKLIST",
+    "B_DIAL_REQUESTED",
+    "B_DIAL_ACCEPTED",
+    "B_DIAL_FAILED",
     "SEARCHING",
     "MATCHED",
     "MATCH_CHOSEN",
@@ -129,6 +132,14 @@ class Call(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recording_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recordings.id", ondelete="RESTRICT")
     )
+    # Participant B, rung into this call when the moderator asked (D-111): how many times, the
+    # last time, what the provider said (ACCEPTED, REFUSED, UNREACHABLE), its reference, and
+    # the last two digits of B's number.
+    b_dial_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    b_dialled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    b_dial_status: Mapped[str | None] = mapped_column(String(20))
+    b_reference: Mapped[str | None] = mapped_column(String(100))
+    b_phone_hint: Mapped[str | None] = mapped_column(String(2))
 
 
 class CallEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):

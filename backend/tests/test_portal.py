@@ -86,9 +86,9 @@ def test_accepted_minutes_count_only_approved_sessions(world: dict[str, Any]) ->
     db.execute(update(Task).where(Task.id == world["task"]["id"]).values(status="APPROVED"))
     db.commit()
     body = api.get("/api/v1/portal/me", headers=head).json()
-    assert (body["accepted_minutes"], body["sessions"][0]["state"]) == (2.0, "Accepted")
-    # Their own share for payment: half of each accepted conversation (D-095, D-100).
-    assert (body["recorded_minutes"], body["payable_minutes"]) == (2.0, 1.0)
+    # Their own share: half of each 2-minute conversation (D-095, D-100, D-111).
+    assert (body["accepted_minutes"], body["sessions"][0]["state"]) == (1.0, "Accepted")
+    assert (body["recorded_minutes"], body["payable_minutes"]) == (1.0, 1.0)
 
 
 def test_the_participant_answers_and_withdraws_consent_themselves(world: dict[str, Any]) -> None:

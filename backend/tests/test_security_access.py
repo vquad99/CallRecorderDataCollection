@@ -1029,6 +1029,15 @@ CASES: list[Case] = [
         Perm.CALLS_END,
         lambda e, s, who: {"item": "A_JOINED"},  # the call is not live: 409 after access
     ),
+    # Ringing participant B into the call (D-111): the task's own moderator only. The call is
+    # waiting for a person, so the moderator's answer is "the call is not on" (409).
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/call-b",
+        lambda e, s: f"/api/v1/calls/{s.call}/call-b",
+        {MO},
+        Perm.CALLS_START,
+    ),
     case(
         "POST",
         "/api/v1/calls/{call_id}/close",

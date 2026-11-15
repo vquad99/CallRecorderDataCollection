@@ -96,7 +96,10 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
         m = after[name]
         assert m["approved_conversations"] == 1
         assert m["approved_minutes"] == m["recorded_minutes"]
-        assert m["payable_minutes"] == pytest.approx(m["approved_minutes"] / 2, abs=0.01)
+        # Each participant's equal share (D-111): payable is their share of approved minutes.
+        assert m["payable_minutes"] == m["approved_minutes"]
+    # The two shares add up to the conversation (to the millisecond).
+    assert after["Asha"]["recorded_minutes"] == after["Bina"]["recorded_minutes"]
 
     got = pa.get(f"/api/v1/projects/{pid}/export", params={"content": "participants"})
     assert got.status_code == 200, got.text
@@ -105,9 +108,7 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
     rows = list(csv.DictReader(io.StringIO(got.content.decode("utf-8-sig"))))
     assert len(rows) == 2
     for row in rows:
-        assert float(row["payable_minutes"]) == pytest.approx(
-            float(row["approved_minutes"]) / 2, abs=0.01
-        )
+        assert float(row["payable_minutes"]) == float(row["approved_minutes"])
 
     # A moderator sees the people, not the payment minutes.
     assert all(
@@ -116,8 +117,10 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
     )
 
 
-def test_payable_minutes_are_half_of_approved() -> None:
-    from app.modules.exports.minutes import Minutes, as_minutes
+def test_a_conversation_is_split_equally_between_its_two_participants() -> None:
+    """D-111: a 5-minute conversation gives each of the two people 2.5 minutes."""
+    from app.modules.exports.minutes import SPEAKERS, Minutes, as_minutes
 
-    five_minutes = Minutes(conversations=1, recorded_ms=300_000, approved_ms=300_000)
-    assert as_minutes(five_minutes.payable_ms) == 2.5
+    share = 300_000 // SPEAKERS
+    each = Minutes(conversations=1, recorded_ms=share, approved_ms=share)
+    assert (as_minutes(each.recorded_ms), as_minutes(each.payable_ms)) == (2.5, 2.5)

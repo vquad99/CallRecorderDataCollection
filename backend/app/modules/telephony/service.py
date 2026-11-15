@@ -425,6 +425,100 @@ def tick(
     return call
 
 
+MAX_B_DIALS = 3  # rings of participant B within one call
+
+
+def call_b(
+    db: Session,
+    provider: TelephonyProvider | None,
+    cipher: FieldCipher,
+    principal: Principal,
+    call_id: uuid.UUID,
+    ip: str | None,
+) -> Call:
+    """Rings participant B into the call that is on the moderator's seat (D-111). Only the task's
+    moderator, only while the call is on, only after A is confirmed on the line."""
+    if provider is None:
+        raise not_configured()
+    call, task = _call_for_change(db, principal, call_id)
+    assigned = tasks.active_assignee(db, task.id, "MODERATOR")
+    if not (
+        principal.can_in_project(Perm.CALLS_START, task.project_id)
+        and assigned is not None
+        and assigned.user_id == principal.user_id
+    ):
+        raise AppError(
+            "Only the task's moderator rings participant B", code="FORBIDDEN", status_code=403
+        )
+    # Two clicks arrive together: the row is locked, so B is rung once.
+    db.refresh(call, with_for_update=True)
+    _require_state(call, "DIALLING")
+    if "A_JOINED" not in checklist_of(call):
+        db.rollback()
+        raise AppError(
+            "Confirm that participant A is on the call before ringing participant B",
+            code="A_NOT_JOINED",
+            status_code=409,
+        )
+    if "B" in _consent_sides(db, task, "REFUSED"):
+        db.rollback()
+        raise AppError(
+            "Participant B refused consent for this session and is not called",
+            code="CONSENT_REFUSED",
+            status_code=409,
+        )
+    if call.b_dial_attempts >= MAX_B_DIALS:
+        db.rollback()
+        raise AppError(
+            f"Participant B has been rung {MAX_B_DIALS} times in this call; close or cancel it "
+            "and start again",
+            code="TOO_MANY_CALLS",
+            status_code=429,
+        )
+    b = db.get(Participant, task.participant_b_id)
+    assert b is not None  # noqa: S101  (foreign key)
+    phone = _phone(cipher, b)
+    call.b_dial_attempts += 1
+    call.b_dialled_at = datetime.now(UTC)
+    call.b_dial_status = None
+    call.b_reference = None
+    call.b_phone_hint = digits(phone)[-2:]
+    _event(
+        db,
+        call,
+        "B_DIAL_REQUESTED",
+        f"Asked {provider.name} to ring participant B (number ending {call.b_phone_hint}) into "
+        f"the call on agent seat {call.agent_id}",
+        principal.user_id,
+    )
+    _audit(db, call, "call.b_dialled", principal, ip, {"attempt": call.b_dial_attempts})
+    db.commit()  # on record before the provider is asked, as for A
+    try:
+        result = provider.attach(phone, call.agent_id)
+    except UnsupportedNumber as exc:
+        call.b_dial_status = "REFUSED"
+        _event(db, call, "B_DIAL_FAILED", str(exc))
+    except ProviderError as exc:
+        call.b_dial_status = "UNREACHABLE"
+        _event(
+            db,
+            call,
+            "B_DIAL_FAILED",
+            f"{exc}. B's phone may still ring: look at your TxContact screen before ringing again",
+        )
+    else:
+        answer = f"HTTP {result.http_status}: {result.response_excerpt or '(empty answer)'}"
+        if result.accepted:
+            call.b_dial_status = "ACCEPTED"
+            call.b_reference = result.reference
+            _event(db, call, "B_DIAL_ACCEPTED", f"{provider.name} answered {answer}")
+        else:
+            call.b_dial_status = "REFUSED"
+            _event(db, call, "B_DIAL_FAILED", f"{provider.name} answered {answer}")
+    db.commit()
+    return call
+
+
 def close_call(
     db: Session,
     settings: Settings,

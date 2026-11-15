@@ -198,8 +198,8 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
 
 
 def participants_table(db: Session, project: Project, table_format: str = "csv") -> str:
-    """Minutes per participant (D-095): each conversation is split equally between its two
-    participants, so payable minutes are half of the approved conversation minutes."""
+    """Minutes per participant (D-095, D-111): each conversation's length is split equally
+    between its two participants; every column is the participant's share."""
     totals = minutes.per_participant(db, project.id)
     people = (
         {p.id: p for p in db.scalars(select(Participant).where(Participant.id.in_(list(totals))))}

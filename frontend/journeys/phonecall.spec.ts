@@ -2,7 +2,7 @@
 // would do it (D-101, D-103). The backend talks to a stand-in for TxContact
 // (backend/tests/fake_txcontact.py): no phone rings, everything else is real (browser, backend,
 // database, file storage). Skipped when the backend has no phone provider configured.
-// Requirements: TEL-002, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038, PART-016
+// Requirements: TEL-002, TEL-004, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038, PART-016
 import { expect, test, type Page } from "@playwright/test";
 
 import {
@@ -117,6 +117,10 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     // The call cannot be closed before both people are confirmed on it.
     await expect(moderator.getByRole("button", { name: "Close call" })).toBeDisabled();
     await moderator.getByRole("checkbox", { name: /Participant A is on the call/ }).check();
+    // B is rung into the same call from here (D-111).
+    await moderator.getByRole("button", { name: "Call participant B" }).click();
+    await expect(moderator.getByText(/TxContact is ringing participant B/)).toBeVisible();
+    await expect(moderator.getByText(/TXCONTACT answered HTTP 200/).first()).toBeVisible();
     await moderator.getByRole("checkbox", { name: /Participant B is on the call/ }).check();
     await moderator.getByRole("checkbox", { name: /I am muted and listening/ }).check();
     await expect(moderator.getByRole("button", { name: "Close call" })).toBeEnabled();

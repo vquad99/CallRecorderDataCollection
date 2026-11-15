@@ -16,6 +16,7 @@ the time zone of reported times, what sl_from/sl_to hold, and the recording file
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import logging
@@ -173,6 +174,13 @@ class TxContact:
             raise ProviderError(f"TxContact's answer was not JSON ({what})") from None
 
     def _auth_header(self) -> str:
+        scheme = self._s.txcontact_auth_scheme.strip()
+        if scheme.lower() == "basic":
+            # The record user and password themselves (TxContact, 2026-11-15): nothing to fetch.
+            password = self._s.txcontact_record_password
+            assert password is not None  # noqa: S101  (telephony_configured)
+            pair = f"{self._s.txcontact_record_user}:{password.get_secret_value()}"
+            return "Basic " + base64.b64encode(pair.encode()).decode()
         if self._token is None:
             password = self._s.txcontact_record_password
             assert password is not None  # noqa: S101  (telephony_configured)
@@ -200,7 +208,6 @@ class TxContact:
             if not isinstance(token, str) or not token:
                 raise ProviderError("TxContact's recording sign-in returned no token")
             self._token = token
-        scheme = self._s.txcontact_auth_scheme.strip()
         return f"{scheme} {self._token}" if scheme else self._token
 
     def _authorised(self, url: str, what: str) -> Any:
@@ -228,6 +235,16 @@ class TxContact:
     # ------------------------------------------------------------------ interface
 
     def dial(self, phone_e164: str, agent_id: str) -> DialResult:
+        return self._contact_add(phone_e164, agent_id, self._s.txcontact_campaign_ref, "dial")
+
+    def attach(self, phone_e164: str, agent_id: str) -> DialResult:
+        """Participant B, rung into the call already on this seat through the attach campaign
+        (TxContact's email of 2026-11-15: the same request with cmp-ref=dc-attach-call)."""
+        return self._contact_add(
+            phone_e164, agent_id, self._s.txcontact_attach_campaign_ref, "attach"
+        )
+
+    def _contact_add(self, phone_e164: str, agent_id: str, campaign: str, what: str) -> DialResult:
         phone = national_number(phone_e164)
         password = self._s.txcontact_dialer_password
         assert password is not None  # noqa: S101  (telephony_configured)
@@ -235,7 +252,7 @@ class TxContact:
             {
                 "username": self._s.txcontact_dialer_username,
                 "password": password.get_secret_value(),
-                "cmp-ref": self._s.txcontact_campaign_ref,
+                "cmp-ref": campaign,
                 "phone": phone,
                 "preferred-agent": agent_id,
                 "source": self._s.txcontact_source,
@@ -244,8 +261,8 @@ class TxContact:
         request = urllib.request.Request(  # noqa: S310
             f"{self._s.txcontact_base_url}/txdialer/api/contact/add?{query}", method="GET"
         )
-        status, response = self._call(request, "dial")
-        text = self._read(response, 20_000, "dial").decode("utf-8", errors="replace").strip()
+        status, response = self._call(request, what)
+        text = self._read(response, 20_000, what).decode("utf-8", errors="replace").strip()
         excerpt = self._scrub(text, [phone, phone_e164])
         # Tested 2026-11-13: an accepted request answers 200 with a UUID as plain text; a wrong
         # username or password answers 200 with an empty body. Empty therefore means refused.

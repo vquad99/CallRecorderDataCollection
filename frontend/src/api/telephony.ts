@@ -82,6 +82,11 @@ export interface Call {
   failure_detail: string | null;
   /** Checklist items ticked, each with the time. */
   checklist: Partial<Record<ChecklistItem, string>>;
+  /** Participant B rung into the call by the platform (D-111). */
+  b_dial_attempts?: number;
+  b_dialled_at?: string | null;
+  b_dial_status?: "ACCEPTED" | "REFUSED" | "UNREACHABLE" | null;
+  b_phone_hint?: string | null;
   candidates: Candidate[];
   events: CallEvent[];
 }
@@ -97,6 +102,9 @@ export const startCall = (taskId: string) =>
   apiRequest<Call>(`/api/v1/tasks/${taskId}/calls`, { method: "POST" });
 export const tickChecklist = (id: string, item: ChecklistItem, done: boolean) =>
   apiRequest<Call>(`/api/v1/calls/${id}/checklist`, { method: "POST", body: { item, done } });
+/** Ring participant B into the call on the moderator's seat (D-111). */
+export const callParticipantB = (id: string) =>
+  apiRequest<Call>(`/api/v1/calls/${id}/call-b`, { method: "POST" });
 export const closeCall = (id: string, note: string) =>
   apiRequest<Call>(`/api/v1/calls/${id}/close`, { method: "POST", body: { note } });
 export const cancelCall = (id: string, reason: CancelReason, note: string) =>
