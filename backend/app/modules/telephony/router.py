@@ -90,6 +90,9 @@ class CallOut(BaseModel):
     b_dialled_at: datetime | None
     b_dial_status: str | None
     b_phone_hint: str | None
+    # The conversation as the moderator marked it (D-113).
+    record_started_at: datetime | None
+    record_stopped_at: datetime | None
     candidates: list[CandidateOut]
     events: list[EventOut]
 
@@ -143,6 +146,8 @@ def _out(db: DbSession, calls: list[Call]) -> list[CallOut]:
             b_dialled_at=c.b_dialled_at,
             b_dial_status=c.b_dial_status,
             b_phone_hint=c.b_phone_hint,
+            record_started_at=c.record_started_at,
+            record_stopped_at=c.record_stopped_at,
             candidates=[
                 CandidateOut(
                     **{
@@ -209,6 +214,24 @@ def call_b(
     call = service.call_b(
         db, request.app.state.telephony, cipher, principal, call_id, client_ip(request)
     )
+    return _out(db, [call])[0]
+
+
+@router.post("/calls/{call_id}/recording/start", response_model=CallOut)
+def start_recording(
+    call_id: uuid.UUID, request: Request, principal: CurrentPrincipal, db: DbSession
+) -> CallOut:
+    """Mark where the conversation starts, once A and B are on the line (D-113)."""
+    call = service.mark_recording(db, principal, call_id, True, client_ip(request))
+    return _out(db, [call])[0]
+
+
+@router.post("/calls/{call_id}/recording/stop", response_model=CallOut)
+def stop_recording(
+    call_id: uuid.UUID, request: Request, principal: CurrentPrincipal, db: DbSession
+) -> CallOut:
+    """Mark where the conversation ends (D-113)."""
+    call = service.mark_recording(db, principal, call_id, False, client_ip(request))
     return _out(db, [call])[0]
 
 

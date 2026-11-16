@@ -122,6 +122,13 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByText(/TxContact is ringing participant B/)).toBeVisible();
     await expect(moderator.getByText(/TXCONTACT answered HTTP 200/).first()).toBeVisible();
     await moderator.getByRole("checkbox", { name: /Participant B is on the call/ }).check();
+    // Both on the line: the moderator marks where the conversation starts (D-113).
+    await moderator.getByRole("button", { name: "Start recording" }).click();
+    await expect(moderator.getByRole("button", { name: "Stop recording" })).toBeVisible();
+    // About four seconds of conversation, then Stop: only that part is delivered.
+    await moderator.waitForTimeout(4_000);
+    await moderator.getByRole("button", { name: "Stop recording" }).click();
+    await expect(moderator.getByText(/Only this part is delivered/)).toBeVisible();
     await moderator.getByRole("checkbox", { name: /I am muted and listening/ }).check();
     await expect(moderator.getByRole("button", { name: "Close call" })).toBeEnabled();
   });
@@ -143,7 +150,10 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     const played = await playToEnd(moderator, "Recording being checked");
     expect(played.error).toBeNull();
     expect(played.ended).toBe(true);
-    expect(Math.round(played.duration)).toBe(12);
+    // The stand-in's file is 12 s from the moment A was rung; the delivery file is cut to the
+    // marked part, about 4 s, plus one second each side (D-113).
+    expect(played.duration).toBeGreaterThanOrEqual(4);
+    expect(played.duration).toBeLessThan(10);
     // One channel is what a phone call has: the automatic check does not fail it (D-103).
     await expect(moderator.getByRole("heading", { name: "Audio quality" })).toBeVisible();
     await expect(moderator.getByText("Failed", { exact: true })).toHaveCount(0);
@@ -158,7 +168,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(admin.getByRole("heading", { name: "Calls per day" })).toBeVisible();
     const row = admin.getByRole("row").filter({ hasText: main.task_code });
     await expect(row).toContainText("Recording stored");
-    await expect(row).toContainText("12 s");
+    await expect(row).toContainText(/[4-9] s/);
     await expect(admin.getByRole("row").filter({ hasText: blocked.task_code })).toContainText(
       "Call could not be placed",
     );
@@ -209,7 +219,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(session).toContainText("Participant A");
     await expect(session).toContainText(bina.participant_code);
     await expect(session).toContainText("Agreed");
-    await expect(session).toContainText("12 s");
+    await expect(session).toContainText(/[4-9] s/);
     await session.getByRole("link", { name: main.task_code }).click();
     await expect(admin).toHaveURL(new RegExp(`/tasks/${main.id}$`));
   });

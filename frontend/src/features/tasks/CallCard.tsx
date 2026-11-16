@@ -267,6 +267,74 @@ function CallB({
   );
 }
 
+const clock = (iso: string) => new Date(iso).toLocaleTimeString();
+
+/** The moderator marks the conversation once both people are on the line (D-113). TxContact
+ * records the whole call; the delivery file keeps only what lies between Start and Stop. */
+function RecordMarks({ call, onChange }: { call: tel.Call; onChange: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState<"start" | "stop" | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const started = call.record_started_at ?? null;
+  const stopped = call.record_stopped_at ?? null;
+  const bothOn = "A_JOINED" in call.checklist && "B_JOINED" in call.checklist;
+  useEffect(() => {
+    if (!started || stopped) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [started, stopped]);
+  const elapsed = started
+    ? Math.max(0, Math.round(((stopped ? Date.parse(stopped) : now) - Date.parse(started)) / 1000))
+    : 0;
+  const mark = (step: "start" | "stop") => {
+    setBusy(step);
+    setError(null);
+    tel
+      .markRecording(call.id, step)
+      .then(onChange)
+      .catch((err: unknown) => setError(toApiError(err)))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <div className="call-b record-marks" role="group" aria-label="Recording">
+      <div>
+        <strong>
+          {!started ? "Recording not started" : stopped ? "Recording stopped" : "Recording"}
+          {started ? ` · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : ""}
+        </strong>
+        <p className="muted">
+          {!started
+            ? bothOn
+              ? "Both people are on the line. Click Start recording when the conversation begins."
+              : "Tick that A and B are on the call first."
+            : stopped
+              ? `Kept: ${clock(started)} to ${clock(stopped)}. Only this part is delivered.`
+              : `Since ${clock(started)}. Click Stop recording when they have finished.`}
+        </p>
+      </div>
+      <span className="actions">
+        {!started || stopped ? (
+          <Button
+            variant={started ? "secondary" : "primary"}
+            busy={busy === "start"}
+            disabled={!bothOn}
+            onClick={() => mark("start")}
+          >
+            <Icon name="record" size={16} />
+            {started ? "Start again" : "Start recording"}
+          </Button>
+        ) : (
+          <Button busy={busy === "stop"} onClick={() => mark("stop")}>
+            <Icon name="stop" size={16} />
+            Stop recording
+          </Button>
+        )}
+      </span>
+      <ErrorNotice error={error} />
+    </div>
+  );
+}
+
 /** The newest finished recording's delivery file, to listen to before sending it to QC. */
 function ListenLatest({ taskId }: { taskId: string }) {
   const { state } = useResource(() => rec.listRecordings(taskId), [taskId]);
@@ -404,7 +472,9 @@ function CallCard({
         </Button>
       );
     } else if (latest.state === "DIALLING") {
-      const ready = tel.CHECKLIST.every((c) => !c.required || c.item in latest.checklist);
+      const ready =
+        tel.CHECKLIST.every((c) => !c.required || c.item in latest.checklist) &&
+        Boolean(latest.record_started_at);
       title = "On the call";
       body = (
         <>
@@ -416,6 +486,7 @@ function CallCard({
           </p>
           <Checklist call={latest} onChange={calls.refresh} />
           <CallB call={latest} task={task} onChange={calls.refresh} />
+          <RecordMarks call={latest} onChange={calls.refresh} />
           <TextField
             label="Note for the record (optional)"
             value={note}
@@ -423,7 +494,8 @@ function CallCard({
           />
           {ready ? null : (
             <p className="muted">
-              Tick both people on the call, and record their consent below, to close the call.
+              Tick both people on the call, start the recording, and record their consent below, to
+              close the call.
             </p>
           )}
         </>

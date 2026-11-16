@@ -89,6 +89,20 @@ describe("phone calls on the task page", () => {
           ];
           return [200, calls[0]];
         },
+        "POST /api/v1/calls/c1/recording/start": () => {
+          calls = [
+            call("DIALLING", {
+              ...calls[0],
+              record_started_at: "2026-11-13T10:03:00Z",
+              record_stopped_at: null,
+            }),
+          ];
+          return [200, calls[0]];
+        },
+        "POST /api/v1/calls/c1/recording/stop": () => {
+          calls = [call("DIALLING", { ...calls[0], record_stopped_at: "2026-11-13T10:15:30Z" })];
+          return [200, calls[0]];
+        },
         "POST /api/v1/calls/c1/close": () => {
           calls = [call("WAITING_FOR_RECORDING", { closed_at: "2026-11-13T10:20:00Z" })];
           return [200, calls[0]];
@@ -122,7 +136,14 @@ describe("phone calls on the task page", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Ring B again/ })).not.toBeInTheDocument(),
     );
+    // Both on the line: the conversation is marked (D-113); closing needs the start.
+    expect(screen.getByRole("button", { name: "Close call" })).toBeDisabled();
+    await userEvent.click(await screen.findByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Stop recording" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Close call" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Stop recording" }));
+    expect(await screen.findByText(/Only this part is delivered/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start again" })).toBeInTheDocument();
     expect(
       api.calls.filter((c) => c.path === "/api/v1/calls/c1/checklist").map((c) => c.body),
     ).toEqual([

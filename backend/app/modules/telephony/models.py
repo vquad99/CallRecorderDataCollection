@@ -49,6 +49,8 @@ EVENT_KINDS = (
     "B_DIAL_REQUESTED",
     "B_DIAL_ACCEPTED",
     "B_DIAL_FAILED",
+    "RECORDING_STARTED",
+    "RECORDING_STOPPED",
     "SEARCHING",
     "MATCHED",
     "MATCH_CHOSEN",
@@ -140,6 +142,10 @@ class Call(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     b_dial_status: Mapped[str | None] = mapped_column(String(20))
     b_reference: Mapped[str | None] = mapped_column(String(100))
     b_phone_hint: Mapped[str | None] = mapped_column(String(2))
+    # The part of the call that is the conversation, marked by the moderator once A and B are
+    # both on the line (D-113). The delivery file is cut to it; the provider's file is kept whole.
+    record_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    record_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CallEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):

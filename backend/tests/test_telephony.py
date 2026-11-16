@@ -33,7 +33,8 @@ from app.modules.projects.models import ProjectAudioRule
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
-from app.modules.telephony.models import Call
+from app.modules.telephony import service
+from app.modules.telephony.models import Call, CallEvent
 from tests.conftest import Api, build_settings, make_participant, make_project, make_user
 
 pytestmark = pytest.mark.db
@@ -229,10 +230,12 @@ def consent(w: dict[str, Any], tid: str, status: str = "GIVEN") -> None:
 
 
 def joined(w: dict[str, Any], call_id: str) -> None:
-    """The moderator confirms that A and B are on the call."""
+    """The moderator confirms that A and B are on the call, then starts the recording (D-113)."""
     for item in ("A_JOINED", "B_JOINED"):
         r = w["mod"].post(f"/api/v1/calls/{call_id}/checklist", json={"item": item})
         assert r.status_code == 200, r.text
+    r = w["mod"].post(f"/api/v1/calls/{call_id}/recording/start")
+    assert r.status_code == 200, r.text
 
 
 def due_now(w: dict[str, Any], call_id: str) -> None:
@@ -1042,3 +1045,116 @@ def test_participant_b_who_refused_consent_is_not_rung(world: dict[str, Any]) ->
     answer = w["mod"].post(f"/api/v1/calls/{call['id']}/call-b")
     assert (answer.status_code, answer.json()["error"]["code"]) == (409, "CONSENT_REFUSED")
     assert w["provider"].attaches == []
+
+
+def test_the_moderator_marks_the_conversation_once_both_are_on_the_line(
+    world: dict[str, Any],
+) -> None:
+    """D-113: Start recording needs A and B on the call; Stop needs a start; the call cannot be
+    closed without a start, and a call closed without Stop ends the recording there."""
+    w = world
+    give_seat(w)
+    tid = w["new_task"]()
+    call = start(w, tid)
+    base = f"/api/v1/calls/{call['id']}"
+    early = w["mod"].post(f"{base}/recording/start")
+    assert (early.status_code, early.json()["error"]["code"]) == (409, "CHECKLIST_INCOMPLETE")
+    stop_first = w["mod"].post(f"{base}/recording/stop")
+    assert (stop_first.status_code, stop_first.json()["error"]["code"]) == (
+        409,
+        "RECORDING_NOT_STARTED",
+    )
+    for item in ("A_JOINED", "B_JOINED"):
+        w["mod"].post(f"{base}/checklist", json={"item": item})
+    consent(w, tid)
+    unmarked = w["mod"].post(f"{base}/close", json={})
+    assert (unmarked.status_code, unmarked.json()["error"]["code"]) == (
+        409,
+        "RECORDING_NOT_STARTED",
+    )
+    # Only the task's moderator marks it.
+    assert w["pa"].post(f"{base}/recording/start").status_code == 403
+    started = w["mod"].post(f"{base}/recording/start").json()
+    assert started["record_started_at"]
+    assert started["record_stopped_at"] is None
+    assert started["events"][-1]["kind"] == "RECORDING_STARTED"
+    # Starting again replaces the start.
+    again = w["mod"].post(f"{base}/recording/start").json()
+    assert again["record_started_at"] >= started["record_started_at"]
+    assert "replaced" in again["events"][-1]["text"]
+    stopped = w["mod"].post(f"{base}/recording/stop").json()
+    assert stopped["record_stopped_at"] >= stopped["record_started_at"]
+    assert stopped["events"][-1]["kind"] == "RECORDING_STOPPED"
+    # A second Stop changes nothing.
+    assert (
+        w["mod"].post(f"{base}/recording/stop").json()["record_stopped_at"]
+        == (stopped["record_stopped_at"])
+    )
+    closed = w["mod"].post(f"{base}/close", json={}).json()
+    assert datetime.fromisoformat(closed["record_stopped_at"]) == datetime.fromisoformat(
+        stopped["record_stopped_at"]
+    )
+
+    # Not stopped by hand: the recording ends when the call is closed.
+    tid2 = w["new_task"]()
+    call2 = start(w, tid2)
+    joined(w, call2["id"])
+    consent(w, tid2)
+    closed2 = w["mod"].post(f"/api/v1/calls/{call2['id']}/close", json={}).json()
+    at = datetime.fromisoformat
+    assert at(closed2["record_stopped_at"]) == at(closed2["closed_at"])
+
+
+def test_the_delivery_file_is_cut_to_the_marks_and_the_original_kept_whole(
+    world: dict[str, Any],
+) -> None:
+    """D-113: the provider's 4-second file starts 1 s before Start recording; Stop comes 1.5 s
+    after it. With the 1-second margin the delivery file holds 0 s to 3.5 s."""
+    w = world
+    tid, call = started_and_closed(w)
+    db = w["db"]
+    row = db.get(Call, call["id"])
+    begin = row.record_started_at
+    row.record_stopped_at = begin + timedelta(seconds=1.5)
+    db.commit()
+    w["provider"].listed = [session("CUT1", begin - timedelta(seconds=1))]
+    due_now(w, call["id"])
+    sweep(w)
+    db.expire_all()
+    row = db.get(Call, call["id"])
+    assert row.state == "RECORDED", row.failure_detail
+    assets = {
+        a.kind: a
+        for a in db.scalars(select(AudioAsset).where(AudioAsset.recording_id == row.recording_id))
+    }
+    assert assets["PROVIDER_ORIGINAL_MIXED"].duration_ms == 4000  # kept whole
+    assert abs(assets["TELEPHONY_DERIVED_PCM"].duration_ms - 3500) <= 5
+    texts = [e.detail for e in db.scalars(select(CallEvent).where(CallEvent.call_id == row.id))]
+    assert any("cut to the moderator's recording marks: 0.0 s to 3.5 s" in t for t in texts)
+
+
+def test_the_window_is_found_or_the_whole_call_kept_with_the_reason() -> None:
+    begin = datetime(2026, 11, 16, 10, 0, 0, tzinfo=UTC)
+
+    def window(
+        start_s: float, stop_s: float, file_start: datetime | None, frames: int = 80_000
+    ) -> service.Window:
+        c = Call(
+            record_started_at=begin + timedelta(seconds=start_s),
+            record_stopped_at=begin + timedelta(seconds=stop_s),
+        )
+        s = session("W", begin)
+        s = ProviderSession(**{**s.__dict__, "start": file_start})
+        return service.recording_window(c, s, frames, 8000, 1.0)
+
+    inside = window(3, 7, begin)
+    assert (inside.first_frame, inside.last_frame, inside.cut) == (16_000, 64_000, True)
+    assert not window(0.5, 9.5, begin).cut  # margins reach both ends: whole file
+    late = window(20, 30, begin)  # marks after the file ends
+    assert (late.cut, late.last_frame) == (False, 80_000)
+    assert "fall outside" in late.description
+    unknown = window(3, 7, None)
+    assert (unknown.cut, unknown.description) == (
+        False,
+        "whole call kept: the provider gave no start time",
+    )

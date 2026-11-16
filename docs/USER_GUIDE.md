@@ -326,6 +326,9 @@ TxContact agent screen before you start.
    answer, click **Ring B again** (3 times at most in one call).
 5. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
    call), then **I am muted and listening** and **Both voices are clear**.
+   Click **Start recording** when the conversation begins, and **Stop recording** when it ends.
+   TxContact records the whole call; only the part between Start and Stop is delivered, checked
+   and counted. The call cannot be closed without Start; **Start again** moves the start.
 6. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
 7. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
    them, end the call, then click **Cancel this call** and choose **Poor line quality**.

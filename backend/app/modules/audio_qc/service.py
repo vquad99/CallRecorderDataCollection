@@ -1238,6 +1238,9 @@ def _call_details(db: Session, rec: Recording) -> dict[str, Any] | None:
         "number_ends_in": call.phone_hint,
         "dialled_at": _iso(call.dialled_at),
         "closed_at": _iso(call.closed_at),
+        # The conversation as the moderator marked it; the delivery file is cut to it (D-113).
+        "recording_started_at": _iso(call.record_started_at),
+        "recording_stopped_at": _iso(call.record_stopped_at),
         "note": call.note,
         "checklist": {
             item: telephony.checklist_of(call).get(item)

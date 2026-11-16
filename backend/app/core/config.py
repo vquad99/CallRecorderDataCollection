@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     # one that rings participant B into the call already on that seat (TxContact, 2026-11-15).
     txcontact_campaign_ref: str = "dc-new-call"
     txcontact_attach_campaign_ref: str = "dc-attach-call"
+    # Seconds kept before Start recording and after Stop recording when the provider's file is
+    # cut to the moderator's marks (D-113): the two clocks may differ a little (NOT VERIFIED).
+    telephony_mark_margin_seconds: float = Field(default=1.0, ge=0, le=30)
     txcontact_source: str = "webapi"
     txcontact_record_user: str | None = None
     txcontact_record_password: SecretStr | None = None

@@ -87,6 +87,9 @@ export interface Call {
   b_dialled_at?: string | null;
   b_dial_status?: "ACCEPTED" | "REFUSED" | "UNREACHABLE" | null;
   b_phone_hint?: string | null;
+  /** The conversation as the moderator marked it (D-113). */
+  record_started_at?: string | null;
+  record_stopped_at?: string | null;
   candidates: Candidate[];
   events: CallEvent[];
 }
@@ -105,6 +108,9 @@ export const tickChecklist = (id: string, item: ChecklistItem, done: boolean) =>
 /** Ring participant B into the call on the moderator's seat (D-111). */
 export const callParticipantB = (id: string) =>
   apiRequest<Call>(`/api/v1/calls/${id}/call-b`, { method: "POST" });
+/** Mark where the conversation starts or stops (D-113). */
+export const markRecording = (id: string, step: "start" | "stop") =>
+  apiRequest<Call>(`/api/v1/calls/${id}/recording/${step}`, { method: "POST" });
 export const closeCall = (id: string, note: string) =>
   apiRequest<Call>(`/api/v1/calls/${id}/close`, { method: "POST", body: { note } });
 export const cancelCall = (id: string, reason: CancelReason, note: string) =>

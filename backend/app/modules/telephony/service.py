@@ -519,6 +519,69 @@ def call_b(
     return call
 
 
+def mark_recording(
+    db: Session, principal: Principal, call_id: uuid.UUID, start: bool, ip: str | None
+) -> Call:
+    """The moderator marks where the conversation starts (both people on the line) or stops
+    (D-113). Starting again moves the start and clears the stop."""
+    call, task = _call_for_change(db, principal, call_id)
+    assigned = tasks.active_assignee(db, task.id, "MODERATOR")
+    if not (
+        principal.can_in_project(Perm.CALLS_START, task.project_id)
+        and assigned is not None
+        and assigned.user_id == principal.user_id
+    ):
+        raise AppError(
+            "Only the task's moderator marks the recording", code="FORBIDDEN", status_code=403
+        )
+    db.refresh(call, with_for_update=True)
+    _require_state(call, "DIALLING")
+    now = datetime.now(UTC)
+    if start:
+        ticked = checklist_of(call)
+        if any(item not in ticked for item in CHECKLIST_REQUIRED):
+            db.rollback()
+            raise AppError(
+                "Tick that participant A and participant B are on the call before starting the "
+                "recording",
+                code="CHECKLIST_INCOMPLETE",
+                status_code=409,
+            )
+        again = call.record_started_at is not None
+        call.record_started_at = now
+        call.record_stopped_at = None
+        _event(
+            db,
+            call,
+            "RECORDING_STARTED",
+            "Recording started again: the earlier start is replaced"
+            if again
+            else "Recording started: the conversation is kept from here",
+            principal.user_id,
+        )
+    else:
+        if call.record_started_at is None:
+            db.rollback()
+            raise AppError(
+                "Start the recording first", code="RECORDING_NOT_STARTED", status_code=409
+            )
+        if call.record_stopped_at is not None:
+            db.rollback()
+            return call
+        call.record_stopped_at = now
+        seconds = int((now - call.record_started_at).total_seconds())
+        _event(
+            db,
+            call,
+            "RECORDING_STOPPED",
+            f"Recording stopped after {seconds // 60} min {seconds % 60} s",
+            principal.user_id,
+        )
+    _audit(db, call, "call.recording_marked", principal, ip, {"start": start})
+    db.commit()
+    return call
+
+
 def close_call(
     db: Session,
     settings: Settings,
@@ -546,7 +609,16 @@ def close_call(
             code="CONSENT_MISSING",
             status_code=409,
         )
+    if call.record_started_at is None:
+        raise AppError(
+            "Click Start recording when both people are on the line, and Stop recording when "
+            "they have finished, before closing the call.",
+            code="RECORDING_NOT_STARTED",
+            status_code=409,
+        )
     now = datetime.now(UTC)
+    if call.record_stopped_at is None:
+        call.record_stopped_at = now  # not stopped by hand: the conversation ends with the call
     call.state = "WAITING_FOR_RECORDING"
     call.closed_at = now
     call.note = note.strip()
@@ -1099,6 +1171,48 @@ def _known_session(
     return None
 
 
+@dataclass(frozen=True)
+class Window:
+    first_frame: int
+    last_frame: int
+    cut: bool
+    description: str
+
+
+def recording_window(
+    call: Call, session: ProviderSession, frames: int, rate: int, margin: float
+) -> Window:
+    """Pure (D-113): the frames of the provider's file between the moderator's Start and Stop
+    recording, with `margin` seconds kept on each side. The provider's file starts at
+    `session.start`. When that time is unknown or the marks fall outside the file, the whole
+    file is kept and the reason is said."""
+    whole = Window(0, frames, False, "whole call kept")
+    started, stopped = call.record_started_at, call.record_stopped_at
+    if started is None or stopped is None:
+        return Window(0, frames, False, "whole call kept (no recording marks)")
+    if session.start is None:
+        return Window(0, frames, False, "whole call kept: the provider gave no start time")
+    first = round(((started - session.start).total_seconds() - margin) * rate)
+    last = round(((stopped - session.start).total_seconds() + margin) * rate)
+    first, last = max(0, first), min(frames, last)
+    if last - first < rate:  # less than a second left: the marks do not fit this file
+        return Window(
+            0,
+            frames,
+            False,
+            "whole call kept: the recording marks fall outside the provider's file",
+        )
+    if (first, last) == (0, frames):
+        return whole
+    return Window(
+        first,
+        last,
+        True,
+        f"cut to the moderator's recording marks: {first / rate:.1f} s to {last / rate:.1f} s "
+        f"of the provider's {frames / rate:.1f} s (margin {margin:g} s)",
+    )
+
+
 def _prefix(project: Project, task: Task, when: datetime) -> str:
     return f"{project.code}/telephony/{when:%Y/%m/%d}/{task.id}"
 
@@ -1206,14 +1320,30 @@ def _store_recording(
                     output_sha256=original.sha256,
                 )
             )
+            cut = recording_window(
+                call,
+                session,
+                info.data_bytes // (4 * heard.channels),
+                heard.sample_rate,
+                settings.telephony_mark_margin_seconds,
+            )
+            frame_bytes = 4 * heard.channels
             media.resample_keep_channels_to_pcm16(
                 decoded,
                 heard.sample_rate,
                 derived,
                 heard.channels,
-                offset=info.data_offset,
-                length=info.data_bytes,
+                offset=info.data_offset + cut.first_frame * frame_bytes,
+                length=(cut.last_frame - cut.first_frame) * frame_bytes,
             )
+            if cut.cut:
+                _event(db, call, "DOWNLOADED", f"Delivery file {cut.description}")
+            if cut.cut:
+                rec.started_at = (
+                    session.start + timedelta(seconds=cut.first_frame / heard.sample_rate)
+                    if session.start
+                    else rec.started_at
+                )
             final = recordings._asset(
                 db, rec, project, DELIVERY_KIND, f"{base}/final/{rec.id}_v1.wav", derived, original
             )
@@ -1238,7 +1368,8 @@ def _store_recording(
                     tool_version=media.SOXR_VERSION,
                     parameters=(
                         f"{heard.container}/{heard.codec} decoded to float32 at "
-                        f"{heard.sample_rate} Hz; {rec.channel_handling}; libsoxr quality=VHQ, "
+                        f"{heard.sample_rate} Hz; {cut.description}; "
+                        f"{rec.channel_handling}; libsoxr quality=VHQ, "
                         f"{media.TARGET_RATE} Hz, float32 -> int16 round-half-even, clip, no dither"
                     ),
                     input_sha256=original.sha256,

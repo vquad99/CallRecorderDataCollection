@@ -1038,6 +1038,22 @@ CASES: list[Case] = [
         {MO},
         Perm.CALLS_START,
     ),
+    # The moderator marks the conversation (D-113): the task's own moderator only; the call is
+    # waiting for a person, so their answer is "the call is not on" (409).
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/recording/start",
+        lambda e, s: f"/api/v1/calls/{s.call}/recording/start",
+        {MO},
+        Perm.CALLS_START,
+    ),
+    case(
+        "POST",
+        "/api/v1/calls/{call_id}/recording/stop",
+        lambda e, s: f"/api/v1/calls/{s.call}/recording/stop",
+        {MO},
+        Perm.CALLS_START,
+    ),
     case(
         "POST",
         "/api/v1/calls/{call_id}/close",
