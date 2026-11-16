@@ -23,7 +23,7 @@ Words in **bold** are the exact labels you see on screen.
 
 People only see projects they have been added to. The Super Admin sees every project.
 
-A project's page has tabs (Team, Participants, Audio rules, Languages, Retention, Export) for
+A project's page has tabs (Team, Participants, Tasks, Audio rules, Languages, Retention, Export) for
 the Super Admin and Project Admin only. Everyone else sees the project's **Overview**.
 
 ---
@@ -156,6 +156,8 @@ Project tabs:
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
   person the right role under Users first.
 - **Participants**: the project's participants (section 5).
+- **Tasks**: every task of this project, with the same search, status and mode filters as the
+  Tasks page. **New task** here starts with this project already chosen.
 - **Audio rules**: the sound format and limits the automatic check uses (default 16 000 Hz,
   16-bit, mono, at most 25 % silence).
 - **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,

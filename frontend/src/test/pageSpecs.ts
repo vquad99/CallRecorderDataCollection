@@ -57,6 +57,11 @@ export const PAGES: Record<string, PageSpec> = {
     shows: /P000002/,
     data: "GET /api/v1/projects/p1/participants",
   },
+  "/projects/:projectId/tasks": {
+    url: "/projects/p1/tasks",
+    shows: /T000001/,
+    data: "GET /api/v1/tasks",
+  },
   "/projects/:projectId/audio": { url: "/projects/p1/audio", shows: /^Face-to-face$/ },
   "/projects/:projectId/languages": { url: "/projects/p1/languages", shows: /^Add language$/ },
   "/projects/:projectId/retention": {

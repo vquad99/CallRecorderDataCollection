@@ -1,6 +1,6 @@
 // Create a recording task (TASK-001); the project's allowed modes drive the choices (PROJ-011).
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { getProject, listMembers, listProjects } from "../../api/projects";
@@ -138,7 +138,9 @@ function BulkTasks({ projectId }: { projectId: string }) {
 
 export function TaskCreatePage() {
   const navigate = useNavigate();
-  const [projectId, setProjectId] = useState("");
+  // Opened from a project's Tasks tab: that project is already chosen.
+  const [params] = useSearchParams();
+  const [projectId, setProjectId] = useState(params.get("project") ?? "");
   const [mode, setMode] = useState("");
   const [a, setA] = useState("");
   const [b, setB] = useState("");

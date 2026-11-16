@@ -23,6 +23,7 @@ const TABS: { to: string; label: string; end: boolean; perm?: string }[] = [
   { to: "", label: "Overview", end: true },
   { to: "team", label: "Team", end: false, perm: "projects.manage" },
   { to: "participants", label: "Participants", end: false, perm: "projects.manage" },
+  { to: "tasks", label: "Tasks", end: false, perm: "projects.manage" },
   { to: "audio", label: "Audio rules", end: false, perm: "projects.manage" },
   { to: "languages", label: "Languages", end: false, perm: "projects.manage" },
   { to: "retention", label: "Retention", end: false, perm: "projects.manage" },

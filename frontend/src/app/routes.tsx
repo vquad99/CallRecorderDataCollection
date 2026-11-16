@@ -102,6 +102,13 @@ export const routes: RouteObject[] = [
                       "ParticipantsTab",
                     ),
                   },
+                  {
+                    path: "tasks",
+                    element: page(
+                      () => import("../features/projects/ProjectTasksTab"),
+                      "ProjectTasksTab",
+                    ),
+                  },
                   { path: "audio", element: page(tabs, "AudioRulesTab") },
                   { path: "languages", element: page(tabs, "LanguagesTab") },
                   { path: "retention", element: page(tabs, "RetentionTab") },

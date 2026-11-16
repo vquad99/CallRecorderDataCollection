@@ -311,4 +311,35 @@ describe("project detail", () => {
     expect(await screen.findByText("Must not be before the first day")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Prepare export" })).toBeDisabled();
   });
+
+  it("has a Tasks tab listing every task of the project (D-117)", async () => {
+    const task = {
+      id: "t1",
+      task_code: "T000001",
+      project_id: "p1",
+      recording_mode: "TELEPHONY",
+      status: "ASSIGNED",
+      priority: "HIGH",
+      due_at: null,
+    };
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "tasks.view", "tasks.assign"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/tasks": () => [200, { items: [task], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/projects/p1");
+    const tabs = await screen.findByRole("navigation", { name: "Project sections" });
+    await userEvent.click(within(tabs).getByRole("link", { name: "Tasks" }));
+    expect(await screen.findByRole("link", { name: "T000001" })).toBeInTheDocument();
+    expect(screen.getByText("1 task in this project")).toBeInTheDocument();
+    // Fixed to this project: no project choice, no project column.
+    expect(screen.queryByLabelText("Project")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Project" })).not.toBeInTheDocument();
+    expect(calls.find((c) => c.path.startsWith("/api/v1/tasks?"))?.path).toContain("project_id=p1");
+    expect(screen.getByRole("link", { name: "New task" })).toHaveAttribute(
+      "href",
+      "/tasks/new?project=p1",
+    );
+  });
 });

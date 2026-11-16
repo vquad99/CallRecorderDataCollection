@@ -1,4 +1,5 @@
 // Tasks the user can see: all in their projects for task managers, only their own otherwise (TASK-005, TASK-011).
+// The same list sits on a project's Tasks tab, fixed to that project (D-117).
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -16,9 +17,11 @@ import { toApiError, useResource } from "../../hooks/useResource";
 import { Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 
-export function TasksPage() {
+export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) {
   const { can } = useAuth();
-  const [projectId, setProjectId] = useState("");
+  const inProject = fixedProjectId !== undefined;
+  const [chosenProject, setProjectId] = useState("");
+  const projectId = fixedProjectId ?? chosenProject;
   const [status, setStatus] = useState("");
   const [mode, setMode] = useState("");
   const [page, setPage] = useState(1);
@@ -32,7 +35,13 @@ export function TasksPage() {
     }, 300);
     return () => window.clearTimeout(id);
   }, [typed]);
-  const projects = useResource(() => listProjects({ page_size: 100 }), []);
+  const projects = useResource(
+    () =>
+      inProject
+        ? Promise.resolve({ items: [], total: 0, page: 1, page_size: 100 })
+        : listProjects({ page_size: 100 }),
+    [inProject],
+  );
   const tasks = useResource(
     () =>
       listTasks({
@@ -94,20 +103,38 @@ export function TasksPage() {
     tasks.reload();
   }
 
+  const newTask = can("tasks.assign") ? (
+    <Link
+      className="button button--primary"
+      to={inProject ? `/tasks/new?project=${projectId}` : "/tasks/new"}
+    >
+      <Icon name="plus" size={18} weight="bold" />
+      New task
+    </Link>
+  ) : null;
+
   return (
-    <section aria-labelledby="tasks-title" className="stack">
-      <div className="page-header">
-        <h1 id="tasks-title">
-          <IconTile name="tasks" tone="teal" />
-          Tasks
-        </h1>
-        {can("tasks.assign") ? (
-          <Link className="button button--primary" to="/tasks/new">
-            <Icon name="plus" size={18} weight="bold" />
-            New task
-          </Link>
-        ) : null}
-      </div>
+    <section aria-labelledby={inProject ? undefined : "tasks-title"} className="stack">
+      {inProject ? (
+        <div className="actions">
+          {newTask}
+          {tasks.state.status === "loaded" ? (
+            <span className="muted">
+              {tasks.state.data.total === 1
+                ? "1 task in this project"
+                : `${tasks.state.data.total} tasks in this project`}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="page-header">
+          <h1 id="tasks-title">
+            <IconTile name="tasks" tone="teal" />
+            Tasks
+          </h1>
+          {newTask}
+        </div>
+      )}
       <div className="filters">
         <TextField
           label="Task or participant code"
@@ -115,20 +142,22 @@ export function TasksPage() {
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
         />
-        <Select
-          label="Project"
-          value={projectId}
-          onChange={(e) => {
-            setProjectId(e.target.value);
-            reset();
-          }}
-          options={[
-            { value: "", label: "All projects" },
-            ...(projects.state.status === "loaded"
-              ? projects.state.data.items.map((p) => ({ value: p.id, label: p.code }))
-              : []),
-          ]}
-        />
+        {inProject ? null : (
+          <Select
+            label="Project"
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              reset();
+            }}
+            options={[
+              { value: "", label: "All projects" },
+              ...(projects.state.status === "loaded"
+                ? projects.state.data.items.map((p) => ({ value: p.id, label: p.code }))
+                : []),
+            ]}
+          />
+        )}
         <Select
           label="Status"
           value={status}
@@ -199,7 +228,7 @@ export function TasksPage() {
                     </th>
                   ) : null}
                   <th scope="col">Task</th>
-                  <th scope="col">Project</th>
+                  {inProject ? null : <th scope="col">Project</th>}
                   <th scope="col">Mode</th>
                   <th scope="col">Status</th>
                   <th scope="col">Priority</th>
@@ -224,7 +253,7 @@ export function TasksPage() {
                         {t.task_code}
                       </Link>
                     </td>
-                    <td>{codes[t.project_id] ?? "-"}</td>
+                    {inProject ? null : <td>{codes[t.project_id] ?? "-"}</td>}
                     <td>
                       <span className="cell-icon">
                         <Icon name={t.recording_mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
