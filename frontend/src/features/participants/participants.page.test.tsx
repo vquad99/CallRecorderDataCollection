@@ -10,6 +10,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 const wait = { timeout: 5000 };
 
+/** The page with its project chosen: nothing is chosen for the person (D-114). */
+async function openList() {
+  renderAt("/participants");
+  await userEvent.selectOptions(await screen.findByLabelText("Project", {}, wait), "p1");
+}
+
 const DETAILS = {
   participant: { ...PARTICIPANT, notes: "Prefers evening calls" },
   updated_at: "2026-11-12T10:00:00Z",
@@ -110,9 +116,26 @@ function open(extra: Parameters<typeof signedInAs>[1] = {}) {
 }
 
 describe("participants section", () => {
+  it("shows nothing and offers no action until a project is chosen (D-114)", async () => {
+    const { calls } = open();
+    renderAt("/participants");
+    expect(
+      await screen.findByRole("heading", { name: "Choose a project" }, wait),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Project")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Add participant" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add many" })).toBeDisabled();
+    expect(screen.queryByText("P000001")).toBeNull();
+    expect(screen.queryByLabelText("Select all on this page")).toBeNull();
+    expect(calls.some((c) => c.path.startsWith("/api/v1/projects/p1/participants"))).toBe(false);
+    await userEvent.selectOptions(screen.getByLabelText("Project"), "p1");
+    expect(await screen.findByText("P000001", {}, wait)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Choose a project" })).toBeNull();
+  });
+
   it("is in the menu and lists the project's participants with their consent state", async () => {
     open();
-    renderAt("/participants");
+    await openList();
     expect(await screen.findByText("P000001", {}, wait)).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Main" })).toHaveTextContent("Participants");
     const row = screen.getByText("P000001").closest("tr") as HTMLElement;
@@ -126,7 +149,7 @@ describe("participants section", () => {
     const { calls } = open({
       "POST /api/v1/projects/p1/participants/a1/consent-review": () => [200, {}],
     });
-    renderAt("/participants");
+    await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     expect(await screen.findByText("Consent of P000001 approved.")).toBeInTheDocument();
@@ -167,7 +190,7 @@ describe("participants section", () => {
         },
       ],
     });
-    renderAt("/participants");
+    await openList();
     await screen.findByText("P000001", {}, wait);
     await userEvent.click(screen.getByLabelText("Select all on this page"));
     const bar = screen.getByRole("group", { name: "Actions for selected participants" });
@@ -208,7 +231,7 @@ describe("participants section", () => {
         ];
       },
     });
-    renderAt("/participants");
+    await openList();
     await screen.findByText("P000001", {}, wait);
     await userEvent.click(screen.getByRole("button", { name: "Add many" }));
     await userEvent.type(screen.getByLabelText("Participants (CSV)"), "name,language");
@@ -229,7 +252,7 @@ describe("participants section", () => {
     const { calls } = open({
       "GET /api/v1/projects/p1/participants/a1/details": () => [200, DETAILS],
     });
-    renderAt("/participants");
+    await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "View" }));
     const panel = await screen.findByRole("region", { name: "Participant details" });
@@ -302,7 +325,7 @@ describe("participants section", () => {
         },
       ],
     });
-    renderAt("/participants");
+    await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "View" }));
     const panel = await screen.findByRole("region", { name: "Participant details" });

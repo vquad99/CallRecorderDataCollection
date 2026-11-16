@@ -75,8 +75,8 @@ export const PAGES: Record<string, PageSpec> = {
   },
   "/participants": {
     url: "/participants",
-    shows: /P000002/,
-    data: "GET /api/v1/projects/p1/participants",
+    shows: /Choose one above to see its participants/,
+    data: "GET /api/v1/projects",
   },
   "/tasks": { url: "/tasks", shows: /T000001/, data: "GET /api/v1/tasks" },
   "/tasks/:taskId": { url: "/tasks/t1", shows: /Task T000001/, data: "GET /api/v1/tasks/t1" },

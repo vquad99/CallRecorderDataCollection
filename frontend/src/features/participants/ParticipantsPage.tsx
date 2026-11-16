@@ -153,7 +153,9 @@ export function ParticipantsPage() {
   const [outcome, setOutcome] = useState<work.BulkResult | null>(null);
 
   const all = projects.state.status === "loaded" ? projects.state.data.items : [];
-  const projectId = chosen || all[0]?.id || "";
+  // Nothing is chosen for the person: consent forms, links and removals belong to one project,
+  // so the project is always picked by hand first.
+  const projectId = chosen;
   const list = useResource(
     () =>
       projectId
@@ -244,12 +246,16 @@ export function ParticipantsPage() {
               setSelected([]);
               setOutcome(null);
             }}
-            options={all.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }))}
+            options={[
+              { value: "", label: "Choose a project" },
+              ...all.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
+            ]}
           />
           <TextField
             label="Search by name or code"
             type="search"
             value={search}
+            disabled={!projectId}
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
@@ -257,6 +263,12 @@ export function ParticipantsPage() {
           />
         </div>
       )}
+      {all.length > 0 && !projectId ? (
+        <EmptyState
+          title="Choose a project"
+          message="Participants, consent forms and links belong to a project. Choose one above to see its participants and work with them."
+        />
+      ) : null}
       {panel === "add" && projectId ? (
         <ParticipantForm
           initial={EMPTY}
@@ -319,11 +331,11 @@ export function ParticipantsPage() {
             Send consent form
           </Button>
           <Select
-            label="Assign to project"
+            label="Also add them to another project"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             options={[
-              { value: "", label: "Choose a project" },
+              { value: "", label: "Choose the other project" },
               ...all
                 .filter((p) => p.id !== projectId)
                 .map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
@@ -335,7 +347,7 @@ export function ParticipantsPage() {
             disabled={!target}
             onClick={() => void bulk("assign", { target_project_id: target })}
           >
-            Assign
+            Add to that project
           </Button>
           <Button
             variant="secondary"

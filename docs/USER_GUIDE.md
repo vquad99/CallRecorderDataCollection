@@ -232,7 +232,7 @@ participant yourself (it works for 30 days; making a new one ends the old one).
 
 ### Other actions on ticked rows
 
-- **Assign to project**: adds the participants to another project too.
+- **Also add them to another project**: choose the other project and click **Add to that project**. They stay in this project too, with the same code and consent history.
 - **Remove**: deletes the person's name, phone, email and notes everywhere. Not possible while
   they are on an open task.
 
