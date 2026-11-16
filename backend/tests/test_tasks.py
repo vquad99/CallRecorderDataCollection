@@ -390,8 +390,7 @@ def test_the_moderator_listens_first_then_qc_then_the_admin(world: dict[str, Any
         f"/api/v1/tasks/{tid}/transition",
         json={"to": "RETURNED", "reason_code": "RE_RECORD", "comment": ""},
     )
-    assert back.json()["status"] == "RETURNED"
-    set_status(db, tid, "ADMIN_REVIEW")
+    assert back.json()["error"]["code"] == "INVALID_TRANSITION", "no return any more (D-118)"
     done = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
     assert done.json()["status"] == "APPROVED"
 

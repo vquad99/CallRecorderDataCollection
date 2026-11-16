@@ -216,8 +216,7 @@ function DecisionForm({
         options={[
           { value: "", label: "Choose" },
           { value: "PASS", label: "Pass: send to the admin for final approval" },
-          { value: "RETURN", label: "Return: record again" },
-          { value: "FAIL", label: "Fail: reject the recording" },
+          { value: "FAIL", label: "Reject the recording" },
         ]}
       />
       {reasons ? (

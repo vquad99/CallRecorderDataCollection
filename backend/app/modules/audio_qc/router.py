@@ -67,7 +67,7 @@ class AssignQcBody(BaseModel):
 
 
 class DecisionBody(BaseModel):
-    outcome: Literal["PASS", "FAIL", "RETURN"]
+    outcome: Literal["PASS", "FAIL"]
     reason_code: str | None = Field(default=None, max_length=50)
     comment: str = Field(default="", max_length=2000)
 

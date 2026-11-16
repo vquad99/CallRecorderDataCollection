@@ -50,7 +50,8 @@ QC_ASSIGNABLE = frozenset(
     {"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD", "RETURNED"}
 )
 # A pass goes to the project admin for the final approval (D-092).
-DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED", "RETURN": "RETURNED"}
+# D-118: pass or reject only; no return to record again.
+DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED"}
 # Content comparison needs enough sound to be meaningful: a short or mostly silent file has a level
 # pattern many unrelated files share.
 FINGERPRINT_MIN_MS = 5000
@@ -880,7 +881,7 @@ def decide(
         )
     target = DECISIONS.get(outcome)
     if target is None:
-        raise AppError("Choose PASS, FAIL or RETURN", code="VALIDATION_ERROR", status_code=422)
+        raise AppError("Choose PASS or FAIL", code="VALIDATION_ERROR", status_code=422)
     automatic = _latest(db, task.id, automated=True)
     if automatic is None:
         raise AppError("Run the automatic check first", code="NO_AUTOMATIC_CHECK", status_code=409)
@@ -983,7 +984,6 @@ def view(db: Session, principal: Principal, task_id: uuid.UUID) -> dict[str, Any
         "can_recheck": (is_qc or can_manage) and task.status in ("RECORDED", "AUDIO_QC"),
         "reasons": {
             "FAIL": sorted(workflow.REASONS["REJECTED"]),
-            "RETURN": sorted(workflow.REASONS["RETURNED"]),
         },
         "results": [
             {

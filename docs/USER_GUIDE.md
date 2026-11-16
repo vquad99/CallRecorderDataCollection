@@ -85,13 +85,13 @@ the middle of a recording, or **Later**.
 | 2 | Assigned | Project Admin | Chooses the Moderator (status changes by itself) |
 | 3 | In progress | Moderator | Starts the task |
 | 4 | Recorded | Moderator | The recording is saved and checked automatically; the Moderator listens, then clicks **Send to QC** (or **Record again**) |
-| 5 | Audio QC | QC Executive | Pass (goes to the admin), Fail (Rejected) or Return (record again) |
-| 6 | Admin review | Project Admin | Listens and gives the final word: **Approve**, or Reject / send back with a reason |
+| 5 | Audio QC | QC Executive | Pass (goes to the admin) or Reject |
+| 6 | Admin review | Project Admin | Listens and gives the final word: **Approve** or **Reject** with a reason |
 | 7 | Approved | - | Done; the recording can be downloaded with its consent form |
 
-A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason. A
-**Returned** task goes back to the Moderator to record again. **Approved**, **Rejected** and
-**Cancelled** are final.
+A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason.
+**Approved**, **Rejected** and **Cancelled** are final. There is no "send back to record again":
+to record a rejected conversation again, create a new task.
 
 ---
 
@@ -396,10 +396,9 @@ in the project's metadata export) carries the same history in its **call** secti
 3. Click **Listen** to hear the recording.
 4. Under **Your decision**, choose:
    - **Pass: send to the admin for final approval** → the task becomes **Admin review**;
-   - **Return: record again** → back to the Moderator;
-   - **Fail: reject the recording** → **Rejected**.
+   - **Reject the recording** → **Rejected** (final).
 
-   For Return or Fail, pick a **Reason**. A **Comment** is required when you pass a recording the
+   For Reject, pick a **Reason**. A **Comment** is required when you pass a recording the
    automatic check failed, or when the reason is "other".
 5. Click **Save decision**.
 
@@ -410,8 +409,7 @@ The automatic check never approves or rejects anything by itself; a person alway
 ### Project Admin: final approval
 
 A task that passed QC shows **Admin review**. Open it: the **Final approval** card lets you
-**Listen** and **Approve**. To reject it or send it back for a new recording, use **Change
-status** with a reason. Only then is the task **Approved** and ready to download.
+**Listen** and **Approve**. To reject it, use **Change status** with a reason. Only then is the task **Approved** and ready to download.
 
 **Many at once** (Tasks list): tick the tasks (or the box at the top of the list for the whole
 page). A bar appears with:

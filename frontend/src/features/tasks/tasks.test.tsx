@@ -276,7 +276,7 @@ describe("tasks", () => {
       recording_mode: "FACE_TO_FACE",
       can_assign: true,
       is_moderator: false,
-      allowed_transitions: ["APPROVED", "REJECTED", "RETURNED"],
+      allowed_transitions: ["APPROVED", "REJECTED"],
     };
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "tasks.assign", "recordings.view"], {

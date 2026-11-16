@@ -224,7 +224,8 @@ def test_failing_needs_a_reason_from_the_list(world: dict[str, Any]) -> None:
     assert (task["status"], task["reason_code"]) == ("REJECTED", "AUDIO_QUALITY")
 
 
-def test_returning_asks_for_a_new_recording(world: dict[str, Any]) -> None:
+def test_qc_can_only_pass_or_reject_not_return(world: dict[str, Any]) -> None:
+    """D-118: one way to say no, Reject; "return to record again" is gone."""
     _record(world)
     tid = world["task"]["id"]
     qc = _assign_qc(world)
@@ -232,8 +233,9 @@ def test_returning_asks_for_a_new_recording(world: dict[str, Any]) -> None:
         f"/api/v1/tasks/{tid}/audio-qc/decision",
         json={"outcome": "RETURN", "reason_code": "RE_RECORD", "comment": "Too much traffic"},
     )
-    assert returned.status_code == 200, returned.text
-    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "RETURNED"
+    assert returned.status_code == 422, returned.text
+    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC"
+    assert set(qc.get(f"/api/v1/tasks/{tid}/audio-qc").json()["reasons"]) == {"FAIL"}
 
 
 def test_passing_a_failed_automatic_check_needs_a_comment(world: dict[str, Any]) -> None:

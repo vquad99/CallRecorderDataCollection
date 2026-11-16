@@ -140,15 +140,16 @@ describe("audio quality card", () => {
     });
   });
 
-  it("needs a reason to return or fail a recording", async () => {
+  it("needs a reason to reject a recording, and offers no return (D-118)", async () => {
     open(view({ can_decide: true }));
     renderAt("/tasks/t1");
     await userEvent.selectOptions(
       await screen.findByLabelText("Decision", {}, { timeout: 5000 }),
-      "RETURN",
+      "FAIL",
     );
+    expect(screen.queryByRole("option", { name: /Return/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save decision" })).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText("Reason"), "RE_RECORD");
+    await userEvent.selectOptions(screen.getByLabelText("Reason"), "AUDIO_QUALITY");
     expect(screen.getByRole("button", { name: "Save decision" })).toBeEnabled();
   });
 
