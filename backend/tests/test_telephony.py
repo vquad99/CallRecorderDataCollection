@@ -1111,7 +1111,7 @@ def test_the_delivery_file_is_cut_to_the_marks_and_the_original_kept_whole(
     """D-113: the provider's 4-second file starts 1 s before Start recording; Stop comes 1.5 s
     after it. With the 1-second margin the delivery file holds 0 s to 3.5 s."""
     w = world
-    tid, call = started_and_closed(w)
+    _, call = started_and_closed(w)
     db = w["db"]
     row = db.get(Call, call["id"])
     begin = row.record_started_at

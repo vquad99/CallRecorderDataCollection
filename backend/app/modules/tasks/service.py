@@ -488,6 +488,54 @@ def add_comment(
     return comment
 
 
+def delete_task(
+    db: Session, principal: Principal, task_id: uuid.UUID, reason: str, ip: str | None
+) -> str:
+    """Removes a task made by mistake (D-115): only by people who assign tasks, and only while
+    nothing has happened on it: no recording, no phone call, no consent noted, no QC result. A
+    task with work on it is cancelled instead, so its history stays. Returns the task code."""
+    from app.modules.audio_qc.models import AudioQcResult
+    from app.modules.recordings.models import Recording
+    from app.modules.telephony.models import Call
+
+    task = get_task(db, principal, task_id)
+    if not principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id):
+        raise forbidden()
+    if not reason.strip():
+        raise AppError("Say why the task is deleted", code="REASON_REQUIRED", status_code=422)
+    work = [
+        ("a recording", exists().where(Recording.task_id == task.id)),
+        ("a phone call", exists().where(Call.task_id == task.id)),
+        ("consent noted", exists().where(ConsentRecord.task_id == task.id)),
+        ("an audio check", exists().where(AudioQcResult.task_id == task.id)),
+    ]
+    found = [what for what, there in work if db.scalar(select(there))]
+    if found:
+        raise AppError(
+            f"This task already has {' and '.join(found)}, so it is kept for the record. "
+            "Cancel it instead.",
+            code="TASK_HAS_WORK",
+            status_code=409,
+        )
+    code = task.task_code
+    for model in (TaskComment, TaskStatusHistory, TaskAssignment):
+        db.query(model).filter(model.task_id == task.id).delete(synchronize_session=False)
+    db.delete(task)
+    audit.record(
+        db,
+        action="task.deleted",
+        entity_type="task",
+        entity_id=task_id,
+        project_id=task.project_id,
+        actor_id=principal.user_id,
+        ip=ip,
+        before={"task_code": code, "status": task.status, "mode": task.recording_mode},
+        after={"reason": reason.strip()},
+    )
+    db.commit()
+    return code
+
+
 @dataclass(frozen=True)
 class TimelineEntry:
     at: datetime

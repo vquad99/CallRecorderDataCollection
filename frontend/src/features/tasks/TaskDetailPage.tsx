@@ -1,6 +1,6 @@
 // One task: participants and consent, moderator, status actions, comments and timeline (TASK-*).
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { listMembers } from "../../api/projects";
@@ -540,6 +540,42 @@ function Recordings({ task }: { task: work.TaskDetail }) {
   );
 }
 
+/** Delete a task made by mistake (D-115). The server refuses when anything has happened on
+ * the task, and says to cancel it instead. */
+function DeleteTask({ task }: { task: work.TaskDetail }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  return (
+    <>
+      <Button
+        variant="secondary"
+        busy={busy}
+        onClick={() => {
+          const reason = window.prompt(
+            `Delete task ${task.task_code}? Only a task with no recording, call or consent can ` +
+              "be deleted. Why is it deleted?",
+          );
+          if (!reason?.trim()) return;
+          setBusy(true);
+          setError(null);
+          work
+            .deleteTask(task.id, reason)
+            .then(() =>
+              navigate("/tasks", { state: { message: `Task ${task.task_code} deleted.` } }),
+            )
+            .catch((err: unknown) => setError(toApiError(err)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        <Icon name="trash" size={15} />
+        Delete task
+      </Button>
+      <ErrorNotice error={error} />
+    </>
+  );
+}
+
 export function TaskDetailPage() {
   const { taskId = "" } = useParams();
   const { state, reload, replace } = useResource(() => work.getTask(taskId), [taskId]);
@@ -555,7 +591,12 @@ export function TaskDetailPage() {
           <IconTile name={task.recording_mode === "TELEPHONY" ? "phone" : "mic"} tone="teal" />
           Task {task.task_code}
         </h1>
-        <StatusBadge status={task.status} label={label(task.status)} />
+        <span className="actions">
+          <StatusBadge status={task.status} label={label(task.status)} />
+          {task.can_assign && ["DRAFT", "ASSIGNED", "CANCELLED"].includes(task.status) ? (
+            <DeleteTask task={task} />
+          ) : null}
+        </span>
       </div>
       <div className="card">
         <Stepper

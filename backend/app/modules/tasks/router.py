@@ -242,6 +242,22 @@ def assign(
     )
 
 
+class DeleteBody(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/{task_id}/delete", status_code=204)
+def delete_task(
+    task_id: uuid.UUID,
+    body: DeleteBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+) -> None:
+    """Delete a task made by mistake, while nothing has happened on it (D-115)."""
+    service.delete_task(db, principal, task_id, body.reason, client_ip(request))
+
+
 class TransitionBody(BaseModel):
     to: Status
     reason_code: str | None = Field(default=None, max_length=50)

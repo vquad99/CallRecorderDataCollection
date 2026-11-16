@@ -176,6 +176,9 @@ export const createTask = (body: {
   due_at: string | null;
   moderator_id?: string;
 }) => apiRequest<TaskDetail>("/api/v1/tasks", { method: "POST", body });
+/** Delete a task made by mistake, while nothing has happened on it (D-115). */
+export const deleteTask = (id: string, reason: string) =>
+  apiRequest<null>(`/api/v1/tasks/${id}/delete`, { method: "POST", body: { reason } });
 export const assignModerator = (id: string, userId: string, reason: string) =>
   apiRequest<TaskDetail>(`/api/v1/tasks/${id}/assign`, {
     method: "POST",

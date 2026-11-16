@@ -1,6 +1,6 @@
 // Tasks the user can see: all in their projects for task managers, only their own otherwise (TASK-005, TASK-011).
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { listProjects } from "../../api/projects";
@@ -59,7 +59,9 @@ export function TasksPage() {
   const selected = selection.key === listKey ? selection.ids : [];
   const setSelected = (ids: string[]) => setSelection({ key: listKey, ids });
   const [busy, setBusy] = useState<"approve" | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // A message handed over by the page before (for example "Task T000012 deleted.").
+  const handed = (useLocation().state as { message?: string } | null)?.message ?? null;
+  const [message, setMessage] = useState<string | null>(handed);
   const [error, setError] = useState<ApiError | null>(null);
   const rows: TaskSummary[] = tasks.state.status === "loaded" ? tasks.state.data.items : [];
   const chosen = rows.filter((t) => selected.includes(t.id));

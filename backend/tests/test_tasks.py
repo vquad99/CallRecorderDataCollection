@@ -394,3 +394,43 @@ def test_the_moderator_listens_first_then_qc_then_the_admin(world: dict[str, Any
     set_status(db, tid, "ADMIN_REVIEW")
     done = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
     assert done.json()["status"] == "APPROVED"
+
+
+def test_a_task_made_by_mistake_is_deleted_but_one_with_work_is_kept(
+    world: dict[str, Any], db: Any
+) -> None:
+    """D-115: people who assign tasks delete a task on which nothing has happened, with a
+    reason, on record; a task with consent (or a recording, a call, a check) is cancelled."""
+    from app.modules.audit.models import AuditLog
+    from app.modules.tasks.models import Task
+
+    pa, mod = world["pa"], world["mod"]
+    tid = _create(world).json()["id"]
+    code = pa.get(f"/api/v1/tasks/{tid}").json()["task_code"]
+    pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    pa.post(f"/api/v1/tasks/{tid}/comments", json={"body": "made twice by mistake"})
+    # Not by its moderator; not without a reason.
+    assert mod.post(f"/api/v1/tasks/{tid}/delete", json={"reason": "x"}).status_code == 403
+    assert pa.post(f"/api/v1/tasks/{tid}/delete", json={"reason": " "}).status_code == 422
+    gone = pa.post(f"/api/v1/tasks/{tid}/delete", json={"reason": "Made twice by mistake"})
+    assert gone.status_code == 204, gone.text
+    assert pa.get(f"/api/v1/tasks/{tid}").status_code == 404
+    db.expire_all()
+    assert db.get(Task, tid) is None
+    entry = db.query(AuditLog).filter(AuditLog.action == "task.deleted").one()
+    assert code in (entry.before_summary or "")
+    assert "Made twice by mistake" in (entry.after_summary or "")
+
+    # Consent noted on it: kept, and the answer says to cancel it instead.
+    kept = _create(world).json()["id"]
+    pa.post(f"/api/v1/tasks/{kept}/assign", json={"user_id": str(world["mod_user"].id)})
+    mod.post(f"/api/v1/tasks/{kept}/transition", json={"to": "IN_PROGRESS"})
+    noted = mod.post(
+        f"/api/v1/tasks/{kept}/consent",
+        json={"participant_id": world["a"]["id"], "status": "GIVEN", "method": "VERBAL_NOTED"},
+    )
+    assert noted.status_code == 201, noted.text
+    refused = pa.post(f"/api/v1/tasks/{kept}/delete", json={"reason": "test"})
+    assert (refused.status_code, refused.json()["error"]["code"]) == (409, "TASK_HAS_WORK")
+    assert "consent noted" in refused.json()["error"]["message"]
+    assert pa.get(f"/api/v1/tasks/{kept}").status_code == 200

@@ -75,6 +75,53 @@ describe("tasks", () => {
     expect(calls.some((c) => c.path.includes("status=ON_HOLD"))).toBe(true);
   });
 
+  it("deletes a task made by mistake, with a reason, and says so on the list (D-115)", async () => {
+    vi.stubGlobal("prompt", () => "Made twice by mistake");
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/tasks/t1": () => [200, task],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks/t1/delete": () => [204, null],
+        "GET /api/v1/tasks": () => [200, { items: [], total: 0, page: 1, page_size: 25 }],
+        "GET /api/v1/projects": () => [200, { items: [], total: 0, page: 1, page_size: 100 }],
+      }),
+    );
+    const router = renderAt("/tasks/t1");
+    await screen.findByRole("heading", { name: "Task T000001" });
+    await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
+    expect(await screen.findByText("Task T000001 deleted.")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/tasks");
+    expect(calls.find((c) => c.path === "/api/v1/tasks/t1/delete")?.body).toEqual({
+      reason: "Made twice by mistake",
+    });
+  });
+
+  it("explains when a task cannot be deleted, and offers nothing to people who do not assign", async () => {
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/tasks/t1": () => [200, task],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks/t1/delete": () => [
+          409,
+          {
+            error: {
+              code: "TASK_HAS_WORK",
+              message:
+                "This task already has consent noted, so it is kept for the record. Cancel it instead.",
+            },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("prompt", () => "test");
+    renderAt("/tasks/t1");
+    await screen.findByRole("heading", { name: "Task T000001" });
+    await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
+    expect(await screen.findByText(/Cancel it instead/)).toBeInTheDocument();
+  });
+
   it("puts a task on hold only with a reason", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "tasks.assign"], {

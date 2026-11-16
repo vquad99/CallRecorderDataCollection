@@ -839,6 +839,16 @@ CASES: list[Case] = [
         Perm.TASKS_VIEW,
         lambda e, s, who: {"user_id": e.foreign_moderator},  # not a member: refused after access
     ),
+    # Deleting a task (D-115): people who assign tasks; the finished task has a recording, so
+    # their answer is "kept for the record" (409).
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/delete",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/delete",
+        {SA, PA},
+        Perm.TASKS_ASSIGN,
+        lambda e, s, who: {"reason": "access check"},
+    ),
     case(
         "POST",
         "/api/v1/tasks/{task_id}/transition",

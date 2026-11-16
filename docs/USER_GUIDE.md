@@ -263,6 +263,8 @@ rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
 On the task page:
 
 - **Assign moderator**: choose the Moderator and click **Assign**. The task becomes **Assigned**.
+- **Delete task** (top right of the task page): for a task made by mistake. Type the reason. Only a
+  task with no recording, phone call or consent can be deleted; otherwise cancel it instead.
 - **Audio quality → Assign QC**: after the recording, choose the QC Executive who will check it.
   The person who recorded cannot check their own recording.
 - **Change status**: put the task **On hold**, **Cancelled**, or back to **Assigned** after a
