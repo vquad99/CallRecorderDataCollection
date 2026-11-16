@@ -215,4 +215,43 @@ describe("participants tab", () => {
       participant_code: "P000009",
     });
   });
+
+  it("adds several existing participants at once (D-116)", async () => {
+    const others = ["P000021", "P000022", "P000023"].map((code, i) => ({
+      language_code: "hi",
+      dialect: "",
+      id: `x${i}`,
+      participant_code: code,
+      display_label: `Person ${i + 1}`,
+    }));
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+        "GET /api/v1/projects/p1/participants/link-candidates": () => [200, others],
+        "POST /api/v1/projects/p1/participants/link": (body) => [
+          201,
+          { ...asha, participant_code: (body as { participant_code: string }).participant_code },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add existing participant" }));
+    expect(await screen.findByText("Person 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add selected (0)" })).toBeDisabled();
+    await userEvent.click(screen.getByLabelText("Select P000021"));
+    await userEvent.click(screen.getByLabelText("Select P000023"));
+    await userEvent.click(screen.getByRole("button", { name: "Add selected (2)" }));
+    expect(await screen.findByText("2 participants added to this project.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.path.endsWith("/link")).map((c) => c.body)).toEqual([
+      { participant_code: "P000021" },
+      { participant_code: "P000023" },
+    ]);
+    // Select all takes every one shown.
+    await userEvent.click(screen.getByLabelText(/^Select all shown/));
+    expect(screen.getByRole("button", { name: "Add selected (3)" })).toBeEnabled();
+  });
 });

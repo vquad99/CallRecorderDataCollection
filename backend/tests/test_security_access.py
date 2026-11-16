@@ -272,7 +272,6 @@ def estate(migrated_db: str, tmp_path: Path) -> Iterator[Estate]:
             make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[own])
             make_user(db, "mo@example.org", ["MODERATOR"], projects=[own])
             make_user(db, "mo2@example.org", ["MODERATOR"], projects=[own])
-            make_user(db, "qc@example.org", ["QC_EXECUTIVE"], projects=[own])
             make_user(db, "cv@example.org", ["CLIENT_VIEWER"], projects=[own])
             spare = make_user(db, "spare@example.org", ["MODERATOR"], projects=[own])
             make_user(db, "pa.f@example.org", ["PROJECT_ADMIN"], projects=[foreign])
@@ -281,6 +280,9 @@ def estate(migrated_db: str, tmp_path: Path) -> Iterator[Estate]:
             foreign_side = _build_side(
                 db, api, FOREIGN_CODE, "pa.f@example.org", "mo.f@example.org"
             )
+            # Joins after the tasks reached QC, so no task is given to them (D-116): the table
+            # checks a QC Executive with no task of their own.
+            make_user(db, "qc@example.org", ["QC_EXECUTIVE"], projects=[own])
             callers = {
                 SA: api("sa@example.org"),
                 PA: api("pa@example.org"),

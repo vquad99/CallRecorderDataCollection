@@ -17,7 +17,7 @@ from app.core.errors import AppError
 from app.core.permissions import Perm, Role
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, forbidden
-from app.modules.auth.models import User
+from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
 from app.modules.projects.models import Project, ProjectMembership
 from app.modules.projects.service import ensure_accepts_new_work
@@ -199,11 +199,95 @@ def transition(
     )
     try:
         _record_transition(db, task, target, actor_id, reason_code, comment, ip)
+        if target == "AUDIO_QC":
+            auto_assign_qc(db, task)
         db.commit()
     except Exception:
         db.rollback()
         raise
     return task
+
+
+def auto_assign_qc(db: Session, task: Task) -> uuid.UUID | None:
+    """Gives a task reaching QC to a QC Executive of its project (D-116), when it has none: the
+    active QC Executive with the fewest tasks waiting in QC; on a tie, the one given a task
+    longest ago (round robin). Never the task's moderator or someone who recorded it. Nobody
+    fits: the task waits, and a project admin assigns it by hand. Returns the person chosen."""
+    from app.modules.recordings.models import Recording
+
+    if active_assignee(db, task.id, Role.QC_EXECUTIVE.value) is not None:
+        return None
+    # One choice at a time per project, so two tasks sent together are spread, not doubled.
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"qc-assign:{task.project_id}"}
+    )
+    moderator = active_assignee(db, task.id, Role.MODERATOR.value)
+    recorders = set(db.scalars(select(Recording.created_by).where(Recording.task_id == task.id)))
+    excluded = recorders | ({moderator.user_id} if moderator else set())
+    qc_role = select(RoleRecord.id).where(RoleRecord.code == Role.QC_EXECUTIVE.value)
+    candidates = list(
+        db.scalars(
+            select(User)
+            .join(ProjectMembership, ProjectMembership.user_id == User.id)
+            .where(
+                ProjectMembership.project_id == task.project_id,
+                User.status == "ACTIVE",
+                exists().where(
+                    UserRole.user_id == User.id, UserRole.role_id.in_(qc_role.scalar_subquery())
+                ),
+            )
+        )
+    )
+    candidates = [u for u in candidates if u.id not in excluded]
+    if not candidates:
+        return None
+    waiting = dict(
+        db.execute(
+            select(TaskAssignment.user_id, func.count())
+            .join(Task, Task.id == TaskAssignment.task_id)
+            .where(
+                TaskAssignment.role_code == Role.QC_EXECUTIVE.value,
+                TaskAssignment.active.is_(True),
+                Task.status == "AUDIO_QC",
+                TaskAssignment.user_id.in_([u.id for u in candidates]),
+            )
+            .group_by(TaskAssignment.user_id)
+        ).all()
+    )
+    last_given = dict(
+        db.execute(
+            select(TaskAssignment.user_id, func.max(TaskAssignment.created_at))
+            .where(
+                TaskAssignment.role_code == Role.QC_EXECUTIVE.value,
+                TaskAssignment.user_id.in_([u.id for u in candidates]),
+            )
+            .group_by(TaskAssignment.user_id)
+        ).all()
+    )
+    never = datetime.min.replace(tzinfo=UTC)
+    chosen = min(
+        candidates,
+        key=lambda u: (waiting.get(u.id, 0), last_given.get(u.id) or never, u.display_name),
+    )
+    db.add(
+        TaskAssignment(
+            task_id=task.id,
+            user_id=chosen.id,
+            role_code=Role.QC_EXECUTIVE.value,
+            assigned_by=None,
+            reason="Assigned by the platform: fewest tasks waiting in QC",
+        )
+    )
+    audit.record(
+        db,
+        action="task.qc_auto_assigned",
+        entity_type="task",
+        entity_id=task.id,
+        project_id=task.project_id,
+        actor_id=None,
+        after={"qc": str(chosen.id), "waiting_before": waiting.get(chosen.id, 0)},
+    )
+    return chosen.id
 
 
 def system_transition(

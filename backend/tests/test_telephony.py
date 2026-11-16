@@ -1080,16 +1080,19 @@ def test_the_moderator_marks_the_conversation_once_both_are_on_the_line(
     assert started["events"][-1]["kind"] == "RECORDING_STARTED"
     # Starting again replaces the start.
     again = w["mod"].post(f"{base}/recording/start").json()
-    assert again["record_started_at"] >= started["record_started_at"]
+    assert datetime.fromisoformat(again["record_started_at"]) >= datetime.fromisoformat(
+        started["record_started_at"]
+    )
     assert "replaced" in again["events"][-1]["text"]
     stopped = w["mod"].post(f"{base}/recording/stop").json()
-    assert stopped["record_stopped_at"] >= stopped["record_started_at"]
+    assert datetime.fromisoformat(stopped["record_stopped_at"]) >= datetime.fromisoformat(
+        stopped["record_started_at"]
+    )
     assert stopped["events"][-1]["kind"] == "RECORDING_STOPPED"
     # A second Stop changes nothing.
-    assert (
+    assert datetime.fromisoformat(
         w["mod"].post(f"{base}/recording/stop").json()["record_stopped_at"]
-        == (stopped["record_stopped_at"])
-    )
+    ) == datetime.fromisoformat(stopped["record_stopped_at"])
     closed = w["mod"].post(f"{base}/close", json={}).json()
     assert datetime.fromisoformat(closed["record_stopped_at"]) == datetime.fromisoformat(
         stopped["record_stopped_at"]

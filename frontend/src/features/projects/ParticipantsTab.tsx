@@ -124,9 +124,10 @@ function AddExisting({
   projectId: string;
   refresh: number;
   busy: boolean;
-  onAdd: (code: string) => void;
+  onAdd: (codes: string[]) => void;
 }) {
   const [typed, setTyped] = useState("");
+  const [ticked, setTicked] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   // Ask the server once typing pauses, not on every key.
   useEffect(() => {
@@ -138,6 +139,11 @@ function AddExisting({
     [projectId, search, refresh],
   );
   const people = found.state.status === "loaded" ? found.state.data : [];
+  // Only people still on offer can stay ticked (the list changes as they are added).
+  const shown = people.map((c) => c.participant_code);
+  const chosen = ticked.filter((code) => shown.includes(code));
+  const flip = (code: string) =>
+    setTicked(chosen.includes(code) ? chosen.filter((x) => x !== code) : [...chosen, code]);
   return (
     <section className="card pick" aria-labelledby="add-existing-title">
       <div className="pick__head">
@@ -171,9 +177,37 @@ function AddExisting({
         </p>
       ) : null}
       {people.length > 0 ? (
+        <div className="actions">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={chosen.length === shown.length}
+              onChange={(e) => setTicked(e.target.checked ? shown : [])}
+            />
+            <span>Select all shown ({shown.length})</span>
+          </label>
+          <Button
+            busy={busy}
+            disabled={chosen.length === 0}
+            onClick={() => {
+              onAdd(chosen);
+              setTicked([]);
+            }}
+          >
+            Add selected ({chosen.length})
+          </Button>
+        </div>
+      ) : null}
+      {people.length > 0 ? (
         <ul className="pick__list">
           {people.map((c) => (
             <li key={c.id} className="pick__row">
+              <input
+                type="checkbox"
+                aria-label={`Select ${c.participant_code}`}
+                checked={chosen.includes(c.participant_code)}
+                onChange={() => flip(c.participant_code)}
+              />
               <span className="pick__code">{c.participant_code}</span>
               <span className="pick__name">{c.display_label ?? "Name hidden"}</span>
               <span className="pick__meta">
@@ -184,7 +218,7 @@ function AddExisting({
                 variant="secondary"
                 busy={busy}
                 aria-label={`Add ${c.participant_code}`}
-                onClick={() => onAdd(c.participant_code)}
+                onClick={() => onAdd([c.participant_code])}
               >
                 Add
               </Button>
@@ -314,11 +348,22 @@ export function ParticipantsTab() {
           projectId={project.id}
           refresh={refresh}
           busy={busy}
-          onAdd={(code) =>
+          onAdd={(codes) =>
             void run(async () => {
-              await work.linkParticipant(project.id, code);
-              setRefresh((n) => n + 1);
-              return `${code} added to this project.`;
+              // One after the other: each is checked and audited on its own; a refusal names
+              // who was not added and keeps the ones that were.
+              const added: string[] = [];
+              try {
+                for (const code of codes) {
+                  await work.linkParticipant(project.id, code);
+                  added.push(code);
+                }
+              } finally {
+                setRefresh((n) => n + 1);
+              }
+              return codes.length === 1
+                ? `${codes[0]} added to this project.`
+                : `${added.length} participants added to this project.`;
             })
           }
         />

@@ -93,8 +93,12 @@ def _qc(world: dict[str, Any]) -> tuple[Api, str]:
 
 
 def _assign_qc(world: dict[str, Any]) -> Api:
+    """The task's QC Executive: given by the platform when the task reached QC (D-116), or by
+    the project admin here when it has none."""
     qc, qc_id = _qc(world)
     tid = world["task"]["id"]
+    if world["pa"].get(f"/api/v1/tasks/{tid}/audio-qc").json().get("qc_name") == "qc":
+        return qc
     assigned = world["pa"].post(f"/api/v1/tasks/{tid}/assign-qc", json={"user_id": qc_id})
     assert assigned.status_code == 200, assigned.text
     assert assigned.json()["qc_name"] == "qc"
@@ -183,11 +187,10 @@ def test_only_the_assigned_qc_executive_decides(world: dict[str, Any]) -> None:
     db.commit()
     _record(world)
     tid = world["task"]["id"]
-    qc, _ = _qc(world)
-    before = qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"})
-    assert before.status_code in (403, 404), "not assigned yet: not theirs"
-    _assign_qc(world)
-    other = world["api"]("qc2@example.org")
+    # The platform gave the task to one of the two (D-116); only that one decides.
+    given = world["pa"].get(f"/api/v1/tasks/{tid}/audio-qc").json()["qc_name"]
+    assert given in ("qc", "qc2")
+    other = world["api"]("qc2@example.org" if given == "qc" else "qc@example.org")
     assert other.post(
         f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"}
     ).status_code in (403, 404)
@@ -377,3 +380,59 @@ def test_the_details_file_goes_with_the_recording(world: dict[str, Any]) -> None
     qc = _assign_qc(world)
     assert qc.get(f"/api/v1/recordings/{rid}/metadata").status_code == 403, "QC cannot download"
     assert world["mod"].get(f"/api/v1/recordings/{rid}/metadata").status_code == 403
+
+
+def test_a_task_reaching_qc_is_given_to_the_least_busy_qc_executive(
+    world: dict[str, Any],
+) -> None:
+    """D-116: the platform assigns QC as tasks arrive: the QC Executive of the project with the
+    fewest tasks waiting, in turn on a tie; never the moderator; nobody fits, nobody is set."""
+    from app.modules.audit.models import AuditLog
+    from tests.conftest import make_user
+
+    db, pa = world["db"], world["pa"]
+    make_user(db, "qc2@example.org", ["QC_EXECUTIVE"], projects=[world["project"]])
+    make_user(
+        db, "qc.away@example.org", ["QC_EXECUTIVE"], projects=[world["project"]], status="DISABLED"
+    )
+    make_user(db, "qc.other@example.org", ["QC_EXECUTIVE"])  # not in this project
+
+    def qc_of(tid: str) -> str | None:
+        name: str | None = pa.get(f"/api/v1/tasks/{tid}/audio-qc").json().get("qc_name")
+        return name
+
+    first = world["task"]["id"]
+    _record(world, 3)
+    second = _second_task(world)
+    world["mod"].post(f"/api/v1/tasks/{second}/transition", json={"to": "IN_PROGRESS"})
+    _record(world, 3, second)
+    third = _second_task(world)
+    world["mod"].post(f"/api/v1/tasks/{third}/transition", json={"to": "IN_PROGRESS"})
+    _record(world, 3, third)
+
+    given = [qc_of(t) for t in (first, second, third)]
+    # Two QC Executives can take work here: the first two tasks go one to each, the third to
+    # whoever has fewer waiting (they are equal), in turn: the one given a task longest ago.
+    assert sorted(str(g) for g in given[:2]) == ["qc", "qc2"]
+    assert given[2] == given[0]
+    assert None not in given
+    entries = db.query(AuditLog).filter(AuditLog.action == "task.qc_auto_assigned").all()
+    assert len(entries) == 3
+    assert all(e.actor_id is None for e in entries)
+    # The QC Executive given the task sees it and can decide.
+    qc_api = world["api"](f"{given[0]}@example.org")
+    assert qc_api.get(f"/api/v1/tasks/{first}/audio-qc").json()["can_decide"] is True
+
+
+def test_nobody_is_assigned_when_no_qc_executive_can_take_it(world: dict[str, Any]) -> None:
+    from sqlalchemy import update
+
+    from app.modules.auth.models import User
+
+    db = world["db"]
+    db.execute(update(User).where(User.email == "qc@example.org").values(status="DISABLED"))
+    db.commit()
+    _record(world, 3)
+    tid = world["task"]["id"]
+    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC"
+    assert world["pa"].get(f"/api/v1/tasks/{tid}/audio-qc").json()["qc_name"] is None

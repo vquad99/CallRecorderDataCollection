@@ -194,7 +194,8 @@ Each participant gets a code such as `P000123`.
 **Add existing participant** (on a project's **Participants** tab): adds someone who is already
 in another of your projects, instead of creating them again. Search by code or name, then click
 **Add**. They keep their code, details and consent history. Only people who speak one of the
-project's languages are listed.
+project's languages are listed. To add many at once, tick the boxes (or **Select all shown**)
+and click **Add selected**.
 
 **Add many**: paste or choose a file whose first line is `name,phone,email,language,dialect`.
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
@@ -265,8 +266,11 @@ On the task page:
 - **Assign moderator**: choose the Moderator and click **Assign**. The task becomes **Assigned**.
 - **Delete task** (top right of the task page): for a task made by mistake. Type the reason. Only a
   task with no recording, phone call or consent can be deleted; otherwise cancel it instead.
-- **Audio quality → Assign QC**: after the recording, choose the QC Executive who will check it.
-  The person who recorded cannot check their own recording.
+- **QC is assigned by itself**: when the recording reaches Audio QC, the platform gives it to the
+  project's active QC Executive with the fewest tasks waiting (in turn when equal), never the
+  moderator or whoever recorded. If the project has no QC Executive free, nobody is set.
+- **Audio quality → Assign QC**: to choose or change the QC Executive by hand. The person who
+  recorded cannot check their own recording.
 - **Change status**: put the task **On hold**, **Cancelled**, or back to **Assigned** after a
   return, with a reason.
 - **History**: everything that happened; add a comment with **Add comment**.
