@@ -110,10 +110,17 @@ export function ParticipantForm({
         {...(phoneError ? { error: phoneError } : {})}
         onChange={(e) => setPhone({ ...phone, digits: e.target.value.replace(/\D/g, "") })}
       />
+      {/* Every participant needs an email: the consent form is sent there (D-128). A saved email
+          this user may not see stays as it is when the box is left empty. */}
       <TextField
         label="Email address"
         type="email"
-        hint="Optional. Used to send the participant their consent form link."
+        required={initial.email !== undefined}
+        hint={
+          initial.email === undefined
+            ? "Saved and hidden from you. Leave empty to keep it."
+            : "The consent form is sent to this address."
+        }
         value={f.email ?? ""}
         onChange={(e) => setF({ ...f, email: e.target.value })}
       />

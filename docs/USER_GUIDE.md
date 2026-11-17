@@ -199,7 +199,8 @@ Project tabs:
 - **Name or label** (required).
 - **Country code** (choose from the list; India +91 is first) and **Phone number** (optional;
   exactly 10 digits, without the country code).
-- **Email address**: needed to email the consent form.
+- **Email address** (required): the consent form is sent there. It cannot be removed; someone
+  added before emails were required gets one the next time they are edited.
 - **Language** (required; choose from the list. When the project has languages, only those
   are listed).
 - **Dialect**, **Internal notes** (optional).
@@ -219,7 +220,8 @@ and click **Add selected**.
 can be filtered by it.
 
 **Add many**: paste or choose a file whose first line is
-`name,phone,email,language,dialect,district` (`district` may be left out).
+`name,phone,email,language,dialect,district` (`district` may be left out). Every row needs
+an email.
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent

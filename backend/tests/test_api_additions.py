@@ -14,7 +14,7 @@ import pytest
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
 from app.modules.users import service as users
-from tests.conftest import Api, make_participant, make_project, make_user
+from tests.conftest import Api, drop_email, make_participant, make_project, make_user
 
 pytestmark = pytest.mark.db
 
@@ -129,6 +129,7 @@ def _with_email(world: dict[str, Any]) -> str:
     db = world["db"]
     db.get(Project, world["project"].id).consent_text = "I agree to be recorded."
     db.commit()
+    drop_email(db, world["a"]["id"])  # A was saved before emails were required
     world["pa"].patch(
         f"{base}/{world['b']['id']}",
         json={"display_label": "Bina", "language_code": "hi", "email": "bina@example.org"},

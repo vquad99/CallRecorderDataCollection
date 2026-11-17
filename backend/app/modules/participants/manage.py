@@ -63,7 +63,8 @@ def import_csv(
     ip: str | None,
 ) -> list[RowResult]:
     """Check every row; with confirm, create the rows that passed. Header: name,phone,email,
-    language,dialect[,district] (phone, email, dialect and district may be empty)."""
+    language,dialect[,district] (phone, dialect and district may be empty; email may not,
+    D-128)."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     rows = read_rows(
         text,
@@ -93,8 +94,9 @@ def import_csv(
                 if phone in seen_phones:
                     raise _bad("Phone number repeated in this file")
                 seen_phones.add(phone)
-            if row.get("email"):
-                clean_email(row["email"])
+            if not row.get("email"):
+                raise _bad("Email is missing")
+            clean_email(row["email"])
             if len(row.get("district", "")) > 100:
                 raise _bad("District is too long")
             if not confirm:

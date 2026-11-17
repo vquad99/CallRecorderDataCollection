@@ -10,6 +10,8 @@ afterEach(() => vi.unstubAllGlobals());
 const party = (id: string, code: string) => ({
   id,
   participant_code: code,
+  display_label: `Name of ${code}`,
+  has_email: true,
   consent_status: null,
   consent_at: null,
   consent_source: null,
@@ -433,13 +435,9 @@ describe("tasks", () => {
           },
         ],
         "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
-        "POST /api/v1/projects/p1/participants/bulk": () => [
-          200,
-          {
-            results: [{ participant_id: "b1", participant_code: "P000002", ok: true, message: "" }],
-            done: 1,
-            failed: 0,
-          },
+        "POST /api/v1/projects/p1/participants/b1/portal-link/email": () => [
+          201,
+          { sent: true, expires_at: "2026-12-09T00:00:00Z" },
         ],
       }),
     );
@@ -451,11 +449,10 @@ describe("tasks", () => {
     expect(within(card).getByText("P000002")).toBeInTheDocument();
     expect(screen.getAllByText("Agreed").length).toBeGreaterThan(0); // A's chip in the facts
     await userEvent.click(within(card).getByRole("button", { name: "Email consent form" }));
-    expect(await screen.findByText("Consent form emailed to P000002.")).toBeInTheDocument();
-    expect(calls.find((c) => c.path.endsWith("/bulk"))?.body).toEqual({
-      action: "send_consent",
-      participant_ids: ["b1"],
-    });
+    expect(await screen.findByText("Consent form emailed to Name of P000002.")).toBeInTheDocument();
+    expect(calls.some((c) => c.path.endsWith("/b1/portal-link/email"))).toBe(true);
+    // Names sit next to the codes (D-128).
+    expect(within(card).getByText("Name of P000002")).toBeInTheDocument();
   });
 
   it("shows audit entries with before and after", async () => {

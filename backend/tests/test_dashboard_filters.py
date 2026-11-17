@@ -45,6 +45,7 @@ def board(w: dict[str, Any]) -> dict[str, Any]:
                 "language_code": "ta",
                 "dialect": dialect,
                 "district": district,
+                "email": f"{name.lower()}@example.org",
             },
         ).json()
         for name, dialect, district in (("Chitra", "Madurai", "Madurai"), ("Devi", "", ""))

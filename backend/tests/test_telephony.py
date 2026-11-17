@@ -964,7 +964,10 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     assert w["mod"].get(f"{base}/{w['a']['id']}/details").status_code == 403
     assert w["api"]("mod2@example.org").get(f"{base}/{w['a']['id']}/details").status_code == 403
     # A removed participant says so, with who and why.
-    extra = w["pa"].post(base, json={"display_label": "Chitra", "language_code": "hi"})
+    extra = w["pa"].post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
     assert extra.status_code == 201, extra.text
     cid = extra.json()["id"]
     fresh = w["pa"].get(f"{base}/{cid}/details").json()

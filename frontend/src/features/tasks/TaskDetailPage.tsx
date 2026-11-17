@@ -342,13 +342,8 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
   const { busy, error, message, run } = useAction();
   const send = (p: work.Party) =>
     void run(async () => {
-      const result = await work.bulkParticipants(task.project_id, {
-        action: "send_consent",
-        participant_ids: [p.id],
-      });
-      const failed = result.results.find((r) => !r.ok);
-      if (failed) throw new Error(failed.message);
-      return `Consent form emailed to ${p.participant_code}.`;
+      await work.emailPortalLink(task.project_id, p.id);
+      return `Consent form emailed to ${p.display_label ?? p.participant_code}.`;
     }, p.id);
   const parties = [task.participant_a, task.participant_b];
   return (
@@ -364,10 +359,14 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
             <li key={p.id} className="consent__row">
               <span className="consent__who">
                 <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
-                <span className="code-tag">{p.participant_code}</span>
+                <PartyName party={p} />
               </span>
               <ConsentChip party={p} />
-              {canSend ? (
+              {canSend && !p.has_email ? (
+                <span className="muted">
+                  No email address. Add one with Edit on the Participants page.
+                </span>
+              ) : canSend ? (
                 <Button
                   variant="secondary"
                   busy={busy === p.id}
@@ -386,6 +385,16 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
     </section>
+  );
+}
+
+/** A participant as their code, with their name for people who may see it (D-128). */
+function PartyName({ party }: { party: work.Party }) {
+  return (
+    <>
+      <span className="code-tag">{party.participant_code}</span>
+      {party.display_label ? <span>{party.display_label}</span> : null}
+    </>
   );
 }
 
@@ -596,7 +605,7 @@ export function TaskDetailPage() {
           <div key={p.id} className="checks__row">
             <dt>Participant {i === 0 ? "A" : "B"}</dt>
             <dd className="party">
-              <span className="code-tag">{p.participant_code}</span>
+              <PartyName party={p} />
               <ConsentChip party={p} />
             </dd>
           </div>

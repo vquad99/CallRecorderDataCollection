@@ -43,8 +43,9 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
       <h2 id="bulk-add-title">Add many participants</h2>
       <p className="muted">
         Paste rows or choose a CSV file. First line:{" "}
-        <code>name,phone,email,language,dialect,district</code>. Phone, email, dialect and district
-        may be empty. Check the rows first; only rows without a problem are added.
+        <code>name,phone,email,language,dialect,district</code>. Every row needs an email; phone,
+        dialect and district may be empty. Check the rows first; only rows without a problem are
+        added.
       </p>
       <div className="field">
         <label htmlFor="bulk-csv" className="field__label">

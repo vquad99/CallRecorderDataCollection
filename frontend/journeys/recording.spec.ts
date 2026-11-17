@@ -118,6 +118,10 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       await admin.getByRole("button", { name: "Add participant" }).first().click();
       const form = admin.getByRole("dialog", { name: "Add participant" });
       await form.getByLabel(/^Name or label/).fill(`${person} ${code}`);
+      // Every participant has an email: the consent form is sent there (D-128).
+      await form
+        .getByLabel(/^Email address/)
+        .fill(`${person.toLowerCase()}.${code.toLowerCase()}@example.org`);
       await form.getByLabel(/^Language/).selectOption("hi");
       await form.getByRole("button", { name: "Add participant" }).click();
       await expect(admin.getByRole("cell", { name: `${person} ${code}` })).toBeVisible();

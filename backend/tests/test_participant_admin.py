@@ -25,7 +25,7 @@ world = test_recordings.world
 CSV = (
     "name,phone,email,language,dialect\n"
     "Kiran,+919811100001,kiran@example.org,hi,\n"
-    "Lata,,,hi,\n"
+    "Lata,,lata@example.org,hi,\n"
     ",+919811100003,,hi,\n"
     "Mohan,+919811100001,,hi,\n"
     "Nila,,not-an-email,hi,\n"
@@ -81,6 +81,11 @@ def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, An
         json={"display_label": "Kiran", "language_code": "hi", "email": "kiran@example.org"},
     )
     without = make_participant(pa, world["project"].id, "Lata")
+    # Saved before every participant needed an email (D-128).
+    from app.modules.participants.models import Participant
+
+    db.execute(update(Participant).where(Participant.id == without["id"]).values(email_enc=None))
+    db.commit()
     ids = [with_mail["id"], without["id"]]
 
     sent = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids}).json()
@@ -272,7 +277,13 @@ def test_a_participant_has_a_district(world: dict[str, Any]) -> None:
     is in test_dashboard_filters)."""
     pa, base = world["pa"], _base(world)
     made = pa.post(
-        base, json={"display_label": "Ravi", "language_code": "hi", "district": " Pune "}
+        base,
+        json={
+            "display_label": "Ravi",
+            "language_code": "hi",
+            "district": " Pune ",
+            "email": "ravi@example.org",
+        },
     )
     assert made.status_code == 201, made.text
     assert made.json()["district"] == "Pune"
@@ -283,7 +294,7 @@ def test_a_participant_has_a_district(world: dict[str, Any]) -> None:
     )
     assert fixed.status_code == 200, fixed.text
     assert fixed.json()["district"] == "Nashik"
-    csv = "name,phone,email,language,dialect,district\nSita,,,hi,,Thane\n"
+    csv = "name,phone,email,language,dialect,district\nSita,,sita@example.org,hi,,Thane\n"
     added = pa.post(f"{base}/import", json={"csv": csv, "confirm": True})
     assert added.status_code == 200, added.text
     assert added.json()["created"] == 1
@@ -291,6 +302,57 @@ def test_a_participant_has_a_district(world: dict[str, Any]) -> None:
     assert sita["district"] == "Thane"
     long_name = "d" * 101
     too_long = pa.post(
-        f"{base}/import", json={"csv": f"name,language,district\nX,hi,{long_name}\n"}
+        f"{base}/import",
+        json={"csv": f"name,email,language,district\nX,x@example.org,hi,{long_name}\n"},
     )
     assert too_long.json()["rows"][0]["ok"] is False
+
+
+def test_every_participant_has_an_email(world: dict[str, Any]) -> None:
+    """D-128: the consent form goes by email, so a participant cannot be added, uploaded or kept
+    without one; someone saved before gets one with their next correction."""
+    from sqlalchemy import update as _update
+
+    from app.modules.participants.models import Participant
+
+    db, pa, base = world["db"], world["pa"], _base(world)
+    without = pa.post(base, json={"display_label": "Noor", "language_code": "hi"})
+    assert (without.status_code, without.json()["error"]["code"]) == (422, "EMAIL_REQUIRED")
+    blank = pa.post(base, json={"display_label": "Noor", "language_code": "hi", "email": " "})
+    assert blank.json()["error"]["code"] == "EMAIL_REQUIRED"
+    rows = pa.post(
+        f"{base}/import", json={"csv": "name,phone,email,language,dialect\nNoor,,,hi,\n"}
+    ).json()["rows"]
+    assert (rows[0]["ok"], rows[0]["message"]) == (False, "Email is missing")
+
+    made = pa.post(
+        base, json={"display_label": "Noor", "language_code": "hi", "email": "noor@example.org"}
+    )
+    assert made.status_code == 201, made.text
+    pid = made.json()["id"]
+    body = {"display_label": "Noor", "language_code": "hi"}
+    removed = pa.patch(f"{base}/{pid}", json={**body, "email": ""})
+    assert removed.json()["error"]["code"] == "EMAIL_REQUIRED"
+    assert pa.patch(f"{base}/{pid}", json=body).status_code == 200  # not sent: kept
+
+    # Saved before the rule: the consent form names the problem, and a correction needs an email.
+    db.execute(_update(Participant).where(Participant.id == pid).values(email_enc=None))
+    db.commit()
+    sent = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": [pid]})
+    assert sent.json()["results"][0]["ok"] is False
+    assert "Add one with Edit" in sent.json()["results"][0]["message"]
+    assert pa.patch(f"{base}/{pid}", json=body).json()["error"]["code"] == "EMAIL_REQUIRED"
+    fixed = pa.patch(f"{base}/{pid}", json={**body, "email": "noor@example.org"})
+    assert fixed.status_code == 200, fixed.text
+
+
+def test_the_task_names_its_participants_for_people_who_may_see_them(
+    world: dict[str, Any],
+) -> None:
+    """D-128: the task page shows each participant's name to the project's managers and the
+    task's moderator, and whether they have an email."""
+    tid = world["task"]["id"]
+    for who in ("pa", "mod"):
+        side_a = world[who].get(f"/api/v1/tasks/{tid}").json()["participant_a"]
+        assert side_a["display_label"], who
+        assert side_a["has_email"] is True

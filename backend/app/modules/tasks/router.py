@@ -16,7 +16,9 @@ from app.modules.audio_qc import service as audio_qc
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.models import User
 from app.modules.participants import consent as consents
+from app.modules.participants import service as participants
 from app.modules.participants.models import ConsentMethod, ConsentStatus, Participant
+from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 from app.modules.tasks import bulk, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
@@ -55,6 +57,9 @@ class TaskSummary(BaseModel):
 class PartyOut(BaseModel):
     id: uuid.UUID
     participant_code: str
+    # The name, for people who may see the participant's profile (null otherwise, D-128).
+    display_label: str | None = None
+    has_email: bool = False
     # The participant's current word on consent, found by the platform (D-127): the newer of
     # their own answer on the consent form and any consent noted for this task.
     consent_status: str | None
@@ -87,15 +92,19 @@ def summary(t: Task) -> TaskSummary:
 
 def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
     sides = consents.for_task(db, t)
+    project = db.get_one(Project, t.project_id)
     moderator = service.active_assignee(db, t.id, Role.MODERATOR.value)
     actor = service.actor_from(principal, t, moderator)
 
     def party(side: consents.SideConsent) -> PartyOut:
         p = db.get_one(Participant, side.participant_id)
         word = side.newest
+        seen = participants.visibility(db, principal, project, p.id)
         return PartyOut(
             id=p.id,
             participant_code=p.participant_code,
+            display_label=p.display_label if seen.profile else None,
+            has_email=p.email_enc is not None,
             consent_status=word.status if word else None,
             consent_at=word.created_at if word else None,
             consent_source=None if word is None else "FORM" if word.is_own_answer else "MODERATOR",

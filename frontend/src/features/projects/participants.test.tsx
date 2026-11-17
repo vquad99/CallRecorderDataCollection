@@ -281,8 +281,14 @@ describe("participants tab", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
     const form = within(screen.getByRole("dialog", { name: "Edit P000001" }));
     expect(form.getByLabelText(/Phone number/)).toHaveValue("");
+    // D-128: someone saved without an email gets one before the change is saved.
+    expect(form.getByLabelText(/Email address/)).toBeRequired();
+    await userEvent.type(form.getByLabelText(/Email address/), "asha@example.org");
     await userEvent.click(form.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByText("P000001 saved.")).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({ phone: null });
+    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+      phone: null,
+      email: "asha@example.org",
+    });
   });
 });

@@ -77,6 +77,9 @@ export interface TaskSummary {
 export interface Party {
   id: string;
   participant_code: string;
+  /** The name, for people who may see the participant's profile (null otherwise). */
+  display_label: string | null;
+  has_email: boolean;
   /** The participant's current word on consent, found by the platform (D-127). */
   consent_status: string | null;
   consent_at: string | null;

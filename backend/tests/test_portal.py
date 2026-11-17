@@ -16,7 +16,7 @@ from app.modules.participants.models import ConsentRecord, ParticipantPortalLink
 from app.modules.projects.models import Project
 from app.modules.tasks.models import Task
 from tests import test_recordings
-from tests.conftest import Api, make_participant
+from tests.conftest import Api, drop_email, make_participant
 from tests.test_recordings import _record, chunks
 
 pytestmark = pytest.mark.db
@@ -234,6 +234,7 @@ def test_the_consent_link_is_emailed_to_the_participant(
     pid = str(world["project"].id)
     pa = world["pa"]
     a = world["task"]["participant_a"]["id"]
+    drop_email(world["db"], a)  # saved before every participant needed an email (D-128)
     no_email = pa.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link/email")
     assert (no_email.status_code, no_email.json()["error"]["code"]) == (409, "NO_EMAIL")
     bad = pa.patch(
@@ -267,10 +268,10 @@ def test_the_consent_link_is_emailed_to_the_participant(
     token = text.replace("=\n", "").split("/portal#", 1)[1].split()[0]
     api, _ = _visitor(world, token)
     assert api.get("/api/v1/portal/me", headers={"X-Portal-Token": token}).status_code == 200
-    # Removing the address stops further emails.
-    pa.patch(
+    # The address cannot be removed: the consent form is sent there (D-128).
+    removed = pa.patch(
         f"/api/v1/projects/{pid}/participants/{a}",
         json={"display_label": "Asha K", "language_code": "hi", "email": ""},
     )
-    again = pa.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link/email")
-    assert again.json()["error"]["code"] == "NO_EMAIL"
+    assert removed.json()["error"]["code"] == "EMAIL_REQUIRED"
+    assert pa.get(f"/api/v1/projects/{pid}/participants/{a}").json()["has_email"] is True

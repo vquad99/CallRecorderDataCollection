@@ -172,6 +172,7 @@ export async function setUpTask(
       await api<{ id: string }>(admin, "POST", `/api/v1/projects/${project.id}/participants`, {
         display_label: `${label} ${code}`,
         language_code: "hi",
+        email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
       }),
     );
   }

@@ -96,7 +96,11 @@ def test_nul_characters_are_refused_not_a_server_error(admin: Api, db: Any, new_
     assert results == dict.fromkeys(attempts, (422, "VALIDATION_ERROR")), results
     literal = admin.post(
         f"/api/v1/projects/{project.id}/participants",
-        json={"display_label": "back\\u0000slash", "language_code": "hi"},
+        json={
+            "display_label": "back\\u0000slash",
+            "language_code": "hi",
+            "email": "backslash@example.org",
+        },
     )
     assert literal.status_code == 201, "a backslash followed by u0000 is ordinary text"
     assert literal.json()["display_label"] == "back\\u0000slash"
@@ -176,6 +180,7 @@ def test_fields_owned_by_the_server_cannot_be_set_by_a_client(
         json={
             "display_label": "Chandra",
             "language_code": "hi",
+            "email": "chandra@example.org",
             "participant_code": "P999999",
             "deleted": True,
             "id": forged_id,

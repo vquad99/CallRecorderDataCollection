@@ -8,6 +8,7 @@ FND-010). With REQUIRE_DB_TESTS=1 (CI) a missing test database is an error, neve
 from __future__ import annotations
 
 import os
+import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -283,10 +284,20 @@ def link_token(email_text: str) -> str:
 # ---------------------------------------------------------------- Phase 3: participants and tasks
 
 
+def email_for(label: str) -> str:
+    """A participant's email for tests (D-128: every participant has one)."""
+    name = "".join(c for c in label.lower() if c.isalnum()) or "p"
+    return f"{name}.{uuid.uuid4().hex[:8]}@example.org"
+
+
 def make_participant(
     api: Api, project_id: Any, label: str, phone: str | None = None, lang: str = "hi"
 ) -> Any:
-    body: dict[str, Any] = {"display_label": label, "language_code": lang}
+    body: dict[str, Any] = {
+        "display_label": label,
+        "language_code": lang,
+        "email": email_for(label),
+    }
     if phone:
         body["phone"] = phone
     response = api.post(f"/api/v1/projects/{project_id}/participants", json=body)
@@ -318,3 +329,13 @@ def give_consent(api: Api, task_id: Any) -> None:
             },
         )
         assert response.status_code == 201, response.text
+
+
+def drop_email(db: Any, participant_id: Any) -> None:
+    """A participant saved before every participant needed an email (D-128)."""
+    from sqlalchemy import update as _update
+
+    from app.modules.participants.models import Participant
+
+    db.execute(_update(Participant).where(Participant.id == participant_id).values(email_enc=None))
+    db.commit()

@@ -260,3 +260,7 @@ A POST, PUT, PATCH or DELETE under `/api/v1/` without the session cookie gets 40
 ## Consent on tasks (D-127)
 
 Each participant in `GET /tasks/{id}` carries `consent_status` and `consent_at` (their current word: the newer of their own consent-form answer and any consent noted for the task), `consent_source` (`FORM` or `MODERATOR`), `consent_review` (staff review of a form answer) and `may_record`. `POST /tasks/{id}/calls` answers 409 `CONSENT_MISSING` until both have agreed.
+
+## Participants need an email (D-128)
+
+`POST /projects/{id}/participants` and `PATCH .../participants/{pid}` answer 422 `EMAIL_REQUIRED` without an email (a PATCH that leaves `email` out keeps the stored one; an empty one is refused). File imports need an `email` on every row. Task participants also carry `display_label` and `has_email`.

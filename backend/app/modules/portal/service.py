@@ -84,7 +84,11 @@ def create_link(
 def email_of(participant: Participant) -> str:
     """The participant's email address (encrypted), or 409 NO_EMAIL."""
     if participant.email_enc is None:
-        raise AppError("This participant has no email address", code="NO_EMAIL", status_code=409)
+        raise AppError(
+            "This participant has no email address. Add one with Edit on the Participants page.",
+            code="NO_EMAIL",
+            status_code=409,
+        )
     return participant.email_enc
 
 

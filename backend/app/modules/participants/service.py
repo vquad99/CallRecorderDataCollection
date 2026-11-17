@@ -282,6 +282,17 @@ def _apply_phone(
     p.phone_hint = phone[-2:]
 
 
+def require_email(email: str | None) -> str:
+    """The email a participant must have (D-128), or 422 EMAIL_REQUIRED."""
+    if not email or not email.strip():
+        raise AppError(
+            "Enter the participant's email address: the consent form is sent there",
+            code="EMAIL_REQUIRED",
+            status_code=422,
+        )
+    return email
+
+
 def create_participant(
     db: Session,
     settings: Settings,
@@ -308,9 +319,8 @@ def create_participant(
         created_by=principal.user_id,
     )
     _apply_phone(participant, settings, cipher, phone)
-    participant.email_enc = (
-        cipher.encrypt(clean_email(data.email)) if data.email and data.email.strip() else None
-    )
+    # Every participant needs an email: the consent form reaches them by email (D-128).
+    participant.email_enc = cipher.encrypt(clean_email(require_email(data.email)))
     db.add(participant)
     db.add(ParticipantProjectLink(participant_id=participant.id, project_id=project.id))
     audit.record(
@@ -442,10 +452,11 @@ def correct_participant(
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
-    # Email: not sent = keep; empty = remove; otherwise replace.
+    # Email: not sent = keep; otherwise replace. It cannot be removed, and someone saved before
+    # it was required gets one with their next correction (D-128).
     email_changed = False
-    if data.email is not None:
-        new_email = clean_email(data.email) if data.email.strip() else None
+    if data.email is not None or participant.email_enc is None:
+        new_email = clean_email(require_email(data.email))
         old_email = cipher.decrypt(participant.email_enc) if participant.email_enc else None
         email_changed = new_email != old_email
         if email_changed:

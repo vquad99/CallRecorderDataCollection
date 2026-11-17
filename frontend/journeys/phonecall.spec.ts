@@ -62,6 +62,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
       display_label: `${label} ${code}`,
       language_code: "hi",
       phone: number,
+      email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
     });
   const asha = await person("Asha", phone("123"));
   const bina = await person("Bina", phone("456"));
