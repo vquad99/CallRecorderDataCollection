@@ -38,7 +38,7 @@ Then sign in at https://dubdesk.live with your email and password.
 **Forgot your password.** On the sign-in page click **Forgot your password?**, type your email,
 click **Send reset link**. The emailed link works for 30 minutes. At most 3 links per hour.
 
-**Signed out by itself.** After 30 minutes without use, and after 12 hours in any case.
+**Signed out by itself.** After 10 minutes without use, and after 12 hours in any case. An open recording or phone call keeps you signed in.
 
 **Locked out.** After 5 wrong passwords in 15 minutes the account waits 15 minutes. You see
 **"Too many failed sign-in attempts. Try again later."**
@@ -199,7 +199,11 @@ in another of your projects, instead of creating them again. Search by code or n
 project's languages are listed. To add many at once, tick the boxes (or **Select all shown**)
 and click **Add selected**.
 
-**Add many**: paste or choose a file whose first line is `name,phone,email,language,dialect`.
+**District**: each participant can have a district (on the form and in the file). The dashboard
+can be filtered by it.
+
+**Add many**: paste or choose a file whose first line is
+`name,phone,email,language,dialect,district` (`district` may be left out).
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent
@@ -296,7 +300,9 @@ Downloads are available to the Super Admin and Project Admin.
 1. Open **Tasks** and click your task.
 2. Click **Start session** (the highlighted box near the top).
 3. **Record consent**: choose **How consent was given**, then click **Consent given** (or
-   **Refused**) on the row of Participant A and of Participant B.
+   **Refused**) on the row of Participant A and of Participant B. A participant who answered
+   **Agreed** on their own consent form already counts (unless staff sent the answer back).
+   **The recorder stays locked until both participants have consent.**
 4. Click **Open the recorder** (in the same highlighted box).
 5. Click **Allow microphone** and allow it in the browser. Choose the **Microphone** if you have
    more than one, and watch the **Input level**.
@@ -306,8 +312,8 @@ Downloads are available to the Super Admin and Project Admin.
 8. Click **Start recording**. Talk. Keep the tab open and the computer awake. The audio uploads in
    small parts while you record.
 9. Click **Stop and save**. Wait for **Recording saved**.
-10. Go back to the task. In **Check your recording**, click **Listen**. If it is good, click
-    **Send to QC**; if not, click **Record again** and record it once more.
+10. On the same screen, click **Listen**. If it is good, click **Send to QC**; if not, click
+    **Record again** and record it once more. (The same buttons are also on the task page.)
 
 The platform checks the sound within about a minute of saving; **Send to QC** works once that
 check is done.
@@ -334,10 +340,12 @@ TxContact agent screen before you start.
    answer, click **Ring B again** (3 times at most in one call).
 5. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
    call), then **I am muted and listening** and **Both voices are clear**.
+   Record consent for both on the task page first: **Start recording** is refused until both
+   participants have consent.
    Click **Start recording** when the conversation begins, and **Stop recording** when it ends.
    TxContact records the whole call; only the part between Start and Stop is delivered, checked
    and counted. The call cannot be closed without Start; **Start again** moves the start.
-6. **Record consent** for Participant A and Participant B on the task page, as for face-to-face.
+6. If not done yet, **Record consent** for Participant A and Participant B on the task page.
 7. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
    them, end the call, then click **Cancel this call** and choose **Poor line quality**.
 8. When they have finished, click **Close call** (add a note if useful). If someone refused
@@ -474,8 +482,8 @@ tab; the **Participant minutes** export gives the same numbers as a spreadsheet.
 
 The **Dashboard** (**Collection progress**) shows recorded and approved hours, today's hours
 against the daily target, and an hours-per-day chart. Choose a **Project** and a **Period** (last 7,
-30 or 90 days, or **Chosen days** with a first and a last day). You can narrow it by **Recording
-type** and **Language** (and **Dialect**, when the project has any). Days are counted in India
+30 or 90 days, or **Choose dates (from – to)**). You can narrow it by **Recording
+type**, **Language** (and **Dialect**, when the project has any) and **District**. Days are counted in India
 Standard Time.
 
 ### Dashboard filters (everyone)
@@ -484,10 +492,11 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 
 | Filter | Who has it | What it does |
 |---|---|---|
-| **Project**, **Period** | everyone | One project or all of yours; the last 7, 30 or 90 days, or **Chosen days** |
-| **From**, **To** (with Chosen days) | everyone | Counts only recordings started on those days; the chart shows exactly those days. At most 366 days |
+| **Project**, **Period** | everyone | One project or all of yours; the last 7, 30 or 90 days, or **Choose dates (from – to)** |
+| **From**, **To** (with Choose dates) | everyone | Counts only recordings started on those days; the chart shows exactly those days. At most 366 days |
 | **Recording type** | everyone | Face-to-face or telephony |
 | **Language**, **Dialect** | everyone | Conversations in which a participant speaks it |
+| **District** | everyone | Conversations with a participant from that district (shown once participants have a district) |
 | **Task status** | staff | Tasks in that status |
 | **Staff** | Super Admin, Project Admin | One person's tasks and the recordings they made |
 

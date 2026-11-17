@@ -9,6 +9,7 @@ import {
   api,
   requireSetup,
   runCode,
+  consentBoth,
   SEEDED,
   SEEDED_PASSWORD,
   setUpTask,
@@ -29,6 +30,7 @@ test("a session ended mid-recording loses nothing once the moderator signs in ag
   await page.goto(`/tasks/${setup.taskId}`);
   await page.getByLabel("Move to").selectOption("IN_PROGRESS");
   await page.getByRole("button", { name: "Apply" }).click();
+  await consentBoth(page);
   await page.getByRole("link", { name: "Open the recorder" }).click();
   await page.getByRole("button", { name: "Allow microphone" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();

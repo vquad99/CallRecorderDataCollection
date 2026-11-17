@@ -29,7 +29,8 @@ const REVIEW: Record<string, [string, string]> = {
   APPROVED: ["APPROVED", "Approved"],
   REJECTED: ["REJECTED", "Sent back"],
 };
-const SAMPLE = "name,phone,email,language,dialect\nAsha Rao,+919876543210,asha@example.org,hi,\n";
+const SAMPLE =
+  "name,phone,email,language,dialect,district\nAsha Rao,+919876543210,asha@example.org,hi,,Pune\n";
 
 function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [csv, setCsv] = useState("");
@@ -54,9 +55,9 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
     <section className="card stack stack--tight" aria-labelledby="bulk-add-title">
       <h2 id="bulk-add-title">Add many participants</h2>
       <p className="muted">
-        Paste rows or choose a CSV file. First line: <code>name,phone,email,language,dialect</code>.
-        Phone, email and dialect may be empty. Check the rows first; only rows without a problem are
-        added.
+        Paste rows or choose a CSV file. First line:{" "}
+        <code>name,phone,email,language,dialect,district</code>. Phone, email, dialect and district
+        may be empty. Check the rows first; only rows without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-csv" className="field__label">
@@ -296,6 +297,7 @@ export function ParticipantsPage() {
             phone: editing.phone?.startsWith("•") ? null : editing.phone,
             language_code: editing.language_code,
             dialect: editing.dialect,
+            district: editing.district ?? "",
             notes: editing.notes ?? "",
             email: editing.email ?? (editing.has_email ? undefined : ""),
           }}

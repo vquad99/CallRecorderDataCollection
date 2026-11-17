@@ -140,6 +140,7 @@ describe("participants tab", () => {
       phone: null,
       language_code: "hi",
       dialect: "",
+      district: "",
       notes: "",
     });
 

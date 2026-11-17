@@ -229,11 +229,13 @@ def consent(w: dict[str, Any], tid: str, status: str = "GIVEN") -> None:
         assert r.status_code == 201, r.text
 
 
-def joined(w: dict[str, Any], call_id: str) -> None:
-    """The moderator confirms that A and B are on the call, then starts the recording (D-113)."""
+def joined(w: dict[str, Any], call_id: str, tid: str) -> None:
+    """The moderator confirms that A and B are on the call, notes both consents (D-119), then
+    starts the recording (D-113)."""
     for item in ("A_JOINED", "B_JOINED"):
         r = w["mod"].post(f"/api/v1/calls/{call_id}/checklist", json={"item": item})
         assert r.status_code == 200, r.text
+    consent(w, tid)
     r = w["mod"].post(f"/api/v1/calls/{call_id}/recording/start")
     assert r.status_code == 200, r.text
 
@@ -264,8 +266,7 @@ def started_and_closed(w: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     give_seat(w)
     tid = w["new_task"]()
     call = start(w, tid)
-    joined(w, call["id"])
-    consent(w, tid)
+    joined(w, call["id"], tid)
     closed = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={"note": ""})
     assert closed.status_code == 200, closed.text
     return tid, closed.json()
@@ -324,17 +325,21 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     early = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={})
     assert early.status_code == 409
     assert early.json()["error"]["code"] == "CHECKLIST_INCOMPLETE"
-    joined(w, call["id"])
+    for item in ("A_JOINED", "B_JOINED"):
+        w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": item})
+    no_consent = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={})
+    assert no_consent.status_code == 409
+    assert no_consent.json()["error"]["code"] == "CONSENT_MISSING"
+    # D-119: the recording is not started before both consents either.
+    no_mark = w["mod"].post(f"/api/v1/calls/{call['id']}/recording/start")
+    assert no_mark.json()["error"]["code"] == "CONSENT_MISSING"
+    joined(w, call["id"], tid)
     ticked = w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "QUALITY_OK"})
     assert sorted(ticked.json()["checklist"]) == ["A_JOINED", "B_JOINED", "QUALITY_OK"]
     undone = w["mod"].post(
         f"/api/v1/calls/{call['id']}/checklist", json={"item": "QUALITY_OK", "done": False}
     )
     assert sorted(undone.json()["checklist"]) == ["A_JOINED", "B_JOINED"]
-    no_consent = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={})
-    assert no_consent.status_code == 409
-    assert no_consent.json()["error"]["code"] == "CONSENT_MISSING"
-    consent(w, tid)
     closed = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={"note": "good call"})
     assert closed.status_code == 200, closed.text
     assert closed.json()["state"] == "WAITING_FOR_RECORDING"
@@ -623,8 +628,7 @@ def test_a_redial_does_not_take_the_dropped_calls_recording(world: dict[str, Any
     )
     w["db"].commit()
     call = start(w, tid)
-    joined(w, call["id"])
-    consent(w, tid)
+    joined(w, call["id"], tid)
     assert w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={}).status_code == 200
     w["provider"].listed = [
         session("DROPPED", now - timedelta(seconds=55)),
@@ -760,7 +764,9 @@ def test_an_agent_seat_belongs_to_one_user(world: dict[str, Any]) -> None:
 def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[str, Any]) -> None:
     w = world
     tid, call = started_and_closed(w)
-    w["provider"].listed = [session("S9", datetime.now(UTC))]
+    # The provider's file starts after the marks: the whole 4 s file is kept, whatever the
+    # clock's resolution (D-113 cutting is tested on its own).
+    w["provider"].listed = [session("S9", datetime.now(UTC) + timedelta(seconds=5))]
     due_now(w, call["id"])
     sweep(w)
     other = w["new_task"]()
@@ -891,7 +897,9 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     profile, who added them, their sessions with consent and recording, minutes, phone calls."""
     w = world
     tid, call = started_and_closed(w)
-    w["provider"].listed = [session("PD1", datetime.now(UTC))]
+    # The provider's file starts after the marks: the whole 4 s file is kept, whatever the
+    # clock's resolution (D-113 cutting is tested on its own).
+    w["provider"].listed = [session("PD1", datetime.now(UTC) + timedelta(seconds=5))]
     due_now(w, call["id"])
     sweep(w)
     w["new_task"]()  # a second session, not called yet
@@ -1101,8 +1109,7 @@ def test_the_moderator_marks_the_conversation_once_both_are_on_the_line(
     # Not stopped by hand: the recording ends when the call is closed.
     tid2 = w["new_task"]()
     call2 = start(w, tid2)
-    joined(w, call2["id"])
-    consent(w, tid2)
+    joined(w, call2["id"], tid2)
     closed2 = w["mod"].post(f"/api/v1/calls/{call2['id']}/close", json={}).json()
     at = datetime.fromisoformat
     assert at(closed2["record_stopped_at"]) == at(closed2["closed_at"])

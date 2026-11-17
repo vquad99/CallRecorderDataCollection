@@ -547,6 +547,10 @@ def mark_recording(
                 code="CHECKLIST_INCOMPLETE",
                 status_code=409,
             )
+        missing = tasks.sides_without_consent(db, task)
+        if missing:
+            db.rollback()
+            tasks.require_consent(db, task)
         again = call.record_started_at is not None
         call.record_started_at = now
         call.record_stopped_at = None
@@ -600,8 +604,7 @@ def close_call(
             code="CHECKLIST_INCOMPLETE",
             status_code=409,
         )
-    given = _consent_sides(db, task, "GIVEN")
-    missing = [side for side in ("A", "B") if side not in given]
+    missing = tasks.sides_without_consent(db, task)
     if missing:
         raise AppError(
             f"Record consent for participant {' and '.join(missing)} before closing the call. "

@@ -87,6 +87,7 @@ def start(
         raise AppError(
             "Start the task before recording", code="TASK_NOT_IN_PROGRESS", status_code=409
         )
+    tasks.require_consent(db, task)
     open_one = db.scalar(
         select(Recording).where(
             Recording.task_id == task.id, Recording.state.in_(("RECORDING", "INTERRUPTED"))

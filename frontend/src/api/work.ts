@@ -7,6 +7,8 @@ export interface Participant {
   participant_code: string;
   language_code: string;
   dialect: string;
+  /** Where the participant lives (D-121); empty when not given. */
+  district?: string;
   display_label: string | null;
   phone: string | null;
   has_phone: boolean;
@@ -39,6 +41,7 @@ export interface ParticipantFields {
   phone: string | null;
   language_code: string;
   dialect: string;
+  district: string;
   notes: string;
   /** Not sent = keep the stored address; empty = remove it. */
   email?: string | undefined;
@@ -111,6 +114,8 @@ export interface TaskDetail extends TaskSummary {
   reasons: Record<string, string[]>;
   can_assign: boolean;
   is_moderator: boolean;
+  /** D-119: participants ("A", "B") without consent to record; recording waits for them. */
+  consent_missing?: string[];
 }
 
 export interface TimelineEntry {

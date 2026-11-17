@@ -40,9 +40,14 @@ def board(w: dict[str, Any]) -> dict[str, Any]:
     people = [
         pa.post(
             f"/api/v1/projects/{pid}/participants",
-            json={"display_label": name, "language_code": "ta", "dialect": dialect},
+            json={
+                "display_label": name,
+                "language_code": "ta",
+                "dialect": dialect,
+                "district": district,
+            },
         ).json()
-        for name, dialect in (("Chitra", "Madurai"), ("Devi", ""))
+        for name, dialect, district in (("Chitra", "Madurai", "Madurai"), ("Devi", "", ""))
     ]
     made = pa.post(
         "/api/v1/tasks",
@@ -236,6 +241,9 @@ def test_filters_narrow_every_figure(board: dict[str, Any]) -> None:
     assert figures(dialect="Madurai") == (0.5, 1, 1)
     assert figures(language="hi", dialect="Madurai") == (0.0, 0, 0)
     assert figures(language="bn") == (0.0, 0, 0)  # nobody speaks it here: empty, not an error
+    # District of the people in the conversation (D-121).
+    assert figures(district="Madurai") == (0.5, 1, 1)
+    assert figures(district="Pune") == (0.0, 0, 0)
     # Status of the task.
     assert figures(status="APPROVED") == (0.5, 1, 1)
     approved = get(b, status="APPROVED")
@@ -257,6 +265,7 @@ def test_filters_narrow_every_figure(board: dict[str, Any]) -> None:
     options = get(b)["options"]
     assert options["languages"] == ["hi", "ta"]
     assert options["dialects"] == ["Madurai"]
+    assert options["districts"] == ["Madurai"]
     assert sorted(s["name"] for s in options["staff"]) == ["mod", "mod2"]
 
     # What makes no sense is refused.
@@ -328,7 +337,11 @@ def test_filters_respect_who_is_asking(board: dict[str, Any]) -> None:
     b["cv"] = b["api"]("cv@example.org")
     seen = get(b, "cv", mode="FACE_TO_FACE", date_from=str(b["day_a"]))
     assert (seen["view"], seen["recorded_hours"]) == ("client", 2.0)
-    assert seen["options"] == {"languages": ["hi", "ta"], "dialects": ["Madurai"]}
+    assert seen["options"] == {
+        "languages": ["hi", "ta"],
+        "dialects": ["Madurai"],
+        "districts": ["Madurai"],
+    }
     assert seen["team"] is None
     assert seen["calls"] is None
     assert seen["tasks_by_status"] is None

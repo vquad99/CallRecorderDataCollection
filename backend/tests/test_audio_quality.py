@@ -22,7 +22,7 @@ import soundfile
 from app.modules.recordings import media
 from tests import audio_fixtures as fx
 from tests import test_recordings
-from tests.conftest import Api
+from tests.conftest import Api, give_consent
 from tests.test_recordings import BUCKET, START, put
 
 # Fixtures shared with the recording tests (a real app on a fake S3 and a moderator's task).
@@ -216,6 +216,7 @@ def test_upload_with_impossible_sample_values_is_refused(
     world: dict[str, Any], values: list[float]
 ) -> None:
     mod: Api = world["mod"]
+    give_consent(mod, world["task"]["id"])
     rid = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
     response = put(mod, rid, 0, _chunk(values))
     assert response.status_code == 422
@@ -227,6 +228,7 @@ def test_a_part_damaged_in_storage_fails_processing_truthfully(
     world: dict[str, Any], s3: Any
 ) -> None:
     mod: Api = world["mod"]
+    give_consent(mod, world["task"]["id"])
     rid = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
     data = fx.tone(1.0).tobytes()
     assert put(mod, rid, 0, data).status_code == 200

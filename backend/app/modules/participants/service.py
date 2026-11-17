@@ -226,6 +226,7 @@ class ParticipantInput:
     dialect: str
     notes: str
     email: str | None = None
+    district: str = ""
 
 
 def _check_language(project: Project, language_code: str, dialect: str) -> None:
@@ -323,6 +324,7 @@ def create_participant(
         display_label=data.display_label.strip(),
         language_code=data.language_code,
         dialect=data.dialect,
+        district=data.district.strip(),
         notes=data.notes,
         created_by=principal.user_id,
     )
@@ -450,11 +452,13 @@ def correct_participant(
         "display_label": participant.display_label,
         "language_code": participant.language_code,
         "dialect": participant.dialect,
+        "district": participant.district,
     }
     phone_changed = new_hash != participant.phone_hash
     participant.display_label = data.display_label.strip()
     participant.language_code = data.language_code
     participant.dialect = data.dialect
+    participant.district = data.district.strip()
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
@@ -489,6 +493,7 @@ def correct_participant(
             "display_label": participant.display_label,
             "language_code": participant.language_code,
             "dialect": participant.dialect,
+            "district": participant.district,
             "phone_changed": phone_changed,
             "email_changed": email_changed,
         },
@@ -566,7 +571,9 @@ def export_contacts(
     )
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["participant_code", "display_label", "phone", "language_code", "dialect"])
+    writer.writerow(
+        ["participant_code", "display_label", "phone", "language_code", "dialect", "district"]
+    )
     for p in items:
         phone = cipher.decrypt(p.phone_e164_enc) if p.phone_e164_enc else ""
         writer.writerow(
@@ -576,6 +583,7 @@ def export_contacts(
                 _safe_cell(phone),
                 p.language_code,
                 _safe_cell(p.dialect),  # free text: no formula may reach a spreadsheet (D-088)
+                _safe_cell(p.district),
             ]
         )
     audit.record(

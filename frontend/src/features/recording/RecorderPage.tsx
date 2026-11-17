@@ -1,12 +1,12 @@
 // Face-to-face recorder (FTF-001..015). Captures raw samples with an AudioWorklet, uploads 5-second
 // chunks as it goes, and never claims to keep recording after the tab is closed or the device sleeps.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import type { ApiError } from "../../api/client";
 import { getProject } from "../../api/projects";
 import * as rec from "../../api/recordings";
-import { getTask } from "../../api/work";
+import { getTask, transitionTask } from "../../api/work";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
@@ -102,6 +102,49 @@ function Recovery({ open, onDone }: { open: rec.Recording; onDone: () => void })
           onClick={() => run(() => rec.discardRecording(open.id, "Discarded after interruption"))}
         >
           Discard it
+        </Button>
+      </div>
+      <ErrorNotice error={error} />
+    </section>
+  );
+}
+
+/** Right after a good recording (D-120): listen above, then send it to QC or record again,
+ * without going back to the task page. */
+export function AfterRecording({ taskId, onAgain }: { taskId: string; onAgain: () => void }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState<"AUDIO_QC" | "IN_PROGRESS" | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const move = (to: "AUDIO_QC" | "IN_PROGRESS") => {
+    setBusy(to);
+    setError(null);
+    transitionTask(taskId, to, "", "")
+      .then(() => {
+        if (to === "AUDIO_QC") void navigate(`/tasks/${taskId}`);
+        else onAgain();
+      })
+      .catch((err: unknown) => setError(toApiError(err)))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <section className="card stack" aria-labelledby="after-title">
+      <h2 id="after-title">Listen, then send it to QC</h2>
+      <p>Listen to the recording above. If it is good, send it to QC; if not, record it again.</p>
+      <div className="actions">
+        <Button
+          busy={busy === "AUDIO_QC"}
+          disabled={busy !== null}
+          onClick={() => move("AUDIO_QC")}
+        >
+          Send to QC
+        </Button>
+        <Button
+          variant="secondary"
+          busy={busy === "IN_PROGRESS"}
+          disabled={busy !== null}
+          onClick={() => move("IN_PROGRESS")}
+        >
+          Record again
         </Button>
       </div>
       <ErrorNotice error={error} />
@@ -409,6 +452,8 @@ export function RecorderPage() {
     existing.state.status === "loaded"
       ? existing.state.data.find((r) => r.state === "RECORDING" || r.state === "INTERRUPTED")
       : undefined;
+  // D-119: no recording until both participants have consent.
+  const waitingConsent = t.consent_missing ?? [];
   const rules =
     project.state.status === "loaded"
       ? project.state.data?.audio_rules.find((r) => r.mode === "FACE_TO_FACE")
@@ -465,9 +510,17 @@ export function RecorderPage() {
           {t.status.toLowerCase().replace(/_/g, " ")}.
         </p>
       ) : null}
+      {t.status === "IN_PROGRESS" && waitingConsent.length > 0 ? (
+        <p className="notice notice--error" role="alert">
+          Consent is missing for participant {waitingConsent.join(" and ")}. Note their consent on
+          the <Link to={`/tasks/${t.id}`}>task page</Link>, or have them answer their consent form,
+          before recording.
+        </p>
+      ) : null}
       {supported() &&
       !open &&
       t.status === "IN_PROGRESS" &&
+      waitingConsent.length === 0 &&
       (phase === "idle" || phase === "opening" || phase === "ready" || phase === "testing") ? (
         <div className="card stack">
           {phase === "idle" ? (
@@ -549,7 +602,18 @@ export function RecorderPage() {
       ) : null}
       <ErrorNotice error={apiError} />
       {phase === "done" && result?.state === "READY" ? (
-        <SuccessNotice message="The task is now marked as recorded." />
+        <>
+          <SuccessNotice message="The task is now marked as recorded." />
+          <AfterRecording
+            taskId={t.id}
+            onAgain={() => {
+              setResult(null);
+              setPhaseBoth("idle");
+              task.reload();
+              existing.reload();
+            }}
+          />
+        </>
       ) : null}
     </section>
   );

@@ -62,6 +62,7 @@ class ParticipantOut(BaseModel):
     participant_code: str
     language_code: str
     dialect: str
+    district: str = ""
     display_label: str | None
     phone: str | None
     has_phone: bool
@@ -101,6 +102,7 @@ def present(
         participant_code=p.participant_code,
         language_code=p.language_code,
         dialect=p.dialect,
+        district=p.district,
         display_label=p.display_label if v.profile else None,
         phone=phone if v.profile or v.contact else None,
         has_phone=p.phone_e164_enc is not None,
@@ -165,6 +167,7 @@ class ParticipantBody(BaseModel):
         min_length=2, max_length=35, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
     )
     dialect: str = Field(default="", max_length=100)
+    district: str = Field(default="", max_length=100)
     notes: str = Field(default="", max_length=5000)
 
     def to_input(self) -> service.ParticipantInput:

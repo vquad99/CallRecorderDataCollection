@@ -18,6 +18,7 @@ from app.modules.recordings import media, service
 from app.modules.recordings.models import AudioAsset
 from tests import audio_fixtures as fx
 from tests import test_recordings
+from tests.conftest import give_consent
 from tests.test_recordings import BUCKET, START, put
 
 pytestmark = pytest.mark.db
@@ -28,6 +29,7 @@ world = test_recordings.world
 
 
 def _recorded(world: dict[str, Any]) -> str:
+    give_consent(world["mod"], world["task"]["id"])
     rid: str = (
         world["mod"]
         .post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START)

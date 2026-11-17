@@ -116,6 +116,19 @@ export interface Setup {
 
 /** Fast set-up through the API as the signed-in Super Admin: an active face-to-face project with
  * two participants and one task, assigned to `moderator` when given. */
+/** The moderator notes consent for participant A and B on the task page: recording waits for
+ * both (D-119). */
+export async function consentBoth(page: Page): Promise<void> {
+  for (const which of ["A", "B"]) {
+    const row = page.locator(".consent__row").filter({ hasText: `Participant ${which}` });
+    await row.getByRole("button", { name: "Consent given" }).click();
+    await expect(row.getByRole("button", { name: "Consent given" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  }
+}
+
 export async function setUpTask(
   admin: Page,
   code: string,

@@ -553,6 +553,51 @@ def latest_consent(db: Session, task: Task) -> dict[uuid.UUID, ConsentRecord]:
     return {r.participant_id: r for r in rows}
 
 
+def sides_without_consent(db: Session, task: Task) -> list[str]:
+    """Which of A and B have no consent to record (D-119). Consent counts when the newest word
+    is "given": either consent noted for this task by the moderator, or the participant's own
+    answer on the project's consent form (not sent back by staff). A later refusal or withdrawal,
+    in either place, takes it away."""
+    noted = latest_consent(db, task)
+    pids = (task.participant_a_id, task.participant_b_id)
+    own_rows = db.scalars(
+        select(ConsentRecord)
+        .where(
+            ConsentRecord.project_id == task.project_id,
+            ConsentRecord.task_id.is_(None),
+            ConsentRecord.captured_by.is_(None),
+            ConsentRecord.participant_id.in_(pids),
+        )
+        .order_by(ConsentRecord.created_at)
+    ).all()
+    own = {r.participant_id: r for r in own_rows}
+    missing = []
+    for side, pid in zip(("A", "B"), pids, strict=True):
+        words = [r for r in (noted.get(pid), own.get(pid)) if r is not None]
+        newest = max(words, key=lambda r: r.created_at) if words else None
+        ok = (
+            newest is not None
+            and newest.status == "GIVEN"
+            and not (newest.task_id is None and newest.review_status == "REJECTED")
+        )
+        if not ok:
+            missing.append(side)
+    return missing
+
+
+def require_consent(db: Session, task: Task) -> None:
+    """Recording needs consent from both participants first (D-119)."""
+    missing = sides_without_consent(db, task)
+    if missing:
+        raise AppError(
+            f"Consent is missing for participant {' and '.join(missing)}. Note their consent on "
+            "the task page, or have them answer their consent form, before recording.",
+            code="CONSENT_MISSING",
+            status_code=409,
+            details=[{"missing": missing}],
+        )
+
+
 def add_comment(
     db: Session, principal: Principal, task_id: uuid.UUID, body: str, ip: str | None
 ) -> TaskComment:

@@ -81,6 +81,7 @@ def dashboard(
         default=None, max_length=35, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
     ),
     dialect: str | None = Query(default=None, min_length=1, max_length=100),
+    district: str | None = Query(default=None, min_length=1, max_length=100),
     status: str | None = Query(default=None, max_length=20),
     staff_id: uuid.UUID | None = None,
     date_from: date | None = None,
@@ -96,6 +97,7 @@ def dashboard(
             mode=mode,
             language=language,
             dialect=dialect,
+            district=district,
             status=status,
             staff_id=staff_id,
             date_from=date_from,

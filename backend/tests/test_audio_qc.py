@@ -19,7 +19,7 @@ from app.modules.projects.models import ProjectAudioRule
 from app.modules.recordings import worker_dispatch
 from app.modules.recordings.models import AudioAsset
 from tests import test_recordings
-from tests.conftest import Api, make_user
+from tests.conftest import Api, give_consent, make_user
 from tests.test_recordings import BUCKET, chunks
 
 pytestmark = pytest.mark.db
@@ -55,6 +55,7 @@ def _record(
     """Record, then (send=True) the moderator listens and sends it to QC, as D-092 requires."""
     mod: Api = world["mod"]
     tid = task_id or world["task"]["id"]
+    give_consent(mod, tid)  # D-119: recording waits for both participants' consent
     rid: str = mod.post(f"/api/v1/tasks/{tid}/recordings", json=test_recordings.START).json()["id"]
     parts = chunks(seconds, 0)
     for seq, data in enumerate(parts):

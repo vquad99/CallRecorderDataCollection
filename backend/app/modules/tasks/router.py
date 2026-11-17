@@ -76,6 +76,8 @@ class TaskDetail(TaskSummary):
     reasons: dict[str, list[str]]
     can_assign: bool
     is_moderator: bool
+    # D-119: participants (A, B) without consent to record; recording is refused until empty.
+    consent_missing: list[str]
 
 
 def summary(t: Task) -> TaskSummary:
@@ -115,6 +117,7 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         reasons={k: sorted(v) for k, v in workflow.REASONS.items()},
         can_assign=actor.can_assign,
         is_moderator=actor.is_moderator,
+        consent_missing=service.sides_without_consent(db, t),
     )
 
 

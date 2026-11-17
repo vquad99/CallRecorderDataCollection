@@ -40,7 +40,14 @@ from sqlalchemy import text
 from app.adapters.telephony import DialResult, ProviderError
 from app.core.permissions import Perm
 from app.main import create_app
-from tests.conftest import Api, build_settings, make_participant, make_project, make_user
+from tests.conftest import (
+    Api,
+    build_settings,
+    give_consent,
+    make_participant,
+    make_project,
+    make_user,
+)
 from tests.test_permissions import PUBLIC, SELF_SERVICE_PREFIXES, _route_contexts
 
 pytestmark = pytest.mark.db
@@ -168,6 +175,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         return tid
 
     done = new_task()
+    give_consent(mo, done)
     rec = mo.post(f"/api/v1/tasks/{done}/recordings", json=START).json()
     data = _one_second_chunk()
     sha = hashlib.sha256(data).hexdigest()
@@ -194,6 +202,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         json={"participant_id": a["id"], "status": "GIVEN", "method": "VERBAL_NOTED"},
     )
     assert consent.status_code == 201, consent.text
+    give_consent(mo, open_task)
     open_rec = mo.post(f"/api/v1/tasks/{open_task}/recordings", json=START).json()
     assert (
         mo.put(

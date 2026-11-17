@@ -583,7 +583,14 @@ function Body({ data }: { data: Dashboard }) {
   );
 }
 
-const NO_FILTERS = { mode: "", language: "", dialect: "", status: "", staffId: "" };
+const NO_FILTERS = {
+  mode: "",
+  language: "",
+  dialect: "",
+  district: "",
+  status: "",
+  staffId: "",
+};
 
 export function DashboardPage() {
   const [projectId, setProjectId] = useState("");
@@ -599,6 +606,7 @@ export function DashboardPage() {
     mode: filters.mode || undefined,
     language: filters.language || undefined,
     dialect: filters.dialect || undefined,
+    district: filters.district || undefined,
     status: filters.status || undefined,
     staff_id: filters.staffId || undefined,
     date_from: custom ? from || undefined : undefined,
@@ -637,7 +645,7 @@ export function DashboardPage() {
             onChange={(e) => {
               setProjectId(e.target.value);
               // Another project has other people and languages.
-              set({ language: "", dialect: "", staffId: "" });
+              set({ language: "", dialect: "", district: "", staffId: "" });
             }}
             options={[
               { value: "", label: "All my projects" },
@@ -652,7 +660,7 @@ export function DashboardPage() {
               { value: "7", label: "Last 7 days" },
               { value: "30", label: "Last 30 days" },
               { value: "90", label: "Last 90 days" },
-              { value: "custom", label: "Chosen days" },
+              { value: "custom", label: "Choose dates (from – to)" },
             ]}
           />
         </div>
@@ -705,6 +713,17 @@ export function DashboardPage() {
             options={[
               { value: "", label: "Every dialect" },
               ...(options.dialects ?? []).map((d) => ({ value: d, label: d })),
+            ]}
+          />
+        ) : null}
+        {(options.districts ?? []).length > 0 ? (
+          <Select
+            label="District"
+            value={filters.district}
+            onChange={(e) => set({ district: e.target.value })}
+            options={[
+              { value: "", label: "Every district" },
+              ...(options.districts ?? []).map((d) => ({ value: d, label: d })),
             ]}
           />
         ) : null}

@@ -33,7 +33,7 @@ from app.modules.projects.service import get_visible as get_visible_project
 
 MAX_IMPORT_ROWS = 500
 MAX_BULK = 200
-COLUMNS = ("name", "phone", "email", "language", "dialect")
+COLUMNS = ("name", "phone", "email", "language", "dialect", "district")
 _LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 
 
@@ -57,7 +57,7 @@ def import_csv(
     ip: str | None,
 ) -> list[RowResult]:
     """Check every row; with confirm, create the rows that passed. Header: name,phone,email,
-    language,dialect (phone, email and dialect may be empty)."""
+    language,dialect[,district] (phone, email, dialect and district may be empty)."""
     project = get_visible_project(db, principal, project_id)
     if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
         raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
@@ -107,6 +107,8 @@ def import_csv(
                 seen_phones.add(phone)
             if row.get("email"):
                 service.clean_email(row["email"])
+            if len(row.get("district", "")) > 100:
+                raise AppError("District is too long", code="INVALID_ROW", status_code=422)
             if not confirm:
                 results.append(RowResult(i, name, True, "Ready to add"))
                 continue
@@ -123,6 +125,7 @@ def import_csv(
                     dialect=row.get("dialect", ""),
                     notes="",
                     email=row.get("email") or None,
+                    district=row.get("district", ""),
                 ),
                 ip,
             )

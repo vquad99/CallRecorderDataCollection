@@ -61,6 +61,7 @@ class Filters:
     mode: str | None = None
     language: str | None = None
     dialect: str | None = None
+    district: str | None = None
     status: str | None = None
     staff_id: uuid.UUID | None = None
     date_from: date | None = None
@@ -188,12 +189,14 @@ def summary(
         on_task.append(Task.recording_mode == f.mode)
     if f.status:
         on_task.append(Task.status == f.status)
-    if f.language or f.dialect:
+    if f.language or f.dialect or f.district:
         speaks: list[Any] = [Participant.id.in_([Task.participant_a_id, Task.participant_b_id])]
         if f.language:
             speaks.append(Participant.language_code == f.language)
         if f.dialect:
             speaks.append(Participant.dialect == f.dialect)
+        if f.district:
+            speaks.append(Participant.district == f.district)
         on_task.append(exists().where(*speaks))
 
     def works_on(user_id: uuid.UUID) -> Any:
@@ -440,15 +443,17 @@ def _options(db: Session, scope: list[uuid.UUID] | None, *, with_staff: bool) ->
     tasks, and, for managers, the staff on those tasks."""
     in_projects = [Task.project_id.in_(scope)] if scope is not None else []
     spoken = db.execute(
-        select(Participant.language_code, Participant.dialect)
+        select(Participant.language_code, Participant.dialect, Participant.district)
         .join(Task, Participant.id.in_([Task.participant_a_id, Task.participant_b_id]))
         .where(*in_projects)
         .distinct()
         .limit(MAX_OPTIONS * 2)
     ).all()
     options: dict[str, Any] = {
-        "languages": sorted({code for code, _ in spoken})[:MAX_OPTIONS],
-        "dialects": sorted({dialect for _, dialect in spoken if dialect})[:MAX_OPTIONS],
+        "languages": sorted({code for code, _, _ in spoken})[:MAX_OPTIONS],
+        "dialects": sorted({dialect for _, dialect, _ in spoken if dialect})[:MAX_OPTIONS],
+        # D-121: the districts of the people on these tasks.
+        "districts": sorted({district for _, _, district in spoken if district})[:MAX_OPTIONS],
     }
     if with_staff:
         staff = db.execute(

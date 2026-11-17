@@ -302,3 +302,19 @@ def set_status(db: Any, task_id: Any, status: str, held_from: str | None = None)
 
     db.execute(_update(Task).where(Task.id == task_id).values(status=status, held_from=held_from))
     db.commit()
+
+
+def give_consent(api: Api, task_id: Any) -> None:
+    """Both participants consent to the recording (D-119: recording waits for it). Done by the
+    task's moderator while the task is assigned or in progress."""
+    task = api.get(f"/api/v1/tasks/{task_id}").json()
+    for side in ("participant_a", "participant_b"):
+        response = api.post(
+            f"/api/v1/tasks/{task_id}/consent",
+            json={
+                "participant_id": task[side]["id"],
+                "status": "GIVEN",
+                "method": "VERBAL_RECORDED",
+            },
+        )
+        assert response.status_code == 201, response.text

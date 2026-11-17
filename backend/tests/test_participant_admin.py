@@ -13,7 +13,7 @@ from sqlalchemy import update
 
 from app.modules.projects.models import Project
 from tests import test_recordings
-from tests.conftest import make_participant, make_project, make_user
+from tests.conftest import give_consent, make_participant, make_project, make_user
 from tests.test_portal import FORM, _visitor
 
 pytestmark = pytest.mark.db
@@ -220,3 +220,69 @@ def test_whoever_hands_out_a_link_cannot_approve_the_answer_given_on_it(
         f"{base}/{a}/consent-review", json={"decision": "APPROVED"}
     )
     assert other.json()["review_status"] == "APPROVED"
+
+
+def test_recording_waits_for_consent_from_both_participants(world: dict[str, Any]) -> None:
+    """D-119: consent noted by the moderator, or the participant's own "agree" on the consent
+    form (not sent back), lets recording start; the newest word counts."""
+    from tests.test_recordings import START
+
+    db, pa, mod, base = world["db"], world["pa"], world["mod"], _base(world)
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
+    db.commit()
+    tid, a = world["task"]["id"], world["task"]["participant_a"]["id"]
+
+    def missing() -> list[str]:
+        found: list[str] = mod.get(f"/api/v1/tasks/{tid}").json()["consent_missing"]
+        return found
+
+    assert missing() == ["A", "B"]
+    early = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert (early.status_code, early.json()["error"]["code"]) == (409, "CONSENT_MISSING")
+    # A agrees on their own consent form: that counts, while it waits for review.
+    api, head = _visitor(world, _link_from_another_admin(world, a))
+    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    assert missing() == ["B"]
+    # Staff send the answer back: it no longer counts.
+    back = pa.post(f"{base}/{a}/consent-review", json={"decision": "REJECTED", "note": "Unclear"})
+    assert back.status_code == 200, back.text
+    assert missing() == ["A", "B"]
+    # The moderator notes both: recording may start.
+    give_consent(mod, tid)
+    assert missing() == []
+    # A withdraws on their page afterwards: the newest word counts.
+    api.post("/api/v1/portal/consent", json={"decision": "WITHDRAWN"}, headers=head)
+    assert missing() == ["A"]
+    again = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert again.json()["error"]["code"] == "CONSENT_MISSING"
+    give_consent(mod, tid)
+    assert mod.post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 201
+
+
+def test_a_participant_has_a_district(world: dict[str, Any]) -> None:
+    """D-121: district on the form, when corrected and in the file upload (the dashboard filter
+    is in test_dashboard_filters)."""
+    pa, base = world["pa"], _base(world)
+    made = pa.post(
+        base, json={"display_label": "Ravi", "language_code": "hi", "district": " Pune "}
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["district"] == "Pune"
+    rid = made.json()["id"]
+    fixed = pa.patch(
+        f"{base}/{rid}",
+        json={"display_label": "Ravi", "language_code": "hi", "district": "Nashik"},
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["district"] == "Nashik"
+    csv = "name,phone,email,language,dialect,district\nSita,,,hi,,Thane\n"
+    added = pa.post(f"{base}/import", json={"csv": csv, "confirm": True})
+    assert added.status_code == 200, added.text
+    assert added.json()["created"] == 1
+    sita = next(p for p in pa.get(base, params={"search": "Sita"}).json()["items"])
+    assert sita["district"] == "Thane"
+    long_name = "d" * 101
+    too_long = pa.post(
+        f"{base}/import", json={"csv": f"name,language,district\nX,hi,{long_name}\n"}
+    )
+    assert too_long.json()["rows"][0]["ok"] is False

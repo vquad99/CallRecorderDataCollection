@@ -122,6 +122,10 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByText(/TxContact is ringing participant B/)).toBeVisible();
     await expect(moderator.getByText(/TXCONTACT answered HTTP 200/).first()).toBeVisible();
     await moderator.getByRole("checkbox", { name: /Participant B is on the call/ }).check();
+    // D-119: no recording before both consents.
+    await moderator.getByRole("button", { name: "Start recording" }).click();
+    await expect(moderator.getByText(/Consent is missing for participant A and B/)).toBeVisible();
+    await giveConsent(moderator, [asha, bina]);
     // Both on the line: the moderator marks where the conversation starts (D-113).
     await moderator.getByRole("button", { name: "Start recording" }).click();
     await expect(moderator.getByRole("button", { name: "Stop recording" })).toBeVisible();
@@ -133,10 +137,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByRole("button", { name: "Close call" })).toBeEnabled();
   });
 
-  await test.step("closing needs both consents; then the recording arrives by itself", async () => {
-    await moderator.getByRole("button", { name: "Close call" }).click();
-    await expect(moderator.getByText(/Record consent for participant A and B/)).toBeVisible();
-    await giveConsent(moderator, [asha, bina]);
+  await test.step("the moderator closes the call; then the recording arrives by itself", async () => {
     await moderator.getByLabel("Note for the record (optional)").fill("clear line");
     await moderator.getByRole("button", { name: "Close call" }).click();
     await expect(moderator.getByRole("heading", { name: "Check the call recording" })).toBeVisible({

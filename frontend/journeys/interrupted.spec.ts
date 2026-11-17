@@ -8,6 +8,7 @@ import {
   api,
   requireSetup,
   runCode,
+  consentBoth,
   SEEDED,
   SEEDED_PASSWORD,
   setUpTask,
@@ -31,6 +32,7 @@ test("an interrupted recording keeps the saved audio and can be finished", async
     await first.goto(`/tasks/${setup.taskId}`);
     await first.getByLabel("Move to").selectOption("IN_PROGRESS");
     await first.getByRole("button", { name: "Apply" }).click();
+    await consentBoth(first);
     await first.getByRole("link", { name: "Open the recorder" }).click();
     await first.getByRole("button", { name: "Allow microphone" }).click();
     await first.getByRole("button", { name: "Start recording" }).click();

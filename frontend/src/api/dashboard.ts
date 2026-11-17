@@ -57,6 +57,7 @@ export interface Dashboard {
   options: {
     languages?: string[];
     dialects?: string[];
+    districts?: string[];
     staff?: { id: string; name: string }[];
   };
   /** The chosen days, when days were chosen. */
@@ -71,6 +72,7 @@ export type DashboardFilters = {
   mode?: string | undefined;
   language?: string | undefined;
   dialect?: string | undefined;
+  district?: string | undefined;
   status?: string | undefined;
   staff_id?: string | undefined;
   date_from?: string | undefined;

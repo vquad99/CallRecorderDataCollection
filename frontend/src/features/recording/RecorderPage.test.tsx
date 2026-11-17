@@ -1,9 +1,11 @@
 // Requirements: FTF-001, FTF-002, FTF-006, FTF-009
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs, type Handler } from "../../test/fakeApi";
+import { AfterRecording } from "./RecorderPage";
 
 const task = {
   id: "t1",
@@ -108,5 +110,53 @@ describe("RecorderPage", () => {
       ["/api/v1/recordings/r1/interrupted", { reason: "Page closed or reloaded during recording" }],
       ["/api/v1/recordings/r1/complete", { chunk_count: 3 }],
     ]);
+  });
+
+  it("does not let recording start until both participants have consent (D-119)", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn() } });
+    fakeApi(
+      signedInAs(["tasks.view", "recordings.create", "recordings.view"], {
+        "GET /api/v1/tasks/t1": () => [200, { ...task, consent_missing: ["B"] }],
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/tasks/t1/recordings": () => [200, []],
+      }),
+    );
+    renderAt("/tasks/t1/record");
+    expect(await screen.findByText(/Consent is missing for participant B/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
+  });
+});
+
+describe("after a recording (D-120)", () => {
+  function show(onAgain = vi.fn()) {
+    const router = createMemoryRouter(
+      [
+        { path: "/tasks/t1/record", element: <AfterRecording taskId="t1" onAgain={onAgain} /> },
+        { path: "/tasks/t1", element: <p>Task page</p> },
+      ],
+      { initialEntries: ["/tasks/t1/record"] },
+    );
+    render(<RouterProvider router={router} />);
+    return onAgain;
+  }
+
+  it("sends the recording to QC from the recorder and opens the task", async () => {
+    const { calls } = fakeApi({
+      "POST /api/v1/tasks/t1/transition": () => [200, { ...task, status: "AUDIO_QC" }],
+    });
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Send to QC" }));
+    expect(await screen.findByText("Task page")).toBeInTheDocument();
+    expect(calls[0]?.body).toMatchObject({ to: "AUDIO_QC" });
+  });
+
+  it("records again from the recorder", async () => {
+    const { calls } = fakeApi({
+      "POST /api/v1/tasks/t1/transition": () => [200, task],
+    });
+    const onAgain = show();
+    await userEvent.click(screen.getByRole("button", { name: "Record again" }));
+    await vi.waitFor(() => expect(onAgain).toHaveBeenCalled());
+    expect(calls[0]?.body).toMatchObject({ to: "IN_PROGRESS" });
   });
 });

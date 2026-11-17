@@ -23,7 +23,14 @@ from sqlalchemy import select, update
 from app.main import create_app
 from app.modules.recordings import service
 from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording
-from tests.conftest import Api, build_settings, make_participant, make_project, make_user
+from tests.conftest import (
+    Api,
+    build_settings,
+    give_consent,
+    make_participant,
+    make_project,
+    make_user,
+)
 
 pytestmark = pytest.mark.db
 BUCKET = "ccp-test"
@@ -157,6 +164,7 @@ def test_storage_not_configured_is_reported_truthfully(db_app: Any, db: Any, new
 def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     mod: Api = world["mod"]
     tid = world["task"]["id"]
+    give_consent(mod, tid)
     rec = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
     assert rec.status_code == 201, rec.text
     rid = rec.json()["id"]
@@ -219,6 +227,7 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
 
 def _record(world: dict[str, Any], parts: list[bytes], complete: bool = True) -> str:
     mod: Api = world["mod"]
+    give_consent(mod, world["task"]["id"])
     rid: str = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
     for seq, data in enumerate(parts):
         put(mod, rid, seq, data)
@@ -235,6 +244,7 @@ def test_two_channel_capture_keeps_both_channels_and_derives_from_the_first(
     mod: Api = world["mod"]
     tid = world["task"]["id"]
     parts, frames = stereo_chunks(2)
+    give_consent(mod, tid)
     rec = mod.post(
         f"/api/v1/tasks/{tid}/recordings",
         json={**START, "channel_count": 2, "device_channel_count": 2},
@@ -373,6 +383,10 @@ def test_who_may_record(world: dict[str, Any]) -> None:
     assert world["pa"].post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 403
     other = world["api"]("mod2@example.org")
     assert other.post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 404
+    # D-119: not before both participants consent.
+    early = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert early.json()["error"]["code"] == "CONSENT_MISSING", early.text
+    give_consent(world["mod"], tid)
     rid = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START).json()["id"]
     second = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
     assert second.json()["error"]["code"] == "RECORDING_OPEN"

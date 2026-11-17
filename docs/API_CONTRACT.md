@@ -103,7 +103,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | Method | Path | Permission |
 |---|---|---|
 | GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100) |
-| GET | /tasks/{id} | `tasks.view` |
+| GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has no consent to record yet, noted for this task or their own form answer Agreed and not sent back; newest word counts (D-119) |
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment) |
 | POST | /tasks/{id}/comments | `tasks.view` |
@@ -113,7 +113,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility |
+| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS + both participants have consent (409 `CONSENT_MISSING` with `details[0].missing`, D-119) (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility |
 | PUT | /recordings/{id}/chunks/{seq} | raw float32 body of whole frames (a multiple of 4 × channel_count bytes, else 422 INVALID_CHUNK), only real numbers (NaN or infinity: 422 INVALID_AUDIO), `X-Content-SHA256` header checked; same chunk again is accepted, a different one is 409 |
 | POST | /recordings/{id}/interrupted | the recording's moderator; body `{reason}` |
 | POST | /recordings/{id}/complete | the recording's moderator; body `{chunk_count}`; 409 MISSING_CHUNKS lists gaps; starts processing |
@@ -215,7 +215,7 @@ apostrophe put before it. No transcripts: this version makes none.
 | Method | Path | Permission |
 |---|---|---|
 | GET | /dashboard?project_id=&days=7..90 | `dashboard.view` (built 2026-11-10, D-065). Answer shaped by role: `view` = `client` (progress only: hours recorded / approved, daily targets, per mode, per day), `worker` (the same for the caller's own tasks and recordings, plus tasks by status and QC counts) or `manager` (whole projects, plus `queues`, `team` output per moderator and `storage_bytes`). Fields a view does not get are `null`. A project the caller cannot see answers 404 like a missing one. Days are calendar days in `REPORT_TIMEZONE`. |
-| GET | /dashboard (filters, D-108) | The same address takes `mode` (FACE_TO_FACE / TELEPHONY), `language`, `dialect`, `status` (a task status), `staff_id` (managers only, 403 otherwise) and `date_from` / `date_to` (days in the report time zone, at most 366; 422 when the first is after the last). Without chosen days the totals count everything and `daily` holds the last `days` days; with them every figure counts those days only and `daily` holds exactly them. The answer adds `options` (`languages`, `dialects`, and for managers `staff` `[{id, name}]`), `date_from`, `date_to`, and for managers `calls` `{placed, recorded, could_not_be_placed, needs_a_person, open}`. Separate addresses for productivity, failures and provider usage are not built: this one carries them |
+| GET | /dashboard (filters, D-108) | The same address takes `mode` (FACE_TO_FACE / TELEPHONY), `language`, `dialect`, `district` (D-121), `status` (a task status), `staff_id` (managers only, 403 otherwise) and `date_from` / `date_to` (days in the report time zone, at most 366; 422 when the first is after the last). Without chosen days the totals count everything and `daily` holds the last `days` days; with them every figure counts those days only and `daily` holds exactly them. The answer adds `options` (`languages`, `dialects`, `districts`, and for managers `staff` `[{id, name}]`), `date_from`, `date_to`, and for managers `calls` `{placed, recorded, could_not_be_placed, needs_a_person, open}`. Separate addresses for productivity, failures and provider usage are not built: this one carries them |
 
 ## Audit (SEC-*)
 
@@ -245,7 +245,7 @@ history, `captured_by` is `null` for the participant's own answers.
 
 | GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |
 | POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`. Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
-| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; answers each row's result, `ready`, `created`. |
+| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]`; answers each row's result, `ready`, `created`. Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
 | POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove / send_consent, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result. |
 | POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |
 | GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer with review, earlier answers. |

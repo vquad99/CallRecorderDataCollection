@@ -22,6 +22,7 @@ export const EMPTY: work.ParticipantFields = {
   phone: null,
   language_code: "",
   dialect: "",
+  district: "",
   notes: "",
 };
 
@@ -97,6 +98,11 @@ export function ParticipantForm({
         label="Dialect"
         value={f.dialect}
         onChange={(e) => setF({ ...f, dialect: e.target.value })}
+      />
+      <TextField
+        label="District"
+        value={f.district}
+        onChange={(e) => setF({ ...f, district: e.target.value })}
       />
       <TextField
         label="Internal notes"
@@ -392,6 +398,7 @@ export function ParticipantsTab() {
             phone: editing.phone?.startsWith("•") ? null : editing.phone,
             language_code: editing.language_code,
             dialect: editing.dialect,
+            district: editing.district ?? "",
             notes: editing.notes ?? "",
             email: editing.email ?? (editing.has_email ? undefined : ""),
           }}

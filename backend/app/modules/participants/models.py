@@ -41,6 +41,8 @@ class Participant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email_enc: Mapped[str | None] = mapped_column(Text)
     language_code: Mapped[str] = mapped_column(String(35), nullable=False)
     dialect: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
+    # Where the participant lives, free text; the dashboard filters by it (D-121).
+    district: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
     notes: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
