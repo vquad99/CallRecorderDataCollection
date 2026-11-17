@@ -43,7 +43,6 @@ from app.main import create_app
 from tests.conftest import (
     Api,
     build_settings,
-    give_consent,
     make_participant,
     make_project,
     make_user,
@@ -104,7 +103,7 @@ class Side:
     participant_code: str
     spare_participant: str
     task_done: str  # recorded face-to-face task, checked automatically (AUDIO_QC)
-    task_open: str  # task with an open recording and a consent record
+    task_open: str  # task with an open recording
     recording_done: str
     recording_open: str
     asset: str
@@ -175,7 +174,6 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         return tid
 
     done = new_task()
-    give_consent(mo, done)
     rec = mo.post(f"/api/v1/tasks/{done}/recordings", json=START).json()
     data = _one_second_chunk()
     sha = hashlib.sha256(data).hexdigest()
@@ -197,12 +195,6 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
     asset = next(x["id"] for x in detail["assets"] if x["kind"] == "FTF_DERIVED_PCM")
 
     open_task = new_task()
-    consent = mo.post(
-        f"/api/v1/tasks/{open_task}/consent",
-        json={"participant_id": a["id"], "status": "GIVEN", "method": "VERBAL_NOTED"},
-    )
-    assert consent.status_code == 201, consent.text
-    give_consent(mo, open_task)
     open_rec = mo.post(f"/api/v1/tasks/{open_task}/recordings", json=START).json()
     assert (
         mo.put(
@@ -744,7 +736,8 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/projects/{s.project}/participants/bulk",
         {SA, PA},
         Perm.PARTICIPANTS_VIEW,
-        lambda e, s, who: {"action": "send_consent", "participant_ids": [s.participant]},
+        # No target project: refused as a request (422), after access control.
+        lambda e, s, who: {"action": "assign", "participant_ids": [s.participant]},
     ),
     case(
         "GET",
@@ -759,14 +752,6 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/consent-form/file",
         {SA, PA, MO},
         Perm.PARTICIPANTS_VIEW,
-    ),
-    case(
-        "POST",
-        PP + "/consent-review",
-        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/consent-review",
-        {SA, PA},
-        Perm.PARTICIPANTS_VIEW,
-        lambda e, s, who: {"decision": "APPROVED"},
     ),
     case(
         "POST",
@@ -907,18 +892,6 @@ CASES: list[Case] = [
         lambda e, s: f"/api/v1/recordings/{s.recording_done}/metadata",
         {SA, PA},
         Perm.RECORDINGS_DOWNLOAD,
-    ),
-    case(
-        "POST",
-        "/api/v1/tasks/{task_id}/consent",
-        lambda e, s: f"/api/v1/tasks/{s.task_open}/consent",
-        {MO},  # only the assigned moderator records consent (D-051)
-        Perm.TASKS_VIEW,
-        lambda e, s, who: {
-            "participant_id": s.participant,
-            "status": "GIVEN",
-            "method": "VERBAL_NOTED",
-        },
     ),
     case(
         "POST",
@@ -1343,7 +1316,7 @@ def test_no_response_carries_credentials_or_encrypted_fields(estate: Estate) -> 
 
 def test_foreign_objects_cannot_be_pulled_in_through_a_request_body(estate: Estate) -> None:
     own, foreign = estate.own, estate.foreign
-    pa, mo, sa = estate.callers[PA], estate.callers[MO], estate.callers[SA]
+    pa, sa = estate.callers[PA], estate.callers[SA]
     attempts = {
         "PA links the foreign participant into OWN": pa.post(
             f"/api/v1/projects/{own.project}/participants/link",
@@ -1369,10 +1342,6 @@ def test_foreign_objects_cannot_be_pulled_in_through_a_request_body(estate: Esta
         ),
         "PA assigns the foreign project's moderator to an OWN task": pa.post(
             f"/api/v1/tasks/{own.task_open}/assign", json={"user_id": estate.foreign_moderator}
-        ),
-        "MO records consent on an OWN task for a foreign participant": mo.post(
-            f"/api/v1/tasks/{own.task_open}/consent",
-            json={"participant_id": foreign.participant, "status": "GIVEN", "method": "WRITTEN"},
         ),
     }
     accepted = {

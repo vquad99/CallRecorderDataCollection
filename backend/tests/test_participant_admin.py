@@ -1,20 +1,22 @@
-"""Participants section (D-073): add many from a file, assign to another project, remove, send
-consent forms in bulk, and approve or reject a participant's own consent answer.
+"""Participants section (D-073): add many from a file, assign to another project, remove; the
+consent form is emailed by itself and an answer counts at once (D-129).
 
-Requirements: PART-016, PART-017, PART-014
+Requirements: PART-006, PART-014, PART-016
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import pytest
 from sqlalchemy import update
 
+from app.modules.participants.models import ConsentRecord
 from app.modules.projects.models import Project
 from tests import test_recordings
-from tests.conftest import give_consent, make_participant, make_project, make_user
-from tests.test_portal import FORM, _visitor
+from tests.conftest import make_participant, make_project, make_user
+from tests.test_portal import FORM, _token, _visitor
 
 pytestmark = pytest.mark.db
 
@@ -37,12 +39,10 @@ def _base(world: dict[str, Any]) -> str:
     return f"/api/v1/projects/{world['project'].id}/participants"
 
 
-def _link_from_another_admin(world: dict[str, Any], a: str) -> str:
-    """A personal link handed out by a second Project Admin: the one who hands out a link may
-    not review the answer given on it (D-088), so the tests review as world["pa"]."""
-    make_user(world["db"], "pa2@example.org", ["PROJECT_ADMIN"], projects=[world["project"]])
-    made = world["api"]("pa2@example.org").post(f"{_base(world)}/{a}/portal-link")
-    return str(made.json()["url"].split("#", 1)[1])
+def _with_form(world: dict[str, Any]) -> None:
+    db = world["db"]
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
+    db.commit()
 
 
 def test_a_file_is_checked_first_and_only_good_rows_are_added(world: dict[str, Any]) -> None:
@@ -60,15 +60,19 @@ def test_a_file_is_checked_first_and_only_good_rows_are_added(world: dict[str, A
     assert done["created"] == 2
     assert pa.get(base).json()["total"] == before + 2
     assert all(r["participant_code"] for r in done["rows"] if r["ok"])
+    # The project has no consent form yet: nothing is sent, and the rows say what to do (D-129).
+    assert [r["message"] for r in done["rows"] if r["ok"]] == [
+        "Added. Write the project's consent form, then send it."
+    ] * 2
     bad = pa.post(f"{base}/import", json={"csv": "label\nx\n"})
     assert bad.json()["error"]["code"] == "INVALID_CSV"
     assert world["mod"].post(f"{base}/import", json={"csv": CSV}).status_code == 403
 
 
-def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, Any]) -> None:
+def test_bulk_assign_and_remove_report_each_participant(world: dict[str, Any]) -> None:
     db, pa, base = world["db"], world["pa"], _base(world)
-    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
     other = make_project(db, "SECOND")
+    other.consent_text = "I agree to the second project."
     outside = make_project(db, "OUTSIDE")
     pa_user = pa.get("/api/v1/auth/me").json()["id"]
     from app.modules.projects.models import ProjectMembership
@@ -76,10 +80,6 @@ def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, An
     db.add(ProjectMembership(user_id=pa_user, project_id=other.id))
     db.commit()
     with_mail = make_participant(pa, world["project"].id, "Kiran")
-    pa.patch(
-        f"{base}/{with_mail['id']}",
-        json={"display_label": "Kiran", "language_code": "hi", "email": "kiran@example.org"},
-    )
     without = make_participant(pa, world["project"].id, "Lata")
     # Saved before every participant needed an email (D-128).
     from app.modules.participants.models import Participant
@@ -87,14 +87,10 @@ def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, An
     db.execute(update(Participant).where(Participant.id == without["id"]).values(email_enc=None))
     db.commit()
     ids = [with_mail["id"], without["id"]]
-
-    sent = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids}).json()
-    assert (sent["done"], sent["failed"]) == (1, 1)
-    assert [r["ok"] for r in sent["results"]] == [True, False]
-    assert "no email" in sent["results"][1]["message"]
-    listed = {p["id"]: p for p in pa.get(base).json()["items"]}
-    assert listed[with_mail["id"]]["link_active"] is True
-    assert listed[without["id"]]["link_active"] is False
+    assert (
+        pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids}).status_code
+        == 422
+    ), "consent forms are no longer sent by hand in bulk (D-129)"
 
     assert (
         pa.post(f"{base}/bulk", json={"action": "assign", "participant_ids": ids}).json()["error"][
@@ -112,7 +108,19 @@ def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, An
         json={"action": "assign", "participant_ids": ids, "target_project_id": str(other.id)},
     ).json()
     assert moved["done"] == 2
-    assert pa.get(f"/api/v1/projects/{other.id}/participants").json()["total"] == 2
+    # They get the other project's consent form by themselves (D-129).
+    assert [r["message"] for r in moved["results"]] == [
+        "Assigned. Consent form emailed.",
+        "Assigned. No email address: add one with Edit, then email the consent form.",
+    ]
+    there = {
+        p["id"]: p for p in pa.get(f"/api/v1/projects/{other.id}/participants").json()["items"]
+    }
+    assert len(there) == 2
+    assert (there[with_mail["id"]]["link_active"], there[without["id"]]["link_active"]) == (
+        True,
+        False,
+    )
     again = pa.post(
         f"{base}/bulk",
         json={"action": "assign", "participant_ids": ids, "target_project_id": str(other.id)},
@@ -135,140 +143,112 @@ def test_bulk_send_assign_and_remove_report_each_participant(world: dict[str, An
     )
 
 
-def test_a_consent_answer_is_approved_or_sent_back(world: dict[str, Any]) -> None:
-    db, pa, base = world["db"], world["pa"], _base(world)
-    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
-    db.commit()
-    a = world["task"]["participant_a"]["id"]
-    nothing = pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
-    assert nothing.json()["error"]["code"] == "NOTHING_TO_REVIEW"
-    token = _link_from_another_admin(world, a)
-    api, head = _visitor(world, token)
+def test_an_agreement_counts_at_once_with_nobody_to_review_it(world: dict[str, Any]) -> None:
+    """D-129: no staff review; the answer is accepted the moment the participant gives it."""
+    pa, base = world["pa"], _base(world)
+    _with_form(world)
+    chitra = make_participant(pa, world["project"].id, "Chitra", agreed=False)
+    c = chitra["id"]
+    row = next(p for p in pa.get(base).json()["items"] if p["id"] == c)
+    assert row["consent_status"] == "NONE"
+    api, head = _visitor(world, _token(world, c))
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
-    row = next(p for p in pa.get(base).json()["items"] if p["id"] == a)
-    assert (row["consent_status"], row["consent_review"]) == ("GIVEN", "PENDING")
-
-    no_note = pa.post(f"{base}/{a}/consent-review", json={"decision": "REJECTED"})
-    assert no_note.json()["error"]["code"] == "NOTE_REQUIRED"
-    back = pa.post(
-        f"{base}/{a}/consent-review", json={"decision": "REJECTED", "note": "Wrong person answered"}
-    )
-    assert back.status_code == 200, back.text
-    page = api.get("/api/v1/portal/me", headers=head).json()
-    assert (page["consent_review"], page["consent_review_note"]) == (
-        "REJECTED",
-        "Wrong person answered",
-    )
-    # The participant answers again; it waits for review again and can then be approved.
-    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
-    assert api.get("/api/v1/portal/me", headers=head).json()["consent_review"] == "PENDING"
-    ok = pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
-    assert ok.json()["review_status"] == "APPROVED"
-    row = next(p for p in pa.get(base).json()["items"] if p["id"] == a)
-    assert row["consent_review"] == "APPROVED"
-    # Moderators and QC cannot review; a moderator on the task sees the state only.
-    assert (
-        world["mod"].post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"}).status_code
-        == 403
-    )
+    row = next(p for p in pa.get(base).json()["items"] if p["id"] == c)
+    assert row["consent_status"] == "GIVEN"
+    assert "consent_review" not in row
+    gone = pa.post(f"{base}/{c}/consent-review", json={"decision": "APPROVED"})
+    assert gone.status_code == 404, "there is no review any more"
     # A client viewer has no list of the project's people at all (D-112).
-    make_user(db, "cv@example.org", ["CLIENT_VIEWER"], projects=[world["project"]])
+    make_user(world["db"], "cv@example.org", ["CLIENT_VIEWER"], projects=[world["project"]])
     assert world["api"]("cv@example.org").get(base).status_code == 403
 
 
 def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) -> None:
     db, pa, base = world["db"], world["pa"], _base(world)
-    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
-    db.commit()
-    a = world["task"]["participant_a"]["id"]
-    blank = pa.get(f"{base}/{a}/consent-form").json()
+    _with_form(world)
+    c = make_participant(pa, world["project"].id, "Chitra", agreed=False)["id"]
+    blank = pa.get(f"{base}/{c}/consent-form").json()
     assert (blank["answered"], blank["current"], blank["form_text"]) == (False, None, FORM)
-    token = _link_from_another_admin(world, a)
-    api, head = _visitor(world, token)
+    api, head = _visitor(world, _token(world, c))
     api.post("/api/v1/portal/consent", json={"decision": "REFUSED"}, headers=head)
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
-    pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
     db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text="New"))
     db.commit()
-    form = pa.get(f"{base}/{a}/consent-form").json()
+    form = pa.get(f"{base}/{c}/consent-form").json()
     assert form["form_text"] == FORM, "the text that was answered, not the project's new text"
-    assert (form["current"]["status"], form["current"]["review_status"]) == ("GIVEN", "APPROVED")
+    assert form["current"] == {
+        "status": "GIVEN",
+        "answered_at": form["current"]["answered_at"],
+        "policy_version": "1",
+    }
     assert [e["status"] for e in form["earlier"]] == ["REFUSED"]
-    got = pa.get(f"{base}/{a}/consent-form/file")
+    got = pa.get(f"{base}/{c}/consent-form/file")
     assert got.status_code == 200
-    code = world["task"]["participant_a"]["participant_code"]
+    code = next(p for p in pa.get(base).json()["items"] if p["id"] == c)["participant_code"]
     assert got.headers["content-disposition"] == f'attachment; filename="consent_VOICE_{code}.html"'
-    for expected in (code, FORM, "Agreed", "Approved", "Did not agree"):
+    for expected in (code, FORM, "Agreed", "Did not agree"):
         assert expected in got.text, expected
-    assert "Asha" not in got.text, "by code only"
+    assert "Review" not in got.text
+    assert "Chitra" not in got.text, "by code only"
     # QC staff and clients have no consent access.
-    assert world["api"]("qc@example.org").get(f"{base}/{a}/consent-form").status_code == 403
+    assert world["api"]("qc@example.org").get(f"{base}/{c}/consent-form").status_code == 403
 
 
-def test_whoever_hands_out_a_link_cannot_approve_the_answer_given_on_it(
-    world: dict[str, Any],
-) -> None:
-    """D-088: an admin could open the personal link, answer "I agree" and approve it."""
-    db, pa, base = world["db"], world["pa"], _base(world)
-    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
-    db.commit()
-    a = world["task"]["participant_a"]["id"]
-    token = pa.post(f"{base}/{a}/portal-link").json()["url"].split("#", 1)[1]
-    api, head = _visitor(world, token)
+def test_an_answer_on_a_link_handed_out_by_staff_says_so(world: dict[str, Any]) -> None:
+    """D-088: whoever was shown a link could have answered on it; with nobody reviewing answers
+    (D-129) the consent record says how the answer came in."""
+    pa, base = world["pa"], _base(world)
+    _with_form(world)
+    c = make_participant(pa, world["project"].id, "Chitra", agreed=False)["id"]
+    api, head = _visitor(world, _token(world, c))  # shown to the admin to pass on
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
-    own = pa.post(f"{base}/{a}/consent-review", json={"decision": "APPROVED"})
-    assert own.json()["error"]["code"] == "SAME_PERSON"
-    record = pa.get(f"{base}/{a}/consent-form/file").text
-    assert "handed out by staff" in record
-    make_user(db, "pa3@example.org", ["PROJECT_ADMIN"], projects=[world["project"]])
-    other = world["api"]("pa3@example.org").post(
-        f"{base}/{a}/consent-review", json={"decision": "APPROVED"}
-    )
-    assert other.json()["review_status"] == "APPROVED"
+    assert "handed out by staff" in pa.get(f"{base}/{c}/consent-form/file").text
 
 
 def test_recording_waits_for_consent_from_both_participants(world: dict[str, Any]) -> None:
-    """D-119: consent noted by the moderator, or the participant's own "agree" on the consent
-    form (not sent back), lets recording start; the newest word counts."""
+    """D-119: recording starts only while both participants' answers on the consent form are
+    "agreed". A task is only made for people who agreed (D-129), so this guards the answers
+    from before D-129: one sent back by staff does not count, nor does consent a moderator
+    noted for the session; agreeing again does."""
     from tests.test_recordings import START
 
-    db, pa, mod, base = world["db"], world["pa"], world["mod"], _base(world)
-    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
-    db.commit()
+    db, mod = world["db"], world["mod"]
+    _with_form(world)
     tid, a = world["task"]["id"], world["task"]["participant_a"]["id"]
 
     def missing() -> list[str]:
         found: list[str] = mod.get(f"/api/v1/tasks/{tid}").json()["consent_missing"]
         return found
 
-    assert missing() == ["A", "B"]
+    def side_a() -> tuple[str | None, bool]:
+        p = mod.get(f"/api/v1/tasks/{tid}").json()["participant_a"]
+        assert "consent_review" not in p, "nobody reviews answers (D-129)"
+        return p["consent_status"], p["may_record"]
+
+    assert (missing(), side_a()) == ([], ("GIVEN", True))
+    db.execute(
+        update(ConsentRecord)
+        .where(ConsentRecord.participant_id == uuid.UUID(a))
+        .values(review_status="REJECTED", review_note="Unclear")
+    )
+    db.add(
+        ConsentRecord(
+            participant_id=uuid.UUID(a),
+            project_id=world["project"].id,
+            task_id=uuid.UUID(tid),
+            status="GIVEN",
+            method="VERBAL_NOTED",
+            policy_version="1",
+            captured_by=uuid.UUID(mod.get("/api/v1/auth/me").json()["id"]),
+        )
+    )
+    db.commit()
+    assert (missing(), side_a()) == (["A"], (None, False))
     early = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
     assert (early.status_code, early.json()["error"]["code"]) == (409, "CONSENT_MISSING")
-    # A agrees on their own consent form: that counts, while it waits for review.
-    api, head = _visitor(world, _link_from_another_admin(world, a))
+    api, head = _visitor(world, _token(world, a))
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
-    assert missing() == ["B"]
-
-    def side_a() -> tuple[str | None, str | None, str | None, bool]:
-        p = mod.get(f"/api/v1/tasks/{tid}").json()["participant_a"]
-        return p["consent_status"], p["consent_source"], p["consent_review"], p["may_record"]
-
-    # D-127: the task page reads the answer from the form; nobody ticks it.
-    assert side_a() == ("GIVEN", "FORM", "PENDING", True)
-    # Staff send the answer back: it no longer counts.
-    back = pa.post(f"{base}/{a}/consent-review", json={"decision": "REJECTED", "note": "Unclear"})
-    assert back.status_code == 200, back.text
-    assert missing() == ["A", "B"]
-    assert side_a() == ("GIVEN", "FORM", "REJECTED", False)
-    # The moderator notes both: recording may start.
-    give_consent(mod, tid)
-    assert missing() == []
-    # A withdraws on their page afterwards: the newest word counts.
-    api.post("/api/v1/portal/consent", json={"decision": "WITHDRAWN"}, headers=head)
-    assert missing() == ["A"]
-    again = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
-    assert again.json()["error"]["code"] == "CONSENT_MISSING"
-    give_consent(mod, tid)
+    assert (missing(), side_a()) == ([], ("GIVEN", True))
     assert mod.post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 201
 
 
@@ -335,12 +315,13 @@ def test_every_participant_has_an_email(world: dict[str, Any]) -> None:
     assert removed.json()["error"]["code"] == "EMAIL_REQUIRED"
     assert pa.patch(f"{base}/{pid}", json=body).status_code == 200  # not sent: kept
 
-    # Saved before the rule: the consent form names the problem, and a correction needs an email.
+    # Saved before the rule: emailing the consent form again names the problem, and a correction
+    # needs an email.
     db.execute(_update(Participant).where(Participant.id == pid).values(email_enc=None))
     db.commit()
-    sent = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": [pid]})
-    assert sent.json()["results"][0]["ok"] is False
-    assert "Add one with Edit" in sent.json()["results"][0]["message"]
+    again = pa.post(f"{base}/{pid}/portal-link/email")
+    assert (again.status_code, again.json()["error"]["code"]) == (409, "NO_EMAIL")
+    assert "Add one with Edit" in again.json()["error"]["message"]
     assert pa.patch(f"{base}/{pid}", json=body).json()["error"]["code"] == "EMAIL_REQUIRED"
     fixed = pa.patch(f"{base}/{pid}", json={**body, "email": "noor@example.org"})
     assert fixed.status_code == 200, fixed.text

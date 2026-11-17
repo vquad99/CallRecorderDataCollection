@@ -19,7 +19,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { day } from "../../lib/format";
-import { emailConsentForm, useParticipantWindows } from "../participants/ParticipantEditor";
+import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
 import "../participants/participants.css";
 import { languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
@@ -228,19 +228,22 @@ export function ParticipantsTab() {
           onAdd={(codes) =>
             void run(async () => {
               // One after the other: each is checked and audited on its own; a refusal names
-              // who was not added and keeps the ones that were.
-              const added: string[] = [];
+              // who was not added and keeps the ones that were. Each is emailed this project's
+              // consent form by the server (D-129).
+              const added: work.AddedParticipant[] = [];
               try {
                 for (const code of codes) {
-                  await work.linkParticipant(project.id, code);
-                  added.push(code);
+                  added.push(await work.linkParticipant(project.id, code));
                 }
               } finally {
                 setRefresh((n) => n + 1);
               }
-              return codes.length === 1
-                ? `${codes[0]} added to this project.`
-                : `${added.length} participants added to this project.`;
+              const [first] = added;
+              return added.length === 1 && first
+                ? addedText(first, " to this project")
+                : `${added.length} participants added to this project. ${[
+                    ...new Set(added.map((p) => p.consent_email)),
+                  ].join(" ")}`;
             }, "link")
           }
         />
@@ -345,16 +348,16 @@ export function ParticipantsTab() {
                         >
                           Personal link
                         </Button>
-                        {p.has_email ? (
+                        {p.has_email && p.consent_status !== "GIVEN" ? (
                           <Button
                             variant="secondary"
                             busy={busy === `email-${p.id}`}
                             disabled={busy !== null}
                             onClick={() =>
-                              void run(() => emailConsentForm(project.id, p), `email-${p.id}`)
+                              void run(() => work.emailConsentForm(project.id, p), `email-${p.id}`)
                             }
                           >
-                            Email consent form
+                            Email consent form again
                           </Button>
                         ) : null}
                         <Button

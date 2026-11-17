@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.api.deps import AppSettings, Cipher
 from app.core.background import dispatch
@@ -67,10 +68,10 @@ class ParticipantOut(BaseModel):
     phone_masked: bool
     email: str | None  # only for people who may see contact details
     has_email: bool
-    # The participant's own answer on the consent form in this project, its staff review, and
-    # whether they hold a working personal link. Empty when the caller may not see consent.
+    # The participant's own answer on the consent form in this project as it counts now (NONE:
+    # no answer yet), and whether they hold a working personal link. Empty when the caller may
+    # not see consent.
     consent_status: str | None = None
-    consent_review: str | None = None
     link_active: bool | None = None
     # Only for people who may export the project (the same people who get the minutes report).
     minutes: MinutesOut | None = None
@@ -87,7 +88,7 @@ def present(
     project: Project,
     p: Participant,
     assigned_ids: set[uuid.UUID] | None = None,
-    overview: dict[uuid.UUID, tuple[str, str | None, bool]] | None = None,
+    overview: dict[uuid.UUID, tuple[str, bool]] | None = None,
 ) -> ParticipantOut:
     v = service.visibility(db, principal, project, p.id, assigned_ids)
     if p.phone_e164_enc is None or not (v.profile or v.contact):
@@ -113,9 +114,8 @@ def present(
         consent_visible=(
             sees := v.profile and principal.can_in_project(Perm.CONSENT_VIEW, project.id)
         ),
-        consent_status=(overview or {}).get(p.id, (None, None, None))[0] if sees else None,
-        consent_review=(overview or {}).get(p.id, (None, None, None))[1] if sees else None,
-        link_active=(overview or {}).get(p.id, (None, None, None))[2] if sees else None,
+        consent_status=(overview or {}).get(p.id, (None, None))[0] if sees else None,
+        link_active=(overview or {}).get(p.id, (None, None))[1] if sees else None,
         created_at=p.created_at,
     )
 
@@ -171,39 +171,93 @@ class ParticipantBody(BaseModel):
         return service.ParticipantInput(**self.model_dump())
 
 
-@router.post("", response_model=ParticipantOut, status_code=201)
+# What staff are told about the consent form once someone joins a project (D-129).
+CONSENT_EMAILED = "Consent form emailed."
+CONSENT_FORM_MISSING = "Write the project's consent form, then send it."
+CONSENT_NO_EMAIL = "No email address: add one with Edit, then email the consent form."
+CONSENT_NOT_QUEUED = "The consent form could not be emailed now: use Email consent form again."
+
+
+def email_consent_forms(
+    request: Request,
+    background: BackgroundTasks,
+    db: DbSession,
+    principal: Principal,
+    project: Project,
+    participant_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, str]:
+    """Everyone who joins a project is emailed their personal consent form for it, after the
+    answer (by the worker when there is one), with no one asking for it (D-129). Says, per
+    participant, what happened. Nothing is sent while the project has no consent form."""
+    if not participant_ids:
+        return {}
+    if not project.consent_text.strip():
+        return dict.fromkeys(participant_ids, CONSENT_FORM_MISSING)
+    reachable = set(
+        db.scalars(
+            select(Participant.id).where(
+                Participant.id.in_(participant_ids), Participant.email_enc.is_not(None)
+            )
+        )
+    )
+    to_email = [str(pid) for pid in participant_ids if pid in reachable]
+    queued = bool(to_email) and dispatch(
+        request.app,
+        portal.SEND_LINKS_TASK,
+        [str(project.id), to_email, str(principal.user_id), client_ip(request)],
+        portal.send_links_job,
+        background,
+    )
+    sent = CONSENT_EMAILED if queued else CONSENT_NOT_QUEUED
+    return {pid: sent if pid in reachable else CONSENT_NO_EMAIL for pid in participant_ids}
+
+
+class AddedOut(ParticipantOut):
+    # What happened to their consent form email (D-129), in words for staff.
+    consent_email: str
+
+
+@router.post("", response_model=AddedOut, status_code=201)
 def create_participant(
     project_id: uuid.UUID,
     body: ParticipantBody,
     request: Request,
+    background: BackgroundTasks,
     principal: CurrentPrincipal,
     db: DbSession,
     settings: AppSettings,
     cipher: Cipher,
-) -> ParticipantOut:
+) -> AddedOut:
     p = service.create_participant(
         db, settings, cipher, principal, project_id, body.to_input(), client_ip(request)
     )
     project, _ = service.get_in_project(db, principal, project_id, p.id)
-    return present(db, principal, cipher, project, p)
+    sent = email_consent_forms(request, background, db, principal, project, [p.id])
+    return AddedOut(
+        **present(db, principal, cipher, project, p).model_dump(), consent_email=sent[p.id]
+    )
 
 
 class LinkBody(BaseModel):
     participant_code: str = Field(min_length=2, max_length=20)
 
 
-@router.post("/link", response_model=ParticipantOut, status_code=201)
+@router.post("/link", response_model=AddedOut, status_code=201)
 def link_participant(
     project_id: uuid.UUID,
     body: LinkBody,
     request: Request,
+    background: BackgroundTasks,
     principal: CurrentPrincipal,
     db: DbSession,
     cipher: Cipher,
-) -> ParticipantOut:
+) -> AddedOut:
     p = service.link_existing(db, principal, project_id, body.participant_code, client_ip(request))
     project, _ = service.get_in_project(db, principal, project_id, p.id)
-    return present(db, principal, cipher, project, p)
+    sent = email_consent_forms(request, background, db, principal, project, [p.id])
+    return AddedOut(
+        **present(db, principal, cipher, project, p).model_dump(), consent_email=sent[p.id]
+    )
 
 
 class CandidateOut(BaseModel):
@@ -309,8 +363,6 @@ class ConsentOut(BaseModel):
     policy_version: str
     captured_by: uuid.UUID | None  # empty: the participant answered the form themselves
     note: str
-    review_status: str | None = None
-    review_note: str = ""
     created_at: datetime
 
 
@@ -351,6 +403,7 @@ def import_participants(
     project_id: uuid.UUID,
     body: ImportBody,
     request: Request,
+    background: BackgroundTasks,
     principal: CurrentPrincipal,
     db: DbSession,
     settings: AppSettings,
@@ -359,6 +412,13 @@ def import_participants(
     rows = manage.import_csv(
         db, settings, cipher, principal, project_id, body.csv, body.confirm, client_ip(request)
     )
+    added = [r.participant_id for r in rows if r.participant_id is not None]
+    if added:
+        project = db.get_one(Project, project_id)
+        sent = email_consent_forms(request, background, db, principal, project, added)
+        for r in rows:
+            if r.participant_id is not None:
+                r.message = f"{r.message}. {sent[r.participant_id]}"
     return ImportOut(
         rows=[ImportRow.model_validate(r, from_attributes=True) for r in rows],
         ready=sum(1 for r in rows if r.ok),
@@ -367,7 +427,7 @@ def import_participants(
 
 
 class BulkBody(BaseModel):
-    action: Literal["assign", "remove", "send_consent"]
+    action: Literal["assign", "remove"]
     participant_ids: list[uuid.UUID] = Field(min_length=1, max_length=manage.MAX_BULK)
     target_project_id: uuid.UUID | None = None
     reason: str = Field(default="", max_length=1000)
@@ -395,8 +455,7 @@ def bulk_action(
     principal: CurrentPrincipal,
     db: DbSession,
 ) -> BulkOut:
-    ip = client_ip(request)
-    results = manage.bulk(
+    target, results = manage.bulk(
         db,
         principal,
         project_id,
@@ -404,43 +463,20 @@ def bulk_action(
         body.participant_ids,
         body.target_project_id,
         body.reason,
-        ip,
+        client_ip(request),
     )
-    to_email = [r for r in results if r.ok] if body.action == "send_consent" else []
-    if to_email and not dispatch(
-        request.app,
-        portal.SEND_LINKS_TASK,
-        [str(project_id), [str(r.participant_id) for r in to_email], str(principal.user_id), ip],
-        portal.send_links_job,
-        background,
-    ):
-        for r in to_email:
-            r.ok, r.message = False, "The emails could not be queued; try again in a moment"
+    if target is not None:
+        # Assigned to another project: they get that project's consent form (D-129).
+        added = [r.participant_id for r in results if r.ok]
+        sent = email_consent_forms(request, background, db, principal, target, added)
+        for r in results:
+            if r.ok:
+                r.message = f"{r.message}. {sent[r.participant_id]}"
     return BulkOut(
         results=[BulkRow.model_validate(r, from_attributes=True) for r in results],
         done=sum(1 for r in results if r.ok),
         failed=sum(1 for r in results if not r.ok),
     )
-
-
-class ReviewBody(BaseModel):
-    decision: Literal["APPROVED", "REJECTED"]
-    note: str = Field(default="", max_length=1000)
-
-
-@router.post("/{participant_id}/consent-review", response_model=ConsentOut)
-def review_consent(
-    project_id: uuid.UUID,
-    participant_id: uuid.UUID,
-    body: ReviewBody,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DbSession,
-) -> ConsentOut:
-    record = manage.review_consent(
-        db, principal, project_id, participant_id, body.decision, body.note, client_ip(request)
-    )
-    return ConsentOut.model_validate(record, from_attributes=True)
 
 
 # ---------------------------------------------------------------- one consent form (D-074)
@@ -450,9 +486,6 @@ class AnswerOut(BaseModel):
     status: ConsentStatus
     answered_at: datetime
     policy_version: str
-    review_status: str | None
-    review_note: str
-    reviewed_at: datetime | None
 
 
 class ConsentFormOut(BaseModel):
@@ -524,9 +557,6 @@ class SessionOut(BaseModel):
     created_at: datetime
     other_participant_code: str
     moderator: str | None
-    consent_status: str | None
-    consent_method: str | None
-    consent_at: datetime | None
     recordings: int
     recording_seconds: float | None
     recorded_at: datetime | None

@@ -1,6 +1,7 @@
 """Everything about one participant in one project, for the people who manage participants
 (D-104): who added them and when, the projects they are in, their personal link, every session
-they were part of with its consent and recording, and the phone calls made to them.
+they were part of with its recording, and the phone calls made to them. Consent is the
+participant's answer on the project's consent form (D-129), shown once by the router.
 
 The profile itself (name, phone, email, notes), the consent form and the minutes are put together
 by the router with the rules those already have; this module adds the rest. Nothing here is
@@ -21,7 +22,6 @@ from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.participants import service
 from app.modules.participants.models import (
-    ConsentRecord,
     Participant,
     ParticipantPortalLink,
     ParticipantProjectLink,
@@ -68,9 +68,6 @@ class SessionRow:
     created_at: datetime
     other_participant_code: str
     moderator: str | None
-    consent_status: str | None
-    consent_method: str | None
-    consent_at: datetime | None
     recordings: int
     recording_seconds: float | None
     recorded_at: datetime | None
@@ -172,7 +169,6 @@ def get(
         else {}
     )
     moderators: dict[uuid.UUID, str] = {}
-    consents: dict[uuid.UUID, ConsentRecord] = {}
     recorded: dict[uuid.UUID, tuple[int, int | None, datetime | None]] = {}
     call_counts: dict[uuid.UUID, int] = {}
     if task_ids:
@@ -186,17 +182,6 @@ def get(
             )
         ).all():
             moderators[tid] = display_name
-        # The newest consent answer for each session wins (rows come oldest first).
-        for record in db.scalars(
-            select(ConsentRecord)
-            .where(
-                ConsentRecord.participant_id == participant.id,
-                ConsentRecord.task_id.in_(task_ids),
-            )
-            .order_by(ConsentRecord.created_at)
-        ):
-            if record.task_id is not None:
-                consents[record.task_id] = record
         # Finished recordings of each session: how many, and the newest one's length and time.
         length = final_length_subquery()
         for tid, started_at, ms in db.execute(
@@ -217,7 +202,6 @@ def get(
     sessions = []
     for t in tasks:
         is_a = t.participant_a_id == participant.id
-        consent = consents.get(t.id)
         count, ms, at = recorded.get(t.id, (0, None, None))
         sessions.append(
             SessionRow(
@@ -231,9 +215,6 @@ def get(
                     t.participant_b_id if is_a else t.participant_a_id, ""
                 ),
                 moderator=moderators.get(t.id),
-                consent_status=consent.status if consent else None,
-                consent_method=consent.method if consent else None,
-                consent_at=consent.created_at if consent else None,
                 recordings=count,
                 recording_seconds=round(ms / 1000, 1) if ms is not None else None,
                 recorded_at=at,

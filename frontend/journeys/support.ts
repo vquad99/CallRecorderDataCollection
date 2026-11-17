@@ -75,12 +75,13 @@ export async function api<T>(
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<T> {
   const cookies = await page.context().cookies();
   const csrf = cookies.find((c) => c.name === "csrf_token")?.value ?? "";
   const response = await page.request.fetch(path, {
     method,
-    headers: { "X-CSRF-Token": csrf, Accept: "application/json" },
+    headers: { "X-CSRF-Token": csrf, Accept: "application/json", ...headers },
     ...(body === undefined ? {} : { data: body }),
   });
   expect(response.status(), `${method} ${path}: ${await response.text()}`).toBeLessThan(400);
@@ -114,31 +115,30 @@ export interface Setup {
   taskCode: string;
 }
 
-/** Fast set-up through the API as the signed-in Super Admin: an active face-to-face project with
- * two participants and one task, assigned to `moderator` when given. */
-/** The moderator notes consent for participant A and B on the task page: recording waits for
- * both (D-119). */
-export async function consentBoth(page: Page): Promise<void> {
-  // Nobody ticks consent on the page any more (D-127): it comes from the participants' own
-  // answers. Here the moderator's session records "agreed" for both through the API, standing in
-  // for those answers; the page then shows the task again with nothing left to wait for.
-  const taskId = new URL(page.url()).pathname.split("/").pop() ?? "";
-  const task = await api<{ participant_a: { id: string }; participant_b: { id: string } }>(
-    page,
-    "GET",
-    `/api/v1/tasks/${taskId}`,
+/** The participant agrees to the project's consent form the real way (D-129: tasks are made only
+ * for people who agreed): the signed-in admin makes their personal link, and the answer goes in
+ * through the personal page's API with the link's secret, as the page itself sends it. */
+export async function agree(admin: Page, projectId: string, participantId: string): Promise<void> {
+  const link = await api<{ url: string }>(
+    admin,
+    "POST",
+    `/api/v1/projects/${projectId}/participants/${participantId}/portal-link`,
   );
-  for (const p of [task.participant_a, task.participant_b]) {
-    await api(page, "POST", `/api/v1/tasks/${taskId}/consent`, {
-      participant_id: p.id,
-      status: "GIVEN",
-      method: "DIGITAL",
-    });
-  }
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
+  // The secret sits after "#" (D-067).
+  const token = new URL(link.url).hash.slice(1);
+  const page = await api<{ consent_status: string }>(
+    admin,
+    "POST",
+    "/api/v1/portal/consent",
+    { decision: "GIVEN" },
+    { "X-Portal-Token": token },
+  );
+  expect(page.consent_status).toBe("GIVEN");
 }
 
+/** Fast set-up through the API as the signed-in Super Admin: an active face-to-face project with
+ * a consent form, two participants who agreed to it, and one task, assigned to `moderator` when
+ * given. */
 export async function setUpTask(
   admin: Page,
   code: string,
@@ -150,6 +150,7 @@ export async function setUpTask(
     name: `Journey ${code}`,
     allows_telephony: false,
     allows_face_to_face: true,
+    consent_text: `I agree to be recorded for ${code}.`,
   });
   await api(admin, "POST", `/api/v1/projects/${project.id}/status`, { status: "ACTIVE" });
   await api(admin, "PUT", `/api/v1/projects/${project.id}/languages`, {
@@ -168,13 +169,18 @@ export async function setUpTask(
   }
   const people = [];
   for (const label of ["Asha", "Bina"]) {
-    people.push(
-      await api<{ id: string }>(admin, "POST", `/api/v1/projects/${project.id}/participants`, {
+    const person = await api<{ id: string }>(
+      admin,
+      "POST",
+      `/api/v1/projects/${project.id}/participants`,
+      {
         display_label: `${label} ${code}`,
         language_code: "hi",
         email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
-      }),
+      },
     );
+    await agree(admin, project.id, person.id);
+    people.push(person);
   }
   const task = await api<{ id: string; task_code: string }>(admin, "POST", "/api/v1/tasks", {
     project_id: project.id,

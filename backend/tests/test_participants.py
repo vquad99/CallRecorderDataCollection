@@ -4,13 +4,14 @@ export, consent history.
 Requirements: PART-001, PART-002, PART-003, PART-004, PART-005, PART-006, PART-007, PART-008, PART-009, PART-011, PART-012, ROLE-007, SEC-010
 """
 
+import uuid
 from typing import Any
 
 import pytest
 from sqlalchemy import select, update
 
 from app.modules.audit.models import AuditLog
-from app.modules.participants.models import Participant
+from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import Project
 from tests.conftest import Api, make_participant, make_project, make_user
 
@@ -187,7 +188,9 @@ def test_contact_export_needs_its_own_permission(world: dict[str, Any]) -> None:
     assert "'=cmd()" in response.text
 
 
-def test_consent_is_separate_history_and_access_controlled(world: dict[str, Any]) -> None:
+def test_consent_is_separate_history_and_access_controlled(world: dict[str, Any], db: Any) -> None:
+    """The consent history lists the participant's own answers and, from before D-129, the
+    consent a moderator noted for a task; only for the people who may see it."""
     pid = world["project"].id
     a = make_participant(world["pa"], pid, "Asha", "+919876543210")
     b = make_participant(world["pa"], pid, "Bina", "+919876543211")
@@ -207,16 +210,28 @@ def test_consent_is_separate_history_and_access_controlled(world: dict[str, Any]
     world["pa"].post(
         f"/api/v1/tasks/{task['id']}/assign", json={"user_id": str(world["mod_user"].id)}
     )
-    for status in ("GIVEN", "WITHDRAWN"):
-        r = world["mod"].post(
-            f"/api/v1/tasks/{task['id']}/consent",
-            json={"participant_id": a["id"], "status": status, "method": "VERBAL_RECORDED"},
+    db.add(
+        ConsentRecord(
+            participant_id=uuid.UUID(a["id"]),
+            project_id=pid,
+            task_id=uuid.UUID(task["id"]),
+            status="WITHDRAWN",
+            method="VERBAL_RECORDED",
+            policy_version="1",
+            captured_by=world["mod_user"].id,
         )
-        assert r.status_code == 201
+    )
+    db.commit()
     history = world["pa"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent").json()
-    assert [h["status"] for h in history] == ["WITHDRAWN", "GIVEN"]
+    assert [(h["status"], h["method"]) for h in history] == [
+        ("WITHDRAWN", "VERBAL_RECORDED"),
+        ("GIVEN", "DIGITAL"),
+    ]
     assert history[0]["policy_version"] == "1"
     assert history[0]["captured_by"] == str(world["mod_user"].id)
+    assert history[1]["captured_by"] is None, "their own answer"
+    on_task = world["mod"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent")
+    assert on_task.status_code == 200, "the moderator of an open task with them"
     assert (
         world["qc"].get(f"/api/v1/projects/{pid}/participants/{a['id']}/consent").status_code == 403
     )

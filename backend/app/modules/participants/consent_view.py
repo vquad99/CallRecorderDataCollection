@@ -2,8 +2,8 @@
 Participants page, and the same thing as a printable file.
 
 It shows the participant's own latest answer on the project's consent form - the form text they
-answered, its version, the answer, when, and the staff review - plus their earlier answers. It
-needs the same right as the consent history, and names the participant by code only in the file.
+answered, its version, the answer and when - plus their earlier answers. It needs the same right
+as the consent history, and names the participant by code only in the file.
 """
 
 from __future__ import annotations
@@ -17,11 +17,10 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
-from app.modules.participants import service
+from app.modules.participants import consent, service
 from app.modules.participants.models import ConsentRecord
 
 ANSWER_WORDS = {"GIVEN": "Agreed", "REFUSED": "Did not agree", "WITHDRAWN": "Withdrew consent"}
-REVIEW_WORDS = {"PENDING": "Waiting for review", "APPROVED": "Approved", "REJECTED": "Sent back"}
 
 
 @dataclass
@@ -29,9 +28,6 @@ class Answer:
     status: str
     answered_at: datetime
     policy_version: str
-    review_status: str | None
-    review_note: str
-    reviewed_at: datetime | None
     link_handed_out: bool = False  # answered on a link shown to staff, not emailed (D-088)
 
 
@@ -52,9 +48,6 @@ def _answer(r: ConsentRecord) -> Answer:
         status=r.status,
         answered_at=r.created_at,
         policy_version=r.policy_version,
-        review_status=r.review_status,
-        review_note=r.review_note,
-        reviewed_at=r.reviewed_at,
         link_handed_out=r.link_shown_to is not None,
     )
 
@@ -66,7 +59,8 @@ def get(
     history = service.consent_history(db, principal, project_id, participant_id)
     project, participant = service.get_in_project(db, principal, project_id, participant_id)
     own = [r for r in history if r.is_own_answer]  # newest first
-    latest = own[0] if own else None
+    # An "agree" staff sent back before D-129 is no answer any more: it is history only.
+    latest = own[0] if own and consent.word(own[0]) else None
     return ConsentForm(
         participant_code=participant.participant_code,
         project_code=project.code,
@@ -75,7 +69,7 @@ def get(
         form_version=latest.policy_version if latest else project.consent_policy_version,
         answered=latest is not None,
         current=_answer(latest) if latest else None,
-        earlier=[_answer(r) for r in own[1:]],
+        earlier=[_answer(r) for r in own if r is not latest],
     )
 
 
@@ -111,12 +105,6 @@ def as_file(
                 else "The participant, on their personal page",
             )
         )
-        if c.review_status:
-            rows.append(_row("Review", REVIEW_WORDS.get(c.review_status, c.review_status)))
-            if c.reviewed_at:
-                rows.append(_row("Reviewed on", _when(c.reviewed_at)))
-            if c.review_note:
-                rows.append(_row("Review note", c.review_note))
     else:
         rows.append(_row("Answer", "Not answered yet"))
     earlier = "".join(

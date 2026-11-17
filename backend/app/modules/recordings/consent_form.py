@@ -1,9 +1,10 @@
 """The consent record that travels with a recording (D-068): one printable HTML file per
 recording, downloaded together with the audio.
 
-It holds, for both participants of the recording's task: the consent the moderator recorded for
-this task, and the participant's own answers on the project's consent form, each with the form
-text they answered, its version and the time. Participants appear by code only, so the file can be
+It holds, for both participants of the recording's task, their own answers on the project's
+consent form, each with the form text they answered, its version and the time; for sessions before
+D-129, also the consent the moderator noted for the task. Participants appear by code only, so the
+file can be
 handed over with the audio without carrying names or phone numbers. HTML, not PDF: it prints the
 same, needs no font files, and shows any script (Hindi and other Indian languages) correctly.
 """
@@ -119,8 +120,12 @@ def render(db: Session, rec: Recording, task: Task, project: Project) -> str:
         sections.append(
             f"<h2>Participant {side.side}: {escape(participant.participant_code)}</h2>"
             f"<table>{_row('Language', participant.language_code)}</table>"
-            f"<h3>Consent for this session</h3>{_events(side.noted, own=False)}"
-            f"<h3>Participant's own answers on the consent form</h3>"
+            + (
+                f"<h3>Consent noted for this session</h3>{_events(side.noted, own=False)}"
+                if side.noted
+                else ""
+            )
+            + f"<h3>Participant's own answers on the consent form</h3>"
             f"{_events(side.own, own=True)}"
         )
     files = "".join(_row(a.kind.replace("_", " ").title(), f"SHA-256 {a.sha256}") for a in assets)

@@ -124,3 +124,62 @@ def test_returned_tasks_leave_the_removed_status(test_database_url: str) -> None
         assert sorted(h.to_status for h in moved) == ["ASSIGNED", "DRAFT"]
         assert all(h.actor_id is None and "D-118" in h.comment for h in moved)
     engine.dispose()
+
+
+def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None:
+    """0027 (D-129): an own consent answer waiting for review counts as accepted, one staff sent
+    back keeps that mark, a consent recorded by staff is left alone; consent.capture leaves
+    every role (and comes back on downgrade)."""
+    from sqlalchemy.orm import Session
+
+    from app.modules.participants.models import ConsentRecord, Participant
+    from tests.conftest import make_project, make_user
+
+    grants = (
+        "SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id "
+        "WHERE p.code = 'consent.capture'"
+    )
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(test_database_url)
+    with Session(engine) as db:
+        project = make_project(db, "MIG")
+        mod = make_user(db, "mig@example.org", ["MODERATOR"], projects=[project])
+        people = [
+            Participant(participant_code=f"P90000{i}", display_label="x", language_code="hi")
+            for i in (1, 2, 3)
+        ]
+        db.add_all(people)
+        db.flush()
+        ids = [p.id for p in people]
+        for pid, review, staff in zip(
+            ids, ("PENDING", "REJECTED", "PENDING"), (None, None, mod.id), strict=True
+        ):
+            db.add(
+                ConsentRecord(
+                    participant_id=pid,
+                    project_id=project.id,
+                    task_id=None,
+                    status="GIVEN",
+                    method="DIGITAL" if staff is None else "WRITTEN",
+                    policy_version="1",
+                    captured_by=staff,
+                    review_status=review,
+                )
+            )
+        db.commit()
+    with engine.begin() as conn:
+        assert conn.execute(text(grants)).scalar_one() == 2  # Super Admin and Moderator
+    command.upgrade(cfg, "head")
+    with Session(engine) as db:
+        reviews = {r.participant_id: r.review_status for r in db.scalars(select(ConsentRecord))}
+        assert [reviews[i] for i in ids] == ["APPROVED", "REJECTED", "PENDING"]
+    with engine.begin() as conn:
+        assert conn.execute(text(grants)).scalar_one() == 0
+        gone = conn.execute(text("SELECT count(*) FROM permissions WHERE code = 'consent.capture'"))
+        assert gone.scalar_one() == 0
+    command.downgrade(cfg, "0026")
+    with engine.begin() as conn:
+        assert conn.execute(text(grants)).scalar_one() == 2
+    engine.dispose()

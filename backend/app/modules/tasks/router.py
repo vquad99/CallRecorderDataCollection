@@ -1,4 +1,4 @@
-"""/api/v1/tasks (TASK-*), consent capture."""
+"""/api/v1/tasks (TASK-*)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client
 from app.modules.auth.models import User
 from app.modules.participants import consent as consents
 from app.modules.participants import service as participants
-from app.modules.participants.models import ConsentMethod, ConsentStatus, Participant
+from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 from app.modules.tasks import bulk, service, workflow
@@ -60,12 +60,9 @@ class PartyOut(BaseModel):
     # The name, for people who may see the participant's profile (null otherwise, D-128).
     display_label: str | None = None
     has_email: bool = False
-    # The participant's current word on consent, found by the platform (D-127): the newer of
-    # their own answer on the consent form and any consent noted for this task.
+    # The participant's answer on the project's consent form as it counts now (D-127, D-129).
     consent_status: str | None
     consent_at: datetime | None
-    consent_source: Literal["FORM", "MODERATOR"] | None = None
-    consent_review: str | None = None  # staff review of a form answer (PENDING, APPROVED, ...)
     may_record: bool = False
 
 
@@ -98,17 +95,15 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
 
     def party(side: consents.SideConsent) -> PartyOut:
         p = db.get_one(Participant, side.participant_id)
-        word = side.newest
         seen = participants.visibility(db, principal, project, p.id)
+        answer = side.latest_own
         return PartyOut(
             id=p.id,
             participant_code=p.participant_code,
             display_label=p.display_label if seen.profile else None,
             has_email=p.email_enc is not None,
-            consent_status=word.status if word else None,
-            consent_at=word.created_at if word else None,
-            consent_source=None if word is None else "FORM" if word.is_own_answer else "MODERATOR",
-            consent_review=word.review_status if word is not None and word.is_own_answer else None,
+            consent_status=side.status,
+            consent_at=answer.created_at if answer and side.status else None,
             may_record=side.may_record,
         )
 
@@ -308,34 +303,6 @@ def transition(
         ip=client_ip(request),
     )
     return detail(db, principal, task)
-
-
-class ConsentBody(BaseModel):
-    participant_id: uuid.UUID
-    status: ConsentStatus
-    method: ConsentMethod
-    note: str = Field(default="", max_length=2000)
-
-
-@router.post("/{task_id}/consent", response_model=TaskDetail, status_code=201)
-def consent(
-    task_id: uuid.UUID,
-    body: ConsentBody,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DbSession,
-) -> TaskDetail:
-    service.capture_consent(
-        db,
-        principal,
-        task_id,
-        body.participant_id,
-        body.status,
-        body.method,
-        body.note,
-        client_ip(request),
-    )
-    return detail(db, principal, service.get_task(db, principal, task_id))
 
 
 class CommentBody(BaseModel):

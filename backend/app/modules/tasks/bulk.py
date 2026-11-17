@@ -5,7 +5,8 @@ form, so the same permissions, project limits and audit entries apply; a failing
 the others and every row gets its own result. Check first (confirm=False), then add.
 
 Columns: participant_a,participant_b,mode,priority,due_date,moderator
-- participant_a, participant_b: participant codes such as P000001 (required).
+- participant_a, participant_b: participant codes such as P000001 (required); both must have
+  agreed to the project's consent form (D-129), which the check already says.
 - mode: face_to_face or telephony; empty = face_to_face, or the project's only mode.
 - priority: low, normal, high or urgent; empty = normal.
 - due_date: YYYY-MM-DD; may be empty.
@@ -136,6 +137,7 @@ def import_csv(
             b = _participant(db, project.id, row.get("participant_b", ""), "B")
             if a.id == b.id:
                 raise _bad("Participant A and B must be different people")
+            service.require_agreed(db, project.id, [a, b], status_code=422)
             mode = _mode(project, row.get("mode", ""))
             if mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
                 raise _bad("Telephony tasks need a phone number for both participants")

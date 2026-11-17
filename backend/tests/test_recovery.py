@@ -26,7 +26,7 @@ from app.modules.recordings import service, worker_dispatch
 from app.modules.recordings.models import AudioAsset, Recording
 from tests import audio_fixtures as fx
 from tests import test_recordings
-from tests.conftest import Api, give_consent
+from tests.conftest import Api
 from tests.test_recordings import START, put
 
 pytestmark = pytest.mark.db
@@ -50,7 +50,6 @@ def _complete_without_processing(
 
 
 def _start(world: dict[str, Any]) -> str:
-    give_consent(world["mod"], world["task"]["id"])
     rid: str = (
         world["mod"]
         .post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START)

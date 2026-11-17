@@ -18,10 +18,9 @@ export interface PortalView {
   language_code: string;
   consent_policy_version: string;
   consent_text: string;
+  /** The answer as it counts now; "I agree" is final (D-129). WITHDRAWN only from before. */
   consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | null;
   consent_at: string | null;
-  consent_review: "PENDING" | "APPROVED" | "REJECTED" | null;
-  consent_review_note: string;
   sessions: PortalSession[];
   accepted_minutes: number;
   recorded_minutes: number;
@@ -33,7 +32,7 @@ const head = (token: string) => ({ "X-Portal-Token": token });
 
 export const getPortal = (token: string) =>
   apiRequest<PortalView>("/api/v1/portal/me", { headers: head(token) });
-export const answerConsent = (token: string, decision: "GIVEN" | "REFUSED" | "WITHDRAWN") =>
+export const answerConsent = (token: string, decision: "GIVEN" | "REFUSED") =>
   apiRequest<PortalView>("/api/v1/portal/consent", {
     method: "POST",
     body: { decision },

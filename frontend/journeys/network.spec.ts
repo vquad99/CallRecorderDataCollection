@@ -8,7 +8,6 @@ import {
   api,
   requireSetup,
   runCode,
-  consentBoth,
   SEEDED,
   SEEDED_PASSWORD,
   setUpTask,
@@ -26,7 +25,6 @@ test("a network drop mid-recording loses nothing", async ({ browser }, info) => 
   await signIn(page, SEEDED.moderator, SEEDED_PASSWORD);
   await page.goto(`/tasks/${setup.taskId}`);
   await page.getByRole("button", { name: "Start session" }).click();
-  await consentBoth(page);
   await page.getByRole("link", { name: "Open the recorder" }).click();
   await page.getByRole("button", { name: "Allow microphone" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();

@@ -1,11 +1,10 @@
 """Participant administration in bulk (D-073): add many from a CSV, assign to another project,
-remove, send consent forms, and review the participants' own consent answers.
+remove.
 
 Every bulk action works one participant at a time through the same checked service functions as
 the single actions, so the same permissions, project limits and audit entries apply; one failing
-row never stops the others and each row gets its own result. Consent forms are checked here and
-emailed after the answer (by the worker when there is one): sending hundreds of emails must not
-hold the request open.
+row never stops the others and each row gets its own result. Everyone who joins a project is
+emailed its consent form afterwards (D-129, by the router after the answer).
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -23,13 +22,10 @@ from app.core.contact import clean_email, normalize_phone
 from app.core.csvio import read_rows
 from app.core.errors import AppError
 from app.core.permissions import Perm
-from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher
-from app.modules.participants import service
-from app.modules.participants.consent import latest_own_answer
-from app.modules.participants.models import ConsentRecord, ParticipantPortalLink
-from app.modules.portal import service as portal
+from app.modules.participants import consent, service
+from app.modules.participants.models import ParticipantPortalLink
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 
@@ -50,6 +46,7 @@ class RowResult:
     ok: bool
     message: str
     participant_code: str | None = None
+    participant_id: uuid.UUID | None = None
 
 
 def import_csv(
@@ -119,7 +116,7 @@ def import_csv(
                 ),
                 ip,
             )
-            results.append(RowResult(i, name, True, "Added", created.participant_code))
+            results.append(RowResult(i, name, True, "Added", created.participant_code, created.id))
         except AppError as exc:
             db.rollback()
             results.append(RowResult(i, name, False, exc.message))
@@ -143,14 +140,16 @@ def bulk(
     target_project_id: uuid.UUID | None,
     reason: str,
     ip: str | None,
-) -> list[BulkResult]:
+) -> tuple[Project | None, list[BulkResult]]:
+    """Assign to another project or remove. Returns the project assigned to (None when removing)
+    and each participant's result."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     target: Project | None = None
     if action == "assign":
         if target_project_id is None or target_project_id == project.id:
             raise AppError("Choose another project", code="TARGET_REQUIRED", status_code=422)
         target = get_manageable(db, principal, target_project_id, Perm.PARTICIPANTS_MANAGE)
-    if action == "remove" and not reason.strip():
+    elif not reason.strip():
         raise AppError("Give a reason for removing", code="REASON_REQUIRED", status_code=422)
     results: list[BulkResult] = []
     for pid in dict.fromkeys(participant_ids):
@@ -161,113 +160,36 @@ def bulk(
             if target is not None:
                 service.link_existing(db, principal, target.id, code, ip)
                 message = "Assigned"
-            elif action == "remove":
+            else:
                 service.delete_participant(db, principal, project.id, pid, reason, ip)
                 message = "Removed"
-            else:
-                # Checked now; emailed after the answer (portal.send_links_job).
-                portal.email_of(participant)
-                portal.check_linkable(participant)
-                message = "Consent form will be emailed"
             results.append(BulkResult(pid, code, True, message))
         except AppError as exc:
             db.rollback()
             results.append(BulkResult(pid, code, False, exc.message))
-    return results
-
-
-def review_consent(
-    db: Session,
-    principal: Principal,
-    project_id: uuid.UUID,
-    participant_id: uuid.UUID,
-    decision: str,
-    note: str,
-    ip: str | None,
-) -> ConsentRecord:
-    """Approve or reject the participant's own latest "agree" answer."""
-    project, participant = service.get_in_project(
-        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
-    )
-    answer = latest_own_answer(db, participant.id, project.id)
-    if answer is None or answer.status != "GIVEN":
-        raise AppError(
-            "There is no consent answer to review", code="NOTHING_TO_REVIEW", status_code=409
-        )
-    if answer.link_shown_to == principal.user_id:
-        # They could have opened the link and answered themselves (D-088).
-        raise AppError(
-            "You handed this participant their link, so another administrator must review "
-            "this answer",
-            code="SAME_PERSON",
-            status_code=409,
-        )
-    if decision == "REJECTED" and not note.strip():
-        raise AppError(
-            "Say why, so the participant knows what to correct",
-            code="NOTE_REQUIRED",
-            status_code=422,
-        )
-    answer.review_status = decision
-    answer.review_note = note.strip()
-    answer.reviewed_by = principal.user_id
-    answer.reviewed_at = datetime.now(UTC)
-    audit.record(
-        db,
-        action=f"consent.review_{decision.lower()}",
-        entity_type="participant",
-        entity_id=participant.id,
-        project_id=project.id,
-        actor_id=principal.user_id,
-        ip=ip,
-    )
-    db.commit()
-    return answer
+    return target, results
 
 
 def consent_overview(
     db: Session, project: Project, participant_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, tuple[str, str | None, bool]]:
-    """Per participant: (own answer, review, has a working link). Two queries for a page."""
-    if not participant_ids:
-        return {}
-    newest = (
-        select(
-            ConsentRecord.participant_id,
-            func.max(ConsentRecord.created_at).label("at"),
-        )
-        .where(
-            ConsentRecord.project_id == project.id,
-            ConsentRecord.participant_id.in_(participant_ids),
-            ConsentRecord.is_own_answer,
-        )
-        .group_by(ConsentRecord.participant_id)
-        .subquery()
-    )
-    answers = {
-        r.participant_id: (r.status, r.review_status)
-        for r in db.execute(
-            select(
-                ConsentRecord.participant_id, ConsentRecord.status, ConsentRecord.review_status
-            ).join(
-                newest,
-                (newest.c.participant_id == ConsentRecord.participant_id)
-                & (newest.c.at == ConsentRecord.created_at),
+) -> dict[uuid.UUID, tuple[str, bool]]:
+    """Per participant: (consent answer as it counts now, or NONE; has a working link). Two
+    queries for a page."""
+    answers = consent.latest_own_answers(db, project.id, participant_ids)
+    linked = (
+        set(
+            db.scalars(
+                select(ParticipantPortalLink.participant_id).where(
+                    ParticipantPortalLink.project_id == project.id,
+                    ParticipantPortalLink.participant_id.in_(participant_ids),
+                    ParticipantPortalLink.revoked_at.is_(None),
+                    ParticipantPortalLink.expires_at > datetime.now(UTC),
+                )
             )
         )
+        if participant_ids
+        else set()
+    )
+    return {
+        pid: (consent.word(answers.get(pid)) or "NONE", pid in linked) for pid in participant_ids
     }
-    linked = set(
-        db.scalars(
-            select(ParticipantPortalLink.participant_id).where(
-                ParticipantPortalLink.project_id == project.id,
-                ParticipantPortalLink.participant_id.in_(participant_ids),
-                ParticipantPortalLink.revoked_at.is_(None),
-                ParticipantPortalLink.expires_at > datetime.now(UTC),
-            )
-        )
-    )
-    out = {}
-    for pid in participant_ids:
-        status, review = answers.get(pid, ("NONE", None))
-        out[pid] = (status, review, pid in linked)
-    return out

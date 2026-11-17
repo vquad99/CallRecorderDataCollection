@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import text
 
 from tests import test_audio_qc, test_export_jobs, test_telephony
-from tests.conftest import Api, make_user, set_status
+from tests.conftest import Api, agree, make_user, set_status
 
 pytestmark = pytest.mark.db
 
@@ -50,6 +50,8 @@ def board(w: dict[str, Any]) -> dict[str, Any]:
         ).json()
         for name, dialect, district in (("Chitra", "Madurai", "Madurai"), ("Devi", "", ""))
     ]
+    for person in people:  # a task is only for people who agreed (D-129)
+        agree(pa, pid, person["id"])
     made = pa.post(
         "/api/v1/tasks",
         json={

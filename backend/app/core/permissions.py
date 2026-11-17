@@ -31,7 +31,6 @@ class Perm(StrEnum):
     PARTICIPANTS_MANAGE = "participants.manage"
     PARTICIPANTS_CONTACT = "participants.contact"
     PARTICIPANTS_EXPORT = "participants.export"
-    CONSENT_CAPTURE = "consent.capture"
     CONSENT_VIEW = "consent.view"
     TASKS_VIEW = "tasks.view"
     TASKS_ASSIGN = "tasks.assign"
@@ -80,7 +79,6 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Perm]] = {
             Perm.PROJECTS_VIEW,
             Perm.PARTICIPANTS_VIEW,
             Perm.PARTICIPANTS_CONTACT,
-            Perm.CONSENT_CAPTURE,
             Perm.CONSENT_VIEW,
             Perm.TASKS_VIEW,
             Perm.CALLS_START,

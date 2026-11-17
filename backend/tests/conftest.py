@@ -290,9 +290,41 @@ def email_for(label: str) -> str:
     return f"{name}.{uuid.uuid4().hex[:8]}@example.org"
 
 
+def agree(api: Api, project_id: Any, participant_id: Any) -> None:
+    """The participant agrees to the project's consent form, as their personal page records it
+    (D-129: tasks are made only for people who agreed), written straight into the database."""
+    from app.modules.participants.models import ConsentRecord
+    from app.modules.projects.models import Project
+
+    with api.client.app.state.session_factory() as db:  # type: ignore[attr-defined]
+        project = db.get(Project, uuid.UUID(str(project_id)))
+        db.add(
+            ConsentRecord(
+                participant_id=uuid.UUID(str(participant_id)),
+                project_id=project.id,
+                task_id=None,
+                status="GIVEN",
+                method="DIGITAL",
+                policy_version=project.consent_policy_version,
+                captured_by=None,
+                note="Agreed in a test",
+                form_text=project.consent_text,
+            )
+        )
+        db.commit()
+
+
 def make_participant(
-    api: Api, project_id: Any, label: str, phone: str | None = None, lang: str = "hi"
+    api: Api,
+    project_id: Any,
+    label: str,
+    phone: str | None = None,
+    lang: str = "hi",
+    *,
+    agreed: bool = True,
 ) -> Any:
+    """A new participant of the project who, unless `agreed` is False, agreed to its consent
+    form."""
     body: dict[str, Any] = {
         "display_label": label,
         "language_code": lang,
@@ -302,6 +334,8 @@ def make_participant(
         body["phone"] = phone
     response = api.post(f"/api/v1/projects/{project_id}/participants", json=body)
     assert response.status_code == 201, response.text
+    if agreed:
+        agree(api, project_id, response.json()["id"])
     return response.json()
 
 
@@ -313,22 +347,6 @@ def set_status(db: Any, task_id: Any, status: str, held_from: str | None = None)
 
     db.execute(_update(Task).where(Task.id == task_id).values(status=status, held_from=held_from))
     db.commit()
-
-
-def give_consent(api: Api, task_id: Any) -> None:
-    """Both participants consent to the recording (D-119: recording waits for it). Done by the
-    task's moderator while the task is assigned or in progress."""
-    task = api.get(f"/api/v1/tasks/{task_id}").json()
-    for side in ("participant_a", "participant_b"):
-        response = api.post(
-            f"/api/v1/tasks/{task_id}/consent",
-            json={
-                "participant_id": task[side]["id"],
-                "status": "GIVEN",
-                "method": "VERBAL_RECORDED",
-            },
-        )
-        assert response.status_code == 201, response.text
 
 
 def drop_email(db: Any, participant_id: Any) -> None:

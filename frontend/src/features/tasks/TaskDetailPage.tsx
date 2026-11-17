@@ -333,18 +333,15 @@ function Assignment({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   );
 }
 
-/** Consent comes from each participant's own consent form (D-127): nobody ticks it here. While
- * someone has not agreed, this card says who, and people who manage participants can email them
- * the form. Calling and recording wait until both have agreed (D-119). */
+/** Consent comes from each participant's own consent form (D-127): nobody ticks it here. Tasks
+ * are made only for people who agreed (D-129), so this card shows for older tasks only: it says
+ * who has not agreed, and people who manage participants can email them the form again. Calling
+ * and recording wait until both have agreed (D-119). */
 function ConsentStatus({ task }: { task: work.TaskDetail }) {
   const { can } = useAuth();
   const canSend = can("participants.manage");
   const { busy, error, message, run } = useAction();
-  const send = (p: work.Party) =>
-    void run(async () => {
-      await work.emailPortalLink(task.project_id, p.id);
-      return `Consent form emailed to ${p.display_label ?? p.participant_code}.`;
-    }, p.id);
+  const send = (p: work.Party) => void run(() => work.emailConsentForm(task.project_id, p), p.id);
   const parties = [task.participant_a, task.participant_b];
   return (
     <section className="card consent" aria-labelledby="consent-title">
@@ -373,7 +370,7 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
                   disabled={busy !== null}
                   onClick={() => send(p)}
                 >
-                  Email consent form
+                  Email consent form again
                 </Button>
               ) : (
                 <span className="muted">Ask your admin to send them the consent form.</span>
@@ -398,13 +395,9 @@ function PartyName({ party }: { party: work.Party }) {
   );
 }
 
-/** A participant's current word on consent as a coloured chip: "Agreed" only when it lets the
- * recording go ahead (a form answer sent back by staff does not). */
+/** A participant's answer on the consent form as a coloured chip, as the server counts it. */
 function ConsentChip({ party }: { party: work.Party }) {
-  const sentBack = party.consent_status === "GIVEN" && !party.may_record;
-  const { label, tone } = sentBack
-    ? { label: "Sent back", tone: "danger" as const }
-    : consentAnswer(party.consent_status);
+  const { label, tone } = consentAnswer(party.consent_status);
   return <StatusBadge tone={tone} label={label} />;
 }
 

@@ -519,6 +519,8 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
     people = []
     for side in consent.for_task(db, task):
         participant = db.get_one(Participant, side.participant_id)
+        # The consent that counts is the answer on the form (D-129); a session consent was noted
+        # by the moderator only before D-129.
         session, own = side.latest_noted, side.latest_own
         people.append(
             {
@@ -528,9 +530,8 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
                 "session_consent": session.status if session else None,
                 "session_consent_at": _iso(session.created_at) if session else None,
                 "session_consent_method": session.method if session else None,
-                "consent_form_answer": own.status if own else None,
-                "consent_form_version": own.policy_version if own else None,
-                "consent_form_review": own.review_status if own else None,
+                "consent_form_answer": side.status,
+                "consent_form_version": own.policy_version if own and side.status else None,
             }
         )
     results = [r for r in results_for(db, task.id) if r.recording_id == rec.id]

@@ -1,6 +1,6 @@
 // Participants, tasks and audit-log API calls (Phase 3).
 import type { TaskStatus } from "../lib/labels";
-import { apiRequest, query, type Page } from "./client";
+import { ApiError, apiRequest, query, type Page } from "./client";
 
 export type { TaskStatus };
 
@@ -21,9 +21,9 @@ export interface Participant {
   consent_visible: boolean;
   email: string | null; // only for people who may see contact details
   has_email: boolean;
-  /** The participant's own answer on the consent form; "NONE" = not answered yet. */
+  /** The participant's own answer on the consent form as it counts now (D-129); "NONE" = not
+   * answered yet. WITHDRAWN only on answers from before D-129. */
   consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "NONE" | null;
-  consent_review: "PENDING" | "APPROVED" | "REJECTED" | null;
   link_active: boolean | null;
   /** Minutes in this project (D-095); only for people who may export it. Payable = half of
    * approved, since every conversation has two participants. */
@@ -31,6 +31,12 @@ export interface Participant {
   notes: string | null;
   deleted: boolean;
   created_at: string;
+}
+
+/** A participant just added to a project, with what happened to their consent form email: it
+ * goes out by itself (D-129), e.g. "Consent form emailed.". */
+export interface AddedParticipant extends Participant {
+  consent_email: string;
 }
 
 export interface ParticipantMinutes {
@@ -80,12 +86,10 @@ export interface Party {
   /** The name, for people who may see the participant's profile (null otherwise). */
   display_label: string | null;
   has_email: boolean;
-  /** The participant's current word on consent, found by the platform (D-127). */
+  /** The participant's answer on the project's consent form as it counts now (D-127, D-129). */
   consent_status: string | null;
   consent_at: string | null;
-  consent_source: "FORM" | "MODERATOR" | null;
-  consent_review: string | null;
-  /** True when this word lets the call and the recording go ahead. */
+  /** True when this answer lets the call and the recording go ahead. */
   may_record: boolean;
 }
 
@@ -149,12 +153,12 @@ export interface LinkCandidate {
 export const linkCandidates = (projectId: string, search: string) =>
   apiRequest<LinkCandidate[]>(`${pp(projectId)}/link-candidates${query({ search })}`);
 export const linkParticipant = (projectId: string, participantCode: string) =>
-  apiRequest<Participant>(`${pp(projectId)}/link`, {
+  apiRequest<AddedParticipant>(`${pp(projectId)}/link`, {
     method: "POST",
     body: { participant_code: participantCode },
   });
 export const createParticipant = (projectId: string, body: ParticipantFields) =>
-  apiRequest<Participant>(pp(projectId), { method: "POST", body });
+  apiRequest<AddedParticipant>(pp(projectId), { method: "POST", body });
 export const correctParticipant = (projectId: string, id: string, body: ParticipantFields) =>
   apiRequest<Participant>(`${pp(projectId)}/${id}`, { method: "PATCH", body });
 export const deleteParticipant = (projectId: string, id: string, reason: string) =>
@@ -187,11 +191,6 @@ export const transitionTask = (id: string, to: TaskStatus, reasonCode: string, c
     method: "POST",
     body: { to, reason_code: reasonCode || null, comment },
   });
-export const captureConsent = (id: string, participantId: string, status: string, method: string) =>
-  apiRequest<TaskDetail>(`/api/v1/tasks/${id}/consent`, {
-    method: "POST",
-    body: { participant_id: participantId, status, method },
-  });
 export const addComment = (id: string, body: string) =>
   apiRequest<TimelineEntry>(`/api/v1/tasks/${id}/comments`, { method: "POST", body: { body } });
 export const getTimeline = (id: string) =>
@@ -209,6 +208,24 @@ export const emailPortalLink = (projectId: string, participantId: string) =>
     `${pp(projectId)}/${participantId}/portal-link/email`,
     { method: "POST" },
   );
+
+/** "Email consent form again": the one way to send the consent form by hand, for an email that
+ * was lost; everyone is emailed it by themselves when they join a project (D-129). Says what was
+ * done. */
+export async function emailConsentForm(
+  projectId: string,
+  p: { id: string; participant_code: string; display_label: string | null },
+): Promise<string> {
+  const r = await emailPortalLink(projectId, p.id);
+  if (!r.sent) {
+    throw new ApiError({
+      status: 0,
+      code: "EMAIL_NOT_SENT",
+      message: "The email could not be sent.",
+    });
+  }
+  return `Consent form emailed to ${p.display_label ?? p.participant_code}.`;
+}
 
 export interface ImportResult {
   rows: {
@@ -251,30 +268,17 @@ export interface BulkResult {
 export const bulkParticipants = (
   projectId: string,
   body: {
-    action: "assign" | "remove" | "send_consent";
+    action: "assign" | "remove";
     participant_ids: string[];
     target_project_id?: string;
     reason?: string;
   },
 ) => apiRequest<BulkResult>(`${pp(projectId)}/bulk`, { method: "POST", body });
-export const reviewConsent = (
-  projectId: string,
-  participantId: string,
-  decision: "APPROVED" | "REJECTED",
-  note = "",
-) =>
-  apiRequest<Consent>(`${pp(projectId)}/${participantId}/consent-review`, {
-    method: "POST",
-    body: { decision, note },
-  });
 
 export interface ConsentAnswer {
   status: "GIVEN" | "REFUSED" | "WITHDRAWN";
   answered_at: string;
   policy_version: string;
-  review_status: "PENDING" | "APPROVED" | "REJECTED" | null;
-  review_note: string;
-  reviewed_at: string | null;
 }
 export interface ConsentFormView {
   participant_code: string;
@@ -299,10 +303,6 @@ export interface ParticipantSession {
   created_at: string;
   other_participant_code: string;
   moderator: string | null;
-  /** The consent noted for this person in this session; empty when none was noted yet. */
-  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | null;
-  consent_method: string | null;
-  consent_at: string | null;
   recordings: number;
   recording_seconds: number | null;
   recorded_at: string | null;

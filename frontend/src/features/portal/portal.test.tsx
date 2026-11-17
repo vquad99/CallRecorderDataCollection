@@ -8,6 +8,7 @@ import { PORTAL } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
+const PORTAL_AT = "2026-11-09T06:00:00Z";
 const anonymous = {
   "GET /api/v1/auth/csrf": () => [204, null] as [number, unknown],
   "GET /api/v1/auth/me": () =>
@@ -32,27 +33,48 @@ describe("participant page", () => {
     });
   });
 
-  it("needs the form to be read before agreeing, then shows the answer and offers withdrawal", async () => {
+  it("needs the form to be read before agreeing, then shows the date and nothing to change (D-129)", async () => {
     const { calls } = fakeApi({
       ...anonymous,
       "GET /api/v1/portal/me": () => [200, PORTAL],
       "POST /api/v1/portal/consent": () => [
         200,
-        { ...PORTAL, consent_status: "GIVEN", consent_at: "2026-11-10T00:00:00Z" },
+        { ...PORTAL, consent_status: "GIVEN", consent_at: "2026-11-10T06:00:00Z" },
       ],
     });
     renderAt("/portal#secret-link-token-0123456789");
     const agree = await screen.findByRole("button", { name: "I agree" });
     expect(agree).toBeDisabled();
+    expect(screen.getByText(/your answer is final/)).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("I have read and understood this form"));
     await userEvent.click(agree);
-    expect(await screen.findByText("You agreed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Withdraw my consent" })).toBeInTheDocument();
+    expect(await screen.findByText("You agreed on 10 Nov 2026.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/withdraw/i)).not.toBeInTheDocument();
     await waitFor(() =>
       expect(calls.find((c) => c.path === "/api/v1/portal/consent")?.body).toEqual({
         decision: "GIVEN",
       }),
     );
+  });
+
+  it("lets someone who did not agree agree later", async () => {
+    const refused = { ...PORTAL, consent_status: "REFUSED" as const, consent_at: PORTAL_AT };
+    const { calls } = fakeApi({
+      ...anonymous,
+      "GET /api/v1/portal/me": () => [200, refused],
+      "POST /api/v1/portal/consent": () => [200, { ...refused, consent_status: "GIVEN" }],
+    });
+    renderAt("/portal#secret-link-token-0123456789");
+    expect(await screen.findByText("You did not agree")).toBeInTheDocument();
+    expect(screen.getByText(/You can still agree\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I do not agree" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("I have read and understood this form"));
+    await userEvent.click(screen.getByRole("button", { name: "I agree" }));
+    expect(await screen.findByText(/^You agreed on /)).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/portal/consent").map((c) => c.body)).toEqual([
+      { decision: "GIVEN" },
+    ]);
   });
 
   it("explains a link without its secret and asks nothing of the server", async () => {

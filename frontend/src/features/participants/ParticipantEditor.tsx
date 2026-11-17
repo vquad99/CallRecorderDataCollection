@@ -3,7 +3,7 @@
 // to the row that was clicked (D-104).
 import { useState, type ReactNode } from "react";
 
-import { ApiError } from "../../api/client";
+import type { ApiError } from "../../api/client";
 import type { Language } from "../../api/projects";
 import * as work from "../../api/work";
 import { Button } from "../../components/form/Button";
@@ -30,18 +30,9 @@ export const EMPTY_PARTICIPANT: work.ParticipantFields = {
   notes: "",
 };
 
-/** Emails the participant the link to their consent form; says what was done. */
-export async function emailConsentForm(projectId: string, p: work.Participant): Promise<string> {
-  const r = await work.emailPortalLink(projectId, p.id);
-  if (!r.sent) {
-    throw new ApiError({
-      status: 0,
-      code: "EMAIL_NOT_SENT",
-      message: "The email could not be sent.",
-    });
-  }
-  return `Consent form sent to ${p.participant_code}.`;
-}
+/** Shown once a participant is added: the server says what happened to their consent form. */
+export const addedText = (p: work.AddedParticipant, where = "") =>
+  `${p.participant_code} added${where}. ${p.consent_email}`;
 
 /** The form's starting values for an existing participant. A masked phone or a hidden email is
  * not sent back, so the stored one is kept. */
@@ -160,7 +151,8 @@ export function ParticipantForm({
   );
 }
 
-/** Every consent this participant gave, refused or withdrew, newest first. */
+/** Every consent answer of this participant, newest first; older ones may have been noted by a
+ * moderator (before D-129). */
 export function ConsentList({
   projectId,
   participantId,
@@ -205,7 +197,8 @@ export function useParticipantWindows({
 }: {
   projectId: string;
   languages: readonly Language[];
-  /** After an add or an edit, with what to tell the person ("P000003 added."). */
+  /** After an add or an edit, with what to tell the person ("P000003 added. Consent form
+   * emailed."). */
   onSaved: (message: string) => void;
 }) {
   const [opened, setOpened] = useState<Opened | null>(null);
@@ -227,11 +220,11 @@ export function useParticipantWindows({
           error={error}
           onSubmit={(fields) =>
             void run(async () => {
-              const saved = editing
-                ? await work.correctParticipant(projectId, editing.id, fields)
-                : await work.createParticipant(projectId, fields);
+              const text = editing
+                ? `${(await work.correctParticipant(projectId, editing.id, fields)).participant_code} saved.`
+                : addedText(await work.createParticipant(projectId, fields));
               close();
-              onSaved(`${saved.participant_code} ${editing ? "saved" : "added"}.`);
+              onSaved(text);
             })
           }
         />

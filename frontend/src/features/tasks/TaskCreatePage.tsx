@@ -46,9 +46,9 @@ function BulkTasks({ projectId }: { projectId: string }) {
       <p className="muted">
         Paste rows or choose a CSV file, one task per line. First line:{" "}
         <code>participant_a,participant_b,mode,priority,due_date,moderator</code>. Write
-        participants by their code (P000001). Mode, priority, due date (YYYY-MM-DD) and moderator
-        (their email) may be empty; with a moderator the task is assigned at once. Check the rows
-        first; only rows without a problem are added.
+        participants by their code (P000001); both must have agreed to the consent form. Mode,
+        priority, due date (YYYY-MM-DD) and moderator (their email) may be empty; with a moderator
+        the task is assigned at once. Check the rows first; only rows without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-tasks-csv" className="field__label">
@@ -174,18 +174,16 @@ export function TaskCreatePage() {
           : []),
       ]
     : [];
-  const options =
-    people.state.status === "loaded" && people.state.data
-      ? people.state.data.items.map((p) => ({
-          value: p.id,
-          label: `${p.participant_code}${p.display_label ? ` ${p.display_label}` : ""}${p.has_phone ? "" : " (no phone)"}`,
-        }))
-      : [];
+  const listed = people.state.status === "loaded" ? people.state.data : null;
+  // A task is only for people who agreed to the project's consent form (D-129).
+  const agreed = (listed?.items ?? []).filter((p) => p.consent_status === "GIVEN");
+  const options = agreed.map((p) => ({
+    value: p.id,
+    label: `${p.participant_code}${p.display_label ? ` ${p.display_label}` : ""}${p.has_phone ? "" : " (no phone)"}`,
+  }));
   // A task needs two people: say so instead of showing two empty lists.
-  const tooFew =
-    people.state.status === "loaded" && people.state.data && people.state.data.total < 2
-      ? people.state.data.total
-      : null;
+  const tooFew = listed && listed.total < 2 ? listed.total : null;
+  const leftOut = listed !== null && listed.total > agreed.length;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -246,6 +244,13 @@ export function TaskCreatePage() {
             two.{" "}
             <Link to={`/projects/${projectId}/participants`}>Add participants to the project</Link>{" "}
             first, then come back here.
+          </p>
+        ) : projectId && leftOut ? (
+          <p className="notice notice--info" role="status">
+            Only people who agreed to the consent form can be chosen.
+            {agreed.length < 2
+              ? ` ${agreed.length === 0 ? "Nobody here has" : "Only 1 person here has"} agreed yet, and a task needs two.`
+              : ""}
           </p>
         ) : null}
         {projectId ? (

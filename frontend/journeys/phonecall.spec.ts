@@ -7,8 +7,8 @@ import { expect, test } from "@playwright/test";
 
 import {
   ADMIN_EMAIL,
+  agree,
   api,
-  consentBoth,
   playToEnd,
   requireSetup,
   runCode,
@@ -38,13 +38,14 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   const status = await api<{ configured: boolean }>(admin, "GET", "/api/v1/telephony/status");
   test.skip(!status.configured, "the backend has no phone provider configured (TXCONTACT_*)");
 
-  // Set-up through the API as the Super Admin: a telephony project, two people with phone
-  // numbers, and tasks given to the seeded moderator.
+  // Set-up through the API as the Super Admin: a telephony project with a consent form, people
+  // with phone numbers who agreed to it (D-129), and tasks given to the seeded moderator.
   const project = await api<{ id: string }>(admin, "POST", "/api/v1/projects", {
     code,
     name: `Journey ${code}`,
     allows_telephony: true,
     allows_face_to_face: false,
+    consent_text: `I agree to be recorded for ${code}.`,
   });
   await api(admin, "POST", `/api/v1/projects/${project.id}/status`, { status: "ACTIVE" });
   await api(admin, "PUT", `/api/v1/projects/${project.id}/languages`, {
@@ -57,13 +58,21 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   );
   const moderatorId = found.items.find((u) => u.email === SEEDED.moderator)?.id ?? "";
   await api(admin, "POST", `/api/v1/projects/${project.id}/members`, { user_id: moderatorId });
-  const person = (label: string, number: string) =>
-    api<Participant>(admin, "POST", `/api/v1/projects/${project.id}/participants`, {
-      display_label: `${label} ${code}`,
-      language_code: "hi",
-      phone: number,
-      email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
-    });
+  const person = async (label: string, number: string) => {
+    const made = await api<Participant>(
+      admin,
+      "POST",
+      `/api/v1/projects/${project.id}/participants`,
+      {
+        display_label: `${label} ${code}`,
+        language_code: "hi",
+        phone: number,
+        email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
+      },
+    );
+    await agree(admin, project.id, made.id);
+    return made;
+  };
   const asha = await person("Asha", phone("123"));
   const bina = await person("Bina", phone("456"));
   const refused = await person("Refused", phone("8888")); // the stand-in refuses this number
@@ -93,10 +102,8 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   await test.step("a call the provider refuses is shown as refused, not as a call", async () => {
     await moderator.goto(`/tasks/${blocked.id}`);
     await moderator.getByRole("button", { name: "Start session" }).click();
-    // D-127: nobody is called before both have agreed on their consent form.
-    await expect(moderator.getByRole("button", { name: "Start call" })).toBeDisabled();
-    await expect(moderator.getByText(/has not agreed on the consent form yet/)).toBeVisible();
-    await consentBoth(moderator);
+    // Both agreed to the consent form before the task was made (D-129): nobody waits for it.
+    await expect(moderator.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("alert")).toContainText("The last call could not be placed");
     await expect(moderator.getByText("Call could not be placed").first()).toBeVisible();
@@ -106,7 +113,6 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   await test.step("the moderator calls and follows one button at a time", async () => {
     await moderator.goto(`/tasks/${main.id}`);
     await moderator.getByRole("button", { name: "Start session" }).click();
-    await consentBoth(moderator);
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("heading", { name: "On the call" })).toBeVisible();
     // The call's history in plain words; the provider's own answer is for the Super Admin only.
@@ -210,7 +216,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(session).toContainText("Phone call");
     await expect(session).toContainText("Participant A");
     await expect(session).toContainText(bina.participant_code);
-    await expect(session).toContainText("Agreed");
+    await expect(panel).toContainText("AnswerAgreed"); // the consent form, once (D-129)
     await expect(session).toContainText(/[4-9] s/);
     await session.getByRole("link", { name: main.task_code }).click();
     await expect(admin).toHaveURL(new RegExp(`/tasks/${main.id}$`));

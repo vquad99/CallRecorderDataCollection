@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.api.deps import AppSettings, Cipher, Mailer
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.participants.models import ConsentStatus, ReviewStatus
+from app.modules.participants.models import ConsentStatus
 from app.modules.portal import service
 
 public_router = APIRouter(prefix="/portal", tags=["participant page"])
@@ -50,10 +50,9 @@ class PortalOut(BaseModel):
     language_code: str
     consent_policy_version: str
     consent_text: str
+    # The answer as it counts now (D-129); empty when there is none yet.
     consent_status: ConsentStatus | None
     consent_at: datetime | None
-    consent_review: ReviewStatus | None
-    consent_review_note: str
     sessions: list[SessionOut]
     accepted_minutes: float
     recorded_minutes: float
@@ -67,7 +66,8 @@ def my_page(token: Token, db: DbSession) -> PortalOut:
 
 
 class ConsentBody(BaseModel):
-    decision: ConsentStatus
+    # Nobody can withdraw consent (D-129): WITHDRAWN is refused with 422.
+    decision: Literal["GIVEN", "REFUSED"]
 
 
 @public_router.post("/consent", response_model=PortalOut)

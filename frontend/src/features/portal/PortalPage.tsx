@@ -1,12 +1,12 @@
 // A participant's personal page (D-067): opened from a private link, no account. Shows the
 // participant's own details, minutes and sessions (read-only) and the project's consent form with
-// their answer (D-100). The same page, without the answer buttons, is the Super Admin's view.
+// their answer (D-100). The answer counts at once; "I agree" is final, with nothing to withdraw
+// (D-129). The same page, without the answer buttons, is the Super Admin's view.
 import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { ApiError } from "../../api/client";
 import { answerConsent, getPortal, type PortalView } from "../../api/portal";
-import { useConfirm } from "../../components/ConfirmDialog";
 import { Button } from "../../components/form/Button";
 import { BrandMark, Icon, IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
@@ -29,7 +29,8 @@ const TONE: Record<string, Tone> = {
   Planned: "info",
   "Not used": "neutral",
 };
-/** The participant's own answer, in their words; the colours are the shared consent ones. */
+/** The participant's own answer, in their words; the colours are the shared consent ones.
+ * "Withdrew" only on answers from before D-129. */
 const ANSWER: Record<string, string> = {
   GIVEN: "You agreed",
   REFUSED: "You did not agree",
@@ -51,31 +52,11 @@ function Consent({
 }) {
   const [read, setRead] = useState(false);
   const { busy, error, run } = useAction();
-  const confirm = useConfirm();
-  const sentBack = view.consent_status === "GIVEN" && view.consent_review === "REJECTED";
-  const answer: { label: string; tone: Tone } | undefined = sentBack
-    ? { label: "Please answer again", tone: "warning" }
-    : view.consent_status === "GIVEN" && view.consent_review === "APPROVED"
-      ? { label: "You agreed · confirmed by the team", tone: "success" }
-      : view.consent_status
-        ? yourAnswer(view.consent_status)
-        : undefined;
-
-  const send = (decision: "GIVEN" | "REFUSED" | "WITHDRAWN") =>
+  const answer = view.consent_status ? yourAnswer(view.consent_status) : undefined;
+  const send = (decision: "GIVEN" | "REFUSED") =>
     void run(async () => {
       if (token) onChange(await answerConsent(token, decision));
     }, decision);
-  const withdraw = () =>
-    confirm.ask({
-      title: "Withdraw your consent?",
-      message:
-        "The project team is told, and your recordings are no longer used. You can agree again later.",
-      confirmLabel: "Withdraw my consent",
-      danger: true,
-      action: async () => {
-        if (token) onChange(await answerConsent(token, "WITHDRAWN"));
-      },
-    });
 
   return (
     <section className="card stack" aria-labelledby="consent-title">
@@ -93,28 +74,25 @@ function Consent({
       {view.consent_text.trim() ? (
         <>
           <div className="consent-text">{view.consent_text}</div>
-          <p className="muted">
-            Version {view.consent_policy_version}
-            {view.consent_at ? ` · your answer was saved on ${day(view.consent_at)}` : ""}
-          </p>
-          {sentBack ? (
-            <p className="notice notice--error" role="status">
-              The project team could not accept your answer: {view.consent_review_note} Please read
-              the form and answer again.
+          <p className="muted">Version {view.consent_policy_version}</p>
+          {view.consent_status === "GIVEN" ? (
+            <p className="notice notice--success" role="status">
+              You agreed on {view.consent_at ? day(view.consent_at) : "this form"}.
             </p>
-          ) : null}
-          {!token ? null : view.consent_status === "GIVEN" && !sentBack ? (
-            <div className="actions">
-              <Button variant="secondary" onClick={withdraw}>
-                Withdraw my consent
-              </Button>
-            </div>
-          ) : (
+          ) : !token ? null : (
             <>
+              {view.consent_at ? (
+                <p className="muted">
+                  Your answer was saved on {day(view.consent_at)}. You can still agree.
+                </p>
+              ) : null}
               <label className="checkbox">
                 <input type="checkbox" checked={read} onChange={(e) => setRead(e.target.checked)} />
                 I have read and understood this form
               </label>
+              <p className="muted">
+                If you agree, your answer is final: it cannot be changed later.
+              </p>
               <div className="actions">
                 <Button
                   busy={busy === "GIVEN"}
@@ -141,7 +119,6 @@ function Consent({
         <p className="muted">The project team has not published the consent form yet.</p>
       )}
       <ErrorNotice error={error} />
-      {confirm.dialog}
     </section>
   );
 }

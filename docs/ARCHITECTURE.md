@@ -88,7 +88,7 @@ TA-ROLE-01 is generated from this table.
 | Participant IDs, language, dialect (`participants.view`) | F | O | A | A (IDs) | S (IDs) |
 | Participant phone number (`participants.contact`) | F | O | A, if project policy allows | - | - |
 | Participant contact export (`participants.export`) | F | O, explicit grant | - | - | - |
-| Consent records (`consent.capture`, `consent.view`) | F | O (R) | A | - | - |
+| Consent records (`consent.view`) | F | O | A | - | - |
 | Create / assign / reassign tasks (`tasks.assign`) | F | O | - | - | - |
 | See tasks (`tasks.view`) | F | O | A | A | - |
 | Start / control calls (`calls.start`) | - | - | A | - | - |

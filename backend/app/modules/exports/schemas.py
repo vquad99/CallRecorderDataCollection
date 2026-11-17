@@ -134,7 +134,6 @@ _PARTICIPANT = _object(
         "session_consent_method": _STR_OR_NULL,
         "consent_form_answer": _CONSENT,
         "consent_form_version": _STR_OR_NULL,
-        "consent_form_review": _STR_OR_NULL,
     }
 )
 _STEP = _object(

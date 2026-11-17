@@ -39,8 +39,8 @@ from app.modules.telephony import fetch
 from app.modules.telephony.models import Call, CallEvent
 from tests.conftest import (
     Api,
+    agree,
     build_settings,
-    give_consent,
     make_participant,
     make_project,
     make_user,
@@ -183,7 +183,7 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
             a = make_participant(pa, project.id, "Asha", phone=A_PHONE)
             b = make_participant(pa, project.id, "Bina", phone=B_PHONE)
 
-            def new_task(agreed: bool = True) -> str:
+            def new_task() -> str:
                 task = pa.post(
                     "/api/v1/tasks",
                     json={
@@ -201,8 +201,6 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
                     f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"}
                 )
                 assert moved.status_code == 200, moved.text
-                if agreed:  # D-127: nobody is rung before both have agreed
-                    give_consent(moderator, tid)
                 return tid
 
             yield {
@@ -231,22 +229,30 @@ def give_seat(w: dict[str, Any]) -> None:
     assert r.json()["telephony_agent_id"] == SEAT
 
 
-def consent(w: dict[str, Any], tid: str, status: str = "GIVEN") -> None:
-    for p in (w["a"], w["b"]):
-        r = w["mod"].post(
-            f"/api/v1/tasks/{tid}/consent",
-            json={"participant_id": p["id"], "status": status, "method": "VERBAL_NOTED"},
+def withdrawn_before_d129(w: dict[str, Any], *people: dict[str, Any]) -> None:
+    """These people's consent no longer counts: they withdrew it on their page before D-129
+    (nobody can since). Written straight into the database."""
+    for p in people:
+        w["db"].add(
+            ConsentRecord(
+                participant_id=uuid.UUID(p["id"]),
+                project_id=uuid.UUID(w["project_id"]),
+                task_id=None,
+                status="WITHDRAWN",
+                method="DIGITAL",
+                policy_version="1",
+                captured_by=None,
+            )
         )
-        assert r.status_code == 201, r.text
+    w["db"].commit()
 
 
 def joined(w: dict[str, Any], call_id: str, tid: str) -> None:
-    """The moderator confirms that A and B are on the call, notes both consents (D-119), then
-    starts the recording (D-113)."""
+    """The moderator confirms that A and B are on the call, then starts the recording (D-113).
+    Both agreed to the consent form when they were added (D-119, D-129)."""
     for item in ("A_JOINED", "B_JOINED"):
         r = w["mod"].post(f"/api/v1/calls/{call_id}/checklist", json={"item": item})
         assert r.status_code == 200, r.text
-    consent(w, tid)
     r = w["mod"].post(f"/api/v1/calls/{call_id}/recording/start")
     assert r.status_code == 200, r.text
 
@@ -308,7 +314,7 @@ def test_not_configured_is_reported_truthfully(db_app: Any, new_api: Any, db: An
 def test_full_call_flow(world: dict[str, Any]) -> None:
     w = world
     assert w["mod"].get("/api/v1/telephony/status").json()["configured"] is True
-    tid = w["new_task"](agreed=False)
+    tid = w["new_task"]()
 
     # Without an agent seat the moderator is told what to do; nothing is dialled.
     no_seat = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
@@ -317,11 +323,14 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert w["provider"].dials == []
 
     give_seat(w)
-    # D-127: nobody is rung before both participants have agreed.
+    # D-127: nobody is rung before both participants have agreed (here: consent from before
+    # D-129 that no longer counts).
+    withdrawn_before_d129(w, w["a"], w["b"])
     early_call = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
     assert (early_call.status_code, early_call.json()["error"]["code"]) == (409, "CONSENT_MISSING")
     assert w["provider"].dials == []
-    consent(w, tid)
+    for p in (w["a"], w["b"]):
+        agree(w["pa"], w["project_id"], p["id"])
     call = start(w, tid)
     assert call["state"] == "DIALLING"
     assert call["agent_id"] == SEAT
@@ -714,14 +723,6 @@ def test_a_participant_is_not_rung_over_and_over(world: dict[str, Any]) -> None:
     assert seventh.json()["error"]["code"] == "TOO_MANY_CALLS"
     assert len(w["provider"].dials) == 6
 
-    # Someone who refused consent for the session is not called again.
-    other = w["new_task"]()
-    consent(w, other, "REFUSED")
-    no = w["mod"].post(f"/api/v1/tasks/{other}/calls")
-    assert no.status_code == 409
-    assert no.json()["error"]["code"] == "CONSENT_REFUSED"
-    assert len(w["provider"].dials) == 6
-
 
 def test_cancel_needs_a_reason_and_only_the_tasks_people_change_a_call(
     world: dict[str, Any],
@@ -904,7 +905,7 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     world: dict[str, Any],
 ) -> None:
     """The Participants page's View shows the whole person, not only the consent form (D-104):
-    profile, who added them, their sessions with consent and recording, minutes, phone calls."""
+    profile, who added them, their sessions with recording, minutes, phone calls."""
     w = world
     tid, call = started_and_closed(w)
     # The provider's file starts after the marks: the whole 4 s file is kept, whatever the
@@ -912,7 +913,7 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     w["provider"].listed = [session("PD1", datetime.now(UTC) + timedelta(seconds=5))]
     due_now(w, call["id"])
     sweep(w)
-    w["new_task"](agreed=False)  # a second session, not called yet
+    w["new_task"]()  # a second session, not called yet
     base = f"/api/v1/projects/{w['project_id']}/participants"
 
     got = w["pa"].get(f"{base}/{w['a']['id']}/details")
@@ -939,13 +940,9 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     )
     assert first["other_participant_code"] == w["b"]["participant_code"]
     assert first["moderator"] == "mod"
-    assert (first["consent_status"], first["consent_method"]) == ("GIVEN", "VERBAL_NOTED")
+    assert "consent_status" not in first, "consent is the form's answer, shown once (D-129)"
     assert (first["recordings"], first["recording_seconds"], first["phone_calls"]) == (1, 4.0, 1)
-    assert (newest["status"], newest["recordings"], newest["consent_status"]) == (
-        "IN_PROGRESS",
-        0,
-        None,
-    )
+    assert (newest["status"], newest["recordings"]) == ("IN_PROGRESS", 0)
     assert d["minutes"]["conversations"] == 1
     assert d["calls"] == {
         "total": 1,
@@ -953,7 +950,11 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
         "last_at": d["calls"]["last_at"],
         "last_state": "RECORDED",
     }
-    assert d["consent_form"]["answered"] is False  # they did not answer the form themselves
+    # They agreed on their page before the task was made (D-129).
+    assert (d["consent_form"]["answered"], d["consent_form"]["current"]["status"]) == (
+        True,
+        "GIVEN",
+    )
 
     # Participant B is in the same sessions as B; phone calls ring A only.
     b = w["pa"].get(f"{base}/{w['b']['id']}/details").json()
@@ -1052,20 +1053,21 @@ def test_the_moderator_rings_participant_b_into_the_call_once_a_is_on(
     assert w["mod"].post(ring).json()["error"]["code"] == "CALL_STATE"
 
 
-def test_participant_b_who_refused_consent_is_not_rung(world: dict[str, Any]) -> None:
+def test_the_recording_mark_waits_for_consent_that_counts(world: dict[str, Any]) -> None:
+    """D-119: on a call, Start recording is refused while someone's consent does not count (here
+    one withdrawn before D-129), and allowed once they agree again."""
     w = world
     give_seat(w)
     tid = w["new_task"]()
     call = start(w, tid)
-    w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "A_JOINED"})
-    refused = w["mod"].post(
-        f"/api/v1/tasks/{tid}/consent",
-        json={"participant_id": w["b"]["id"], "status": "REFUSED", "method": "VERBAL_NOTED"},
-    )
-    assert refused.status_code == 201, refused.text
-    answer = w["mod"].post(f"/api/v1/calls/{call['id']}/call-b")
-    assert (answer.status_code, answer.json()["error"]["code"]) == (409, "CONSENT_REFUSED")
-    assert w["provider"].attaches == []
+    for item in ("A_JOINED", "B_JOINED"):
+        w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": item})
+    withdrawn_before_d129(w, w["b"])
+    no = w["mod"].post(f"/api/v1/calls/{call['id']}/recording/start")
+    assert (no.status_code, no.json()["error"]["code"]) == (409, "CONSENT_MISSING")
+    assert "Participant B " in no.json()["error"]["message"]
+    agree(w["pa"], w["project_id"], w["b"]["id"])
+    assert w["mod"].post(f"/api/v1/calls/{call['id']}/recording/start").status_code == 200
 
 
 def test_the_moderator_marks_the_conversation_once_both_are_on_the_line(
@@ -1087,7 +1089,6 @@ def test_the_moderator_marks_the_conversation_once_both_are_on_the_line(
     )
     for item in ("A_JOINED", "B_JOINED"):
         w["mod"].post(f"{base}/checklist", json={"item": item})
-    consent(w, tid)
     unmarked = w["mod"].post(f"{base}/close", json={})
     assert (unmarked.status_code, unmarked.json()["error"]["code"]) == (
         409,
@@ -1183,31 +1184,33 @@ def test_the_window_is_found_or_the_whole_call_kept_with_the_reason() -> None:
     )
 
 
-def test_a_participant_whose_newest_word_is_no_on_their_own_form_is_not_called(
+def test_only_the_answer_on_the_consent_form_lets_a_participant_be_called(
     world: dict[str, Any],
 ) -> None:
-    """Calling follows the participant's newest word, noted for the session or answered on their
-    own consent form: a withdrawal on the form stops the call until consent is given again."""
+    """Calling follows the participant's own answer on the consent form (D-129): with consent
+    that no longer counts (withdrawn before D-129) they are not called, a consent noted by the
+    moderator for the session (as before D-129) changes nothing, agreeing again does."""
     w = world
     give_seat(w)
     tid = w["new_task"]()
+    withdrawn_before_d129(w, w["a"])
     w["db"].add(
         ConsentRecord(
             participant_id=uuid.UUID(w["a"]["id"]),
             project_id=uuid.UUID(w["project_id"]),
-            task_id=None,
-            status="WITHDRAWN",
-            method="DIGITAL",
+            task_id=uuid.UUID(tid),
+            status="GIVEN",
+            method="VERBAL_NOTED",
             policy_version="1",
-            captured_by=None,
+            captured_by=uuid.UUID(w["mod_id"]),
         )
     )
     w["db"].commit()
     no = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
-    assert (no.status_code, no.json()["error"]["code"]) == (409, "CONSENT_REFUSED")
-    assert "A" in no.json()["error"]["message"]
+    assert (no.status_code, no.json()["error"]["code"]) == (409, "CONSENT_MISSING")
+    assert "Participant A " in no.json()["error"]["message"]
     assert w["provider"].dials == []
-    consent(w, tid)  # given again, noted by the moderator: now the newest word
+    agree(w["pa"], w["project_id"], w["a"]["id"])
     assert w["mod"].post(f"/api/v1/tasks/{tid}/calls").status_code == 201
 
 

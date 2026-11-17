@@ -16,14 +16,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { day, duration, when } from "../../lib/format";
-import {
-  CONSENT_METHOD_LABELS,
-  CONSENT_REVIEW,
-  consentAnswer,
-  labelFor,
-  MODE_LABELS,
-  TASK_STATUS_LABELS,
-} from "../../lib/labels";
+import { consentAnswer, labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
 import "./participants.css";
 
@@ -137,20 +130,12 @@ function PersonalLink({ link }: { link: work.ParticipantDetails["link"] }) {
 
 function ConsentForm({ form }: { form: work.ConsentFormView }) {
   const now = form.current;
-  const review = now?.review_status ? CONSENT_REVIEW[now.review_status] : undefined;
   return (
     <Block icon="verified" title="Consent form">
       <dl className="checks">
         <Fact label="Answer">{now ? consentAnswer(now.status).label : "No answer yet"}</Fact>
         {now ? <Fact label="Answered on">{when(now.answered_at)}</Fact> : null}
         <Fact label="Form version">{form.form_version}</Fact>
-        {review ? (
-          <Fact label="Review">
-            {review.label}
-            {now?.review_note ? `: ${now.review_note}` : ""}
-          </Fact>
-        ) : null}
-        {now?.reviewed_at ? <Fact label="Reviewed on">{when(now.reviewed_at)}</Fact> : null}
       </dl>
       <h4>{form.answered ? "Form text they answered" : "Form text they will see"}</h4>
       <div className="consent-doc">
@@ -188,63 +173,39 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
                 <th scope="col">With</th>
                 <th scope="col">Moderator</th>
                 <th scope="col">Status</th>
-                <th scope="col">Consent in session</th>
                 <th scope="col">Recording</th>
                 <th scope="col">Calls</th>
                 <th scope="col">Created</th>
               </tr>
             </thead>
             <tbody>
-              {d.sessions.map((s) => {
-                const answer = s.consent_status ? consentAnswer(s.consent_status) : null;
-                return (
-                  <tr key={s.task_id}>
-                    <td className="mono">
-                      <Link to={`/tasks/${s.task_id}`}>{s.task_code}</Link>
-                    </td>
-                    <td>{labelFor(MODE_LABELS, s.mode)}</td>
-                    <td>Participant {s.slot}</td>
-                    <td className="mono">{s.other_participant_code || "-"}</td>
-                    <td>{s.moderator ?? <span className="muted">Nobody yet</span>}</td>
-                    <td>
-                      <StatusBadge
-                        status={s.status}
-                        label={labelFor(TASK_STATUS_LABELS, s.status)}
-                      />
-                    </td>
-                    <td>
-                      {answer ? (
-                        <>
-                          <StatusBadge tone={answer.tone} label={answer.label} />
-                          <div className="muted">
-                            {s.consent_method
-                              ? `${labelFor(CONSENT_METHOD_LABELS, s.consent_method)} · `
-                              : ""}
-                            {when(s.consent_at)}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="muted">Not noted</span>
-                      )}
-                    </td>
-                    <td>
-                      {s.recordings > 0 ? (
-                        <>
-                          {s.recording_seconds !== null
-                            ? duration(s.recording_seconds)
-                            : "Recorded"}
-                          {s.recordings > 1 ? ` (${s.recordings} recordings)` : ""}
-                          <div className="muted">{when(s.recorded_at)}</div>
-                        </>
-                      ) : (
-                        <span className="muted">None</span>
-                      )}
-                    </td>
-                    <td>{s.mode === "TELEPHONY" ? s.phone_calls : "-"}</td>
-                    <td>{when(s.created_at)}</td>
-                  </tr>
-                );
-              })}
+              {d.sessions.map((s) => (
+                <tr key={s.task_id}>
+                  <td className="mono">
+                    <Link to={`/tasks/${s.task_id}`}>{s.task_code}</Link>
+                  </td>
+                  <td>{labelFor(MODE_LABELS, s.mode)}</td>
+                  <td>Participant {s.slot}</td>
+                  <td className="mono">{s.other_participant_code || "-"}</td>
+                  <td>{s.moderator ?? <span className="muted">Nobody yet</span>}</td>
+                  <td>
+                    <StatusBadge status={s.status} label={labelFor(TASK_STATUS_LABELS, s.status)} />
+                  </td>
+                  <td>
+                    {s.recordings > 0 ? (
+                      <>
+                        {s.recording_seconds !== null ? duration(s.recording_seconds) : "Recorded"}
+                        {s.recordings > 1 ? ` (${s.recordings} recordings)` : ""}
+                        <div className="muted">{when(s.recorded_at)}</div>
+                      </>
+                    ) : (
+                      <span className="muted">None</span>
+                    )}
+                  </td>
+                  <td>{s.mode === "TELEPHONY" ? s.phone_calls : "-"}</td>
+                  <td>{when(s.created_at)}</td>
+                </tr>
+              ))}
             </tbody>
           </DataTable>
           {d.sessions_total > d.sessions.length ? (
@@ -261,8 +222,6 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
 function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() => void) | null }) {
   const p = d.participant;
   const answer = p.consent_status ? consentAnswer(p.consent_status) : null;
-  const review =
-    p.consent_status === "GIVEN" && p.consent_review ? CONSENT_REVIEW[p.consent_review] : undefined;
   return (
     <div className="pd-head">
       <IconTile name="user" tone="blue" size={46} />
@@ -279,7 +238,6 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
           {answer ? (
             <StatusBadge tone={answer.tone} label={`Consent form: ${answer.label}`} />
           ) : null}
-          {review ? <StatusBadge tone={review.tone} label={review.label} /> : null}
           {d.link ? (
             <StatusBadge
               tone={d.link.active ? "success" : "neutral"}

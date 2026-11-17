@@ -1,10 +1,16 @@
-// Participants section (D-073). Requirements: PART-016, PART-017
-import { screen, waitFor, within } from "@testing-library/react";
+// Participants section (D-073, D-129). Requirements: PART-006, PART-016
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, PARTICIPANT, worldHandlers } from "../../test/world";
+import {
+  ALL_PERMISSIONS,
+  PARTICIPANT,
+  PARTICIPANT_B,
+  PROJECT,
+  worldHandlers,
+} from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -44,18 +50,12 @@ const DETAILS = {
       status: "GIVEN",
       answered_at: "2026-11-10T08:00:00Z",
       policy_version: "2",
-      review_status: "REJECTED",
-      review_note: "Wrong person",
-      reviewed_at: "2026-11-10T09:00:00Z",
     },
     earlier: [
       {
         status: "REFUSED",
         answered_at: "2026-11-09T08:00:00Z",
         policy_version: "1",
-        review_status: null,
-        review_note: "",
-        reviewed_at: null,
       },
     ],
   },
@@ -69,9 +69,6 @@ const DETAILS = {
       created_at: "2026-11-11T05:00:00Z",
       other_participant_code: "P000002",
       moderator: "Mohan",
-      consent_status: "GIVEN",
-      consent_method: "VERBAL_NOTED",
-      consent_at: "2026-11-11T05:10:00Z",
       recordings: 1,
       recording_seconds: 420,
       recorded_at: "2026-11-11T05:12:00Z",
@@ -86,9 +83,6 @@ const DETAILS = {
       created_at: "2026-11-10T05:00:00Z",
       other_participant_code: "P000004",
       moderator: null,
-      consent_status: null,
-      consent_method: null,
-      consent_at: null,
       recordings: 0,
       recording_seconds: null,
       recorded_at: null,
@@ -140,43 +134,47 @@ describe("participants section", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toHaveTextContent("Participants");
     const row = screen.getByText("P000001").closest("tr") as HTMLElement;
     expect(within(row).getByText("Agreed")).toBeInTheDocument();
-    expect(within(row).getByText("Waiting for review")).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Email consent form" })).toBeInTheDocument();
     // The language in words, not its code.
     expect(within(row).getByText("Hindi (hi)")).toBeInTheDocument();
   });
 
-  it("approves, and rejects only with a reason the participant will see", async () => {
+  it("has nothing to review and sends the form again only to people who have not agreed (D-129)", async () => {
+    const waiting = { ...PARTICIPANT_B, consent_status: "NONE" };
     const { calls } = open({
-      "POST /api/v1/projects/p1/participants/a1/consent-review": () => [200, {}],
+      "GET /api/v1/projects/p1/participants": () => [
+        200,
+        { items: [PARTICIPANT, waiting], total: 2, page: 1, page_size: 25 },
+      ],
+      "POST /api/v1/projects/p1/participants/b1/portal-link/email": () => [
+        200,
+        { sent: true, expires_at: "2026-12-09T00:00:00Z" },
+      ],
     });
     await openList();
-    const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "Approve consent" }));
-    expect(await screen.findByText("Consent of P000001 approved.")).toBeInTheDocument();
-    await userEvent.click(
-      within(screen.getByText("P000001").closest("tr") as HTMLElement).getByRole("button", {
-        name: "Reject consent",
-      }),
-    );
-    const box = within(screen.getByRole("dialog"));
-    expect(box.getByRole("button", { name: "Reject consent" })).toBeDisabled();
-    await userEvent.type(
-      box.getByLabelText(/participant sees this/),
-      "Signature of the wrong person",
-    );
-    await userEvent.click(box.getByRole("button", { name: "Reject consent" }));
-    expect(await screen.findByText("Consent of P000001 sent back.")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(calls.filter((c) => c.path.endsWith("/consent-review")).map((c) => c.body)).toEqual([
-        { decision: "APPROVED", note: "" },
-        { decision: "REJECTED", note: "Signature of the wrong person" },
-      ]),
-    );
+    const agreed = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
+    expect(within(agreed).queryByRole("button", { name: /consent form/i })).toBeNull();
+    for (const gone of ["Approve consent", "Reject consent", "Email consent form"]) {
+      expect(screen.queryByRole("button", { name: gone })).toBeNull();
+    }
+    expect(screen.queryByText("Waiting for review")).toBeNull();
+    const row = screen.getByText("P000002").closest("tr") as HTMLElement;
+    expect(within(row).getByText("No answer yet")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Email consent form again" }));
+    expect(await screen.findByText("Consent form emailed to Bina.")).toBeInTheDocument();
+    expect(calls.some((c) => c.path.endsWith("/b1/portal-link/email"))).toBe(true);
   });
 
-  it("sends consent forms to the selected participants and names the ones that failed", async () => {
+  it("adds the selected people to another project, saying what happened to each", async () => {
     const { calls } = open({
+      "GET /api/v1/projects": () => [
+        200,
+        {
+          items: [PROJECT, { ...PROJECT, id: "p2", code: "TAMIL", name: "Tamil talks" }],
+          total: 2,
+          page: 1,
+          page_size: 100,
+        },
+      ],
       "POST /api/v1/projects/p1/participants/bulk": () => [
         200,
         {
@@ -185,13 +183,13 @@ describe("participants section", () => {
               participant_id: "a1",
               participant_code: "P000001",
               ok: true,
-              message: "Consent form sent",
+              message: "Assigned. Consent form emailed.",
             },
             {
               participant_id: "b1",
               participant_code: "P000002",
               ok: false,
-              message: "This participant has no email address",
+              message: "Already in this project",
             },
           ],
           done: 1,
@@ -204,17 +202,30 @@ describe("participants section", () => {
     await userEvent.click(screen.getByLabelText("Select all on this page"));
     const bar = screen.getByRole("group", { name: "Actions for selected participants" });
     expect(bar).toHaveTextContent("2 selected");
-    await userEvent.click(within(bar).getByRole("button", { name: "Send consent form" }));
+    // The consent form goes out by itself when someone joins a project (D-129).
+    expect(within(bar).queryByRole("button", { name: /consent/i })).toBeNull();
+    await userEvent.selectOptions(
+      within(bar).getByLabelText("Also add them to another project"),
+      "p2",
+    );
+    await userEvent.click(within(bar).getByRole("button", { name: "Add to that project" }));
     expect(await screen.findByText("1 done, 1 not done.")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Not done" })).toHaveTextContent(
-      "P000002: This participant has no email address",
+      "P000002: Already in this project",
+    );
+    expect(screen.getByRole("list", { name: "Added to the other project" })).toHaveTextContent(
+      "P000001: Assigned. Consent form emailed.",
     );
     const sent = calls.find((c) => c.path.endsWith("/participants/bulk"))?.body as {
       action: string;
       participant_ids: string[];
+      target_project_id: string;
     };
-    expect(sent.action).toBe("send_consent");
-    expect(sent.participant_ids).toHaveLength(2);
+    expect(sent).toEqual({
+      action: "assign",
+      participant_ids: ["a1", "b1"],
+      target_project_id: "p2",
+    });
   });
 
   it("checks a pasted file before adding anyone", async () => {
@@ -229,7 +240,7 @@ describe("participants section", () => {
                 line: 2,
                 name: "Kiran",
                 ok: true,
-                message: confirm ? "Added" : "Ready to add",
+                message: confirm ? "Added. Consent form emailed." : "Ready to add",
                 participant_code: confirm ? "P000010" : null,
               },
               { line: 3, name: "", ok: false, message: "Name is missing", participant_code: null },
@@ -250,6 +261,7 @@ describe("participants section", () => {
     expect(screen.getByText("Name is missing")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Add 1 participants" }));
     expect(await screen.findByText("1 added.")).toBeInTheDocument();
+    expect(screen.getByText("Added. Consent form emailed. (P000010)")).toBeInTheDocument();
     expect(
       calls
         .filter((c) => c.path.endsWith("/import"))
@@ -290,7 +302,8 @@ describe("participants section", () => {
     expect(panel).toHaveTextContent("Given byEmail only");
     // The consent form, as before.
     expect(within(panel).getByText("I agree that my voice is recorded.")).toBeInTheDocument();
-    expect(panel).toHaveTextContent("Sent back: Wrong person");
+    expect(panel).toHaveTextContent("AnswerAgreed");
+    expect(panel).not.toHaveTextContent("Review");
     expect(panel).toHaveTextContent("Did not agree · version 1");
     expect(within(panel).getByRole("button", { name: "Download consent form" })).toBeEnabled();
     // Every session, with a way to the task.
@@ -304,14 +317,13 @@ describe("participants section", () => {
     expect(first).toHaveTextContent("Participant A");
     expect(first).toHaveTextContent("P000002");
     expect(first).toHaveTextContent("Mohan");
-    expect(first).toHaveTextContent("Agreed");
-    expect(first).toHaveTextContent("Said yes (noted by the moderator)");
     expect(first).toHaveTextContent("7.0 min");
     const second = within(sessions).getByRole("link", { name: "T000003" }).closest("tr");
     expect(second).toHaveTextContent("Face-to-face");
     expect(second).toHaveTextContent("Participant B");
     expect(second).toHaveTextContent("Nobody yet");
-    expect(second).toHaveTextContent("Not noted");
+    // Consent is the form's answer above, not a column per session (D-129).
+    expect(within(sessions).queryByRole("columnheader", { name: /consent/i })).toBeNull();
     // One request brings it all.
     expect(calls.filter((c) => c.path.includes("/participants/a1/")).map((c) => c.path)).toEqual([
       "/api/v1/projects/p1/participants/a1/details",

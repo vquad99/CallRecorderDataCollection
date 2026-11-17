@@ -90,22 +90,21 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks |
-| POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code) |
+| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks. POST answers the participant with `consent_email` (D-129) |
+| POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code); answers with `consent_email` (D-129) |
 | GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
 | GET | /projects/{id}/participants/{pid}/consent | `consent.view` + participant manager, or the moderator on an open task with that person (D-049); each participant row carries `consent_visible` |
 | GET | /projects/{id}/participants/export | `participants.export` |
-| POST | /tasks/{id}/consent | `consent.capture` + the task's assigned moderator, whatever the role (D-051) |
 
 ## Tasks (TASK-*)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100) |
-| GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has no consent to record yet, noted for this task or their own form answer Agreed and not sent back; newest word counts (D-119) |
+| GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100). POST: both participants must have agreed to the project's consent form, else 422 `CONSENT_REQUIRED` naming them ("P000009 and P000010 have not agreed to this project's consent form yet.", `details[0].participants`, D-129) |
+| GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has not agreed to the project's consent form (D-119, D-129) |
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
-| POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment) |
+| POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment); 409 `CONSENT_REQUIRED` while a participant has not agreed to the consent form (D-129) |
 | POST | /tasks/{id}/comments | `tasks.view` |
 | GET | /tasks/{id}/timeline | `tasks.view` (status history, assignments, comments). Status entries also carry `from_status`, `to_status`, `reason_code`, `comment` (null on other entries, D-125) |
 
@@ -132,10 +131,10 @@ no provider webhooks: after the call is closed the platform looks for its record
 |---|---|---|---|
 | GET | /telephony/status | `tasks.view` | `{configured, provider}`; "Not configured" until the TxContact logins are set |
 | GET | /tasks/{id}/calls | sees the task | The task's newest 20 calls, each with its checklist, candidates and history |
-| POST | /tasks/{id}/calls | the assigned moderator (`calls.start`) | Rings A. Task must be telephony and In progress; the moderator needs an agent seat; a participant who refused consent is not called; at most `TELEPHONY_MAX_CALLS_PER_TASK_PER_HOUR` (6) calls an hour for a task (429 `TOO_MANY_CALLS`). 201 also when TxContact refused: the call is `DIAL_FAILED` with TxContact's answer |
+| POST | /tasks/{id}/calls | the assigned moderator (`calls.start`) | Rings A. Task must be telephony and In progress; the moderator needs an agent seat; nobody is called before both agreed to the consent form (409 `CONSENT_MISSING`); at most `TELEPHONY_MAX_CALLS_PER_TASK_PER_HOUR` (6) calls an hour for a task (429 `TOO_MANY_CALLS`). 201 also when TxContact refused: the call is `DIAL_FAILED` with TxContact's answer |
 | POST | /calls/{id}/checklist | `calls.end`; the task's moderator or a manager | `{item, done}`: A_JOINED, B_JOINED, MODERATOR_MUTED, QUALITY_OK |
 | POST | /tasks/{id}/delete | `tasks.assign` in the project | `{reason}`; 204. Only while nothing has happened on the task (409 `TASK_HAS_WORK` otherwise: cancel it instead). Audited as `task.deleted` (D-115) |
-| POST | /calls/{id}/call-b | the task's moderator (`calls.start`) | Rings participant B into the call on the moderator's seat (D-111). 409 `A_NOT_JOINED` until A_JOINED is ticked, `CALL_STATE` when the call is not on, `CONSENT_REFUSED`; 429 `TOO_MANY_CALLS` after 3 rings. The call carries `b_dial_attempts`, `b_dialled_at`, `b_dial_status` (ACCEPTED, REFUSED, UNREACHABLE), `b_phone_hint` |
+| POST | /calls/{id}/call-b | the task's moderator (`calls.start`) | Rings participant B into the call on the moderator's seat (D-111). 409 `A_NOT_JOINED` until A_JOINED is ticked, `CALL_STATE` when the call is not on; 429 `TOO_MANY_CALLS` after 3 rings. The call carries `b_dial_attempts`, `b_dialled_at`, `b_dial_status` (ACCEPTED, REFUSED, UNREACHABLE), `b_phone_hint` |
 | POST | /calls/{id}/recording/start, /calls/{id}/recording/stop | the task's moderator | Marks where the conversation starts and stops (D-113). Start needs A_JOINED and B_JOINED (409 `CHECKLIST_INCOMPLETE`); Stop needs a start (409 `RECORDING_NOT_STARTED`). The call carries `record_started_at`, `record_stopped_at` |
 | POST | /calls/{id}/close | same | Needs A_JOINED and B_JOINED ticked (409 `CHECKLIST_INCOMPLETE`) and consent Given for A and B (409 `CONSENT_MISSING`). The call waits for its recording |
 | POST | /calls/{id}/cancel | same | `{reason, note}`: NO_ANSWER, WRONG_NUMBER, CALL_DROPPED, POOR_QUALITY, CONSENT_REFUSED, OTHER (note needed). Allowed at every stage before the recording is stored |
@@ -238,19 +237,18 @@ apostrophe put before it. No transcripts: this version makes none.
 | POST | /projects/{id}/participants/{id}/portal-link | `participants.manage` in the project. Answers `{url, expires_at}` once; ends any earlier link. |
 | DELETE | /projects/{id}/participants/{id}/portal-link | `participants.manage`. Ends the link. |
 | GET | /portal/me | Public; header `X-Portal-Token`. The participant's code, project name, consent form and answer, own sessions, accepted minutes. 404 `LINK_INVALID` for any link that does not work. |
-| POST | /portal/consent | Public; header `X-Portal-Token` and the CSRF token. Body `{decision: GIVEN / REFUSED / WITHDRAWN}`. 409 `NOTHING_TO_WITHDRAW`, 409 `CONSENT_FORM_MISSING`. |
+| POST | /portal/consent | Public; header `X-Portal-Token` and the CSRF token. Body `{decision: GIVEN / REFUSED}`; WITHDRAWN is refused (422). The answer counts at once (D-129). The same answer again changes nothing; any other answer after GIVEN gets 409 `ALREADY_AGREED`; 409 `CONSENT_FORM_MISSING`. |
 
 Projects carry `consent_text` (up to 20 000 characters) beside `consent_policy_version`. In consent
 history, `captured_by` is `null` for the participant's own answers.
 
 | GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |
 | POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`. Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
-| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]`; answers each row's result, `ready`, `created`. Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
-| POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove / send_consent, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result. |
-| POST | /projects/{id}/participants/{id}/consent-review | `participants.manage`. `{decision: APPROVED / REJECTED, note}`; 409 `NOTHING_TO_REVIEW`, 422 `NOTE_REQUIRED`. Participants carry `consent_status`, `consent_review`, `link_active` for callers who may see consent. |
-| GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer with review, earlier answers. |
+| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]`; answers each row's result, `ready`, `created`; an added row's message says what happened to the consent form email (D-129). Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
+| POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result (an assigned one's message says what happened to the other project's consent form email, D-129). Participants carry `consent_status` (their answer as it counts now; `NONE` = no answer yet) and `link_active` for callers who may see consent. |
+| GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer, earlier answers. |
 | GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |
-| GET | /projects/{id}/participants/{id}/details | `participants.manage` in the project (403 otherwise; D-104). Everything about the participant there: `participant` (as in the list), `updated_at`, `added_by`, `projects` (only those the caller may see), `removed` `{at, by, reason}`, `link` `{active, created_at, created_by, expires_at, last_used_at, handed_out}`, `consent_form` (as above), `minutes` (for people who may export), `calls` `{total, recorded, last_at, last_state}`, `sessions` (newest 200: `task_id, task_code, mode, slot, status, other_participant_code, moderator, consent_status, consent_method, consent_at, recordings, recording_seconds, recorded_at, phone_calls, created_at`) and `sessions_total`. |
+| GET | /projects/{id}/participants/{id}/details | `participants.manage` in the project (403 otherwise; D-104). Everything about the participant there: `participant` (as in the list), `updated_at`, `added_by`, `projects` (only those the caller may see), `removed` `{at, by, reason}`, `link` `{active, created_at, created_by, expires_at, last_used_at, handed_out}`, `consent_form` (as above), `minutes` (for people who may export), `calls` `{total, recorded, last_at, last_state}`, `sessions` (newest 200: `task_id, task_code, mode, slot, status, other_participant_code, moderator, recordings, recording_seconds, recorded_at, phone_calls, created_at`) and `sessions_total`. |
 | GET | /system/status | `settings.manage` (Super Admin only, D-075). `{status, checks, version}` for the System status page. Also `alerts` `{email_configured, recipients, active: [{code, summary, count, since}]}`: what the platform found wrong with itself at its last look (D-109). |
 
 ## Request guard (D-124)
@@ -259,7 +257,11 @@ A POST, PUT, PATCH or DELETE under `/api/v1/` without the session cookie gets 40
 
 ## Consent on tasks (D-127)
 
-Each participant in `GET /tasks/{id}` carries `consent_status` and `consent_at` (their current word: the newer of their own consent-form answer and any consent noted for the task), `consent_source` (`FORM` or `MODERATOR`), `consent_review` (staff review of a form answer) and `may_record`. `POST /tasks/{id}/calls` answers 409 `CONSENT_MISSING` until both have agreed.
+Each participant in `GET /tasks/{id}` carries `consent_status` and `consent_at` (their answer on the project's consent form as it counts now, D-129) and `may_record`. `POST /tasks/{id}/calls` answers 409 `CONSENT_MISSING` until both have agreed.
+
+## Consent sent by itself, accepted at once (D-129)
+
+Everyone who joins a project (added, added from a file, added as an existing participant, assigned in bulk) is emailed a fresh personal link to that project's consent form after the answer (`portal.send_links`, by the worker when there is one). The answer says what happened in `consent_email` (add, link) or the row's `message` (import, bulk assign): `Consent form emailed.`, `Write the project's consent form, then send it.` (the project has no consent form: nothing is sent), `No email address: add one with Edit, then email the consent form.`, or `The consent form could not be emailed now: use Email consent form again.` `POST .../portal-link/email` is the one manual resend. A participant's own "agree" counts at once; there is no review and no withdrawing. Removed: `POST /projects/{id}/participants/{pid}/consent-review`, the bulk action `send_consent`, `POST /tasks/{id}/consent` (consent noted by a moderator; older ones stay in the consent history) and the `consent.capture` permission (migration 0027). An "agree" that staff sent back before D-129 does not count as agreed.
 
 ## Participants need an email (D-128)
 

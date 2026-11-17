@@ -1,5 +1,5 @@
 // Requirements: TASK-001, TASK-003, TASK-006, TASK-007, TASK-011, PART-006, SEC-001
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,8 +14,6 @@ const party = (id: string, code: string) => ({
   has_email: true,
   consent_status: null,
   consent_at: null,
-  consent_source: null,
-  consent_review: null,
   may_record: false,
 });
 const task = {
@@ -248,7 +246,7 @@ describe("tasks", () => {
       consent_missing: [],
     };
     const { calls } = fakeApi(
-      signedInAs(["tasks.view", "consent.capture"], {
+      signedInAs(["tasks.view"], {
         "GET /api/v1/tasks/t1": () => [200, mine],
         "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
         "POST /api/v1/tasks/t1/transition": () => [
@@ -288,7 +286,7 @@ describe("tasks", () => {
       assets: [{ id: "as1", kind: "FTF_DERIVED_PCM" }],
     };
     const { calls } = fakeApi(
-      signedInAs(["tasks.view", "consent.capture", "recordings.view"], {
+      signedInAs(["tasks.view", "recordings.view"], {
         "GET /api/v1/tasks/t1": () => [200, recorded],
         "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
         "GET /api/v1/tasks/t1/recordings": () => [200, [recording]],
@@ -412,7 +410,7 @@ describe("tasks", () => {
     expect(screen.queryByRole("button", { name: "Download audio and metadata" })).toBeNull();
   });
 
-  it("shows consent from the participants' own forms and emails the form to whoever has not agreed (D-127)", async () => {
+  it("shows consent from the participants' own forms and emails the form again to whoever has not agreed (D-127, D-129)", async () => {
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "participants.manage"], {
         "GET /api/v1/tasks/t1": () => [
@@ -428,8 +426,6 @@ describe("tasks", () => {
               ...task.participant_a,
               consent_status: "GIVEN",
               consent_at: "2026-11-09T01:00:00Z",
-              consent_source: "FORM",
-              consent_review: "PENDING",
               may_record: true,
             },
           },
@@ -448,7 +444,7 @@ describe("tasks", () => {
     expect(within(card).queryByText("P000001")).not.toBeInTheDocument();
     expect(within(card).getByText("P000002")).toBeInTheDocument();
     expect(screen.getAllByText("Agreed").length).toBeGreaterThan(0); // A's chip in the facts
-    await userEvent.click(within(card).getByRole("button", { name: "Email consent form" }));
+    await userEvent.click(within(card).getByRole("button", { name: "Email consent form again" }));
     expect(await screen.findByText("Consent form emailed to Name of P000002.")).toBeInTheDocument();
     expect(calls.some((c) => c.path.endsWith("/b1/portal-link/email"))).toBe(true);
     // Names sit next to the codes (D-128).
@@ -558,6 +554,65 @@ describe("tasks", () => {
       { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: true },
     ]);
   });
+
+  it("offers only people who agreed to the consent form for a new task (D-129)", async () => {
+    const proj = {
+      id: "p1",
+      code: "PRJ0001",
+      name: "Voice",
+      status: "ACTIVE",
+      allows_telephony: false,
+      allows_face_to_face: true,
+      languages: [],
+    };
+    const person = (code: string, consent_status: string) => ({
+      id: code,
+      participant_code: code,
+      display_label: `Name ${code}`,
+      has_phone: true,
+      consent_status,
+    });
+    let people = [
+      person("P000001", "GIVEN"),
+      person("P000002", "GIVEN"),
+      person("P000003", "NONE"),
+      person("P000004", "REFUSED"),
+    ];
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: people, total: people.length, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    expect(
+      await screen.findByText("Only people who agreed to the consent form can be chosen."),
+    ).toBeInTheDocument();
+    const offered = within(screen.getByLabelText("Participant A"))
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(offered).toEqual([
+      "Choose participant A",
+      "P000001 Name P000001",
+      "P000002 Name P000002",
+    ]);
+    cleanup();
+
+    people = [person("P000001", "GIVEN"), person("P000003", "NONE")];
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    expect(
+      await screen.findByText(
+        "Only people who agreed to the consent form can be chosen. Only 1 person here has agreed yet, and a task needs two.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("task page in plain words (UI review 2026-11-17)", () => {
@@ -581,7 +636,7 @@ describe("task page in plain words (UI review 2026-11-17)", () => {
 
   it("keeps the recorder closed until both people have agreed on their form (D-119)", async () => {
     fakeApi(
-      signedInAs(["tasks.view", "consent.capture"], {
+      signedInAs(["tasks.view"], {
         "GET /api/v1/tasks/t1": () => [
           200,
           {

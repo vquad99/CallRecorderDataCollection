@@ -7,6 +7,9 @@ import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 
 afterEach(() => vi.unstubAllGlobals());
 
+// What the server says once someone joins a project: the form went out by itself (D-129).
+const EMAILED = "Consent form emailed.";
+
 const project = {
   id: "p1",
   code: "VOICE",
@@ -125,7 +128,7 @@ describe("participants tab", () => {
         ],
         "POST /api/v1/projects/p1/participants": () => [
           201,
-          { ...asha, id: "c1", participant_code: "P000003" },
+          { ...asha, id: "c1", participant_code: "P000003", consent_email: EMAILED },
         ],
         "POST /api/v1/projects/p1/participants/a1/delete": () => [200, { ...asha, deleted: true }],
       }),
@@ -136,7 +139,7 @@ describe("participants tab", () => {
     await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
     await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
     await userEvent.click(form.getByRole("button", { name: "Add participant" }));
-    expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
+    expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       display_label: "Chitra",
@@ -170,7 +173,7 @@ describe("participants tab", () => {
         ],
         "POST /api/v1/projects/p1/participants": () => [
           201,
-          { ...asha, id: "c1", participant_code: "P000003" },
+          { ...asha, id: "c1", participant_code: "P000003", consent_email: EMAILED },
         ],
       }),
     );
@@ -185,7 +188,7 @@ describe("participants tab", () => {
     await userEvent.type(form.getByLabelText(/Phone number/), "32109");
     await userEvent.selectOptions(form.getByLabelText("Country code"), "+44");
     await userEvent.click(form.getByRole("button", { name: "Add participant" }));
-    expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
+    expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       phone: "+449876543210",
       language_code: "ta",
@@ -210,7 +213,7 @@ describe("participants tab", () => {
         "GET /api/v1/projects/p1/participants/link-candidates": () => [200, [quinn]],
         "POST /api/v1/projects/p1/participants/link": () => [
           201,
-          { ...asha, id: "q1", participant_code: "P000009" },
+          { ...asha, id: "q1", participant_code: "P000009", consent_email: EMAILED },
         ],
       }),
     );
@@ -220,7 +223,9 @@ describe("participants tab", () => {
     expect(screen.getByText("Hindi (hi) · Awadhi")).toBeInTheDocument();
     expect(screen.getByText("1 person")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Add P000009" }));
-    expect(await screen.findByText("P000009 added to this project.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("P000009 added to this project. Consent form emailed."),
+    ).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/link"))?.body).toEqual({
       participant_code: "P000009",
     });
@@ -244,7 +249,11 @@ describe("participants tab", () => {
         "GET /api/v1/projects/p1/participants/link-candidates": () => [200, others],
         "POST /api/v1/projects/p1/participants/link": (body) => [
           201,
-          { ...asha, participant_code: (body as { participant_code: string }).participant_code },
+          {
+            ...asha,
+            participant_code: (body as { participant_code: string }).participant_code,
+            consent_email: EMAILED,
+          },
         ],
       }),
     );
@@ -255,7 +264,9 @@ describe("participants tab", () => {
     await userEvent.click(screen.getByLabelText("Select P000021"));
     await userEvent.click(screen.getByLabelText("Select P000023"));
     await userEvent.click(screen.getByRole("button", { name: "Add selected (2)" }));
-    expect(await screen.findByText("2 participants added to this project.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("2 participants added to this project. Consent form emailed."),
+    ).toBeInTheDocument();
     expect(calls.filter((c) => c.path.endsWith("/link")).map((c) => c.body)).toEqual([
       { participant_code: "P000021" },
       { participant_code: "P000023" },

@@ -6,6 +6,7 @@ Requirements: TASK-001, TASK-006, PART-002, AUTH-005, USER-005
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,14 @@ import pytest
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
 from app.modules.users import service as users
-from tests.conftest import Api, drop_email, make_participant, make_project, make_user
+from tests.conftest import (
+    Api,
+    drop_email,
+    make_participant,
+    make_project,
+    make_user,
+    read_outbox,
+)
 
 pytestmark = pytest.mark.db
 
@@ -124,55 +132,143 @@ def test_me_tells_the_page_when_an_idle_session_ends(world: dict[str, Any]) -> N
     assert me["session_idle_minutes"] == world["app"].state.settings.session_idle_minutes == 10
 
 
-def _with_email(world: dict[str, Any]) -> str:
-    base = f"/api/v1/projects/{world['project'].id}/participants"
+def _with_form(world: dict[str, Any], project: Any = None) -> str:
+    """The project (the world's unless named) gets a consent form; returns its participants
+    path."""
+    project = project or world["project"]
     db = world["db"]
-    db.get(Project, world["project"].id).consent_text = "I agree to be recorded."
+    db.get(Project, project.id).consent_text = "I agree to be recorded."
     db.commit()
-    drop_email(db, world["a"]["id"])  # A was saved before emails were required
-    world["pa"].patch(
-        f"{base}/{world['b']['id']}",
-        json={"display_label": "Bina", "language_code": "hi", "email": "bina@example.org"},
-    )
-    return base
+    return f"/api/v1/projects/{project.id}/participants"
 
 
-def test_bulk_consent_forms_are_emailed_after_the_answer(
+def _consent_mails(outbox: Path) -> list[str]:
+    return [m for m in read_outbox(outbox) if "Subject: Consent form for" in m]
+
+
+def _second_project(world: dict[str, Any], code: str) -> Any:
+    """Another project the world's Project Admin manages."""
+    from app.modules.projects.models import ProjectMembership
+
+    db = world["db"]
+    project = make_project(db, code)
+    pa_id = world["pa"].get("/api/v1/auth/me").json()["id"]
+    db.add(ProjectMembership(user_id=uuid.UUID(pa_id), project_id=project.id))
+    db.commit()
+    return project
+
+
+def test_everyone_who_joins_a_project_is_emailed_its_consent_form(
     world: dict[str, Any], outbox: Path
 ) -> None:
-    base = _with_email(world)
+    """D-129: added on the form, from a file, or as someone who already exists - each gets their
+    own consent form link by email after the answer, with nobody sending it by hand."""
+    pa, base = world["pa"], _with_form(world)
+    side = _second_project(world, "SIDE")  # no consent form there
+    existing = make_participant(pa, side.id, "Esha")
+    assert not _consent_mails(outbox), "a project without a consent form sends nothing"
+
+    made = pa.post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["consent_email"] == "Consent form emailed."
+    imported = pa.post(
+        f"{base}/import",
+        json={"csv": "name,email,language\nDevi,devi@example.org,hi\n", "confirm": True},
+    ).json()
+    assert imported["rows"][0]["message"] == "Added. Consent form emailed."
+    linked = pa.post(f"{base}/link", json={"participant_code": existing["participant_code"]})
+    assert linked.status_code == 201, linked.text
+    assert linked.json()["consent_email"] == "Consent form emailed."
+
+    mails = _consent_mails(outbox)
+    for address in ("chitra@example.org", "devi@example.org", existing["email"]):
+        [mail] = [m for m in mails if f"To: {address}" in m]
+        assert "Subject: Consent form for Project ADD" in mail
+        assert "/portal#" in mail
+        assert "withdraw" not in mail
+    assert len(mails) == 3
+    listed = {p["participant_code"]: p for p in pa.get(base).json()["items"]}
+    assert all(listed[p.json()["participant_code"]]["link_active"] for p in (made, linked))
+
+
+def test_without_a_consent_form_nothing_is_sent_and_staff_are_told(
+    world: dict[str, Any], outbox: Path
+) -> None:
+    pa = world["pa"]
+    base = f"/api/v1/projects/{world['project'].id}/participants"
+    made = pa.post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["consent_email"] == "Write the project's consent form, then send it."
+    side = _second_project(world, "SIDE")
+    moved = pa.post(
+        f"{base}/bulk",
+        json={
+            "action": "assign",
+            "participant_ids": [made.json()["id"]],
+            "target_project_id": str(side.id),
+        },
+    ).json()
+    assert moved["results"][0]["message"] == (
+        "Assigned. Write the project's consent form, then send it."
+    )
+    assert not _consent_mails(outbox)
+
+
+def test_consent_forms_of_an_assignment_are_emailed_after_the_answer(
+    world: dict[str, Any], outbox: Path
+) -> None:
+    """Assigned in bulk to a project with a consent form, they get that project's form; the
+    emails go out after the answer (by the worker), never inside the request."""
+    db = world["db"]
+    other = _second_project(world, "OTHER")
+    other_base = _with_form(world, other)
+    base = f"/api/v1/projects/{world['project'].id}/participants"
     celery = FakeCelery()
     world["app"].state.celery = celery
+    drop_email(db, world["a"]["id"])  # A was saved before emails were required
     ids = [world["a"]["id"], world["b"]["id"]]
     answer = (
         world["pa"]
-        .post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids})
-        .json()
-    )
-    assert (answer["done"], answer["failed"]) == (1, 1), "checked now: A has no email"
-    assert answer["results"][1]["message"] == "Consent form will be emailed"
-    assert not list(outbox.glob("*.eml")), "nothing is sent inside the request"
-    [(name, args)] = celery.sent
-    assert (name, args[1]) == (portal.SEND_LINKS_TASK, [world["b"]["id"]])
-
-    portal.send_links_job(world["app"].state, *args)  # what the worker does
-    assert len(list(outbox.glob("*.eml"))) == 1
-    listed = {p["id"]: p for p in world["pa"].get(base).json()["items"]}
-    assert listed[world["b"]["id"]]["link_active"] is True
-
-
-def test_bulk_consent_reports_a_broker_that_cannot_be_reached(world: dict[str, Any]) -> None:
-    base = _with_email(world)
-    world["app"].state.celery = FakeCelery(fail=True)
-    answer = (
-        world["pa"]
         .post(
-            f"{base}/bulk", json={"action": "send_consent", "participant_ids": [world["b"]["id"]]}
+            f"{base}/bulk",
+            json={"action": "assign", "participant_ids": ids, "target_project_id": str(other.id)},
         )
         .json()
     )
-    assert (answer["done"], answer["failed"]) == (0, 1)
-    assert "could not be queued" in answer["results"][0]["message"]
+    assert (answer["done"], answer["failed"]) == (2, 0)
+    assert [r["message"] for r in answer["results"]] == [
+        "Assigned. No email address: add one with Edit, then email the consent form.",
+        "Assigned. Consent form emailed.",
+    ]
+    assert not _consent_mails(outbox), "nothing is sent inside the request"
+    [(name, args)] = celery.sent
+    assert (name, args[0], args[1]) == (portal.SEND_LINKS_TASK, str(other.id), [world["b"]["id"]])
+
+    portal.send_links_job(world["app"].state, *args)  # what the worker does
+    assert len(_consent_mails(outbox)) == 1
+    listed = {p["id"]: p for p in world["pa"].get(other_base).json()["items"]}
+    assert listed[world["b"]["id"]]["link_active"] is True
+
+
+def test_a_broker_that_cannot_be_reached_is_reported_and_the_participant_kept(
+    world: dict[str, Any],
+) -> None:
+    base = _with_form(world)
+    world["app"].state.celery = FakeCelery(fail=True)
+    made = world["pa"].post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["consent_email"] == (
+        "The consent form could not be emailed now: use Email consent form again."
+    )
 
 
 def test_import_invitations_are_emailed_after_the_answer(

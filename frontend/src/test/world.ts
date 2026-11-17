@@ -47,7 +47,6 @@ export const PARTICIPANT = {
   email: "asha@example.org",
   has_email: true,
   consent_status: "GIVEN",
-  consent_review: "PENDING",
   link_active: true,
   consent_visible: true,
   notes: "",
@@ -68,8 +67,6 @@ const party = (p: typeof PARTICIPANT) => ({
   has_email: true,
   consent_status: "GIVEN",
   consent_at: "2026-11-09T00:00:00Z",
-  consent_source: "FORM",
-  consent_review: "APPROVED",
   may_record: true,
 });
 
@@ -254,10 +251,8 @@ export const PORTAL = {
   language_code: "hi",
   consent_policy_version: "2",
   consent_text: "I agree that my voice is recorded.",
-  consent_status: null,
-  consent_at: null,
-  consent_review: null,
-  consent_review_note: "",
+  consent_status: null as "GIVEN" | "REFUSED" | null,
+  consent_at: null as string | null,
   sessions: [
     {
       task_code: "T000001",
@@ -347,7 +342,6 @@ export const ALL_PERMISSIONS = [
   "participants.manage",
   "participants.contact",
   "participants.export",
-  "consent.capture",
   "consent.view",
   "tasks.view",
   "tasks.assign",

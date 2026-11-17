@@ -1,11 +1,12 @@
 """Participant personal page (D-067): a private link, the consent form, the participant's own
-sessions - and nothing else.
+sessions - and nothing else. The answer counts at once and an "I agree" is final (D-129).
 
 Requirements: PART-006, PART-013, PART-014, ROLE-001
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -28,17 +29,26 @@ world = test_recordings.world
 FORM = "I agree that my voice is recorded and used for speech research."
 
 
-def _setup(world: dict[str, Any], text: str = FORM) -> tuple[str, str, str]:
-    """Returns (project id, participant A's id, A's personal token)."""
+def _setup(
+    world: dict[str, Any], text: str = FORM, participant: str | None = None
+) -> tuple[str, str, str]:
+    """Returns (project id, the participant's id, their personal token); participant A unless
+    another is named."""
     db, pid = world["db"], str(world["project"].id)
     db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=text))
     db.commit()
-    a = world["task"]["participant_a"]["id"]
-    made = world["pa"].post(f"/api/v1/projects/{pid}/participants/{a}/portal-link")
+    who = participant or world["task"]["participant_a"]["id"]
+    return pid, who, _token(world, who)
+
+
+def _token(world: dict[str, Any], participant: str) -> str:
+    """A personal link made by a project admin; the secret after "#"."""
+    pid = str(world["project"].id)
+    made = world["pa"].post(f"/api/v1/projects/{pid}/participants/{participant}/portal-link")
     assert made.status_code == 201, made.text
     url = made.json()["url"]
     assert "/portal#" in url, "the secret sits after #, which browsers never send to a server"
-    return pid, a, url.split("#", 1)[1]
+    return str(url.split("#", 1)[1])
 
 
 def _visitor(world: dict[str, Any], token: str) -> tuple[Api, dict[str, str]]:
@@ -52,20 +62,16 @@ def _visitor(world: dict[str, Any], token: str) -> tuple[Api, dict[str, str]]:
 def test_the_page_shows_only_the_participants_own_sessions(world: dict[str, Any]) -> None:
     _record(world, chunks(60, 0))
     pid, _, token = _setup(world)
-    other = make_participant(world["pa"], pid, "Chitra")  # same project, on no task
-    other_token = (
-        world["pa"]
-        .post(f"/api/v1/projects/{pid}/participants/{other['id']}/portal-link")
-        .json()["url"]
-        .split("#", 1)[1]
-    )
+    other = make_participant(world["pa"], pid, "Chitra", agreed=False)  # on no task
+    other_token = _token(world, other["id"])
     api, head = _visitor(world, token)
     page = api.get("/api/v1/portal/me", headers=head)
     assert page.status_code == 200, page.text
     body = page.json()
     assert body["participant_code"] == world["task"]["participant_a"]["participant_code"]
     assert body["consent_text"] == FORM
-    assert body["consent_status"] is None
+    assert body["consent_status"] == "GIVEN", "a task is only made for people who agreed"
+    assert "consent_review" not in body
     assert [s["task_code"] for s in body["sessions"]] == [world["task"]["task_code"]]
     assert body["sessions"][0]["state"] == "Recorded, being checked"
     assert body["sessions"][0]["minutes"] == 1.0
@@ -74,7 +80,7 @@ def test_the_page_shows_only_the_participants_own_sessions(world: dict[str, Any]
     for private in ("Bina", "display_label", "storage_key", "moderator"):
         assert private not in text, private
     theirs = api.get("/api/v1/portal/me", headers={"X-Portal-Token": other_token}).json()
-    assert theirs["sessions"] == []
+    assert (theirs["sessions"], theirs["consent_status"], theirs["consent_at"]) == ([], None, None)
 
 
 def test_accepted_minutes_count_only_approved_sessions(world: dict[str, Any]) -> None:
@@ -91,37 +97,83 @@ def test_accepted_minutes_count_only_approved_sessions(world: dict[str, Any]) ->
     assert (body["recorded_minutes"], body["payable_minutes"]) == (1.0, 1.0)
 
 
-def test_the_participant_answers_and_withdraws_consent_themselves(world: dict[str, Any]) -> None:
-    pid, a, token = _setup(world)
+def test_an_answer_counts_at_once_and_an_agreement_is_final(world: dict[str, Any]) -> None:
+    """D-129: no staff review, no withdrawing; "I do not agree" may become "I agree" later."""
+    pid = str(world["project"].id)
+    chitra = make_participant(world["pa"], pid, "Chitra", agreed=False)
+    _, c, token = _setup(world, participant=chitra["id"])
     api, head = _visitor(world, token)
-    nothing = api.post("/api/v1/portal/consent", json={"decision": "WITHDRAWN"}, headers=head)
-    assert nothing.json()["error"]["code"] == "NOTHING_TO_WITHDRAW"
-    given = api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+
+    def answer(decision: str) -> Any:
+        return api.post("/api/v1/portal/consent", json={"decision": decision}, headers=head)
+
+    withdraw = answer("WITHDRAWN")
+    assert (withdraw.status_code, withdraw.json()["error"]["code"]) == (422, "VALIDATION_ERROR")
+    assert answer("REFUSED").json()["consent_status"] == "REFUSED"
+    assert answer("REFUSED").status_code == 200  # the same answer again changes nothing
+    given = answer("GIVEN")
     assert given.status_code == 200, given.text
     assert given.json()["consent_status"] == "GIVEN"
-    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)  # again: no-op
-    gone = api.post("/api/v1/portal/consent", json={"decision": "WITHDRAWN"}, headers=head)
-    assert gone.json()["consent_status"] == "WITHDRAWN"
-    db = world["db"]
-    rows = db.scalars(
-        select(ConsentRecord)
-        .where(ConsentRecord.task_id.is_(None))
-        .order_by(ConsentRecord.created_at)
-    ).all()
-    assert [(r.status, r.method, r.captured_by) for r in rows] == [
-        ("GIVEN", "DIGITAL", None),
-        ("WITHDRAWN", "DIGITAL", None),
+    assert given.json()["consent_at"]
+    assert answer("GIVEN").status_code == 200  # a second click changes nothing
+    changed = answer("REFUSED")
+    assert (changed.status_code, changed.json()["error"]["code"]) == (409, "ALREADY_AGREED")
+    assert changed.json()["error"]["message"] == (
+        "You have already agreed to this consent form. Your answer cannot be changed."
+    )
+    rows = (
+        world["db"]
+        .scalars(
+            select(ConsentRecord)
+            .where(ConsentRecord.participant_id == uuid.UUID(chitra["id"]))
+            .order_by(ConsentRecord.created_at)
+        )
+        .all()
+    )
+    assert [(r.status, r.method, r.captured_by, r.review_status) for r in rows] == [
+        ("REFUSED", "DIGITAL", None, None),
+        ("GIVEN", "DIGITAL", None, None),
     ]
-    # Staff see the participant's own answers in the consent history.
-    history = world["pa"].get(f"/api/v1/projects/{pid}/participants/{a}/consent").json()
-    assert [h["status"] for h in history if h["captured_by"] is None] == ["WITHDRAWN", "GIVEN"]
+    # Staff see it agreed at once, with nothing to review; the history keeps both answers.
+    listed = world["pa"].get(f"/api/v1/projects/{pid}/participants").json()["items"]
+    row = next(p for p in listed if p["id"] == c)
+    assert row["consent_status"] == "GIVEN"
+    assert "consent_review" not in row
+    history = world["pa"].get(f"/api/v1/projects/{pid}/participants/{c}/consent").json()
+    assert [h["status"] for h in history] == ["GIVEN", "REFUSED"]
     # No CSRF token, no change (a hostile page cannot answer for the participant).
     bare = api.client.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
     assert bare.status_code == 403
 
 
+def test_an_agreement_sent_back_before_d129_can_be_given_again(world: dict[str, Any]) -> None:
+    """An "agree" staff sent back in the review that existed before D-129 is not agreed: the page
+    asks for an answer again, and the new one counts at once."""
+    pid = str(world["project"].id)
+    chitra = make_participant(world["pa"], pid, "Chitra", agreed=False)
+    _, c, token = _setup(world, participant=chitra["id"])
+    api, head = _visitor(world, token)
+    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    db = world["db"]
+    db.execute(
+        update(ConsentRecord)
+        .where(ConsentRecord.participant_id == uuid.UUID(c))
+        .values(review_status="REJECTED", review_note="Wrong person answered")
+    )
+    db.commit()
+    page = api.get("/api/v1/portal/me", headers=head).json()
+    assert (page["consent_status"], page["consent_at"]) == (None, None)
+    form = world["pa"].get(f"/api/v1/projects/{pid}/participants/{c}/consent-form").json()
+    assert (form["answered"], form["current"]) == (False, None)
+    assert [e["status"] for e in form["earlier"]] == ["GIVEN"]
+    again = api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    assert again.json()["consent_status"] == "GIVEN"
+
+
 def test_without_a_consent_form_nothing_can_be_answered(world: dict[str, Any]) -> None:
-    _, _, token = _setup(world, text="")
+    pid = str(world["project"].id)
+    chitra = make_participant(world["pa"], pid, "Chitra", agreed=False)
+    _, _, token = _setup(world, text="", participant=chitra["id"])
     api, head = _visitor(world, token)
     answer = api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
     assert answer.json()["error"]["code"] == "CONSENT_FORM_MISSING"
@@ -143,14 +195,8 @@ def test_wrong_expired_replaced_and_revoked_links_all_answer_the_same(
     db = world["db"]
     assert db.scalar(select(ParticipantPortalLink.token_hash)) != token, "only a hash is stored"
     # Replaced: a new link ends the old one.
-    world["pa"].post(f"/api/v1/projects/{pid}/participants/{a}/portal-link")
+    newer = _token(world, a)
     assert ask(token) == never
-    newer = (
-        world["pa"]
-        .post(f"/api/v1/projects/{pid}/participants/{a}/portal-link")
-        .json()["url"]
-        .split("#", 1)[1]
-    )
     assert ask(newer) == (200, None)
     # Expired.
     db.execute(
@@ -161,12 +207,7 @@ def test_wrong_expired_replaced_and_revoked_links_all_answer_the_same(
     db.commit()
     assert ask(newer) == never
     # Revoked by staff.
-    last = (
-        world["pa"]
-        .post(f"/api/v1/projects/{pid}/participants/{a}/portal-link")
-        .json()["url"]
-        .split("#", 1)[1]
-    )
+    last = _token(world, a)
     assert (
         world["pa"].delete(f"/api/v1/projects/{pid}/participants/{a}/portal-link").status_code
         == 204
@@ -182,22 +223,30 @@ def test_only_people_who_manage_participants_create_links(world: dict[str, Any])
 
 
 def test_the_consent_record_downloads_with_the_recording(world: dict[str, Any]) -> None:
-    rid = _record(world, chunks(2, 0))
-    task = world["task"]
-    for who in ("participant_a", "participant_b"):
-        ok = world["mod"].post(
-            f"/api/v1/tasks/{task['id']}/consent",
-            json={
-                "participant_id": task[who]["id"],
-                "status": "GIVEN",
-                "method": "VERBAL_RECORDED",
-                "note": "",
-            },
-        )
-        assert ok.status_code in (200, 201, 409), ok.text
-    _, _, token = _setup(world)
-    api, head = _visitor(world, token)
-    api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+    """The consent record holds what each participant answered on their page, with the form
+    text they answered (D-068); nothing is noted for the session any more (D-129)."""
+    pid = str(world["project"].id)
+    _setup(world)  # the project's consent form
+    people = [make_participant(world["pa"], pid, n, agreed=False) for n in ("Chitra", "Devi")]
+    for person in people:
+        api, head = _visitor(world, _token(world, person["id"]))
+        given = api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
+        assert given.status_code == 200, given.text
+    task = world["pa"].post(
+        "/api/v1/tasks",
+        json={
+            "project_id": pid,
+            "recording_mode": "FACE_TO_FACE",
+            "participant_a_id": people[0]["id"],
+            "participant_b_id": people[1]["id"],
+        },
+    )
+    assert task.status_code == 201, task.text
+    task = task.json()
+    mod_id = world["mod"].get("/api/v1/auth/me").json()["id"]
+    world["pa"].post(f"/api/v1/tasks/{task['id']}/assign", json={"user_id": mod_id})
+    world["mod"].post(f"/api/v1/tasks/{task['id']}/transition", json={"to": "IN_PROGRESS"})
+    rid = _record({**world, "task": task}, chunks(2, 0))
     # The project's form changes afterwards: the record keeps the text that was answered.
     db = world["db"]
     db.execute(
@@ -211,13 +260,14 @@ def test_the_consent_record_downloads_with_the_recording(world: dict[str, Any]) 
         f'attachment; filename="consent_{task["task_code"]}_{rid}.html"'
     )
     html = got.text
-    assert task["participant_a"]["participant_code"] in html
-    assert task["participant_b"]["participant_code"] in html
-    assert FORM in html, "the text the participant answered"
+    for person in people:
+        assert person["participant_code"] in html
+    assert html.count(FORM) == 2, "the text each participant answered"
     assert "New text" not in html
     assert "The participant" in html
+    assert "noted for this session" not in html, "nothing noted, nothing shown"
     assert "SHA-256" in html, "ties the record to the audio files"
-    for private in ("Asha", "Bina"):
+    for private in ("Chitra", "Devi"):
         assert private not in html, "participants appear by code only"
     # Same right as downloading the audio: a moderator may listen but not download.
     assert world["mod"].get(f"/api/v1/recordings/{rid}/consent-form").status_code == 403
@@ -264,6 +314,7 @@ def test_the_consent_link_is_emailed_to_the_participant(
     mails = sorted(outbox.glob("*.eml"), key=lambda f: f.stat().st_mtime)
     text = mails[-1].read_text()
     assert "To: Asha@example.org" in text
+    assert "withdraw" not in text.replace("=\n", ""), "nobody can withdraw (D-129)"
     assert "/portal#" in text.replace("=\n", "")
     token = text.replace("=\n", "").split("/portal#", 1)[1].split()[0]
     api, _ = _visitor(world, token)

@@ -73,7 +73,7 @@ def build_export(job_id: str) -> None:
 def send_consent_links(
     project_id: str, participant_ids: list[str], actor_id: str, ip: str | None
 ) -> None:
-    """Email a fresh personal link to each participant of a bulk "send consent form" (D-073)."""
+    """Email a fresh personal link to each participant who just joined a project (D-129)."""
     portal.send_links_job(_state, project_id, participant_ids, actor_id, ip)
 
 

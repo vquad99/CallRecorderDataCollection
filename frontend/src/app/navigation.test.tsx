@@ -40,7 +40,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "projects.view",
     "participants.view",
     "participants.contact",
-    "consent.capture",
     "consent.view",
     "tasks.view",
     "calls.start",

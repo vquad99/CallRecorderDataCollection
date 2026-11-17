@@ -1,7 +1,8 @@
-"""Recording tasks (TASK-*), consent capture (PART-006, TEL-015 groundwork).
+"""Recording tasks (TASK-*).
 
 Visibility: Super Admin sees every task; a holder of tasks.assign sees tasks in their projects;
-everyone else sees only tasks they are actively assigned to (TASK-005).
+everyone else sees only tasks they are actively assigned to (TASK-005). A task is made, and given
+to a moderator, only for two people who agreed to the project's consent form (D-129).
 """
 
 from __future__ import annotations
@@ -22,14 +23,13 @@ from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
-from app.modules.projects.models import Project, ProjectMembership
+from app.modules.projects.models import ProjectMembership
 from app.modules.projects.service import ensure_accepts_new_work, get_manageable
 from app.modules.tasks import workflow
 from app.modules.tasks.models import Task, TaskAssignment, TaskComment, TaskStatusHistory
 
 # Statuses in which the moderator may still be changed.
 REASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "ON_HOLD"})
-CONSENT_OPEN = frozenset({"ASSIGNED", "IN_PROGRESS"})
 
 
 class _RoleWords(NamedTuple):
@@ -356,6 +356,23 @@ def _project_participant(
     return participant
 
 
+def require_agreed(
+    db: Session, project_id: uuid.UUID, people: list[Participant], *, status_code: int
+) -> None:
+    """A task is made or given to a moderator only for people who agreed to the project's
+    consent form (D-129): CONSENT_REQUIRED naming the others."""
+    answers = consent.latest_own_answers(db, project_id, [p.id for p in people])
+    waiting = [p.participant_code for p in people if not consent.agreed(answers.get(p.id))]
+    if waiting:
+        raise AppError(
+            f"{' and '.join(waiting)} {'has' if len(waiting) == 1 else 'have'} not agreed to "
+            "this project's consent form yet.",
+            code="CONSENT_REQUIRED",
+            status_code=status_code,
+            details=[{"participants": waiting}],
+        )
+
+
 @dataclass(frozen=True)
 class TaskInput:
     recording_mode: str
@@ -385,6 +402,7 @@ def create_task(
         )
     a = _project_participant(db, project.id, data.participant_a_id)
     b = _project_participant(db, project.id, data.participant_b_id)
+    require_agreed(db, project.id, [a, b], status_code=422)
     if data.recording_mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
         raise AppError(
             "Telephony tasks need a phone number for both participants",
@@ -520,6 +538,10 @@ def assign_moderator(
         raise AppError(
             f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
         )
+    people = [
+        db.get_one(Participant, pid) for pid in (task.participant_a_id, task.participant_b_id)
+    ]
+    require_agreed(db, task.project_id, people, status_code=409)
     user = require_member_with_role(db, task.project_id, user_id, Role.MODERATOR)
     qc = active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
     if qc is not None and qc.user_id == user.id:
@@ -548,65 +570,10 @@ def assign_moderator(
     return task
 
 
-def capture_consent(
-    db: Session,
-    principal: Principal,
-    task_id: uuid.UUID,
-    participant_id: uuid.UUID,
-    status: str,
-    method: str,
-    note: str,
-    ip: str | None,
-) -> ConsentRecord:
-    task = get_task(db, principal, task_id)
-    if not principal.can_in_project(Perm.CONSENT_CAPTURE, task.project_id):
-        raise forbidden()
-    require_moderator(db, principal, task, "Only the assigned moderator records consent")
-    if task.status not in CONSENT_OPEN:
-        raise AppError(
-            "Consent is recorded while the task is assigned or in progress",
-            code="TASK_LOCKED",
-            status_code=409,
-        )
-    if participant_id not in (task.participant_a_id, task.participant_b_id):
-        raise AppError(
-            "Participant is not on this task", code="PARTICIPANT_NOT_ON_TASK", status_code=422
-        )
-    project = db.get_one(Project, task.project_id)
-    record = ConsentRecord(
-        participant_id=participant_id,
-        project_id=task.project_id,
-        task_id=task.id,
-        status=status,
-        method=method,
-        policy_version=project.consent_policy_version,
-        captured_by=principal.user_id,
-        note=note,
-    )
-    db.add(record)
-    audit.record(
-        db,
-        action="consent.recorded",
-        entity_type="participant",
-        entity_id=participant_id,
-        project_id=task.project_id,
-        actor_id=principal.user_id,
-        ip=ip,
-        after={
-            "task": task.task_code,
-            "status": status,
-            "method": method,
-            "policy_version": record.policy_version,
-        },
-    )
-    db.commit()
-    return record
-
-
 def consent_missing_error(missing: list[str]) -> AppError:
     return AppError(
-        f"Participant {' and '.join(missing)} has not agreed on the consent form yet. Send them "
-        "the consent form; recording waits until both have agreed.",
+        f"Participant {' and '.join(missing)} has not agreed on the consent form yet. Calling "
+        "and recording wait until both have agreed.",
         code="CONSENT_MISSING",
         status_code=409,
         details=[{"missing": missing}],

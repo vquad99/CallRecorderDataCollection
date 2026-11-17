@@ -26,7 +26,6 @@ from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recor
 from tests.conftest import (
     Api,
     build_settings,
-    give_consent,
     make_participant,
     make_project,
     make_user,
@@ -164,7 +163,6 @@ def test_storage_not_configured_is_reported_truthfully(db_app: Any, db: Any, new
 def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     mod: Api = world["mod"]
     tid = world["task"]["id"]
-    give_consent(mod, tid)
     rec = mod.post(f"/api/v1/tasks/{tid}/recordings", json=START)
     assert rec.status_code == 201, rec.text
     rid = rec.json()["id"]
@@ -227,7 +225,6 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
 
 def _record(world: dict[str, Any], parts: list[bytes], complete: bool = True) -> str:
     mod: Api = world["mod"]
-    give_consent(mod, world["task"]["id"])
     rid: str = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
     for seq, data in enumerate(parts):
         put(mod, rid, seq, data)
@@ -244,7 +241,6 @@ def test_two_channel_capture_keeps_both_channels_and_derives_from_the_first(
     mod: Api = world["mod"]
     tid = world["task"]["id"]
     parts, frames = stereo_chunks(2)
-    give_consent(mod, tid)
     rec = mod.post(
         f"/api/v1/tasks/{tid}/recordings",
         json={**START, "channel_count": 2, "device_channel_count": 2},
@@ -385,10 +381,8 @@ def test_who_may_record(world: dict[str, Any]) -> None:
     assert world["pa"].post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 403
     other = world["api"]("mod2@example.org")
     assert other.post(f"/api/v1/tasks/{tid}/recordings", json=START).status_code == 404
-    # D-119: not before both participants consent.
-    early = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
-    assert early.json()["error"]["code"] == "CONSENT_MISSING", early.text
-    give_consent(world["mod"], tid)
+    # Both agreed to the consent form when they were added (D-119, D-129: the refusal without
+    # consent is in test_participant_admin).
     rid = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START).json()["id"]
     second = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
     assert second.json()["error"]["code"] == "RECORDING_OPEN"
@@ -510,7 +504,6 @@ def test_a_16k_recording_is_delivered_as_recorded_not_resampled(
 def test_a_recording_at_another_rate_is_refused(world: dict[str, Any]) -> None:
     mod: Api = world["mod"]
     tid = world["task"]["id"]
-    give_consent(mod, tid)
     refused = mod.post(
         f"/api/v1/tasks/{tid}/recordings", json={**START, "native_sample_rate": 48000}
     )
@@ -542,7 +535,6 @@ def test_capture_beyond_what_a_browser_delivers_is_refused(
 def test_a_microphone_with_many_channels_is_still_accepted(world: dict[str, Any]) -> None:
     """Only what is captured is limited; the device may report more channels."""
     mod: Api = world["mod"]
-    give_consent(mod, world["task"]["id"])
     started = mod.post(
         f"/api/v1/tasks/{world['task']['id']}/recordings",
         json={**START, "device_channel_count": 6},
@@ -554,7 +546,6 @@ def test_a_recording_stops_growing_at_its_byte_limit(world: dict[str, Any]) -> N
     app = world["app"]
     app.state.settings = app.state.settings.model_copy(update={"max_recording_bytes": 1_000_000})
     mod: Api = world["mod"]
-    give_consent(mod, world["task"]["id"])
     rid = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
     second = np.zeros(RATE, dtype="<f4").tobytes()  # 64 000 bytes
     for seq in range(15):

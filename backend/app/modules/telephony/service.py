@@ -218,18 +218,9 @@ def start_call(
             code="NO_AGENT_SEAT",
             status_code=409,
         )
-    sides = consent.for_task(db, task)
-    refused = consent.refused(sides)
-    if refused:
-        # Someone whose newest word is no (noted for this session, or on their own consent form)
-        # is not rung again.
-        raise AppError(
-            f"Participant {' and '.join(refused)} refused or withdrew consent and is not called",
-            code="CONSENT_REFUSED",
-            status_code=409,
-        )
-    # Nobody is rung before both have agreed (D-127): the call is only for recording them.
-    missing = consent.missing(sides)
+    # Nobody is rung before both have agreed (D-127): the call is only for recording them. An
+    # "I agree" cannot be withdrawn (D-129), so B, agreed here, is still agreed when rung.
+    missing = consent.missing(consent.for_task(db, task))
     if missing:
         raise tasks.consent_missing_error(missing)
     a = db.get_one(Participant, task.participant_a_id)
@@ -416,13 +407,6 @@ def call_b(
         raise AppError(
             "Confirm that participant A is on the call before ringing participant B",
             code="A_NOT_JOINED",
-            status_code=409,
-        )
-    if "B" in consent.refused(consent.for_task(db, task)):
-        db.rollback()
-        raise AppError(
-            "Participant B refused or withdrew consent and is not called",
-            code="CONSENT_REFUSED",
             status_code=409,
         )
     if call.b_dial_attempts >= MAX_B_DIALS:

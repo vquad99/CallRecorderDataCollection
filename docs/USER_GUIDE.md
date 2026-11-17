@@ -226,15 +226,22 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent
 
-1. Click **Email consent form** next to a participant. Or tick several and click **Send consent
-   form**: those emails go out shortly after, in the background, not at once. The participant
-   gets an email **"Consent form for <project name>"** with a private link.
-2. The participant opens the link, reads the form, ticks **I have read and understood this form**
-   and clicks **I agree** or **I do not agree**. They can later **Withdraw my consent**.
-3. The **Consent form** column shows **No answer yet**, **Agreed**, **Did not agree** or
-   **Withdrawn**. When the answer is Agreed, click **Approve consent**, or **Reject consent** with
-   a note that the participant will see.
-4. **Consent history** shows earlier answers, in a window.
+1. You do not send the consent form. When you add a participant to a project (one, many from a
+   file, an existing one, or **Add to that project**), the platform emails them the project's
+   consent form: **"Consent form for <project name>"** with a private link. The message after
+   adding says so: **Consent form emailed.**
+2. If the project has no consent form text yet, nothing is sent. The message says **Write the
+   project's consent form, then send it.** Write it on the project page, then click **Email
+   consent form again** for each person.
+3. The participant opens the link, reads the form, ticks **I have read and understood this form**
+   and clicks **I agree** or **I do not agree**. **I agree** counts at once: nobody approves it.
+   It is final: there is no way to withdraw it. Someone who clicked **I do not agree** can still
+   agree later.
+4. The **Consent form** column shows **No answer yet**, **Agreed** or **Did not agree**.
+5. Email lost? Click **Email consent form again** on the participant's row. It is only there
+   until they agree.
+6. **Consent history** shows earlier answers, in a window.
+7. You can make a task only with people who have agreed (see section 6).
 
 ### Everything about one participant
 
@@ -247,11 +254,11 @@ project:
   minutes, phone calls made to them, calls with a recording, and the last call.
 - **Personal link**: whether it works, who made it and when, until when it works, when it was
   last opened, and whether it was emailed or passed on by staff.
-- **Consent form**: the answer, when, the form version, the review and its note, the form text,
-  and earlier answers. **Download consent form** saves it.
+- **Consent form**: the answer, when, the form version, the form text, and earlier answers.
+  **Download consent form** saves it.
 - **Sessions**: every task they were part of, with their role (A or B), the other participant,
-  the moderator, the status, the consent noted in that session, the recording length, and the
-  number of phone calls. Click the task code to open the task.
+  the moderator, the status, the recording length, and the number of phone calls. Click the task
+  code to open the task.
 
 A project's **Participants** tab also has **Personal link**: a window with a link you can copy
 (**Copy link**) and give the participant yourself (it works for 30 days; making a new one ends the
@@ -259,7 +266,7 @@ old one).
 
 ### Other actions on ticked rows
 
-- **Also add them to another project**: choose the other project and click **Add to that project**. They stay in this project too, with the same code and consent history.
+- **Also add them to another project**: choose the other project and click **Add to that project**. They stay in this project too, with the same code and consent history. Each one is emailed the other project's consent form; the list under the buttons says what happened to each.
 - **Remove**: deletes the person's name, phone, email and notes everywhere. Not possible while
   they are on an open task.
 
@@ -272,8 +279,10 @@ or **Phone call** when the project allows it),
 **Participant A** and **Participant B** (two different people), **Priority**, **Moderator** (choose
 now and the task starts as **Assigned**, or **Assign later**) and **Due date**, then **Create task**. Each task gets a code such as `T000045`.
 
-If the project has fewer than two participants, the page says so and links to **Add participants
-to the project**; add them first.
+Only people who agreed to the project's consent form can be chosen. When someone is left out,
+the page says **Only people who agreed to the consent form can be chosen.** If the project has
+fewer than two participants, the page says so and links to **Add participants to the project**;
+add them first.
 
 **Add many tasks** (on the same page, after choosing the project): paste or choose a CSV file, one
 task per line. The first line must be exactly:
@@ -282,7 +291,8 @@ task per line. The first line must be exactly:
 participant_a,participant_b,mode,priority,due_date,moderator
 ```
 
-Write participants by their code (`P000001`). `mode` is `face_to_face` or `telephony` (a phone
+Write participants by their code (`P000001`); both must have agreed to the consent form, or
+the row says who has not. `mode` is `face_to_face` or `telephony` (a phone
 call; empty means face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means
 normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
 leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
@@ -291,11 +301,13 @@ rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
 On the task page:
 
 - **Assign moderator**: choose the Moderator and click **Assign**. The task becomes **Assigned**.
+  This is refused while one of the two has not agreed to the consent form.
 - **Buttons at the top of the task page**: **Put on hold** and **Cancel task** each open a window
   with a **Reason** and a **Comment** (**Go back** closes it without a change). A task on hold
   shows **Resume task**, which puts it back where it was.
 - **Delete task** (also at the top): for a task made by mistake. Type the reason. Only a
-  task with no recording, phone call or consent can be deleted; otherwise cancel it instead.
+  task with no recording, phone call or consent noted on it can be deleted; otherwise cancel it
+  instead.
 - **QC is assigned by itself**: when the recording reaches Audio QC, the platform gives it to the
   project's active QC Executive with the fewest tasks waiting (in turn when equal), never the
   moderator or whoever recorded. If the project has no QC Executive free, nobody is set.
@@ -322,10 +334,10 @@ Downloads are available to the Super Admin and Project Admin.
 1. Open **Tasks** and click your task.
 2. Click **Start session** (the highlighted box near the top).
 3. Consent is taken automatically from each participant's own consent form: you do not tick it.
-   The task shows each person's answer (**Agreed**, **Did not agree**, **No answer yet**). While
-   someone has not agreed, a **Waiting for consent** card lists them; people who manage
-   participants can click **Email consent form** there. A moderator asks their admin.
-   **Open the recorder stays grey until both participants have agreed.**
+   A task is only made for two people who agreed, so you normally see **Agreed** for both. On an
+   older task where someone has not agreed, a **Waiting for consent** card lists them; people who
+   manage participants can click **Email consent form again** there. A moderator asks their
+   admin. **Open the recorder stays grey until both participants have agreed.**
 4. Click **Open the recorder** (in the same highlighted box). The recorder shows the steps
    **Microphone**, **Sound check**, **Record**, **Save**, **Done**; **Back to the task** is above
    them. It records at 16000 Hz (the project's rate).
@@ -541,7 +553,8 @@ The participant opens the link from the consent email. No login is needed. The p
 - **Minutes**: sessions, recorded time, accepted time, and **Your share for payment** (half of
   each accepted conversation).
 - **Consent form**: read it, tick **I have read and understood this form**, click **I agree** or
-  **I do not agree**. After agreeing they can **Withdraw my consent**.
+  **I do not agree**. After agreeing the page says **You agreed on <date>.** with no buttons: the
+  answer is final. After **I do not agree** they can still agree later.
 - **Your sessions**: each session and its state (**Planned**, **Recorded, being checked**,
   **Accepted**, **Not used**).
 
@@ -567,10 +580,11 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "This browser cannot record here" | Use the latest Chrome or Edge on a computer. |
 | "This browser cannot record at 16000 Hz" | Use the latest Chrome or Edge. |
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
+| New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. |
 | "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
 | "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
-| No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. |
+| No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. For a consent form, click **Email consent form again**. |
 | "No access" | Your role does not include that page. Ask an administrator. |
 | The site does not open on one computer only | That computer still remembers an old address. Wait a few hours or restart the router. |

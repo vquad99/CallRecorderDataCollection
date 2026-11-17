@@ -1,9 +1,10 @@
-"""Task lifecycle: creation rules, moderator assignment, the state machine, history, rollback,
-visibility, consent capture, comments, timeline.
+"""Task lifecycle: creation rules, consent before a task (D-129), moderator assignment, the
+state machine, history, rollback, visibility, comments, timeline.
 
 Requirements: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, PROJ-010, PART-004
 """
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -11,9 +12,10 @@ import pytest
 from sqlalchemy import func, select
 
 from app.modules.audit import service as audit_service
+from app.modules.participants.models import ConsentRecord
 from app.modules.tasks import service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task, TaskStatusHistory
-from tests.conftest import make_participant, make_project, make_user, set_status
+from tests.conftest import agree, make_participant, make_project, make_user, set_status
 
 pytestmark = pytest.mark.db
 
@@ -250,19 +252,65 @@ def test_task_status_only_changes_inside_the_task_service() -> None:
     assert {k: v for k, v in hits.items() if v} == {"modules/tasks/service.py": 1}
 
 
-def test_consent_capture_rules(world: dict[str, Any]) -> None:
-    tid = _create(world).json()["id"]
-    body = {"participant_id": world["a"]["id"], "status": "GIVEN", "method": "VERBAL_RECORDED"}
-    assert world["mod"].post(f"/api/v1/tasks/{tid}/consent", json=body).status_code == 404
-    world["pa"].post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
-    assert world["pa"].post(f"/api/v1/tasks/{tid}/consent", json=body).status_code == 403
-    not_on_task = world["mod"].post(
-        f"/api/v1/tasks/{tid}/consent", json={**body, "participant_id": world["c"]["id"]}
+def test_tasks_are_only_for_people_who_agreed_to_the_consent_form(
+    world: dict[str, Any], db: Any
+) -> None:
+    """D-129: a task is made, or given to a moderator, only when both participants agreed to the
+    project's consent form; the file upload says so on the row at the check."""
+    pa, pid = world["pa"], world["project"].id
+    world["d"] = d = make_participant(pa, pid, "Devi", agreed=False)
+    world["e"] = e = make_participant(pa, pid, "Esha", agreed=False)
+    a_code, c_code = world["a"]["participant_code"], world["c"]["participant_code"]
+    d_code, e_code = d["participant_code"], e["participant_code"]
+
+    def new(a: str, b: str, **extra: Any) -> Any:
+        body = {"project_id": str(pid), "recording_mode": "FACE_TO_FACE"}
+        return pa.post(
+            "/api/v1/tasks",
+            json={**body, "participant_a_id": world[a]["id"], "participant_b_id": world[b]["id"]}
+            | extra,
+        )
+
+    one = new("a", "d")
+    assert (one.status_code, one.json()["error"]["code"]) == (422, "CONSENT_REQUIRED")
+    assert one.json()["error"]["message"] == (
+        f"{d_code} has not agreed to this project's consent form yet."
     )
-    assert not_on_task.json()["error"]["code"] == "PARTICIPANT_NOT_ON_TASK"
-    detail = world["mod"].post(f"/api/v1/tasks/{tid}/consent", json=body).json()
-    assert detail["participant_a"]["consent_status"] == "GIVEN"
-    assert detail["participant_b"]["consent_status"] is None
+    both = new("d", "e", moderator_id=str(world["mod_user"].id))
+    assert both.json()["error"]["message"] == (
+        f"{d_code} and {e_code} have not agreed to this project's consent form yet."
+    )
+    assert db.scalar(select(func.count()).select_from(Task)) == 0, "no half-made task"
+    csv = (
+        f"participant_a,participant_b,mode\n{a_code},{d_code},face_to_face\n"
+        f"{a_code},{c_code},face_to_face\n"
+    )
+    rows = pa.post("/api/v1/tasks/import", json={"project_id": str(pid), "csv": csv}).json()
+    assert [(r["ok"], r["message"]) for r in rows["rows"]] == [
+        (False, f"{d_code} has not agreed to this project's consent form yet."),
+        (True, "Ready to add"),
+    ]
+    # Agreed later on their page: now the task can be made.
+    agree(pa, pid, d["id"])
+    assert new("a", "d").status_code == 201
+    # Consent that no longer counts (withdrawn before D-129): the task gets no moderator.
+    tid = new("a", "c").json()["id"]
+    db.add(
+        ConsentRecord(
+            participant_id=uuid.UUID(world["c"]["id"]),
+            project_id=pid,
+            task_id=None,
+            status="WITHDRAWN",
+            method="DIGITAL",
+            policy_version="1",
+            captured_by=None,
+        )
+    )
+    db.commit()
+    no = pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    assert (no.status_code, no.json()["error"]["code"]) == (409, "CONSENT_REQUIRED")
+    assert no.json()["error"]["message"].startswith(c_code)
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["status"] == "DRAFT"
 
 
 def test_filters_comments_and_timeline(world: dict[str, Any]) -> None:
@@ -419,15 +467,21 @@ def test_a_task_made_by_mistake_is_deleted_but_one_with_work_is_kept(
     assert code in (entry.before_summary or "")
     assert "Made twice by mistake" in (entry.after_summary or "")
 
-    # Consent noted on it: kept, and the answer says to cancel it instead.
+    # Consent noted on it (by a moderator, before D-129): kept, and the answer says to cancel it.
     kept = _create(world).json()["id"]
     pa.post(f"/api/v1/tasks/{kept}/assign", json={"user_id": str(world["mod_user"].id)})
-    mod.post(f"/api/v1/tasks/{kept}/transition", json={"to": "IN_PROGRESS"})
-    noted = mod.post(
-        f"/api/v1/tasks/{kept}/consent",
-        json={"participant_id": world["a"]["id"], "status": "GIVEN", "method": "VERBAL_NOTED"},
+    db.add(
+        ConsentRecord(
+            participant_id=uuid.UUID(world["a"]["id"]),
+            project_id=world["project"].id,
+            task_id=uuid.UUID(kept),
+            status="GIVEN",
+            method="VERBAL_NOTED",
+            policy_version="1",
+            captured_by=world["mod_user"].id,
+        )
     )
-    assert noted.status_code == 201, noted.text
+    db.commit()
     refused = pa.post(f"/api/v1/tasks/{kept}/delete", json={"reason": "test"})
     assert (refused.status_code, refused.json()["error"]["code"]) == (409, "TASK_HAS_WORK")
     assert "consent noted" in refused.json()["error"]["message"]

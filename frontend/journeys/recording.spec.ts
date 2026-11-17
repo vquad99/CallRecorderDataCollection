@@ -9,8 +9,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   ADMIN_EMAIL,
+  agree,
   api,
-  consentBoth,
   emailedLink,
   NEW_PASSWORD,
   playToEnd,
@@ -125,15 +125,38 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       await form.getByLabel(/^Language/).selectOption("hi");
       await form.getByRole("button", { name: "Add participant" }).click();
       await expect(admin.getByRole("cell", { name: `${person} ${code}` })).toBeVisible();
+      // The project's consent form goes out by itself (D-129; the project has the sample text).
+      await expect(admin.getByText(/ added\. Consent form emailed\.$/)).toBeVisible();
     }
   });
 
-  await test.step("the Super Admin creates the task and assigns the moderator", async () => {
+  await test.step("a task waits until both have agreed to the consent form (D-129)", async () => {
     await admin
       .getByRole("navigation", { name: "Main" })
       .getByRole("link", { name: "Tasks" })
       .click();
     await admin.getByRole("link", { name: "New task" }).click();
+    await admin
+      .getByLabel("Project (active projects)")
+      .selectOption({ label: `${projectCode} ${name}` });
+    await expect(
+      admin.getByText(/Nobody here has agreed yet, and a task needs two\./),
+    ).toBeVisible();
+    await expect(
+      admin.getByLabel("Participant A").locator("option", { hasText: `Asha ${code}` }),
+    ).toHaveCount(0);
+    // Each answers "I agree" on their personal page.
+    const projectId = projectUrl.split("/")[2] ?? "";
+    const listed = await api<{ items: { id: string }[] }>(
+      admin,
+      "GET",
+      `/api/v1/projects/${projectId}/participants`,
+    );
+    for (const person of listed.items) await agree(admin, projectId, person.id);
+  });
+
+  await test.step("the Super Admin creates the task and assigns the moderator", async () => {
+    await admin.reload();
     await admin
       .getByLabel("Project (active projects)")
       .selectOption({ label: `${projectCode} ${name}` });
@@ -150,7 +173,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await expect(admin.getByText(`Moderator ${code}`).first()).toBeVisible();
   });
 
-  await test.step("the moderator finds the task, starts it and records consent", async () => {
+  await test.step("the moderator finds the task and starts it: nobody waits for consent", async () => {
     await moderator
       .getByRole("navigation", { name: "Main" })
       .getByRole("link", { name: "Tasks" })
@@ -161,7 +184,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     // D-091: one button starts the session; the recorder link then appears in the same card.
     await moderator.getByRole("button", { name: "Start session" }).click();
     await expect(moderator.getByText("In progress").first()).toBeVisible();
-    await consentBoth(moderator);
+    await expect(moderator.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
   });
 
   await test.step("the moderator records the conversation and plays it back", async () => {

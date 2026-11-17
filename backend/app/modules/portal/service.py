@@ -8,8 +8,10 @@ log). The page shows the participant's own details (code, name, language, dialec
 digits of their phone), their own sessions (date, mode, length, state), their minutes (recorded,
 accepted, and their payable half of the accepted ones, D-095) and their consent answer - read-only
 apart from the consent answer itself; no other speaker, no full phone number, no audio (D-100).
-A wrong, expired or revoked link answers exactly like one that never existed. A Super Admin can
-open the same page for any participant, without a link and without changing anything (D-100).
+The answer counts at once, and an "I agree" is final: nobody reviews it and it cannot be withdrawn
+(D-129). A wrong, expired or revoked link answers exactly like one that never existed. A Super
+Admin can open the same page for any participant, without a link and without changing anything
+(D-100).
 """
 
 from __future__ import annotations
@@ -31,8 +33,8 @@ from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher, hash_token, new_token
 from app.modules.exports import minutes as minute_totals
+from app.modules.participants import consent
 from app.modules.participants import service as participants
-from app.modules.participants.consent import latest_own_answer
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
 from app.modules.recordings.models import final_length_subquery, newest_ready_subquery
@@ -172,8 +174,8 @@ def _email(
         f'You are taking part in the project "{project.name}". Please read the consent form '
         "and give your answer on your private page:\n\n"
         f"{url}\n\n"
-        "On the same page you can see your recording sessions and withdraw your consent at any "
-        f"time. The link is personal - do not share it. It works until {expires:%d %B %Y}.\n\n"
+        "On the same page you can see your recording sessions. The link is personal - do not "
+        f"share it. It works until {expires:%d %B %Y}.\n\n"
         "If you did not expect this message, you can ignore it.\n"
     )
     try:
@@ -205,9 +207,9 @@ SEND_LINKS_TASK = "portal.send_links"
 def send_links_job(
     state: Any, project_id: str, participant_ids: list[str], actor_id: str, ip: str | None
 ) -> None:
-    """Background (D-073 bulk "send consent form"): a fresh personal link emailed to each
-    participant. The request checked who may be sent one; anyone deleted or left without an email
-    address since then is skipped. A failed email is logged and the others still go out."""
+    """Background (D-129): a fresh personal link emailed to each participant who just joined the
+    project. Anyone deleted or without an email address is skipped. A failed email is logged and
+    the others still go out."""
     with state.session_factory() as db:
         project = db.get(Project, uuid.UUID(project_id))
         if project is None:
@@ -313,8 +315,6 @@ class PortalView:
     consent_text: str
     consent_status: str | None
     consent_at: datetime | None
-    consent_review: str | None
-    consent_review_note: str
     sessions: list[SessionRow]
     accepted_minutes: float
     recorded_minutes: float
@@ -373,7 +373,8 @@ def build_view(
         for r in rows
     ]
     totals = minute_totals.per_participant(db, project.id, [participant.id]).get(participant.id)
-    answer = latest_own_answer(db, participant.id, project.id)
+    answer = consent.latest_own_answer(db, participant.id, project.id)
+    status = consent.word(answer)
     return PortalView(
         participant_code=participant.participant_code,
         display_name=participant.display_label,
@@ -383,12 +384,8 @@ def build_view(
         language_code=participant.language_code,
         consent_policy_version=project.consent_policy_version,
         consent_text=project.consent_text,
-        consent_status=answer.status if answer else None,
-        consent_at=answer.created_at if answer else None,
-        consent_review=answer.review_status if answer else None,
-        consent_review_note=answer.review_note
-        if answer and answer.review_status == "REJECTED"
-        else "",
+        consent_status=status,
+        consent_at=answer.created_at if answer and status else None,
         sessions=sessions,
         accepted_minutes=minute_totals.as_minutes(totals.approved_ms) if totals else 0.0,
         recorded_minutes=minute_totals.as_minutes(totals.recorded_ms) if totals else 0.0,
@@ -398,7 +395,8 @@ def build_view(
 
 
 def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> None:
-    """The participant's own answer: GIVEN, REFUSED, or WITHDRAWN after having given it."""
+    """The participant's own answer, GIVEN or REFUSED; it counts at once. "I do not agree" can
+    become "I agree" later; an "I agree" cannot be changed (D-129)."""
     link, participant, project = _resolve(db, token)
     if not project.consent_text.strip():
         raise AppError(
@@ -406,14 +404,15 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             code="CONSENT_FORM_MISSING",
             status_code=409,
         )
-    current = latest_own_answer(db, participant.id, project.id)
-    if decision == "WITHDRAWN" and (current is None or current.status != "GIVEN"):
-        raise AppError(
-            "There is no consent to withdraw", code="NOTHING_TO_WITHDRAW", status_code=409
-        )
-    rejected = current is not None and current.review_status == "REJECTED"
-    if current is not None and current.status == decision and not rejected:
+    current = consent.word(consent.latest_own_answer(db, participant.id, project.id))
+    if current == decision:
         return  # the same answer again changes nothing
+    if current == "GIVEN":
+        raise AppError(
+            "You have already agreed to this consent form. Your answer cannot be changed.",
+            code="ALREADY_AGREED",
+            status_code=409,
+        )
     db.add(
         ConsentRecord(
             participant_id=participant.id,
@@ -430,7 +429,6 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
                 else "Answered by the participant on their personal page"
             ),
             form_text=project.consent_text,
-            review_status="PENDING" if decision == "GIVEN" else None,
         )
     )
     audit.record(

@@ -24,9 +24,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
+# WITHDRAWN only on answers given before D-129 (nobody can withdraw since).
 ConsentStatus = Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+# Everything but DIGITAL (the participant's own answer) was noted by a moderator before D-129.
 ConsentMethod = Literal["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"]
-ReviewStatus = Literal["PENDING", "APPROVED", "REJECTED"]
 CONSENT_STATUSES: tuple[str, ...] = get_args(ConsentStatus)
 CONSENT_METHODS: tuple[str, ...] = get_args(ConsentMethod)
 
@@ -75,7 +76,8 @@ class ParticipantProjectLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One row per consent event; the newest row for (participant, task) is the current status."""
+    """One row per consent event. What the rows mean is decided in `consent.py` only: the newest
+    own answer of a participant in a project is their consent there (D-129)."""
 
     __tablename__ = "consent_records"
     __table_args__ = (
@@ -95,13 +97,13 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     method: Mapped[str] = mapped_column(String(30), nullable=False)
     policy_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    # The staff member who recorded it; empty when the participant answered the consent form
-    # themselves on their personal page (method DIGITAL, D-067).
+    # The moderator who noted it for a task (before D-129); empty when the participant answered
+    # the consent form themselves on their personal page (method DIGITAL, D-067).
     captured_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
     )
-    # Set when the participant answered on a link that was shown to this staff member: that
-    # person may not review the answer (D-088).
+    # Set when the participant answered on a link that was shown to this staff member, who could
+    # have typed the answer: the consent record says so (D-088).
     link_shown_to: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
     )
@@ -109,8 +111,9 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # The consent form text the participant answered (their own answers only, D-068), kept so a
     # later change of the project's form cannot change what they agreed to.
     form_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
-    # Staff review of a participant's own "agree" answer (D-073): PENDING until someone who
-    # manages participants approves or rejects it; a rejection carries a note the participant sees.
+    # The staff review of an own "agree" answer that existed from D-073 to D-129, kept as history:
+    # APPROVED or REJECTED (with a note) on older answers, empty on answers since. A REJECTED
+    # answer does not count as agreed (consent.word); nothing else reads these columns.
     review_status: Mapped[str | None] = mapped_column(String(20))
     review_note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(

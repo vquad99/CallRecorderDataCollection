@@ -62,7 +62,8 @@ export const REASON_LABELS: Record<string, string> = {
   OTHER: "Other (explain in the comment)",
 };
 
-/** How a participant's consent was given for a session. */
+/** How a consent was given: online on the participant's own page, or (before D-129) noted by the
+ * moderator for a session. */
 export const CONSENT_METHOD_LABELS: Record<string, string> = {
   VERBAL_RECORDED: "Said yes on the recording",
   VERBAL_NOTED: "Said yes (noted by the moderator)",
@@ -70,19 +71,12 @@ export const CONSENT_METHOD_LABELS: Record<string, string> = {
   DIGITAL: "Agreed online",
 };
 
-/** A participant's consent answer: on their own form, or noted for a session. */
+/** A participant's consent answer. Withdrawn only on answers from before D-129. */
 export const CONSENT_ANSWER: Record<string, { label: string; tone: Tone }> = {
   GIVEN: { label: "Agreed", tone: "success" },
   REFUSED: { label: "Did not agree", tone: "danger" },
   WITHDRAWN: { label: "Withdrawn", tone: "warning" },
   NONE: { label: "No answer yet", tone: "neutral" },
-};
-
-/** The project team's review of a consent form answer. */
-export const CONSENT_REVIEW: Record<string, { label: string; tone: Tone }> = {
-  PENDING: { label: "Waiting for review", tone: "warning" },
-  APPROVED: { label: "Approved", tone: "success" },
-  REJECTED: { label: "Sent back", tone: "danger" },
 };
 
 /** The words for a code, or the code in plain words when no label is known yet. */

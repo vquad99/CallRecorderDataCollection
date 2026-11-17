@@ -1,6 +1,7 @@
 // Participants section (D-073): everyone in a project in one place, with the work done on many at
-// once - add from a file, assign to another project, send consent forms, remove - and the review
-// of each participant's own consent answer (approve, reject with a note, send the form again).
+// once - add from a file, assign to another project, remove - and each participant's own answer
+// on the consent form. The form is emailed by itself to everyone who joins a project and an
+// answer counts at once (D-129); "Email consent form again" is for an email that was lost.
 import { useState } from "react";
 
 import { getProject, listProjects } from "../../api/projects";
@@ -17,12 +18,14 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
-import { CONSENT_REVIEW, consentAnswer } from "../../lib/labels";
+import { consentAnswer } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
-import { emailConsentForm, useParticipantWindows } from "./ParticipantEditor";
+import { useParticipantWindows } from "./ParticipantEditor";
 
 const SAMPLE =
   "name,phone,email,language,dialect,district\nAsha Rao,+919876543210,asha@example.org,hi,,Pune\n";
+
+type BulkAction = "assign" | "remove";
 
 function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [csv, setCsv] = useState("");
@@ -136,7 +139,7 @@ export function ParticipantsPage() {
   const [bulkAdd, setBulkAdd] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [target, setTarget] = useState("");
-  const [outcome, setOutcome] = useState<work.BulkResult | null>(null);
+  const [outcome, setOutcome] = useState<(work.BulkResult & { action: BulkAction }) | null>(null);
 
   const all = projects.state.status === "loaded" ? projects.state.data.items : [];
   // Nothing is chosen for the person: consent forms, links and removals belong to one project,
@@ -168,9 +171,10 @@ export function ParticipantsPage() {
   });
   const live = rows.filter((p) => !p.deleted);
 
-  /** One action for every selected participant; the ones it could not do are listed. */
+  /** One action for every selected participant; the ones it could not do are listed, and so
+   * are the ones assigned, with what happened to their consent form (D-129). */
   const bulkAction = async (
-    action: "assign" | "remove" | "send_consent",
+    action: BulkAction,
     extra: { target_project_id?: string; reason?: string } = {},
   ) => {
     setOutcome(null);
@@ -179,13 +183,13 @@ export function ParticipantsPage() {
       participant_ids: selected,
       ...extra,
     });
-    setOutcome(r);
+    setOutcome({ ...r, action });
     setSelected([]);
     list.reload();
     return `${r.done} done, ${r.failed} not done.`;
   };
-  const bulk = (action: "assign" | "send_consent", extra = {}) =>
-    void run(() => bulkAction(action, extra), `bulk-${action}`);
+  const assignSelected = () =>
+    void run(() => bulkAction("assign", { target_project_id: target }), "bulk-assign");
   const removeSelected = () =>
     confirm.ask({
       title: `Remove ${selected.length} participant(s)?`,
@@ -194,18 +198,6 @@ export function ParticipantsPage() {
       confirmLabel: "Remove",
       danger: true,
       action: ({ comment }) => bulkAction("remove", { reason: comment }),
-    });
-  const rejectConsent = (p: work.Participant) =>
-    confirm.ask({
-      title: `Reject the consent of ${p.participant_code}?`,
-      askReason: "Why is it not accepted? The participant sees this.",
-      confirmLabel: "Reject consent",
-      danger: true,
-      action: async ({ comment }) => {
-        await work.reviewConsent(projectId, p.id, "REJECTED", comment);
-        list.reload();
-        return `Consent of ${p.participant_code} sent back.`;
-      },
     });
   const toggle = (id: string) =>
     setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
@@ -282,18 +274,20 @@ export function ParticipantsPage() {
             ))}
         </ul>
       ) : null}
+      {outcome?.action === "assign" && outcome.done > 0 ? (
+        <ul className="notice notice--info list" aria-label="Added to the other project">
+          {outcome.results
+            .filter((r) => r.ok)
+            .map((r) => (
+              <li key={r.participant_id}>
+                {r.participant_code}: {r.message}
+              </li>
+            ))}
+        </ul>
+      ) : null}
       {selected.length > 0 ? (
         <div className="card bulkbar" role="group" aria-label="Actions for selected participants">
           <strong>{selected.length} selected</strong>
-          <Button
-            variant="secondary"
-            busy={busy === "bulk-send_consent"}
-            disabled={busy !== null}
-            onClick={() => bulk("send_consent")}
-          >
-            <Icon name="mail" size={15} />
-            Send consent form
-          </Button>
           <Select
             label="Also add them to another project"
             value={target}
@@ -309,7 +303,7 @@ export function ParticipantsPage() {
             variant="secondary"
             busy={busy === "bulk-assign"}
             disabled={!target || busy !== null}
-            onClick={() => bulk("assign", { target_project_id: target })}
+            onClick={assignSelected}
           >
             Add to that project
           </Button>
@@ -356,8 +350,6 @@ export function ParticipantsPage() {
             <tbody>
               {rows.map((p) => {
                 const answer = consentAnswer(p.consent_status);
-                const review = CONSENT_REVIEW[p.consent_review ?? ""];
-                const given = p.consent_status === "GIVEN";
                 return (
                   <tr key={p.id}>
                     <td>
@@ -383,52 +375,23 @@ export function ParticipantsPage() {
                       {p.dialect ? <div className="muted">{p.dialect}</div> : null}
                     </td>
                     <td>
-                      <span className="actions">
-                        <StatusBadge tone={answer.tone} label={answer.label} />
-                        {given && review ? (
-                          <StatusBadge tone={review.tone} label={review.label} />
-                        ) : null}
-                      </span>
+                      <StatusBadge tone={answer.tone} label={answer.label} />
                     </td>
                     <td className="actions">
                       {p.deleted ? (
                         <span className="muted">Removed</span>
                       ) : (
                         <>
-                          {given && p.consent_review !== "APPROVED" ? (
-                            <Button
-                              variant="secondary"
-                              busy={busy === `approve-${p.id}`}
-                              disabled={busy !== null}
-                              onClick={() =>
-                                void run(async () => {
-                                  await work.reviewConsent(projectId, p.id, "APPROVED");
-                                  return `Consent of ${p.participant_code} approved.`;
-                                }, `approve-${p.id}`)
-                              }
-                            >
-                              Approve consent
-                            </Button>
-                          ) : null}
-                          {given && p.consent_review !== "REJECTED" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy !== null}
-                              onClick={() => rejectConsent(p)}
-                            >
-                              Reject consent
-                            </Button>
-                          ) : null}
-                          {p.has_email ? (
+                          {p.has_email && p.consent_status !== "GIVEN" ? (
                             <Button
                               variant="secondary"
                               busy={busy === `email-${p.id}`}
                               disabled={busy !== null}
                               onClick={() =>
-                                void run(() => emailConsentForm(projectId, p), `email-${p.id}`)
+                                void run(() => work.emailConsentForm(projectId, p), `email-${p.id}`)
                               }
                             >
-                              Email consent form
+                              Email consent form again
                             </Button>
                           ) : null}
                           <Button

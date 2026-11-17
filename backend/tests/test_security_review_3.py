@@ -203,8 +203,10 @@ def test_large_bodies_are_read_a_few_at_a_time(monkeypatch: pytest.MonkeyPatch) 
     assert (status, error["code"], reads, received) == (503, "BUSY", 0, [])
 
 
-def test_consent_follows_the_newest_word() -> None:
-    """D-119 and calling: the newer of the noted consent and the own answer decides."""
+def test_consent_is_the_latest_answer_on_the_form() -> None:
+    """D-119, D-129: the participant's latest own answer decides; a consent noted by a moderator
+    before D-129 decides nothing; an answer withdrawn or sent back by staff before D-129 is not
+    agreed."""
 
     def record(status: str, minute: int, *, own: bool, review: str | None = None) -> Any:
         return ConsentRecord(
@@ -225,18 +227,21 @@ def test_consent_follows_the_newest_word() -> None:
             (s.own if r.is_own_answer else s.noted).append(r)
         return s
 
-    noted_yes = record("GIVEN", 1, own=False)
-    later_no = record("WITHDRAWN", 2, own=True)
-    assert (side(noted_yes).may_record, side(noted_yes).says_no) == (True, False)
-    assert (side(noted_yes, later_no).may_record, side(noted_yes, later_no).says_no) == (
-        False,
-        True,
-    )
-    newer_yes = record("GIVEN", 3, own=False)
-    assert side(noted_yes, later_no, newer_yes).says_no is False
-    sent_back = record("GIVEN", 4, own=True, review="REJECTED")
-    assert (side(sent_back).may_record, side(sent_back).says_no) == (False, False)
-    assert side().may_record is False
+    def state(s: SideConsent) -> tuple[str | None, bool]:
+        return s.status, s.may_record
+
+    agreed = record("GIVEN", 1, own=True)
+    assert state(side(agreed)) == ("GIVEN", True)
+    assert state(side(record("GIVEN", 1, own=False))) == (None, False), "noted only"
+    assert state(side(agreed, record("REFUSED", 2, own=False))) == ("GIVEN", True)
+    refused = record("REFUSED", 1, own=True)
+    assert state(side(refused, record("GIVEN", 2, own=True))) == ("GIVEN", True), "agreed later"
+    assert state(side(agreed, record("WITHDRAWN", 2, own=True))) == ("WITHDRAWN", False)
+    sent_back = record("GIVEN", 3, own=True, review="REJECTED")
+    assert state(side(agreed, sent_back)) == (None, False)
+    approved = record("GIVEN", 3, own=True, review="APPROVED")
+    assert state(side(approved)) == ("GIVEN", True)
+    assert state(side()) == (None, False)
 
 
 # ---------------------------------------------------------------- on a database
@@ -290,8 +295,25 @@ def test_bulk_actions_refuse_participants_of_another_project(two_projects: dict[
     assert (removed["done"], removed["failed"]) == (0, 2)
     assert all(r["message"] == "Participant not found" for r in removed["results"])
     assert all(r["participant_code"] == "?" for r in removed["results"]), "no code leaks"
-    sent = w["pa"].post(base, json={"action": "send_consent", "participant_ids": foreign}).json()
-    assert (sent["done"], sent["failed"]) == (0, 2)
+    from app.modules.projects.models import ProjectMembership
+
+    third = make_project(db, "THIRD")
+    pa_id = w["pa"].get("/api/v1/auth/me").json()["id"]
+    db.add(ProjectMembership(user_id=uuid.UUID(pa_id), project_id=third.id))
+    db.commit()
+    moved = (
+        w["pa"]
+        .post(
+            base,
+            json={
+                "action": "assign",
+                "participant_ids": foreign,
+                "target_project_id": str(third.id),
+            },
+        )
+        .json()
+    )
+    assert (moved["done"], moved["failed"]) == (0, 2)
     db.expire_all()
     still = db.scalar(
         select(func.count())

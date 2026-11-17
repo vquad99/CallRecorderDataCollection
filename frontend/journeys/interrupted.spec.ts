@@ -8,7 +8,6 @@ import {
   api,
   requireSetup,
   runCode,
-  consentBoth,
   SEEDED,
   SEEDED_PASSWORD,
   setUpTask,
@@ -31,7 +30,8 @@ test("an interrupted recording keeps the saved audio and can be finished", async
     await signIn(first, SEEDED.moderator, SEEDED_PASSWORD);
     await first.goto(`/tasks/${setup.taskId}`);
     await first.getByRole("button", { name: "Start session" }).click();
-    await consentBoth(first);
+    // Both agreed to the consent form before the task was made (D-129).
+    await expect(first.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
     await first.getByRole("link", { name: "Open the recorder" }).click();
     await first.getByRole("button", { name: "Allow microphone" }).click();
     await first.getByRole("button", { name: "Start recording" }).click();
