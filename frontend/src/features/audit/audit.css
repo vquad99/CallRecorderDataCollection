@@ -1,0 +1,12 @@
+/* Audit log: an entry's before and after, closed until opened, wrapping inside its cell. */
+.audit-change summary {
+  color: var(--primary);
+  font-weight: 500;
+  cursor: pointer;
+}
+.audit-change > div {
+  min-width: 240px;
+  max-width: 520px;
+  margin-top: 6px;
+  white-space: normal;
+}

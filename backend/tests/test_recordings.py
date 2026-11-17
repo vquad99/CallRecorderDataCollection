@@ -34,7 +34,7 @@ from tests.conftest import (
 
 pytestmark = pytest.mark.db
 BUCKET = "ccp-test"
-RATE = 48000
+RATE = 16000  # the project's face-to-face rate (D-123)
 
 
 @pytest.fixture
@@ -220,7 +220,7 @@ def test_full_recording_flow(world: dict[str, Any], s3: Any) -> None:
     ).get("KeyCount", 0)
     assert remaining == 0, "chunks are removed once the original is stored"
     steps = db.scalars(select(AssetProcessingStep.tool)).all()
-    assert set(steps) == {"ccp chunk assembly", "python-soxr"}
+    assert set(steps) == {"ccp chunk assembly", "ccp float32 to int16"}, "no resampler (D-123)"
     # D-092: the task waits for its moderator to listen and send it to QC.
     assert mod.get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
 
@@ -299,7 +299,9 @@ def test_two_channel_capture_keeps_both_channels_and_derives_from_the_first(
     at = {f: spectrum[np.argmin(np.abs(freqs - f))] for f in (440, 1000)}
     assert at[440] > 1000 * at[1000], "channel 1 only; channel 2 is not mixed in"
     params = db.scalars(
-        select(AssetProcessingStep.parameters).where(AssetProcessingStep.tool == "python-soxr")
+        select(AssetProcessingStep.parameters).where(
+            AssetProcessingStep.tool == "ccp float32 to int16"
+        )
     ).one()
     assert params.startswith("channel 1 of 2 kept")
 
@@ -472,3 +474,91 @@ def test_the_task_list_carries_each_recordings_files(world: dict[str, Any]) -> N
     db.commit()
     again = world["mod"].get(f"/api/v1/tasks/{world['task']['id']}/recordings").json()
     assert [a["kind"] for a in again[0]["assets"]] == ["BROWSER_ORIGINAL"]
+
+
+# ------------------------------------------------- D-123: the recording itself is delivered
+
+
+def test_a_16k_recording_is_delivered_as_recorded_not_resampled(
+    world: dict[str, Any], s3: Any
+) -> None:
+    """The browser records at 16 kHz; the delivery file holds the same samples, only stored as
+    16-bit (round half to even, clipped), and no resampler is recorded as having touched it."""
+    parts = chunks(2, 1)
+    rid = _record(world, parts)
+    db = world["db"]
+    db.expire_all()
+    derived = db.scalars(select(AudioAsset).where(AudioAsset.kind == "FTF_DERIVED_PCM")).one()
+    body = s3.get_object(Bucket=BUCKET, Key=derived.storage_key)["Body"].read()
+    delivered, rate = soundfile.read(io.BytesIO(body), dtype="int16")
+    uploaded = np.frombuffer(b"".join(parts), dtype="<f4")
+    expected = np.clip(np.round(uploaded.astype(np.float64) * 32768.0), -32768, 32767)
+    assert rate == RATE == 16000
+    assert np.array_equal(delivered, expected.astype(np.int16)), "sample for sample"
+    steps = db.scalars(
+        select(AssetProcessingStep).where(AssetProcessingStep.asset_id == derived.id)
+    ).all()
+    assert [s.tool for s in steps] == ["ccp float32 to int16"]
+    assert "recorded at 16000 Hz; samples kept as recorded, stored as 16-bit" in steps[0].parameters
+    assert "no resampling" in steps[0].parameters
+    assert not db.scalars(
+        select(AssetProcessingStep).where(AssetProcessingStep.tool.contains("soxr"))
+    ).all(), "no soxr step for a face-to-face recording"
+    assert world["mod"].get(f"/api/v1/recordings/{rid}").json()["state"] == "READY"
+
+
+def test_a_recording_at_another_rate_is_refused(world: dict[str, Any]) -> None:
+    mod: Api = world["mod"]
+    tid = world["task"]["id"]
+    give_consent(mod, tid)
+    refused = mod.post(
+        f"/api/v1/tasks/{tid}/recordings", json={**START, "native_sample_rate": 48000}
+    )
+    assert refused.status_code == 422
+    error = refused.json()["error"]
+    assert error["code"] == "SAMPLE_RATE_NOT_ALLOWED"
+    assert error["message"] == "Record at 16000 Hz: use the latest Chrome or Edge."
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"native_sample_rate": 96000},
+        {"native_sample_rate": 192000},
+        {"channel_count": 3},
+        {"channel_count": 8},
+    ],
+    ids=["96 kHz", "192 kHz", "3 channels", "8 channels"],
+)
+def test_capture_beyond_what_a_browser_delivers_is_refused(
+    world: dict[str, Any], change: dict[str, int]
+) -> None:
+    response = world["mod"].post(
+        f"/api/v1/tasks/{world['task']['id']}/recordings", json={**START, **change}
+    )
+    assert (response.status_code, response.json()["error"]["code"]) == (422, "VALIDATION_ERROR")
+
+
+def test_a_microphone_with_many_channels_is_still_accepted(world: dict[str, Any]) -> None:
+    """Only what is captured is limited; the device may report more channels."""
+    mod: Api = world["mod"]
+    give_consent(mod, world["task"]["id"])
+    started = mod.post(
+        f"/api/v1/tasks/{world['task']['id']}/recordings",
+        json={**START, "device_channel_count": 6},
+    )
+    assert started.status_code == 201, started.text
+
+
+def test_a_recording_stops_growing_at_its_byte_limit(world: dict[str, Any]) -> None:
+    app = world["app"]
+    app.state.settings = app.state.settings.model_copy(update={"max_recording_bytes": 1_000_000})
+    mod: Api = world["mod"]
+    give_consent(mod, world["task"]["id"])
+    rid = mod.post(f"/api/v1/tasks/{world['task']['id']}/recordings", json=START).json()["id"]
+    second = np.zeros(RATE, dtype="<f4").tobytes()  # 64 000 bytes
+    for seq in range(15):
+        assert put(mod, rid, seq, second).status_code == 200
+    over = put(mod, rid, 15, second)
+    assert (over.status_code, over.json()["error"]["code"]) == (422, "TOO_LARGE")
+    assert mod.get(f"/api/v1/recordings/{rid}").json()["chunks_received"] == 15

@@ -42,6 +42,7 @@ export const PARTICIPANT = {
   dialect: "",
   display_label: "Asha",
   phone: "+919876543210",
+  phone_masked: false,
   has_phone: true,
   email: "asha@example.org",
   has_email: true,
@@ -188,7 +189,9 @@ export const TASK = {
     CANCELLED: ["CLIENT_REQUEST", "OTHER"],
   },
   can_assign: true,
+  can_reassign: true,
   is_moderator: true,
+  consent_missing: [],
 };
 
 export const USER = {
@@ -302,7 +305,6 @@ export const DASHBOARD = {
   qc: {
     passed: 22,
     rejected: 1,
-    returned: 2,
     waiting: 6,
     auto_pass: 4,
     auto_review: 1,
@@ -390,7 +392,16 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects/p1/participants/a1/page": ok({ ...PORTAL, link_expires_at: null }),
     "GET /api/v1/tasks/t1": ok(TASK),
     "GET /api/v1/tasks/t1/timeline": ok([
-      { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },
+      {
+        at: "2026-11-09T00:00:00Z",
+        kind: "status",
+        actor: "Ada",
+        text: "created -> DRAFT",
+        from_status: null,
+        to_status: "DRAFT",
+        reason_code: null,
+        comment: null,
+      },
     ]),
     "GET /api/v1/tasks/t1/recordings": ok([]),
     "GET /api/v1/tasks/t1/calls": ok([]),

@@ -1,0 +1,306 @@
+/* Figures and charts (dashboard, phone calls). Series colours: KoboToolbox blue and amber for
+   approved and waiting (D-099); blue, orange and red for the calls, checked with the dataviz
+   validator on #ffffff (lightness band, chroma, colour-vision separation, 3:1 contrast). The legend
+   and the table view carry the same information as the colours. */
+:root {
+  --series-approved: #2095f3;
+  --series-waiting: #f0a24a;
+  --series-recorded: #2095f3;
+  --series-open: #c47a12;
+  --series-failed: #9d0000;
+}
+.series--approved {
+  fill: var(--series-approved);
+  background: var(--series-approved);
+}
+.series--waiting {
+  fill: var(--series-waiting);
+  background: var(--series-waiting);
+}
+.series--recorded {
+  fill: var(--series-recorded);
+  background: var(--series-recorded);
+}
+.series--open {
+  fill: var(--series-open);
+  background: var(--series-open);
+}
+.series--failed {
+  fill: var(--series-failed);
+  background: var(--series-failed);
+}
+
+/* Key figures */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.stat__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stat__label {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+.stat__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stat__body > div {
+  min-width: 0;
+}
+.stat__value {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.stat__note {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.spark {
+  flex: none;
+  width: 96px;
+  height: 36px;
+}
+.spark polyline {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.spark polygon {
+  fill: var(--primary-soft);
+}
+.ring {
+  width: 56px;
+  height: 56px;
+}
+.ring__track,
+.ring__value {
+  fill: none;
+  stroke-width: 6;
+}
+.ring__track {
+  stroke: var(--surface-hover);
+}
+.ring__value {
+  stroke: var(--primary);
+  stroke-linecap: round;
+}
+.ring text {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+@media (max-width: 1100px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Cards side by side, one column on a narrow screen. */
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 16px;
+}
+.split--wide {
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+}
+@media (max-width: 900px) {
+  .split--wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Bars per day */
+.chart {
+  margin: 0;
+}
+.chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-bottom: 10px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.legend__line {
+  width: 16px;
+  border-top: 2px dashed var(--text-2);
+}
+/* On a narrow screen the chart keeps a readable width and scrolls sideways inside its card. */
+.chart__plot {
+  position: relative;
+  overflow-x: auto;
+}
+.chart__plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+@media (max-width: 640px) {
+  .chart__plot svg {
+    min-width: 560px;
+  }
+}
+.chart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart__axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.chart__tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.chart__hit {
+  fill: transparent;
+}
+.chart__day.is-hover .chart__hit {
+  fill: var(--surface-hover);
+}
+.chart__target {
+  stroke: var(--text-2);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+.chart__empty {
+  position: absolute;
+  inset: 0 0 26px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.chart__empty span {
+  padding: 2px 8px;
+  background: var(--surface);
+}
+.chart__tooltip {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgb(16 24 40 / 0.12);
+  color: var(--text-2);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.chart__tooltip strong {
+  color: var(--text);
+}
+.chart__table {
+  margin-top: 10px;
+}
+.chart__table summary {
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chart__table .table-wrap {
+  max-height: 260px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+/* Rows of label, thin bar, number. */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bars li {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 12px;
+}
+.bars--wide li {
+  grid-template-columns: minmax(120px, 1.2fr) minmax(0, 1fr) minmax(64px, auto);
+}
+.bars__track {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--surface-hover);
+}
+.bars__track span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.bars__value {
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bars__note {
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+.bars .badge {
+  justify-self: start;
+}

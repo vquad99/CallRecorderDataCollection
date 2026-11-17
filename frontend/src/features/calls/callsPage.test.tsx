@@ -1,14 +1,14 @@
 // The phone-calls page (D-102, D-103): figures from the platform's own call records (calls, the
 // way from call to approval, today against the target, phone tasks, checks and QC, the checklist),
 // TxContact's own traffic count (or why it is not available), the calls as a spreadsheet, and
-// every call linked to its task.
+// on its own tab every call linked to its task.
 // Requirements: TEL-018, DASH-001, GEN-004
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, CALL_ROW, worldHandlers } from "../../test/world";
+import { ALL_PERMISSIONS, CALL_ANALYTICS, CALL_ROW, worldHandlers } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -36,12 +36,40 @@ describe("phone calls page", () => {
     expect(
       await screen.findByText(/Not available: TxContact refused the recording sign-in/),
     ).toBeInTheDocument();
+    // Every call is on its own tab, so the figures page stays short.
+    expect(screen.queryByRole("link", { name: "T000001" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "All calls" }));
+    expect(screen.getByRole("tab", { name: "All calls" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("link", { name: "T000001" })).toHaveAttribute(
       "href",
       "/tasks/t1",
     );
     // The call's length and its recording's length.
     expect(screen.getAllByText("12.0 min")).toHaveLength(2);
+    expect(screen.queryByText("Calls per day")).not.toBeInTheDocument();
+  });
+
+  it("shows the first ten moderators and the rest on request", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      moderator_id: `m${i}`,
+      name: `Moderator ${i + 1}`,
+      calls: 1,
+      recorded: 1,
+      failed: 0,
+      recorded_minutes: 1,
+      avg_call_minutes: 1,
+    }));
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/telephony/analytics": () => [200, { ...CALL_ANALYTICS, by_moderator: many }],
+      }),
+    );
+    renderAt("/calls");
+    const card = await screen.findByRole("region", { name: "By moderator" }, { timeout: 5000 });
+    expect(within(card).queryByText("Moderator 11")).not.toBeInTheDocument();
+    await userEvent.click(within(card).getByRole("button", { name: "Show all (12)" }));
+    expect(within(card).getByText("Moderator 12")).toBeInTheDocument();
   });
 
   it("marks a call that was left open and downloads the calls as a spreadsheet", async () => {
@@ -64,7 +92,7 @@ describe("phone calls page", () => {
         "GET /api/v1/calls/export": () => [200, "started,closed\n"],
       }),
     );
-    renderAt("/calls");
+    renderAt("/calls?view=calls");
     expect(await screen.findByText("Left open", {}, { timeout: 5000 })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Download calls (CSV)" }));
     await waitFor(() =>
@@ -87,7 +115,7 @@ describe("phone calls page", () => {
         ],
       }),
     );
-    renderAt("/calls");
+    renderAt("/calls?view=calls");
     await userEvent.click(await screen.findByRole("button", { name: /Next/ }, { timeout: 5000 }));
     await waitFor(() => expect(api.calls.some((c) => c.path.includes("page=2"))).toBe(true));
     await userEvent.selectOptions(screen.getByLabelText("Project"), "p1");

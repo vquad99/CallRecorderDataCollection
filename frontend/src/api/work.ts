@@ -1,6 +1,8 @@
 // Participants, tasks and audit-log API calls (Phase 3).
-import { query, type Page } from "./admin";
-import { apiRequest } from "./client";
+import type { TaskStatus } from "../lib/labels";
+import { apiRequest, query, type Page } from "./client";
+
+export type { TaskStatus };
 
 export interface Participant {
   id: string;
@@ -10,7 +12,10 @@ export interface Participant {
   /** Where the participant lives (D-121); empty when not given. */
   district?: string;
   display_label: string | null;
+  /** The number, or a masked one ("••••••3210") for people who may not see it in full. */
   phone: string | null;
+  /** The phone above is masked: a form must not send it back as the number. */
+  phone_masked: boolean;
   has_phone: boolean;
   /** Whether this user may open the person's consent history (managers, assigned moderator). */
   consent_visible: boolean;
@@ -58,33 +63,6 @@ export interface Consent {
   created_at: string;
 }
 
-export type TaskStatus =
-  | "DRAFT"
-  | "ASSIGNED"
-  | "IN_PROGRESS"
-  | "RECORDED"
-  | "AUDIO_QC"
-  | "ADMIN_REVIEW"
-  | "APPROVED"
-  | "REJECTED"
-  | "RETURNED"
-  | "CANCELLED"
-  | "ON_HOLD";
-
-export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  DRAFT: "Draft",
-  ASSIGNED: "Assigned",
-  IN_PROGRESS: "In progress",
-  RECORDED: "Recorded",
-  AUDIO_QC: "Audio QC",
-  ADMIN_REVIEW: "Admin review",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  RETURNED: "Returned",
-  CANCELLED: "Cancelled",
-  ON_HOLD: "On hold",
-};
-
 export interface TaskSummary {
   id: string;
   task_code: string;
@@ -113,9 +91,11 @@ export interface TaskDetail extends TaskSummary {
   allowed_transitions: TaskStatus[];
   reasons: Record<string, string[]>;
   can_assign: boolean;
+  /** The moderator may be assigned or changed now (the server decides by status and role). */
+  can_reassign: boolean;
   is_moderator: boolean;
   /** D-119: participants ("A", "B") without consent to record; recording waits for them. */
-  consent_missing?: string[];
+  consent_missing: string[];
 }
 
 export interface TimelineEntry {
@@ -123,6 +103,11 @@ export interface TimelineEntry {
   kind: "status" | "assignment" | "comment";
   actor: string | null;
   text: string;
+  /** For a status change: from (null when the task was made) and to, with the reason given. */
+  from_status: TaskStatus | null;
+  to_status: TaskStatus | null;
+  reason_code: string | null;
+  comment: string | null;
 }
 
 export interface AuditEntry {
@@ -293,8 +278,6 @@ export interface ConsentFormView {
   current: ConsentAnswer | null;
   earlier: ConsentAnswer[];
 }
-export const consentForm = (projectId: string, participantId: string) =>
-  apiRequest<ConsentFormView>(`${pp(projectId)}/${participantId}/consent-form`);
 export const consentFormFileUrl = (projectId: string, participantId: string) =>
   `${pp(projectId)}/${participantId}/consent-form/file`;
 

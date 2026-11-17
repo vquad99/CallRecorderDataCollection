@@ -1,5 +1,5 @@
-// Audio quality card on the task page (D-079): the automatic checks, assigning a QC Executive, the
-// player, and the decision with its reason and comment rules.
+// Audio quality card on the task page (D-079): the automatic checks (those that need attention
+// first), assigning a QC Executive, the player, and the decision: Pass, or Reject with a reason.
 // Requirements: AQC-002, AQC-003, AQC-004, AQC-008, TASK-004
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -52,7 +52,7 @@ function view(over: Record<string, unknown> = {}) {
     can_decide: false,
     can_assign: false,
     can_recheck: false,
-    reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"], RETURN: ["OTHER", "RE_RECORD"] },
+    reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"] },
     results: [AUTO],
     ...over,
   };
@@ -62,7 +62,7 @@ function open(qcView: Record<string, unknown>, extra = {}) {
   return fakeApi(
     signedInAs(ALL_PERMISSIONS, {
       ...worldHandlers(),
-      "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC" }],
+      "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC", can_reassign: false }],
       "GET /api/v1/tasks/t1/recordings": () => [200, []],
       "GET /api/v1/tasks/t1/audio-qc": () => [200, qcView],
       "GET /api/v1/projects/p1/members": () => [
@@ -84,17 +84,21 @@ function open(qcView: Record<string, unknown>, extra = {}) {
 }
 
 describe("audio quality card", () => {
-  it("shows every automatic check with what was measured and allowed", async () => {
+  it("shows the checks that need attention first, and every check on request", async () => {
     open(view());
     renderAt("/tasks/t1");
     const card = await screen.findByRole("region", { name: "Audio quality" }, { timeout: 5000 });
     expect(within(card).getAllByText("Failed").length).toBeGreaterThan(0);
-    const table = within(card).getByRole("table");
+    expect(within(card).getByText("1 check needs attention:")).toBeInTheDocument();
+    const table = within(card).getByRole("table", { name: "Checks that need attention" });
     expect(within(table).getByText("Length")).toBeInTheDocument();
     expect(within(table).getByText("3.0 s")).toBeInTheDocument();
     expect(within(table).getByText("10 s or more")).toBeInTheDocument();
-    expect(within(table).getByText("Signal to noise")).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "Save decision" })).toBeNull();
+    expect(within(table).queryByText("Signal to noise")).toBeNull();
+    await userEvent.click(within(card).getByRole("button", { name: "Show all checks (3)" }));
+    const all = within(card).getByRole("table", { name: "All automatic checks" });
+    expect(within(all).getByText("Signal to noise")).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "Pass" })).toBeNull();
   });
 
   it("lets a manager assign a QC Executive, never the session's moderator", async () => {
@@ -122,14 +126,16 @@ describe("audio quality card", () => {
       "POST /api/v1/tasks/t1/audio-qc/decision": () => [200, view({ task_status: "APPROVED" })],
     });
     renderAt("/tasks/t1");
-    const decision = await screen.findByLabelText("Decision", {}, { timeout: 5000 });
-    await userEvent.selectOptions(decision, "PASS");
-    const save = screen.getByRole("button", { name: "Save decision" });
+    await userEvent.click(await screen.findByRole("button", { name: "Pass" }, { timeout: 5000 }));
+    const window = screen.getByRole("dialog", {
+      name: "Pass a recording that failed the automatic check?",
+    });
+    const save = within(window).getByRole("button", { name: "Pass" });
     expect(save).toBeDisabled();
-    expect(
-      screen.getByText("The automatic check failed: say why this passes."),
-    ).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText(/Comment/), "Client accepts short greetings");
+    await userEvent.type(
+      within(window).getByLabelText(/Why does it pass/),
+      "Client accepts short greetings",
+    );
     await userEvent.click(save);
     await waitFor(() => {
       expect(calls.find((c) => c.path === "/api/v1/tasks/t1/audio-qc/decision")?.body).toEqual({
@@ -140,17 +146,42 @@ describe("audio quality card", () => {
     });
   });
 
-  it("needs a reason to reject a recording, and offers no return (D-118)", async () => {
-    open(view({ can_decide: true }));
-    renderAt("/tasks/t1");
-    await userEvent.selectOptions(
-      await screen.findByLabelText("Decision", {}, { timeout: 5000 }),
-      "FAIL",
+  it("passes a recording the automatic check passed at once", async () => {
+    const { calls } = open(
+      view({ can_decide: true, results: [{ ...AUTO, outcome: "PASS", checks: [] }] }),
+      { "POST /api/v1/tasks/t1/audio-qc/decision": () => [200, view()] },
     );
-    expect(screen.queryByRole("option", { name: /Return/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save decision" })).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText("Reason"), "AUDIO_QUALITY");
-    expect(screen.getByRole("button", { name: "Save decision" })).toBeEnabled();
+    renderAt("/tasks/t1");
+    await userEvent.click(await screen.findByRole("button", { name: "Pass" }, { timeout: 5000 }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(calls.find((c) => c.path.endsWith("/audio-qc/decision"))?.body).toEqual({
+        outcome: "PASS",
+        reason_code: null,
+        comment: "",
+      }),
+    );
+  });
+
+  it("needs a reason to reject a recording, and offers no return (D-118)", async () => {
+    const { calls } = open(view({ can_decide: true }), {
+      "POST /api/v1/tasks/t1/audio-qc/decision": () => [200, view()],
+    });
+    renderAt("/tasks/t1");
+    await userEvent.click(await screen.findByRole("button", { name: "Reject" }, { timeout: 5000 }));
+    expect(screen.queryByRole("button", { name: /Return/ })).not.toBeInTheDocument();
+    const window = screen.getByRole("dialog");
+    expect(within(window).getByRole("button", { name: "Reject" })).toBeDisabled();
+    await userEvent.selectOptions(within(window).getByLabelText(/^Reason/), "AUDIO_QUALITY");
+    expect(within(window).getByRole("button", { name: "Reject" })).toBeEnabled();
+    await userEvent.click(within(window).getByRole("button", { name: "Reject" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path.endsWith("/audio-qc/decision"))?.body).toEqual({
+        outcome: "FAIL",
+        reason_code: "AUDIO_QUALITY",
+        comment: "",
+      }),
+    );
   });
 
   it("plays the recording being checked from a short-lived link", async () => {
@@ -162,7 +193,7 @@ describe("audio quality card", () => {
     });
     renderAt("/tasks/t1");
     await userEvent.click(await screen.findByRole("button", { name: "Listen" }, { timeout: 5000 }));
-    expect(await screen.findByLabelText("Recording being checked")).toHaveAttribute(
+    expect(await screen.findByLabelText("Recording")).toHaveAttribute(
       "src",
       "https://storage.example/a2.wav",
     );

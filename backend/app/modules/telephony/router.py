@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.adapters.telephony import ProviderError
+from app.api.deps import AppSettings, Cipher, Provider
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.auth.models import User
-from app.modules.auth.router import AppSettings, Cipher
 from app.modules.telephony import analytics, service
 from app.modules.telephony.models import Call, CallEvent
 
@@ -38,8 +38,7 @@ class TelephonyStatus(BaseModel):
 
 
 @router.get("/telephony/status", response_model=TelephonyStatus)
-def status(request: Request) -> TelephonyStatus:
-    provider = request.app.state.telephony
+def status(provider: Provider) -> TelephonyStatus:
     return TelephonyStatus(
         configured=provider is not None, provider=provider.name if provider else "TXCONTACT"
     )
@@ -178,9 +177,10 @@ def start_call(
     db: DbSession,
     settings: AppSettings,
     cipher: Cipher,
+    provider: Provider,
 ) -> CallOut:
     call = service.start_call(
-        db, settings, request.app.state.telephony, cipher, principal, task_id, client_ip(request)
+        db, settings, provider, cipher, principal, task_id, client_ip(request)
     )
     return _out(db, [call])[0]
 
@@ -209,11 +209,10 @@ def call_b(
     principal: CurrentPrincipal,
     db: DbSession,
     cipher: Cipher,
+    provider: Provider,
 ) -> CallOut:
     """Ring participant B into the call on the moderator's seat (D-111)."""
-    call = service.call_b(
-        db, request.app.state.telephony, cipher, principal, call_id, client_ip(request)
-    )
+    call = service.call_b(db, provider, cipher, principal, call_id, client_ip(request))
     return _out(db, [call])[0]
 
 
@@ -535,12 +534,11 @@ class TrafficOut(BaseModel):
     response_model=TrafficOut,
     dependencies=[Depends(require(Perm.TASKS_ASSIGN))],
 )
-def provider_traffic(request: Request, settings: AppSettings, days: Days = 30) -> TrafficOut:
+def provider_traffic(settings: AppSettings, provider: Provider, days: Days = 30) -> TrafficOut:
     """The provider's own count of calls per hour of the day (the address is the adapter's
     business). Account-wide: the provider does not split it by project, so only people who
     assign tasks see it."""
     first, last = analytics.day_range(days, settings.txcontact_timezone)
-    provider = request.app.state.telephony
     if provider is None:
         return TrafficOut(
             available=False,

@@ -1,6 +1,6 @@
 // Requirements: FTF-003, FTF-004, FTF-005, FTF-007, FTF-008, FTF-010, FTF-012, AUDIO-004
-// Real browser audio path (fake microphone, AudioWorklet, chunk upload, playback of a 16 kHz 16-bit
-// mono WAV); backend answered by page.route.
+// Real browser audio path (fake microphone, AudioWorklet at the project's 16000 Hz, chunk upload,
+// playback of a 16 kHz 16-bit mono WAV); backend answered by page.route.
 import { expect, test } from "@playwright/test";
 
 const task = {
@@ -21,7 +21,21 @@ const task = {
   allowed_transitions: [],
   reasons: {},
   can_assign: false,
+  can_reassign: false,
   is_moderator: true,
+  consent_missing: [],
+};
+
+/** The project's face-to-face rule: the recorder captures at this rate, never converted. */
+const FACE_TO_FACE_RULE = {
+  mode: "FACE_TO_FACE",
+  sample_rate: 16000,
+  bit_depth: 16,
+  channels: 1,
+  max_silence_pct: "25.00",
+  max_clipping_pct: null,
+  min_duration_seconds: 0,
+  max_duration_seconds: null,
 };
 
 /** A 16 kHz, 16-bit, mono PCM WAV: the delivery format the player must handle. */
@@ -68,7 +82,7 @@ test("records with the fake microphone, uploads whole frames with checksums, and
   );
   await page.route("**/api/v1/tasks/t1", (r) => r.fulfill({ json: task }));
   await page.route("**/api/v1/projects/p1", (r) =>
-    r.fulfill({ json: { id: "p1", audio_rules: [] } }),
+    r.fulfill({ json: { id: "p1", audio_rules: [FACE_TO_FACE_RULE] } }),
   );
   await page.route("**/api/v1/tasks/t1/recordings", async (r) => {
     if (r.request().method() === "POST") {
@@ -154,6 +168,8 @@ test("records with the fake microphone, uploads whole frames with checksums, and
   expect(started).not.toHaveProperty("channel_handling"); // the server derives it from the data
   const channels = Number(started?.["channel_count"]);
   const rate = Number(started?.["native_sample_rate"]);
+  // Captured at the project's rate (owner 2026-11-17): the browser resamples the microphone.
+  expect(rate).toBe(16000);
   const device = started?.["device_channel_count"];
   expect(Number.isInteger(channels) && channels >= 1).toBe(true);
   expect(device === null || (typeof device === "number" && device >= 1)).toBe(true);
@@ -173,9 +189,8 @@ test("records with the fake microphone, uploads whole frames with checksums, and
     if (i < chunks.length - 1) expect(c.bytes).toBe(fullChunk); // 5 s of every channel
   }
   expect(completedWith).toEqual({ chunk_count: chunks.length });
-  await expect(
-    page.getByText(new RegExp(`${channels} captured and kept in the original`)),
-  ).toBeVisible();
+  await expect(page.getByText("Recorded at 16000 Hz.")).toBeVisible();
+  await expect(page.getByText("Recording, 16000 Hz, mono")).toBeVisible();
 
   // Playback: the browser decodes the delivery format and plays it to the end of its length.
   await page.getByRole("button", { name: "Listen" }).click();

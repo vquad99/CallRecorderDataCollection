@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # 2.5 MB covers the largest JSON field (user CSV import, 2 000 000 characters) plus encoding.
     max_request_bytes: int = Field(default=2_500_000, ge=10_000, le=64_000_000)
     max_recording_seconds: int = Field(default=4 * 3600, ge=60, le=24 * 3600)
+    # Largest face-to-face recording kept, all parts together (bytes of float32 samples): a guard
+    # on storage next to the length limit. 3 GB holds over 11 hours of one channel at the 16 kHz
+    # the recorder uses (D-123), or 4 hours of one channel at 48 kHz.
+    max_recording_bytes: int = Field(default=3_000_000_000, ge=1_000_000, le=50_000_000_000)
     # A participant's personal page link works this many days, then staff issue a new one.
     portal_link_days: int = Field(default=30, ge=1, le=365)
     # Dashboards count calendar days in this time zone (IANA name).

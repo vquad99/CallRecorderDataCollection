@@ -4,8 +4,10 @@
 // For each form: what was entered reaches the server in exactly one request; a second click while
 // waiting sends nothing more; and a validation error (naming the field), a conflict, a server error
 // (with its reference) and a lost connection are each shown without losing what was typed. A guard
-// counts the <form> elements in the source so a new form cannot ship without an entry here.
-import { screen, waitFor } from "@testing-library/react";
+// counts the <form> elements in the source so a new form cannot ship without an entry here. The
+// confirmation window (components/ConfirmDialog) is one form used by many actions: each of those
+// has its own entry, and the window stays open with what was typed until its action has worked.
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -95,11 +97,11 @@ const QC_VIEW = {
   can_decide: true,
   can_assign: true,
   can_recheck: true,
-  reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"], RETURN: ["OTHER", "RE_RECORD"] },
+  reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"] },
   results: [],
 };
 const QC_PAGE: Record<string, Handler> = {
-  "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC" }],
+  "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC", can_reassign: false }],
   "GET /api/v1/tasks/t1/recordings": () => [200, []],
   "GET /api/v1/tasks/t1/audio-qc": () => [200, QC_VIEW],
   "GET /api/v1/projects/p1/members": () => [
@@ -263,14 +265,15 @@ const FORMS: Record<string, FormSpec> = {
     kept: "Name",
   },
   "project status": {
-    source: "src/features/projects/tabs.tsx",
+    source: "src/components/ConfirmDialog.tsx",
     url: "/projects/p1",
     ready: /This project accepts new work/, // the Overview tab itself has loaded
-    fill: [type("Reason", "Client asked to pause")],
-    submit: "Change status",
+    open: [click("Archive")],
+    fill: [type("Reason", "Client stopped the work")],
+    submit: "Archive",
     write: "POST /api/v1/projects/p1/status",
     reply: [200, PROJECT],
-    body: { reason: "Client asked to pause" },
+    body: { status: "ARCHIVED", reason: "Client stopped the work" },
     kept: "Reason",
   },
   "find people to add": {
@@ -297,11 +300,11 @@ const FORMS: Record<string, FormSpec> = {
     source: "src/features/projects/tabs.tsx",
     url: "/projects/p1/languages",
     ready: /^Add language$/,
-    fill: [choose("Language code", "ta")],
+    fill: [choose("Language", "ta")],
     submit: "Add language",
     write: "PUT /api/v1/projects/p1/languages",
     reply: [200, PROJECT],
-    kept: "Language code",
+    kept: "Language",
   },
   retention: {
     source: "src/features/projects/tabs.tsx",
@@ -314,24 +317,24 @@ const FORMS: Record<string, FormSpec> = {
     kept: "Face-to-face 16 kHz WAV",
   },
   "add participant": {
-    source: "src/features/projects/ParticipantsTab.tsx",
+    source: "src/features/participants/ParticipantEditor.tsx",
     url: "/projects/p1/participants",
     ready: /P000002/,
     open: [click("Add participant")],
-    fill: [type("Name or label", "Chandra"), choose("Language code", "hi")],
+    fill: [type("Name or label", "Chandra"), choose("Language", "hi")],
     submit: "Add participant",
     write: "POST /api/v1/projects/p1/participants",
     reply: [201, { ...PROJECT, id: "c1" }],
     body: { display_label: "Chandra", language_code: "hi" },
     kept: "Name or label",
   },
-  "correct participant": {
-    source: "src/features/projects/ParticipantsTab.tsx",
+  "edit participant": {
+    source: "src/features/participants/ParticipantEditor.tsx",
     url: "/projects/p1/participants",
     ready: /P000002/,
-    open: [click("Correct")],
+    open: [click("Edit")],
     fill: [type("Name or label", "Asha K")],
-    submit: "Save P000001",
+    submit: "Save changes",
     write: "PATCH /api/v1/projects/p1/participants/a1",
     reply: [200, {}],
     body: { display_label: "Asha K" },
@@ -343,7 +346,7 @@ const FORMS: Record<string, FormSpec> = {
     ready: /HINDI Hindi conversations/,
     fill: [
       choose("Project (active projects)", "p1"),
-      choose("Recording mode", "FACE_TO_FACE"),
+      choose("Recording type", "FACE_TO_FACE"),
       choose("Participant A", "a1"),
       choose("Participant B", "b1"),
       choose("Moderator", "m1"),
@@ -355,11 +358,12 @@ const FORMS: Record<string, FormSpec> = {
     kept: "Due date",
   },
   "task status": {
-    source: "src/features/tasks/TaskDetailPage.tsx",
+    source: "src/components/ConfirmDialog.tsx",
     url: "/tasks/t1",
     ready: /Task T000001/,
-    fill: [choose("Move to", "ON_HOLD"), choose("Reason", "OTHER"), type("Comment", "Waiting")],
-    submit: "Apply",
+    open: [click("Put on hold")],
+    fill: [choose("Reason", "OTHER"), type("Comment", "Waiting")],
+    submit: "Put on hold",
     write: "POST /api/v1/tasks/t1/transition",
     reply: [200, TASK],
     body: { to: "ON_HOLD", reason_code: "OTHER", comment: "Waiting" },
@@ -392,38 +396,35 @@ const FORMS: Record<string, FormSpec> = {
     handlers: QC_PAGE,
   },
   "audio qc decision": {
-    source: "src/features/tasks/AudioQcPanel.tsx",
+    source: "src/components/ConfirmDialog.tsx",
     url: "/tasks/t1",
     ready: /Your decision/,
-    fill: [
-      choose("Decision", "FAIL"),
-      choose("Reason", "AUDIO_QUALITY"),
-      type("Comment", "Traffic"),
-    ],
-    submit: "Save decision",
+    open: [click("Reject")],
+    fill: [choose("Reason", "AUDIO_QUALITY"), type("Comment", "Traffic")],
+    submit: "Reject",
     write: "POST /api/v1/tasks/t1/audio-qc/decision",
     reply: [200, QC_VIEW],
     body: { outcome: "FAIL", reason_code: "AUDIO_QUALITY", comment: "Traffic" },
     kept: "Comment",
     handlers: QC_PAGE,
   },
-  "agent seat": {
+  "phone seat": {
     source: "src/features/users/UserDetailPage.tsx",
     url: "/admin/users/u2",
     ready: /Disable account/,
-    fill: [type("TxContact agent seat", "70001")],
-    submit: "Save agent seat",
+    fill: [type("Phone seat", "70001")],
+    submit: "Save phone seat",
     write: "PUT /api/v1/users/u2/telephony-agent",
     reply: [200, { user_id: "u2", telephony_agent_id: "70001" }],
     body: { agent_id: "70001" },
-    kept: "TxContact agent seat",
+    kept: "Phone seat",
   },
   "cancel phone call": {
-    source: "src/features/tasks/CallCard.tsx",
+    source: "src/components/ConfirmDialog.tsx",
     url: "/tasks/t1",
     ready: /On the call/,
     open: [click("Cancel this call")],
-    fill: [choose("Why", "OTHER"), type("Note", "Line kept dropping")],
+    fill: [choose("Reason", "OTHER"), type("Note", "Line kept dropping")],
     submit: "Cancel the call",
     write: "POST /api/v1/calls/c1/cancel",
     reply: [200, { ...LIVE_CALL, state: "CANCELLED" }],
@@ -472,8 +473,11 @@ async function openForm(spec: FormSpec, write: Handler) {
   for (const step of spec.fill) await step();
   const writes = () =>
     api.calls.filter((c) => `${c.method} ${c.path.split("?")[0]}` === spec.write);
-  return { writes, submit: () => screen.getByRole("button", { name: spec.submit }) };
+  return { writes, submit: () => scope().getByRole("button", { name: spec.submit }) };
 }
+
+/** Inside the open window when there is one (its confirm button), the page otherwise. */
+const scope = () => within(screen.queryByRole("dialog") ?? document.body);
 
 describe("form inventory", () => {
   it("has an entry for every <form> in the source", () => {
@@ -547,7 +551,7 @@ describe.each(Object.entries(FORMS))("%s form", (_, spec) => {
     );
     await userEvent.click(submit());
     await waitFor(() => expect(writes()).toHaveLength(1));
-    const button = screen.queryByRole("button", { name: spec.submit });
+    const button = scope().queryByRole("button", { name: spec.submit });
     if (button) {
       expect(button).toBeDisabled();
       await userEvent.click(button);

@@ -3,13 +3,13 @@ remove, send consent forms, and review the participants' own consent answers.
 
 Every bulk action works one participant at a time through the same checked service functions as
 the single actions, so the same permissions, project limits and audit entries apply; one failing
-row never stops the others and each row gets its own result.
+row never stops the others and each row gets its own result. Consent forms are checked here and
+emailed after the answer (by the worker when there is one): sending hundreds of emails must not
+hold the request open.
 """
 
 from __future__ import annotations
 
-import csv
-import io
 import re
 import uuid
 from dataclasses import dataclass
@@ -19,22 +19,28 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.email import EmailSender
+from app.core.contact import clean_email, normalize_phone
+from app.core.csvio import read_rows
 from app.core.errors import AppError
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher
 from app.modules.participants import service
+from app.modules.participants.consent import latest_own_answer
 from app.modules.participants.models import ConsentRecord, ParticipantPortalLink
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
-from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.projects.service import get_manageable
 
 MAX_IMPORT_ROWS = 500
 MAX_BULK = 200
 COLUMNS = ("name", "phone", "email", "language", "dialect", "district")
 _LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+
+
+def _bad(message: str) -> AppError:
+    return AppError(message, code="INVALID_ROW", status_code=422)
 
 
 @dataclass
@@ -58,57 +64,39 @@ def import_csv(
 ) -> list[RowResult]:
     """Check every row; with confirm, create the rows that passed. Header: name,phone,email,
     language,dialect[,district] (phone, email, dialect and district may be empty)."""
-    project = get_visible_project(db, principal, project_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
-    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
-    header = [h.strip().lower() for h in (reader.fieldnames or [])]
-    if "name" not in header or "language" not in header:
-        raise AppError(
-            "The first line must name the columns: name,phone,email,language,dialect",
-            code="INVALID_CSV",
-            status_code=422,
-        )
-    rows = list(reader)
-    if len(rows) > MAX_IMPORT_ROWS:
-        raise AppError(
-            f"At most {MAX_IMPORT_ROWS} participants per file",
-            code="TOO_MANY_ROWS",
-            status_code=422,
-        )
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
+    rows = read_rows(
+        text,
+        COLUMNS,
+        required=("name", "language"),
+        max_rows=MAX_IMPORT_ROWS,
+        noun="participants",
+    )
     results: list[RowResult] = []
     seen_phones: set[str] = set()
-    for i, raw in enumerate(rows, start=2):
-        # csv puts values beyond the header under the key None, as a list (D-088: was a 500).
-        extra = raw.pop(None, None)
-        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+    for csv_row in rows:
+        i, row = csv_row.line, csv_row.values
         name = row.get("name", "")
         try:
-            if extra:
-                raise AppError(
-                    "This line has more values than the first line has columns",
-                    code="INVALID_ROW",
-                    status_code=422,
-                )
+            if csv_row.extra:
+                raise _bad("This line has more values than the first line has columns")
             if not name:
-                raise AppError("Name is missing", code="INVALID_ROW", status_code=422)
+                raise _bad("Name is missing")
             if len(name) > 200:
-                raise AppError("Name is too long", code="INVALID_ROW", status_code=422)
+                raise _bad("Name is too long")
             language = row.get("language", "")
             if not _LANGUAGE.match(language):
-                raise AppError("Language code is not valid", code="INVALID_ROW", status_code=422)
-            service._check_language(project, language, row.get("dialect", ""))
-            phone = service.normalize_phone(row["phone"]) if row.get("phone") else None
+                raise _bad("Language code is not valid")
+            service.check_language(project, language, row.get("dialect", ""))
+            phone = normalize_phone(row["phone"]) if row.get("phone") else None
             if phone:
                 if phone in seen_phones:
-                    raise AppError(
-                        "Phone number repeated in this file", code="INVALID_ROW", status_code=422
-                    )
+                    raise _bad("Phone number repeated in this file")
                 seen_phones.add(phone)
             if row.get("email"):
-                service.clean_email(row["email"])
+                clean_email(row["email"])
             if len(row.get("district", "")) > 100:
-                raise AppError("District is too long", code="INVALID_ROW", status_code=422)
+                raise _bad("District is too long")
             if not confirm:
                 results.append(RowResult(i, name, True, "Ready to add"))
                 continue
@@ -146,9 +134,6 @@ class BulkResult:
 
 def bulk(
     db: Session,
-    settings: Settings,
-    cipher: FieldCipher,
-    sender: EmailSender,
     principal: Principal,
     project_id: uuid.UUID,
     action: str,
@@ -157,17 +142,12 @@ def bulk(
     reason: str,
     ip: str | None,
 ) -> list[BulkResult]:
-    project = get_visible_project(db, principal, project_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
+    target: Project | None = None
     if action == "assign":
         if target_project_id is None or target_project_id == project.id:
             raise AppError("Choose another project", code="TARGET_REQUIRED", status_code=422)
-        target = get_visible_project(db, principal, target_project_id)
-        if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, target.id):
-            raise AppError(
-                "You do not have permission to do this", code="FORBIDDEN", status_code=403
-            )
+        target = get_manageable(db, principal, target_project_id, Perm.PARTICIPANTS_MANAGE)
     if action == "remove" and not reason.strip():
         raise AppError("Give a reason for removing", code="REASON_REQUIRED", status_code=422)
     results: list[BulkResult] = []
@@ -176,20 +156,17 @@ def bulk(
         try:
             _, participant = service.get_in_project(db, principal, project.id, pid)
             code = participant.participant_code
-            if action == "assign":
-                assert target_project_id is not None  # noqa: S101
-                service.link_existing(db, principal, target_project_id, code, ip)
+            if target is not None:
+                service.link_existing(db, principal, target.id, code, ip)
                 message = "Assigned"
             elif action == "remove":
                 service.delete_participant(db, principal, project.id, pid, reason, ip)
                 message = "Removed"
             else:
-                sent, _ = portal.email_link(
-                    db, settings, cipher, sender, principal, project.id, pid, ip
-                )
-                if not sent:
-                    raise AppError("The email could not be sent", code="EMAIL_FAILED")
-                message = "Consent form sent"
+                # Checked now; emailed after the answer (portal.send_links_job).
+                portal.email_of(participant)
+                portal.check_linkable(participant)
+                message = "Consent form will be emailed"
             results.append(BulkResult(pid, code, True, message))
         except AppError as exc:
             db.rollback()
@@ -207,10 +184,10 @@ def review_consent(
     ip: str | None,
 ) -> ConsentRecord:
     """Approve or reject the participant's own latest "agree" answer."""
-    project, participant = service.get_in_project(db, principal, project_id, participant_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
-    answer = portal.own_consent(db, participant.id, project.id)
+    project, participant = service.get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
+    answer = latest_own_answer(db, participant.id, project.id)
     if answer is None or answer.status != "GIVEN":
         raise AppError(
             "There is no consent answer to review", code="NOTHING_TO_REVIEW", status_code=409
@@ -260,8 +237,7 @@ def consent_overview(
         .where(
             ConsentRecord.project_id == project.id,
             ConsentRecord.participant_id.in_(participant_ids),
-            ConsentRecord.task_id.is_(None),
-            ConsentRecord.captured_by.is_(None),
+            ConsentRecord.is_own_answer,
         )
         .group_by(ConsentRecord.participant_id)
         .subquery()

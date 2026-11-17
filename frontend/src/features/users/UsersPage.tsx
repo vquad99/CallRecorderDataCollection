@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { apiDownload, type ApiError } from "../../api/client";
+import { apiDownload } from "../../api/client";
 import { listUsers, ROLE_CODES, ROLE_LABELS } from "../../api/admin";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
@@ -10,10 +10,12 @@ import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
 import { Avatar, Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAuth } from "../../auth/AuthContext";
+import { DataTable } from "../../components/DataTable";
 
 const PAGE_SIZE = 25;
 
@@ -22,32 +24,21 @@ export function UsersPage() {
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
-  const [exportError, setExportError] = useState<ApiError | null>(null);
-  const [viewError, setViewError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
   const { user: me, viewAs } = useAuth();
   const navigate = useNavigate();
   // Super Admin only (D-100): see the app exactly as this person does, read-only.
   const canViewAs = Boolean(me?.roles.includes("SUPER_ADMIN") && !me.viewer);
 
-  function startViewing(id: string) {
-    setViewError(null);
-    viewAs(id)
-      .then(() => navigate("/"))
-      .catch((err: unknown) => setViewError(toApiError(err)));
-  }
+  const startViewing = (id: string) =>
+    void run(async () => {
+      await viewAs(id);
+      void navigate("/");
+    }, id);
   const { state, reload } = useResource(
     () => listUsers({ search, role, status, page, page_size: PAGE_SIZE }),
     [search, role, status, page],
   );
-
-  async function exportCsv() {
-    setExportError(null);
-    try {
-      await apiDownload("/api/v1/users/export", "users.csv");
-    } catch (err) {
-      setExportError(toApiError(err));
-    }
-  }
 
   return (
     <section aria-labelledby="users-title" className="stack">
@@ -65,12 +56,19 @@ export function UsersPage() {
             <Icon name="upload" size={18} />
             Import CSV
           </Link>
-          <Button variant="secondary" onClick={() => void exportCsv()}>
+          <Button
+            variant="secondary"
+            busy={busy === "export"}
+            onClick={() =>
+              void run(() => apiDownload("/api/v1/users/export", "users.csv"), "export")
+            }
+          >
+            <Icon name="download" size={18} />
             Export CSV
           </Button>
         </div>
       </div>
-      <ErrorNotice error={exportError} />
+      <ErrorNotice error={error} />
       <div className="filters">
         <TextField
           label="Search"
@@ -107,7 +105,6 @@ export function UsersPage() {
           ]}
         />
       </div>
-      <ErrorNotice error={viewError} />
       {state.status === "loading" ? <LoadingState label="Loading users" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.items.length === 0 ? (
@@ -115,58 +112,59 @@ export function UsersPage() {
       ) : null}
       {state.status === "loaded" && state.data.items.length > 0 ? (
         <>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Roles</th>
-                  <th scope="col">Status</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Email</th>
+                <th scope="col">Roles</th>
+                <th scope="col">Phone seat</th>
+                <th scope="col">Status</th>
+                {canViewAs ? (
+                  <th scope="col">
+                    <span className="sr-only">View as</span>
+                  </th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {state.data.items.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <span className="cell-person">
+                      <Avatar name={u.display_name} />
+                      <Link to={`/admin/users/${u.id}`}>{u.display_name}</Link>
+                    </span>
+                  </td>
+                  <td>{u.email}</td>
+                  <td>{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
+                  <td>{u.telephony_agent_id || "-"}</td>
+                  <td>
+                    <StatusBadge
+                      status={
+                        u.status === "ACTIVE" ? (u.password_set ? "ACTIVE" : "INVITED") : "DISABLED"
+                      }
+                      label={`${u.status === "ACTIVE" ? "Active" : "Disabled"}${u.password_set ? "" : " (invitation pending)"}`}
+                    />
+                  </td>
                   {canViewAs ? (
-                    <th scope="col">
-                      <span className="sr-only">View as</span>
-                    </th>
+                    <td className="actions">
+                      {u.status === "ACTIVE" && u.id !== me?.id ? (
+                        <Button
+                          variant="secondary"
+                          aria-label={`View as ${u.display_name}`}
+                          busy={busy === u.id}
+                          onClick={() => startViewing(u.id)}
+                        >
+                          View as
+                        </Button>
+                      ) : null}
+                    </td>
                   ) : null}
                 </tr>
-              </thead>
-              <tbody>
-                {state.data.items.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <span className="cell-person">
-                        <Avatar name={u.display_name} />
-                        <Link to={`/admin/users/${u.id}`}>{u.display_name}</Link>
-                      </span>
-                    </td>
-                    <td>{u.email}</td>
-                    <td>{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
-                    <td>
-                      <StatusBadge
-                        status={
-                          u.status === "ACTIVE"
-                            ? u.password_set
-                              ? "ACTIVE"
-                              : "INVITED"
-                            : "DISABLED"
-                        }
-                        label={`${u.status === "ACTIVE" ? "Active" : "Disabled"}${u.password_set ? "" : " (invitation pending)"}`}
-                      />
-                    </td>
-                    {canViewAs ? (
-                      <td className="actions">
-                        {u.status === "ACTIVE" && u.id !== me?.id ? (
-                          <Button variant="secondary" onClick={() => startViewing(u.id)}>
-                            View as {u.display_name}
-                          </Button>
-                        ) : null}
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </DataTable>
           <Pagination page={page} pageSize={PAGE_SIZE} total={state.data.total} onPage={setPage} />
         </>
       ) : null}

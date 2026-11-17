@@ -35,4 +35,24 @@ export default tseslint.config(
       "no-console": ["error", { allow: ["error"] }],
     },
   },
+  {
+    // One table frame and one confirmation dialog for the whole app, so a page cannot get wider
+    // than a phone screen or ask with the browser's own unstyled boxes.
+    files: ["src/**/*.tsx"],
+    ignores: ["src/components/DataTable.tsx", "src/**/*.test.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='table']",
+          message: "Use <DataTable> from components/DataTable.",
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='window'][callee.property.name=/^(prompt|confirm|alert)$/]",
+          message: "Use useConfirm() from components/ConfirmDialog.",
+        },
+      ],
+    },
+  },
 );

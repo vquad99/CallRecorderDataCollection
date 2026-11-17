@@ -8,6 +8,8 @@ Website: **https://dubdesk.live**. Use a current Google Chrome or Microsoft Edge
 
 Words in **bold** are the exact labels you see on screen.
 
+Dates and times are in India time, written the Indian way, for example 17 Nov 2026, 1:57 pm.
+
 ---
 
 ## 1. Who does what
@@ -39,6 +41,8 @@ Then sign in at https://dubdesk.live with your email and password.
 click **Send reset link**. The emailed link works for 30 minutes. At most 3 links per hour.
 
 **Signed out by itself.** After 10 minutes without use, and after 12 hours in any case. An open recording or phone call keeps you signed in.
+One minute before, a strip says **You will be signed out in 1 minute.** Click **Stay signed in**
+to carry on.
 
 **Locked out.** After 5 wrong passwords in 15 minutes the account waits 15 minutes. You see
 **"Too many failed sign-in attempts. Try again later."**
@@ -60,7 +64,8 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
   are signed out everywhere; sign in with your password and set it up again. (For the last Super
   Admin, the person who runs the server uses `python -m app.cli reset-mfa <email>`.)
 
-**My account** also has **Change password** and **Signed-in devices** (sign out other devices).
+**My account** also has **Change password** and **Signed-in devices**: each device is shown like
+"Edge on Windows · 127.0.0.1"; **Sign out** signs out another device.
 
 **Install the application.** On **My account**, **Install the application** puts Conversation
 Collection among your applications: it then opens in its own window from the desktop or the
@@ -118,16 +123,17 @@ Click a name to open the user. There you can change the name, email or roles (**
 if the password is already set), and **Sign out everywhere**. Users are never deleted, only
 disabled.
 
-**Phone calls → TxContact agent seat** (moderators only): type the moderator's TxContact agent ID
-(for example `70001`) and click **Save agent seat**. Their phone calls ring that seat. Each seat
-belongs to one person; leave it empty for moderators who do not make phone calls.
+**Phone calls → Phone seat** (moderators only): on the moderator's user page, type the seat number
+TxContact gave for them (for example `80003`) in the **Phone seat** box and click **Save phone
+seat**. Their phone calls go through that seat. One seat per person; leave it empty for moderators
+who do not make phone calls. The **Users** list shows each seat in the **Phone seat** column.
 
 The number of active accounts is limited by **Settings → Staff accounts**.
 
-**View as** (Super Admin only): on **Users**, click **View as [name]** to see the platform exactly
-as that person does: their menu, their projects, their tasks. A yellow strip says who you are
-viewing as. Nothing can be changed while viewing; every button that would save something is
-refused. Click **Stop viewing** to return to your own view. Starting and stopping are in the
+**View as** (Super Admin only): on **Users**, click **View as** on a person's row to see the
+platform exactly as that person does: their menu, their projects, their tasks. A yellow strip says
+who you are viewing as. Nothing can be changed while viewing; every button that would save
+something is refused. Click **Stop viewing** to return to your own view. Starting and stopping are in the
 audit log under your own name.
 
 To see a participant's own page, open the project's **Participants** tab and click **Their page**
@@ -139,16 +145,21 @@ on the row (Super Admin only). It is the page the participant sees, without the 
 
 - The **project code** is given by the platform: `PRJ0001`, `PRJ0002`, and so on. You do not type it.
 - **Name**, **Description**.
-- **Recording modes allowed**: tick **Face-to-face** only. Phone calls are not available yet
-  (section 11).
-- **Face-to-face target (hours per day)**: the daily goal shown on dashboards.
+- **Recording types allowed**: tick **Face-to-face**, **Phone call**, or both. Phone calls are new:
+  read section 11 first.
+- **Phone call target** and **Face-to-face target (hours per day)**: the daily goals shown on
+  dashboards.
 - **Who may see participant phone numbers**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
 
 After **Create project** you return to the project list. A new project starts as **Draft**: click
-its code to open it and use **Overview → Status → Change status to: Active**. Only **Active**
+its code to open it and, on **Overview → Status**, click **Make active**. Only **Active**
 projects accept new tasks and recordings, and only they appear in **New task**.
+
+The **Status** card has a button for each next step: **Make active**, **Pause**, **Mark as
+completed**, **Archive**, and **Reopen** for a completed or archived project. Each asks you to
+confirm; archiving or reopening also needs a reason.
 
 Project tabs:
 
@@ -156,8 +167,8 @@ Project tabs:
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
   person the right role under Users first.
 - **Participants**: the project's participants (section 5).
-- **Tasks**: every task of this project, with the same search, status and mode filters as the
-  Tasks page. **New task** here starts with this project already chosen.
+- **Tasks**: every task of this project, with the same search, status and recording type filters
+  as the Tasks page. **New task** here starts with this project already chosen.
 - **Audio rules**: the sound format and limits the automatic check uses (default 16 000 Hz,
   16-bit, mono, at most 25 % silence).
 - **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,
@@ -175,23 +186,28 @@ Project tabs:
   minute): failed recordings, phone calls waiting for a person, failed exports, storage or the
   work queue not answering. When an alert address is set on the server, the same goes out
   by email.
-- **Audit log**: every change, who made it and when. Read only.
+- **Audit log**: every change, who made it and when. Read only. Narrow it with **Area**, **About**
+  and **Action**; the values before and after a change are in a closed **Before and after**
+  section on each row.
 
 ---
 
 ## 5. Project Admin: participants
 
-**Participants → Add participant**:
+**Participants → Add participant** (opens a window):
 
 - **Name or label** (required).
 - **Country code** (choose from the list; India +91 is first) and **Phone number** (optional;
   exactly 10 digits, without the country code).
 - **Email address**: needed to email the consent form.
-- **Language code** (required; choose from the list. When the project has languages, only those
+- **Language** (required; choose from the list. When the project has languages, only those
   are listed).
 - **Dialect**, **Internal notes** (optional).
 
 Each participant gets a code such as `P000123`.
+
+To change someone's details, click **Edit** on their row. A window **Edit P000123** opens; change
+the details and click **Save changes**.
 
 **Add existing participant** (on a project's **Participants** tab): adds someone who is already
 in another of your projects, instead of creating them again. Search by code or name, then click
@@ -208,18 +224,19 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent
 
-1. Click **Send** next to a participant (or tick several and click **Send consent form**). The
-   participant gets an email **"Consent form for <project name>"** with a private link.
+1. Click **Email consent form** next to a participant. Or tick several and click **Send consent
+   form**: those emails go out shortly after, in the background, not at once. The participant
+   gets an email **"Consent form for <project name>"** with a private link.
 2. The participant opens the link, reads the form, ticks **I have read and understood this form**
    and clicks **I agree** or **I do not agree**. They can later **Withdraw my consent**.
-3. The **Consent form** column shows **Not answered**, **Agreed**, **Did not agree** or
-   **Withdrawn**. When the answer is Agreed, click **Approve**, or **Reject** with a note that the
-   participant will see.
-4. **History** shows earlier answers.
+3. The **Consent form** column shows **No answer yet**, **Agreed**, **Did not agree** or
+   **Withdrawn**. When the answer is Agreed, click **Approve consent**, or **Reject consent** with
+   a note that the participant will see.
+4. **Consent history** shows earlier answers, in a window.
 
 ### Everything about one participant
 
-Click **View** on a participant's row. One panel shows all the platform holds about them in the
+Click **View** on a participant's row. One window shows all the platform holds about them in the
 project:
 
 - **Profile**: code, name, phone, email, language, notes, who added them and when, when they
@@ -234,8 +251,9 @@ project:
   the moderator, the status, the consent noted in that session, the recording length, and the
   number of phone calls. Click the task code to open the task.
 
-A project's **Participants** tab also has **Personal link**: a link you can copy and give the
-participant yourself (it works for 30 days; making a new one ends the old one).
+A project's **Participants** tab also has **Personal link**: a window with a link you can copy
+(**Copy link**) and give the participant yourself (it works for 30 days; making a new one ends the
+old one).
 
 ### Other actions on ticked rows
 
@@ -247,7 +265,8 @@ participant yourself (it works for 30 days; making a new one ends the old one).
 
 ## 6. Project Admin: tasks
 
-**Tasks → New task**: choose **Project (active projects)**, **Recording mode: Face-to-face**,
+**Tasks → New task**: choose **Project (active projects)**, **Recording type** (**Face-to-face**,
+or **Phone call** when the project allows it),
 **Participant A** and **Participant B** (two different people), **Priority**, **Moderator** (choose
 now and the task starts as **Assigned**, or **Assign later**) and **Due date**, then **Create task**. Each task gets a code such as `T000045`.
 
@@ -261,24 +280,25 @@ task per line. The first line must be exactly:
 participant_a,participant_b,mode,priority,due_date,moderator
 ```
 
-Write participants by their code (`P000001`). `mode` is `face_to_face` or `telephony` (empty means
-face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means normal), `due_date` is
-`YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
+Write participants by their code (`P000001`). `mode` is `face_to_face` or `telephony` (a phone
+call; empty means face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means
+normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
 leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
 rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
 
 On the task page:
 
 - **Assign moderator**: choose the Moderator and click **Assign**. The task becomes **Assigned**.
-- **Delete task** (top right of the task page): for a task made by mistake. Type the reason. Only a
+- **Buttons at the top of the task page**: **Put on hold** and **Cancel task** each open a window
+  with a **Reason** and a **Comment** (**Go back** closes it without a change). A task on hold
+  shows **Resume task**, which puts it back where it was.
+- **Delete task** (also at the top): for a task made by mistake. Type the reason. Only a
   task with no recording, phone call or consent can be deleted; otherwise cancel it instead.
 - **QC is assigned by itself**: when the recording reaches Audio QC, the platform gives it to the
   project's active QC Executive with the fewest tasks waiting (in turn when equal), never the
   moderator or whoever recorded. If the project has no QC Executive free, nobody is set.
 - **Audio quality → Assign QC**: to choose or change the QC Executive by hand. The person who
   recorded cannot check their own recording.
-- **Change status**: put the task **On hold**, **Cancelled**, or back to **Assigned** after a
-  return, with a reason.
 - **History**: everything that happened; add a comment with **Add comment**.
 
 ### Downloads
@@ -299,11 +319,15 @@ Downloads are available to the Super Admin and Project Admin.
 
 1. Open **Tasks** and click your task.
 2. Click **Start session** (the highlighted box near the top).
-3. **Record consent**: choose **How consent was given**, then click **Consent given** (or
-   **Refused**) on the row of Participant A and of Participant B. A participant who answered
-   **Agreed** on their own consent form already counts (unless staff sent the answer back).
-   **The recorder stays locked until both participants have consent.**
-4. Click **Open the recorder** (in the same highlighted box).
+3. In the **Consent** card, choose **How consent was given**, then click **Agreed** (or **Did not
+   agree**) on the row of Participant A and of Participant B. Each row shows **Agreed**, **Did not
+   agree** or **No answer yet**. A participant who answered **Agreed** on their own consent form
+   already counts (unless staff sent the answer back).
+   **Open the recorder stays grey, with "Note both people's consent below first.", until both
+   participants have consent.**
+4. Click **Open the recorder** (in the same highlighted box). The recorder shows the steps
+   **Microphone**, **Sound check**, **Record**, **Save**, **Done**; **Back to the task** is above
+   them. It records at 16000 Hz (the project's rate).
 5. Click **Allow microphone** and allow it in the browser. Choose the **Microphone** if you have
    more than one, and watch the **Input level**.
 6. Optional: **Test (5 s, then play back)** to hear yourself.
@@ -314,65 +338,69 @@ Downloads are available to the Super Admin and Project Admin.
 9. Click **Stop and save**. Wait for **Recording saved**.
 10. On the same screen, click **Listen**. If it is good, click **Send to QC**; if not, click
     **Record again** and record it once more. (The same buttons are also on the task page.)
+    After **Send to QC** the task page says **Sent to QC. A QC Executive checks it next.**
 
 The platform checks the sound within about a minute of saving; **Send to QC** works once that
 check is done.
 
 If the internet drops, recording carries on and the saved parts are sent when it comes back. If
 the tab closes by mistake, open the recorder again: it offers **Keep the saved m:ss** or **Discard
-it**. A recording can be up to 4 hours long.
+it** (it asks you to confirm; the saved audio is then deleted). A recording can be up to 4 hours
+long.
 
 ---
 
 ## 7a. Moderator: phone calls
 
-Phone calls go through TxContact. You need a **TxContact agent seat**: the Super Admin adds it on
-your user page (**Users → your name → Phone calls → TxContact agent seat**). Sign in to your
-TxContact agent screen before you start.
+Everything is done on the task page in this portal. You do not use any TxContact app or screen.
+Your phone seat is set by the Super Admin (section 4); if calls do not start, ask them.
 
-1. Open **Tasks** and click your **Telephony** task.
-2. Click **Start session**.
-3. Click **Start call**. TxContact rings participant A and connects them to your TxContact seat.
-   The card shows **On the call** once TxContact has accepted the request; if it refused, the
-   card says what TxContact answered.
-4. When A answers, tick **Participant A is on the call**. Then click **Call participant B**:
-   TxContact rings B into the same call. The card says what TxContact answered; if B does not
-   answer, click **Ring B again** (3 times at most in one call).
-5. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
+1. Open **Tasks** and click your **Phone call** task.
+2. Click **Start session**. The card says **Ready to call** and lists the steps.
+3. Note both people's consent in the **Consent** card, right under the call card (as in section
+   7, step 3). **Start recording** stays grey, with "Note both people's consent below first.",
+   until both participants have consent.
+4. Click **Start call**. The phone system rings participant A. The card shows **On the call**; if
+   the call could not be placed, the card says why.
+5. When A answers, tick **Participant A is on the call**. Then click **Call participant B**: the
+   phone system rings B into the same call. If B does not answer, click **Ring B again** (3 times
+   at most in one call).
+6. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
    call), then **I am muted and listening** and **Both voices are clear**.
-   Record consent for both on the task page first: **Start recording** is refused until both
-   participants have consent.
-   Click **Start recording** when the conversation begins, and **Stop recording** when it ends.
-   TxContact records the whole call; only the part between Start and Stop is delivered, checked
-   and counted. The call cannot be closed without Start; **Start again** moves the start.
-6. If not done yet, **Record consent** for Participant A and Participant B on the task page.
-7. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
-   them, end the call, then click **Cancel this call** and choose **Poor line quality**.
-8. When they have finished, click **Close call** (add a note if useful). If someone refused
+7. When both are on the line, click **Start recording** as the conversation begins, and **Stop
+   recording** when they finish. The whole call is recorded; only the part between Start and Stop
+   is delivered, checked and counted. The call cannot be closed without Start; **Start again**
+   moves the start.
+8. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
+   them, then click **Cancel this call** and choose the **Reason** **Poor line quality**.
+9. When they have finished, click **Close call** (add a note if useful). If someone refused
    consent, click **Cancel this call** and choose **Consent refused**: they are not called again
    for this task.
-9. The card shows **Fetching the recording**. The platform finds the call at TxContact and
-   downloads its recording, usually within a few minutes. The page updates on its own. You can
-   still cancel the call while it is being fetched.
-10. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
+10. The card shows **Fetching the recording**. The platform fetches the call's recording from the
+    phone system, usually within a few minutes. The page updates on its own. You can still cancel
+    the call while it is being fetched.
+11. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
     QC**; if not, **Call again**.
 
 If the call did not work (no answer, wrong number, dropped), click **Cancel this call** and choose
-the reason. You can then start a new call. A task can be called at most 6 times in an hour.
+the **Reason**. You can then start a new call. A task can be called at most 6 times in an hour.
 
-**Needs a person to pick the recording.** If several TxContact calls fit the time, or none shows
-participant A's number, the card lists them with their start time, length and the last two digits
-of each number. Click **This is the call** on the right one. If none was found, or TxContact could
-not be searched (the card says why), click **Look for the recording again** later, or cancel the
-call. A project admin can do the same, and cancel a call, from the task's **Phone calls** history.
+**Needs a person to pick the recording.** If several calls in the phone system fit the time, or
+none shows participant A's number, the card lists them with their start time, length and the last
+two digits of each number. Click **This is the call** on the right one. If none was found, or the
+phone system could not be searched (the card says why), click **Look for the recording again**
+later, or cancel the call. A project admin can do the same, and cancel a call, from the task's
+**Phone calls** history.
 
 **Phone calls page.** The menu has **Phone calls** (Super Admin, Project Admin, Moderator). A
 moderator's page is **My phone calls**: the list of their own calls, newest first, each with a
-link to its task. Admins choose a **Project** and a **Period** (7, 30 or 90 days) and see:
+link to its task. Admins choose a **Project** and a **Period** (7, 30 or 90 days). Their page has
+two tabs, **Figures** and **All calls**. Long tables show 10 rows; click **Show all** for the
+rest. The **Figures** tab shows:
 
-- **Figures**: calls; recorded (and the share of calls); failed or cancelled; **needs a person**
+- Calls; recorded (and the share of calls); failed or cancelled; **needs a person**
   (also calls left open); average call; recorded audio and how long recordings take to arrive;
-  **Today** against the project's daily telephony target; phone tasks **not called yet**.
+  **Today** against the project's daily phone call target; phone tasks **not called yet**.
 - **Calls per day** (recorded, still open, failed or cancelled), with a table view.
 - **From call to approval**: calls started, accepted by TxContact, closed by the moderator,
   recording stored, tasks sent to QC, tasks approved.
@@ -382,15 +410,17 @@ link to its task. Admins choose a **Project** and a **Period** (7, 30 or 90 days
 - **Why calls were cancelled**, **Problems getting the recording**, and the **Call checklist on
   closed calls** (how often each box was ticked).
 - Project admins also see **TxContact: calls per hour**, TxContact's own count for the account.
-- **All calls**: every call with a link to its task; **Show** filters it (for example **Needs a
-  person**). **Download calls (CSV)** saves the period's calls as a spreadsheet.
+
+The **All calls** tab lists every call with a link to its task; **Show** filters it (for example
+**Needs a person**). **Download calls (CSV)** saves the period's calls as a spreadsheet.
 
 Moderators have no figures, charts or CSV: only the list of their own calls. No page shows a
 full phone number: the last two digits only.
 
-**Phone calls history.** Every task shows each call with every step: when it was requested, what
-TxContact answered, each checklist tick, when it was closed, each search, which recording was
-chosen and when it was stored. The recording's details file (in **Download with consent form** and
+**Phone calls history.** Every task shows each call with every step, in plain words: when it was
+started, when A and B were rung, each checklist tick, when it was closed, which recording was found
+or chosen and when it was stored. The phone system's own answers are in a closed **Technical log**,
+for the Super Admin only. The recording's details file (in **Download with consent form** and
 in the project's metadata export) carries the same history in its **call** section.
 
 ---
@@ -399,16 +429,16 @@ in the project's metadata export) carries the same history in its **call** secti
 
 1. Open **Tasks** (set **Status: Audio QC** to see only waiting work), or your **Dashboard**.
 2. Open the task. The **Audio quality** card shows the automatic check: overall **Passed**,
-   **Listen and decide** or **Failed**, and a row for each check (format, length, silence,
-   clipping, loudness, duplicates and more).
+   **Listen and decide** or **Failed**. Only the checks that need attention are listed; **Show
+   all checks (n)** shows every check (format, length, silence, clipping, loudness, duplicates and
+   more).
 3. Click **Listen** to hear the recording.
-4. Under **Your decision**, choose:
-   - **Pass: send to the admin for final approval** → the task becomes **Admin review**;
-   - **Reject the recording** → **Rejected** (final).
+4. Under **Your decision**, click:
+   - **Pass** → the task becomes **Admin review** (the admin gives final approval);
+   - **Reject** → **Rejected** (final).
 
-   For Reject, pick a **Reason**. A **Comment** is required when you pass a recording the
-   automatic check failed, or when the reason is "other".
-5. Click **Save decision**.
+   Reject asks for a **Reason** (a **Comment** is needed when the reason is "Other"). Passing a
+   recording the automatic check failed asks **Why does it pass?**.
 
 **Check the stored file again** repeats the automatic check on the stored file.
 
@@ -416,15 +446,17 @@ The automatic check never approves or rejects anything by itself; a person alway
 
 ### Project Admin: final approval
 
-A task that passed QC shows **Admin review**. Open it: the **Final approval** card lets you
-**Listen** and **Approve**. To reject it, use **Change status** with a reason. Only then is the task **Approved** and ready to download.
+A task that passed QC shows **Admin review**. Open it: the **Final approval** card says **QC passed
+this recording. Listen, then approve or reject it.** Click **Listen**, then **Approve**, or
+**Reject** (it asks for a **Reason** and a **Comment**). After **Approve** the task is **Approved**
+and ready to download.
 
 **Many at once** (Tasks list): tick the tasks (or the box at the top of the list for the whole
 page). A bar appears with:
 
 - **Approve selected (N)**: approves the ticked tasks that are waiting for admin review; the others
   are skipped and named.
-- **Clear**: removes the ticks.
+- **Clear selection**: removes the ticks.
 
 ### Export a project
 
@@ -434,7 +466,7 @@ Open the project and click the **Export** tab (Super Admin and Project Admin).
 
 1. Choose **What to export**: **Audio + metadata**, **Audio only** or **Metadata only**.
 2. Choose **Which recordings**: **Approved tasks only** (the delivery) or **Every finished
-   recording**. You can narrow it by **Recording type** (face-to-face or telephony), **Language**,
+   recording**. You can narrow it by **Recording type** (face-to-face or phone calls), **Language**,
    and the days it was recorded (**Recorded from**, **Recorded to**; days in India time).
 3. Choose **Tables as** CSV or TSV.
 4. Optional: **Also include the original recordings** (as recorded, before any processing; much
@@ -494,7 +526,7 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 |---|---|---|
 | **Project**, **Period** | everyone | One project or all of yours; the last 7, 30 or 90 days, or **Choose dates (from – to)** |
 | **From**, **To** (with Choose dates) | everyone | Counts only recordings started on those days; the chart shows exactly those days. At most 366 days |
-| **Recording type** | everyone | Face-to-face or telephony |
+| **Recording type** | everyone | Face-to-face or phone call |
 | **Language**, **Dialect** | everyone | Conversations in which a participant speaks it |
 | **District** | everyone | Conversations with a participant from that district (shown once participants have a district) |
 | **Task status** | staff | Tasks in that status |
@@ -504,7 +536,8 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 everything ever recorded; with chosen days they count those days only.
 
 Managers also see **Phone calls**: placed, recorded, could not be placed, waiting for a person,
-still open.
+still open. Under **Needs attention**, the **Waiting for audio QC** and **Tasks on hold** tiles open
+the **Tasks** list filtered to those tasks.
 
 ---
 
@@ -519,7 +552,7 @@ The participant opens the link from the consent email. No login is needed. The p
 - **Consent form**: read it, tick **I have read and understood this form**, click **I agree** or
   **I do not agree**. After agreeing they can **Withdraw my consent**.
 - **Your sessions**: each session and its state (**Planned**, **Recorded, being checked**,
-  **Accepted**, **To be recorded again**, **Not used**).
+  **Accepted**, **Not used**).
 
 The link works for 30 days. If it stops working, the project team sends a new one.
 
@@ -531,7 +564,6 @@ The link works for 30 days. If it stops working, the project team sends a new on
   7a) before real work. Whether a second person can be added to a call, and whether the two
   speakers are recorded apart, is for TxContact to confirm.
 - **Transcription.**
-- **Installing as an app** on a phone or computer.
 
 ---
 
@@ -542,9 +574,10 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "Microphone permission was refused" | Click the lock icon in the address bar, allow the microphone, reload. |
 | "No microphone was found" | Connect a microphone, then choose it again. |
 | "This browser cannot record here" | Use the latest Chrome or Edge on a computer. |
+| "This browser cannot record at 16000 Hz" | Use the latest Chrome or Edge. |
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
 | "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
-| "The task must be in progress to record" | Moderator: **Change status → In progress → Apply**. |
+| "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
 | No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. |

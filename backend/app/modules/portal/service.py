@@ -14,35 +14,38 @@ open the same page for any participant, without a link and without changing anyt
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.email import EmailSender, EmailSendError, OutgoingEmail
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher, hash_token, new_token
 from app.modules.exports import minutes as minute_totals
 from app.modules.participants import service as participants
+from app.modules.participants.consent import latest_own_answer
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import final_length_subquery, newest_ready_subquery
 from app.modules.tasks.models import Task
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
+logger = logging.getLogger("app.portal")
+
 MAX_SESSIONS = 200
 # What a participant sees for each task state: no internal workflow words.
 SESSION_STATES = {
     "ASSIGNED": "Planned",
     "IN_PROGRESS": "Planned",
     "ON_HOLD": "Planned",
-    "RETURNED": "To be recorded again",
     "RECORDED": "Recorded, being checked",
     "AUDIO_QC": "Recorded, being checked",
     "ADMIN_REVIEW": "Recorded, being checked",
@@ -71,11 +74,35 @@ def create_link(
 ) -> tuple[str, datetime]:
     """A new personal link; any earlier link for this participant and project stops working.
     shown_to_staff: the caller sees the link (to hand it over), as opposed to only emailing it."""
-    project, participant = participants.get_in_project(db, principal, project_id, participant_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+    project, participant = participants.get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
+    check_linkable(participant)
+    return _issue(db, settings, project, participant, principal.user_id, ip, shown_to_staff)
+
+
+def email_of(participant: Participant) -> str:
+    """The participant's email address (encrypted), or 409 NO_EMAIL."""
+    if participant.email_enc is None:
+        raise AppError("This participant has no email address", code="NO_EMAIL", status_code=409)
+    return participant.email_enc
+
+
+def check_linkable(participant: Participant) -> None:
+    """409 when this participant can no longer be given a personal link."""
     if participant.deleted_at is not None:
         raise AppError("This participant was deleted", code="PARTICIPANT_DELETED", status_code=409)
+
+
+def _issue(
+    db: Session,
+    settings: Settings,
+    project: Project,
+    participant: Participant,
+    created_by: uuid.UUID,
+    ip: str | None,
+    shown_to_staff: bool,
+) -> tuple[str, datetime]:
     _revoke(db, project.id, participant.id)
     token = new_token()
     expires = datetime.now(UTC) + timedelta(days=settings.portal_link_days)
@@ -85,7 +112,7 @@ def create_link(
             project_id=project.id,
             token_hash=hash_token(token),
             expires_at=expires,
-            created_by=principal.user_id,
+            created_by=created_by,
             shown_to_staff=shown_to_staff,
         )
     )
@@ -95,7 +122,7 @@ def create_link(
         entity_type="participant",
         entity_id=participant.id,
         project_id=project.id,
-        actor_id=principal.user_id,
+        actor_id=created_by,
         ip=ip,
         after={"expires_at": expires.isoformat(), "shown_to_staff": shown_to_staff},
     )
@@ -116,12 +143,26 @@ def email_link(
 ) -> tuple[bool, datetime]:
     """Create a fresh personal link and email it to the participant (the link is not shown to
     staff). Returns (sent, expires_at)."""
-    project, participant = participants.get_in_project(db, principal, project_id, participant_id)
-    if participant.email_enc is None:
-        raise AppError("This participant has no email address", code="NO_EMAIL", status_code=409)
-    url, expires = create_link(
-        db, settings, principal, project_id, participant_id, ip, shown_to_staff=False
+    project, participant = participants.get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
     )
+    email_of(participant)
+    check_linkable(participant)
+    return _email(db, settings, cipher, sender, project, participant, principal.user_id, ip)
+
+
+def _email(
+    db: Session,
+    settings: Settings,
+    cipher: FieldCipher,
+    sender: EmailSender,
+    project: Project,
+    participant: Participant,
+    actor_id: uuid.UUID,
+    ip: str | None,
+) -> tuple[bool, datetime]:
+    address = cipher.decrypt(email_of(participant))
+    url, expires = _issue(db, settings, project, participant, actor_id, ip, shown_to_staff=False)
     body = (
         "Hello,\n\n"
         f'You are taking part in the project "{project.name}". Please read the consent form '
@@ -134,7 +175,7 @@ def email_link(
     try:
         sender.send(
             OutgoingEmail(
-                to=cipher.decrypt(participant.email_enc),
+                to=address,
                 subject=f"Consent form for {project.name}",
                 body=body,
             )
@@ -147,11 +188,51 @@ def email_link(
         entity_type="participant",
         entity_id=participant.id,
         project_id=project.id,
-        actor_id=principal.user_id,
+        actor_id=actor_id,
         ip=ip,
     )
     db.commit()
     return True, expires
+
+
+SEND_LINKS_TASK = "portal.send_links"
+
+
+def send_links_job(
+    state: Any, project_id: str, participant_ids: list[str], actor_id: str, ip: str | None
+) -> None:
+    """Background (D-073 bulk "send consent form"): a fresh personal link emailed to each
+    participant. The request checked who may be sent one; anyone deleted or left without an email
+    address since then is skipped. A failed email is logged and the others still go out."""
+    with state.session_factory() as db:
+        project = db.get(Project, uuid.UUID(project_id))
+        if project is None:
+            return
+        for pid in participant_ids:
+            participant = db.get(Participant, uuid.UUID(pid))
+            if participant is None:
+                continue
+            try:
+                check_linkable(participant)
+                sent, _ = _email(
+                    db,
+                    state.settings,
+                    state.cipher,
+                    state.email_sender,
+                    project,
+                    participant,
+                    uuid.UUID(actor_id),
+                    ip,
+                )
+            except AppError as exc:
+                logger.info("consent_link_skipped", extra={"participant_id": pid, "why": exc.code})
+                continue
+            except Exception:
+                db.rollback()
+                logger.exception("consent_link_failed", extra={"participant_id": pid})
+                continue
+            if not sent:
+                logger.warning("consent_link_email_failed", extra={"participant_id": pid})
 
 
 def _revoke(db: Session, project_id: uuid.UUID, participant_id: uuid.UUID) -> int:
@@ -175,9 +256,9 @@ def revoke_link(
     participant_id: uuid.UUID,
     ip: str | None,
 ) -> None:
-    project, participant = participants.get_in_project(db, principal, project_id, participant_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+    project, participant = participants.get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
     if _revoke(db, project.id, participant.id):
         audit.record(
             db,
@@ -237,23 +318,6 @@ class PortalView:
     link_expires_at: datetime | None
 
 
-def own_consent(
-    db: Session, participant_id: uuid.UUID, project_id: uuid.UUID
-) -> ConsentRecord | None:
-    """The participant's own latest answer on the form (project-wide, not tied to one task)."""
-    return db.scalar(
-        select(ConsentRecord)
-        .where(
-            ConsentRecord.participant_id == participant_id,
-            ConsentRecord.project_id == project_id,
-            ConsentRecord.task_id.is_(None),
-            ConsentRecord.captured_by.is_(None),
-        )
-        .order_by(ConsentRecord.created_at.desc())
-        .limit(1)
-    )
-
-
 def view(db: Session, token: str) -> PortalView:
     link, participant, project = _resolve(db, token)
     link.last_used_at = datetime.now(UTC)
@@ -266,7 +330,7 @@ def view_for_admin(
 ) -> PortalView:
     """The participant's own page as they see it, for a Super Admin (D-100); read-only."""
     if not principal.is_super_admin:
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+        raise forbidden()
     project, participant = participants.get_in_project(db, principal, project_id, participant_id)
     return build_view(db, participant, project, None)
 
@@ -274,11 +338,13 @@ def view_for_admin(
 def build_view(
     db: Session, participant: Participant, project: Project, expires: datetime | None
 ) -> PortalView:
+    # A session's length is its newest finished recording's, as on the minutes (D-095).
+    newest = newest_ready_subquery()
+    length = final_length_subquery()
     final = (
-        select(Recording.task_id, func.max(AudioAsset.duration_ms).label("ms"))
-        .join(AudioAsset, AudioAsset.recording_id == Recording.id)
-        .where(Recording.state == "READY", AudioAsset.kind.in_(FINAL_KINDS))
-        .group_by(Recording.task_id)
+        select(newest.c.task_id, length.c.ms)
+        .join(length, length.c.recording_id == newest.c.recording_id)
+        .where(newest.c.rank == 1)
         .subquery()
     )
     rows = db.execute(
@@ -303,7 +369,7 @@ def build_view(
         for r in rows
     ]
     totals = minute_totals.per_participant(db, project.id, [participant.id]).get(participant.id)
-    answer = own_consent(db, participant.id, project.id)
+    answer = latest_own_answer(db, participant.id, project.id)
     return PortalView(
         participant_code=participant.participant_code,
         display_name=participant.display_label,
@@ -336,7 +402,7 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             code="CONSENT_FORM_MISSING",
             status_code=409,
         )
-    current = own_consent(db, participant.id, project.id)
+    current = latest_own_answer(db, participant.id, project.id)
     if decision == "WITHDRAWN" and (current is None or current.status != "GIVEN"):
         raise AppError(
             "There is no consent to withdraw", code="NOTHING_TO_WITHDRAW", status_code=409

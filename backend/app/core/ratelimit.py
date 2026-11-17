@@ -17,9 +17,9 @@ from fastapi import Request
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.security import SESSION_COOKIE, UNSAFE_METHODS
 
 WINDOW_SECONDS = 60
-_UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 class Limiter(Protocol):
@@ -91,11 +91,11 @@ def address_key(address: str | None) -> str | None:
 def rate_limit(request: Request) -> None:
     settings: Settings = request.app.state.settings
     limiter: Limiter = request.app.state.rate_limiter
-    write = request.method in _UNSAFE
+    write = request.method in UNSAFE_METHODS
     limit = settings.rate_limit_writes_per_minute if write else settings.rate_limit_reads_per_minute
     kind = "w" if write else "r"
     address = address_key(request.client.host if request.client else None) or "-"
-    session = request.cookies.get("ccp_session")
+    session = request.cookies.get(SESSION_COOKIE)
     if session:
         keys = [
             (f"rl:{kind}:{hashlib.sha256(session.encode()).hexdigest()[:24]}", limit),

@@ -5,14 +5,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel
 
+from app.api.deps import AppSettings, Cipher, Mailer
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.auth.router import AppSettings, Cipher
+from app.modules.participants.models import ConsentStatus, ReviewStatus
 from app.modules.portal import service
 
 public_router = APIRouter(prefix="/portal", tags=["participant page"])
@@ -49,9 +50,9 @@ class PortalOut(BaseModel):
     language_code: str
     consent_policy_version: str
     consent_text: str
-    consent_status: Literal["GIVEN", "REFUSED", "WITHDRAWN"] | None
+    consent_status: ConsentStatus | None
     consent_at: datetime | None
-    consent_review: Literal["PENDING", "APPROVED", "REJECTED"] | None
+    consent_review: ReviewStatus | None
     consent_review_note: str
     sessions: list[SessionOut]
     accepted_minutes: float
@@ -66,7 +67,7 @@ def my_page(token: Token, db: DbSession) -> PortalOut:
 
 
 class ConsentBody(BaseModel):
-    decision: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+    decision: ConsentStatus
 
 
 @public_router.post("/consent", response_model=PortalOut)
@@ -115,12 +116,13 @@ def email_link(
     db: DbSession,
     settings: AppSettings,
     cipher: Cipher,
+    mailer: Mailer,
 ) -> EmailedOut:
     sent, expires = service.email_link(
         db,
         settings,
         cipher,
-        request.app.state.email_sender,
+        mailer,
         principal,
         project_id,
         participant_id,

@@ -5,10 +5,11 @@ import { NavLink, Outlet, useMatch, useOutletContext, useParams } from "react-ro
 
 import { getProject, type Project } from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
+import { BackLink } from "../../components/BackLink";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useResource } from "../../hooks/useResource";
-import { STATUS_LABELS } from "./ProjectsPage";
 import { StatusBadge } from "../../components/StatusBadge";
+import { labelFor, PROJECT_STATUS_LABELS } from "../../lib/labels";
 
 export interface ProjectContext {
   project: Project;
@@ -44,13 +45,14 @@ export function ProjectDetailPage() {
   );
   return (
     <section aria-labelledby="project-title" className="stack">
-      <div className="page-header">
+      <BackLink to="/projects">All projects</BackLink>
+      <div className="page-header__title">
         <h1 id="project-title">
           {project.code} · {project.name}
         </h1>
         <StatusBadge
           status={project.status}
-          label={STATUS_LABELS[project.status] ?? project.status}
+          label={labelFor(PROJECT_STATUS_LABELS, project.status)}
         />
       </div>
       {tabs.length > 1 ? (

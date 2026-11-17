@@ -2,9 +2,9 @@
 // decision, assignment and a re-check from storage.
 import { apiRequest } from "./client";
 
-export type QcOutcome = "PASS" | "NEEDS_REVIEW" | "FAIL" | "RETURN";
+export type QcOutcome = "PASS" | "NEEDS_REVIEW" | "FAIL";
 export type CheckState = "PASS" | "FAIL" | "REVIEW" | "INFO" | "NOT_APPLICABLE";
-export type Decision = "PASS" | "FAIL" | "RETURN";
+export type Decision = "PASS" | "FAIL";
 
 export interface QcCheck {
   code: string;
@@ -41,7 +41,7 @@ export interface AudioQcView {
   can_decide: boolean;
   can_assign: boolean;
   can_recheck: boolean;
-  reasons: Record<"FAIL" | "RETURN", string[]>;
+  reasons: Record<"FAIL", string[]>;
   results: QcResult[];
 }
 
@@ -86,7 +86,6 @@ export const OUTCOME_LABELS: Record<QcOutcome, string> = {
   PASS: "Passed",
   NEEDS_REVIEW: "Listen and decide",
   FAIL: "Failed",
-  RETURN: "Returned",
 };
 
 export const STATE_LABELS: Record<CheckState, string> = {

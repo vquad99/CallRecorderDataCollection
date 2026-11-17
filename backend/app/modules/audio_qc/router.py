@@ -10,11 +10,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 
+from app.api.deps import AppSettings, Storage
 from app.core.permissions import Perm
-from app.core.storage import require_storage
 from app.modules.audio_qc import service
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.auth.router import AppSettings
 
 router = APIRouter(tags=["audio-qc"], dependencies=[Depends(require(Perm.TASKS_VIEW))])
 metadata_router = APIRouter(
@@ -106,12 +105,12 @@ def decide(
 @router.post("/tasks/{task_id}/audio-qc/recheck", response_model=AudioQcOut)
 def recheck(
     task_id: uuid.UUID,
-    request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
     settings: AppSettings,
+    storage: Storage,
 ) -> AudioQcOut:
-    service.recheck(db, require_storage(request), settings, principal, task_id)
+    service.recheck(db, storage, settings, principal, task_id)
     return AudioQcOut.model_validate(service.view(db, principal, task_id))
 
 

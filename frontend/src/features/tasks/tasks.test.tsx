@@ -34,11 +34,34 @@ const task = {
     CANCELLED: ["CLIENT_REQUEST", "OTHER"],
   },
   can_assign: true,
+  can_reassign: true,
   is_moderator: false,
+  consent_missing: ["A", "B"],
 };
 const timeline = [
-  { at: "2026-11-09T00:00:00Z", kind: "status", actor: "Ada", text: "created -> DRAFT" },
+  {
+    at: "2026-11-09T00:00:00Z",
+    kind: "status",
+    actor: "Ada",
+    text: "created -> DRAFT",
+    from_status: null,
+    to_status: "DRAFT",
+    reason_code: null,
+    comment: null,
+  },
+  {
+    at: "2026-11-09T01:00:00Z",
+    kind: "status",
+    actor: "Ada",
+    text: "DRAFT -> ON_HOLD WAITING_FOR_PARTICIPANT Back next week",
+    from_status: "DRAFT",
+    to_status: "ON_HOLD",
+    reason_code: "WAITING_FOR_PARTICIPANT",
+    comment: "Back next week",
+  },
 ];
+/** The open confirmation window. */
+const dialog = () => screen.getByRole("dialog");
 
 describe("tasks", () => {
   it("finds tasks by code once typing pauses", async () => {
@@ -76,7 +99,6 @@ describe("tasks", () => {
   });
 
   it("deletes a task made by mistake, with a reason, and says so on the list (D-115)", async () => {
-    vi.stubGlobal("prompt", () => "Made twice by mistake");
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "tasks.assign"], {
         "GET /api/v1/tasks/t1": () => [200, task],
@@ -88,8 +110,15 @@ describe("tasks", () => {
       }),
     );
     const router = renderAt("/tasks/t1");
-    await screen.findByRole("heading", { name: "Task T000001" });
+    await screen.findByRole("heading", { name: /^Task T000001/ });
     await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
+    const confirm = within(dialog()).getByRole("button", { name: "Delete task" });
+    expect(confirm).toBeDisabled();
+    await userEvent.type(
+      within(dialog()).getByLabelText(/Why is it deleted/),
+      "Made twice by mistake",
+    );
+    await userEvent.click(confirm);
     expect(await screen.findByText("Task T000001 deleted.")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/tasks");
     expect(calls.find((c) => c.path === "/api/v1/tasks/t1/delete")?.body).toEqual({
@@ -115,11 +144,14 @@ describe("tasks", () => {
         ],
       }),
     );
-    vi.stubGlobal("prompt", () => "test");
     renderAt("/tasks/t1");
-    await screen.findByRole("heading", { name: "Task T000001" });
+    await screen.findByRole("heading", { name: /^Task T000001/ });
     await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
-    expect(await screen.findByText(/Cancel it instead/)).toBeInTheDocument();
+    await userEvent.type(within(dialog()).getByLabelText(/Why is it deleted/), "test");
+    await userEvent.click(within(dialog()).getByRole("button", { name: "Delete task" }));
+    // The window stays open with the reason typed, and says why.
+    expect(await within(dialog()).findByText(/Cancel it instead/)).toBeInTheDocument();
+    expect(within(dialog()).getByLabelText(/Why is it deleted/)).toHaveValue("test");
   });
 
   it("puts a task on hold only with a reason", async () => {
@@ -140,13 +172,22 @@ describe("tasks", () => {
       }),
     );
     renderAt("/tasks/t1");
-    await screen.findByRole("heading", { name: "Task T000001" });
-    await userEvent.selectOptions(screen.getByLabelText("Move to"), "ON_HOLD");
-    const apply = screen.getByRole("button", { name: "Apply" });
+    await screen.findByRole("heading", { name: /^Task T000001/ });
+    // No list of statuses to pick from: each action is its own button (UI review 2026-11-17).
+    expect(screen.queryByLabelText("Move to")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Put on hold" }));
+    const apply = within(dialog()).getByRole("button", { name: "Put on hold" });
     expect(apply).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText("Reason"), "WAITING_FOR_PARTICIPANT");
+    expect(
+      within(dialog()).getByRole("option", { name: "Waiting for a participant" }),
+    ).toBeInTheDocument();
+    await userEvent.selectOptions(
+      within(dialog()).getByLabelText(/^Reason/),
+      "WAITING_FOR_PARTICIPANT",
+    );
     await userEvent.click(apply);
-    expect(await screen.findByText("On hold")).toBeInTheDocument();
+    expect(await screen.findByText("On hold.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume task" })).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
       to: "ON_HOLD",
       reason_code: "WAITING_FOR_PARTICIPANT",
@@ -196,8 +237,10 @@ describe("tasks", () => {
       ...task,
       recording_mode: "FACE_TO_FACE",
       can_assign: false,
+      can_reassign: false,
       is_moderator: true,
       allowed_transitions: ["IN_PROGRESS"],
+      consent_missing: [],
     };
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "consent.capture"], {
@@ -215,6 +258,7 @@ describe("tasks", () => {
       "href",
       "/tasks/t1/record",
     );
+    expect(screen.getByText("Session started.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
       to: "IN_PROGRESS",
       reason_code: null,
@@ -368,7 +412,13 @@ describe("tasks", () => {
       signedInAs(["tasks.view", "consent.capture"], {
         "GET /api/v1/tasks/t1": () => [
           200,
-          { ...task, can_assign: false, is_moderator: true, allowed_transitions: ["IN_PROGRESS"] },
+          {
+            ...task,
+            can_assign: false,
+            can_reassign: false,
+            is_moderator: true,
+            allowed_transitions: ["IN_PROGRESS"],
+          },
         ],
         "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
         "POST /api/v1/tasks/t1/consent": () => [
@@ -386,17 +436,19 @@ describe("tasks", () => {
       }),
     );
     renderAt("/tasks/t1");
-    await screen.findByRole("heading", { name: "Record consent" });
+    await screen.findByRole("heading", { name: "Consent" });
     expect(
       screen.queryByRole("heading", { name: /Assign moderator|Reassign moderator/ }),
     ).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Consent given" })[0] as HTMLElement,
+    expect(screen.getAllByText("No answer yet").length).toBeGreaterThan(0);
+    const group = screen.getByRole("group", { name: "Consent of P000001" });
+    await userEvent.click(within(group).getByRole("button", { name: "Agreed" }));
+    await waitFor(() =>
+      expect(within(group).getByRole("button", { name: "Agreed" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
     );
-    expect((await screen.findAllByText("Given")).length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByRole("button", { name: "Consent given" })[0] as HTMLElement,
-    ).toHaveAttribute("aria-pressed", "true");
     expect(calls.find((c) => c.path.endsWith("/consent"))?.body).toEqual({
       participant_id: "a1",
       status: "GIVEN",
@@ -506,5 +558,119 @@ describe("tasks", () => {
       { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: false },
       { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: true },
     ]);
+  });
+});
+
+describe("task page in plain words (UI review 2026-11-17)", () => {
+  it("shows the history in words, not status codes", async () => {
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/tasks/t1": () => [200, task],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(await screen.findByText("Draft → On hold")).toBeInTheDocument();
+    expect(screen.getByText("Created as Draft")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for a participant · Back next week")).toBeInTheDocument();
+    expect(screen.queryByText(/DRAFT -> ON_HOLD/)).not.toBeInTheDocument();
+    // Priority and recording type as words.
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Phone call")).toBeInTheDocument();
+  });
+
+  it("keeps the recorder closed until both people's consent is noted (D-119)", async () => {
+    fakeApi(
+      signedInAs(["tasks.view", "consent.capture"], {
+        "GET /api/v1/tasks/t1": () => [
+          200,
+          {
+            ...task,
+            recording_mode: "FACE_TO_FACE",
+            status: "IN_PROGRESS",
+            can_assign: false,
+            can_reassign: false,
+            is_moderator: true,
+            allowed_transitions: [],
+            consent_missing: ["B"],
+          },
+        ],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+      }),
+    );
+    renderAt("/tasks/t1");
+    const open = await screen.findByRole("button", { name: "Open the recorder" });
+    expect(open).toBeDisabled();
+    expect(open).toHaveAccessibleDescription("Note both people's consent below first.");
+    expect(screen.queryByRole("link", { name: "Open the recorder" })).not.toBeInTheDocument();
+  });
+
+  it("lets the admin reject at the final approval, with a reason and a comment (D-118)", async () => {
+    const review = {
+      ...task,
+      status: "ADMIN_REVIEW",
+      recording_mode: "FACE_TO_FACE",
+      can_reassign: false,
+      allowed_transitions: ["APPROVED", "REJECTED"],
+      reasons: { REJECTED: ["AUDIO_QUALITY", "OTHER"] },
+    };
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "recordings.view"], {
+        "GET /api/v1/tasks/t1": () => [200, review],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/tasks/t1/recordings": () => [200, []],
+        "GET /api/v1/tasks/t1/audio-qc": () => [
+          404,
+          { error: { code: "NOT_FOUND", message: "x" } },
+        ],
+        "POST /api/v1/tasks/t1/transition": () => [
+          200,
+          { ...review, status: "REJECTED", allowed_transitions: [] },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByText("QC passed this recording. Listen, then approve or reject it."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/send it back/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.selectOptions(within(dialog()).getByLabelText(/^Reason/), "OTHER");
+    const confirm = within(dialog()).getByRole("button", { name: "Reject" });
+    expect(confirm).toBeDisabled(); // Other needs a comment
+    await userEvent.type(within(dialog()).getByLabelText(/^Comment/), "Wrong language");
+    await userEvent.click(confirm);
+    expect(await screen.findByText("Recording rejected.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path.endsWith("/transition"))?.body).toEqual({
+      to: "REJECTED",
+      reason_code: "OTHER",
+      comment: "Wrong language",
+    });
+  });
+
+  it("opens the task list filtered by the status and project in its address", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/projects": () => [
+          200,
+          { items: [{ id: "p1", code: "VOICE" }], total: 1, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/tasks": () => [200, { items: [task], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/tasks?status=AUDIO_QC&project=p1");
+    await screen.findByText("T000001");
+    expect(screen.getByLabelText("Status")).toHaveValue("AUDIO_QC");
+    expect(screen.getByLabelText("Project")).toHaveValue("p1");
+    expect(
+      calls.some(
+        (c) =>
+          c.path.startsWith("/api/v1/tasks?") &&
+          c.path.includes("status=AUDIO_QC") &&
+          c.path.includes("project_id=p1"),
+      ),
+    ).toBe(true);
   });
 });

@@ -1,102 +1,98 @@
-// Audio quality card on the task page (D-079): what the automatic check measured, who checks the
-// recording, a player, and the QC Executive's decision. The server decides who may do what; this
-// only shows the controls it allows.
+// Audio quality card on the task page (D-079): what the automatic check found, who checks the
+// recording, a player, and the QC Executive's decision: Pass or Reject (D-118). The server decides
+// who may do what; this only shows the controls it allows.
 import { useState } from "react";
 
 import * as qc from "../../api/audioQc";
-import type { ApiError } from "../../api/client";
 import { listMembers } from "../../api/projects";
-import { assetUrl } from "../../api/recordings";
 import type * as work from "../../api/work";
-import { Icon } from "../../components/Icon";
-import { ErrorNotice } from "../../components/Notice";
-import { ErrorState, LoadingState } from "../../components/StateViews";
-import { StatusBadge } from "../../components/StatusBadge";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { Icon } from "../../components/Icon";
+import { ErrorNotice } from "../../components/Notice";
+import { ErrorState, LoadingState } from "../../components/StateViews";
+import { StatusBadge, type Tone } from "../../components/StatusBadge";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { when } from "../../lib/format";
+import { labelFor, REASON_LABELS, reasonChoices } from "../../lib/labels";
+import { Player } from "./Listen";
 
-const TONE: Record<string, string> = {
-  PASS: "APPROVED",
-  NEEDS_REVIEW: "AUDIO_QC",
-  FAIL: "REJECTED",
-  RETURN: "RETURNED",
+const OUTCOME_TONE: Record<qc.QcOutcome, Tone> = {
+  PASS: "success",
+  NEEDS_REVIEW: "warning",
+  FAIL: "danger",
 };
-const CHECK_TONE: Record<qc.CheckState, string> = {
-  PASS: "APPROVED",
-  FAIL: "REJECTED",
-  REVIEW: "AUDIO_QC",
-  INFO: "DRAFT",
-  NOT_APPLICABLE: "DRAFT",
+const CHECK_TONE: Record<qc.CheckState, Tone> = {
+  PASS: "success",
+  FAIL: "danger",
+  REVIEW: "warning",
+  INFO: "neutral",
+  NOT_APPLICABLE: "neutral",
 };
-const words = (s: string) => s.toLowerCase().replace(/_/g, " ");
-const when = (iso: string) => new Date(iso).toLocaleString();
+/** Checks that need the listener's attention; the rest are behind "Show all checks". */
+const ATTENTION: readonly qc.CheckState[] = ["FAIL", "REVIEW"];
 
 function Outcome({ outcome }: { outcome: qc.QcOutcome }) {
-  return <StatusBadge status={TONE[outcome] ?? "DRAFT"} label={qc.OUTCOME_LABELS[outcome]} />;
-}
-
-function Checks({ result }: { result: qc.QcResult }) {
   return (
-    <table className="table">
-      <caption className="sr-only">Automatic checks</caption>
-      <thead>
-        <tr>
-          <th scope="col">Check</th>
-          <th scope="col">Result</th>
-          <th scope="col">Measured</th>
-          <th scope="col">Allowed</th>
-        </tr>
-      </thead>
-      <tbody>
-        {result.checks.map((c) => (
-          <tr key={c.code}>
-            <td>
-              {qc.CHECK_LABELS[c.code] ?? words(c.code)}
-              {c.message ? <div className="muted">{c.message}</div> : null}
-            </td>
-            <td>
-              <StatusBadge status={CHECK_TONE[c.state]} label={qc.STATE_LABELS[c.state]} />
-            </td>
-            <td>{c.measured}</td>
-            <td>{c.expected}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <StatusBadge
+      tone={OUTCOME_TONE[outcome] ?? "neutral"}
+      label={labelFor(qc.OUTCOME_LABELS, outcome)}
+    />
   );
 }
 
-export function Player({ assetId }: { assetId: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  if (src) {
-    return (
-      // Speech recordings carry no captions; the details are in the checks table above.
-      // eslint-disable-next-line jsx-a11y/media-has-caption
-      <audio controls src={src} className="player" aria-label="Recording being checked" />
-    );
-  }
+/** The automatic checks: those that need attention, and every check on request. */
+function Checks({ result }: { result: qc.QcResult }) {
+  const [all, setAll] = useState(false);
+  const attention = result.checks.filter((c) => ATTENTION.includes(c.state));
+  const shown = all ? result.checks : attention;
   return (
-    <div>
-      <Button
-        variant="secondary"
-        busy={busy}
-        onClick={() => {
-          setBusy(true);
-          setError(null);
-          assetUrl(assetId, "play")
-            .then((r) => setSrc(r.url))
-            .catch((err: unknown) => setError(toApiError(err)))
-            .finally(() => setBusy(false));
-        }}
-      >
-        <Icon name="play" size={15} />
-        Listen
-      </Button>
-      <ErrorNotice error={error} />
+    <div className="stack stack--tight">
+      <p>
+        {attention.length === 0
+          ? "No check needs attention."
+          : attention.length === 1
+            ? "1 check needs attention:"
+            : `${attention.length} checks need attention:`}
+      </p>
+      {shown.length > 0 ? (
+        <DataTable label={all ? "All automatic checks" : "Checks that need attention"}>
+          <thead>
+            <tr>
+              <th scope="col">Check</th>
+              <th scope="col">Result</th>
+              <th scope="col">Measured</th>
+              <th scope="col">Allowed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((c) => (
+              <tr key={c.code}>
+                <td>
+                  {labelFor(qc.CHECK_LABELS, c.code)}
+                  {c.message ? <div className="muted">{c.message}</div> : null}
+                </td>
+                <td>
+                  <StatusBadge tone={CHECK_TONE[c.state]} label={qc.STATE_LABELS[c.state]} />
+                </td>
+                <td>{c.measured}</td>
+                <td>{c.expected}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      ) : null}
+      <span>
+        <Button variant="secondary" aria-expanded={all} onClick={() => setAll(!all)}>
+          {all
+            ? "Show only checks that need attention"
+            : `Show all checks (${result.checks.length})`}
+        </Button>
+      </span>
     </div>
   );
 }
@@ -113,8 +109,7 @@ function AssignQc({
   const members = useResource(() => listMembers(task.project_id), [task.project_id]);
   const [userId, setUserId] = useState("");
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
   const people =
     members.state.status === "loaded"
       ? members.state.data.filter(
@@ -130,16 +125,11 @@ function AssignQc({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        setBusy(true);
-        setError(null);
-        qc.assignQc(task.id, userId, reason)
-          .then((v) => {
-            onChange(v);
-            setUserId("");
-            setReason("");
-          })
-          .catch((err: unknown) => setError(toApiError(err)))
-          .finally(() => setBusy(false));
+        void run(async () => {
+          onChange(await qc.assignQc(task.id, userId, reason));
+          setUserId("");
+          setReason("");
+        });
       }}
     >
       <Select
@@ -163,7 +153,7 @@ function AssignQc({
       <Button
         type="submit"
         variant="secondary"
-        busy={busy}
+        busy={busy !== null}
         disabled={!userId || (reassigning && !reason.trim())}
       >
         {reassigning ? "Reassign QC" : "Assign QC"}
@@ -172,85 +162,61 @@ function AssignQc({
   );
 }
 
-function DecisionForm({
-  taskId,
+/** Pass sends the recording to the project admin; Reject asks why and ends the task. */
+function Decision({
+  task,
   view,
   automatic,
   onDecided,
 }: {
-  taskId: string;
+  task: work.TaskDetail;
   view: qc.AudioQcView;
   automatic: qc.QcResult | undefined;
   onDecided: () => void;
 }) {
-  const [outcome, setOutcome] = useState<qc.Decision | "">("");
-  const [reason, setReason] = useState("");
-  const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const reasons = outcome === "FAIL" || outcome === "RETURN" ? view.reasons[outcome] : null;
-  const overriding = outcome === "PASS" && automatic?.outcome === "FAIL";
-  const needsComment = overriding || reason === "OTHER";
+  const confirm = useConfirm();
+  const { busy, error, run } = useAction(onDecided);
+  const decided = async (outcome: qc.Decision, reason: string, comment: string) => {
+    await qc.decideQc(task.id, outcome, reason, comment);
+    onDecided();
+  };
+  const pass = () =>
+    // Passing a recording the automatic check failed needs the reason in words.
+    automatic?.outcome === "FAIL"
+      ? confirm.ask({
+          title: "Pass a recording that failed the automatic check?",
+          askReason: "Why does it pass?",
+          confirmLabel: "Pass",
+          action: ({ comment }) => decided("PASS", "", comment),
+        })
+      : void run(() => qc.decideQc(task.id, "PASS", "", ""), "PASS");
+  const reject = () =>
+    confirm.ask({
+      title: `Reject the recording of task ${task.task_code}?`,
+      message: "The task ends as rejected.",
+      confirmLabel: "Reject",
+      danger: true,
+      reasons: reasonChoices(view.reasons.FAIL),
+      action: ({ reason, comment }) => decided("FAIL", reason, comment),
+    });
   return (
-    <form
-      aria-labelledby="qc-decision-title"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!outcome) return;
-        setBusy(true);
-        setError(null);
-        qc.decideQc(taskId, outcome, reason, comment)
-          .then(onDecided)
-          .catch((err: unknown) => setError(toApiError(err)))
-          .finally(() => setBusy(false));
-      }}
-    >
+    <section className="stack stack--tight" aria-labelledby="qc-decision-title">
       <h3 id="qc-decision-title">Your decision</h3>
-      <Select
-        label="Decision"
-        value={outcome}
-        onChange={(e) => {
-          setOutcome(e.target.value as qc.Decision);
-          setReason("");
-        }}
-        options={[
-          { value: "", label: "Choose" },
-          { value: "PASS", label: "Pass: send to the admin for final approval" },
-          { value: "FAIL", label: "Reject the recording" },
-        ]}
-      />
-      {reasons ? (
-        <Select
-          label="Reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          options={[
-            { value: "", label: "Choose a reason" },
-            ...reasons.map((r) => ({ value: r, label: words(r) })),
-          ]}
-        />
-      ) : null}
-      <TextField
-        label="Comment"
-        hint={
-          overriding
-            ? "The automatic check failed: say why this passes."
-            : "Required when the reason is 'other'."
-        }
-        required={needsComment}
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-      />
+      <p className="muted">
+        Listen first. Pass sends it to the project admin for final approval; Reject ends the task.
+      </p>
+      <div className="actions">
+        <Button busy={busy !== null} onClick={pass}>
+          <Icon name="verified" size={16} />
+          Pass
+        </Button>
+        <Button variant="danger" disabled={busy !== null} onClick={reject}>
+          Reject
+        </Button>
+      </div>
       <ErrorNotice error={error} />
-      <Button
-        type="submit"
-        busy={busy}
-        disabled={!outcome || (Boolean(reasons) && !reason) || (needsComment && !comment.trim())}
-      >
-        <Icon name="verified" size={16} />
-        Save decision
-      </Button>
-    </form>
+      {confirm.dialog}
+    </section>
   );
 }
 
@@ -262,8 +228,7 @@ export function AudioQcPanel({
   onDecided: () => void;
 }) {
   const { state, reload, replace } = useResource(() => qc.getAudioQc(task.id), [task.id]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
   if (state.status === "loading") return <LoadingState label="Loading audio check" />;
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const view = state.data;
@@ -280,19 +245,12 @@ export function AudioQcPanel({
           <dt>QC Executive</dt>
           <dd>{view.qc_name ?? "Not assigned"}</dd>
         </div>
-        {automatic ? (
-          <div className="checks__row">
-            <dt>Automatic check</dt>
-            <dd>
-              {automatic.comment} · {when(automatic.created_at)}
-            </dd>
-          </div>
-        ) : (
-          <div className="checks__row">
-            <dt>Automatic check</dt>
-            <dd>Not run yet</dd>
-          </div>
-        )}
+        <div className="checks__row">
+          <dt>Automatic check</dt>
+          <dd>
+            {automatic ? `${automatic.comment} · ${when(automatic.created_at)}` : "Not run yet"}
+          </dd>
+        </div>
       </dl>
       {automatic ? <Checks result={automatic} /> : null}
       {automatic?.asset_id && (view.can_decide || view.can_recheck) ? (
@@ -302,18 +260,14 @@ export function AudioQcPanel({
         <div className="actions">
           <Button
             variant="secondary"
-            busy={busy}
-            onClick={() => {
-              setBusy(true);
-              setError(null);
-              qc.recheckQc(task.id)
-                .then((v) => {
-                  replace(v);
-                  if (v.task_status !== task.status) onDecided();
-                })
-                .catch((err: unknown) => setError(toApiError(err)))
-                .finally(() => setBusy(false));
-            }}
+            busy={busy !== null}
+            onClick={() =>
+              void run(async () => {
+                const v = await qc.recheckQc(task.id);
+                replace(v);
+                if (v.task_status !== task.status) onDecided();
+              })
+            }
           >
             <Icon name="waveform" size={15} />
             Check the stored file again
@@ -323,7 +277,7 @@ export function AudioQcPanel({
       <ErrorNotice error={error} />
       {view.can_assign ? <AssignQc task={task} view={view} onChange={replace} /> : null}
       {view.can_decide ? (
-        <DecisionForm taskId={task.id} view={view} automatic={automatic} onDecided={onDecided} />
+        <Decision task={task} view={view} automatic={automatic} onDecided={onDecided} />
       ) : null}
       {decisions.length > 0 ? (
         <div>
@@ -336,7 +290,7 @@ export function AudioQcPanel({
                 </span>
                 <div>
                   <Outcome outcome={d.outcome} />
-                  {d.reason_code ? ` ${words(d.reason_code)}` : ""}
+                  {d.reason_code ? ` ${labelFor(REASON_LABELS, d.reason_code)}` : ""}
                   {d.comment ? ` · ${d.comment}` : ""}
                 </div>
               </li>

@@ -14,23 +14,22 @@ Columns: participant_a,participant_b,mode,priority,due_date,moderator
 
 from __future__ import annotations
 
-import csv
-import io
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.contact import normalize_email
+from app.core.csvio import read_rows
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.participants.models import Participant, ParticipantProjectLink
-from app.modules.projects.models import Project, ProjectMembership
-from app.modules.projects.service import ensure_accepts_new_work
-from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.projects.models import Project
+from app.modules.projects.service import ensure_accepts_new_work, get_manageable
 from app.modules.tasks import service
 
 MAX_IMPORT_ROWS = 500
@@ -97,17 +96,16 @@ def _due(value: str) -> datetime | None:
 def _moderator(db: Session, project_id: uuid.UUID, email: str) -> User | None:
     if not email:
         return None
-    user = db.scalar(select(User).where(func.lower(User.email) == email.lower()))
-    member = user is not None and db.scalar(
-        select(ProjectMembership.id).where(
-            ProjectMembership.project_id == project_id, ProjectMembership.user_id == user.id
-        )
-    )
-    if user is None or not member:
-        raise _bad(f"Moderator {email} is not a member of this project")
-    if user.status != "ACTIVE" or Role.MODERATOR.value not in {r.code for r in user.roles}:
-        raise _bad(f"{email} is not an active moderator")
-    return user
+    not_member = _bad(f"Moderator {email} is not a member of this project")
+    user = db.scalar(select(User).where(User.email == normalize_email(email)))
+    if user is None:
+        raise not_member
+    try:
+        return service.require_member_with_role(db, project_id, user.id, Role.MODERATOR)
+    except AppError as exc:
+        if exc.code == "NOT_PROJECT_MEMBER":
+            raise not_member from None
+        raise _bad(f"{email} is not an active moderator") from None
 
 
 def import_csv(
@@ -118,36 +116,22 @@ def import_csv(
     confirm: bool,
     ip: str | None,
 ) -> list[RowResult]:
-    project = get_visible_project(db, principal, project_id)
-    if not principal.can_in_project(Perm.TASKS_ASSIGN, project.id):
-        raise forbidden()
+    project = get_manageable(db, principal, project_id, Perm.TASKS_ASSIGN)
     ensure_accepts_new_work(project)
-    reader = csv.DictReader(io.StringIO(text.lstrip("﻿")))
-    header = [(h or "").strip().lower() for h in (reader.fieldnames or [])]
-    if "participant_a" not in header or "participant_b" not in header:
-        raise AppError(
-            "The first line must name the columns: " + ",".join(COLUMNS),
-            code="INVALID_CSV",
-            status_code=422,
-        )
-    rows = list(reader)
-    if len(rows) > MAX_IMPORT_ROWS:
-        raise AppError(
-            f"At most {MAX_IMPORT_ROWS} tasks per file", code="TOO_MANY_ROWS", status_code=422
-        )
+    rows = read_rows(
+        text,
+        COLUMNS,
+        required=("participant_a", "participant_b"),
+        max_rows=MAX_IMPORT_ROWS,
+        noun="tasks",
+    )
     results: list[RowResult] = []
-    for i, raw in enumerate(rows, start=2):
-        # csv puts values beyond the header under the key None, as a list (D-088: was a 500).
-        extra = raw.pop(None, None)
-        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+    for csv_row in rows:
+        i, row = csv_row.line, csv_row.values
         pair = f"{row.get('participant_a', '')} + {row.get('participant_b', '')}"
         try:
-            if extra:
-                raise AppError(
-                    "This line has more values than the first line has columns",
-                    code="INVALID_ROW",
-                    status_code=422,
-                )
+            if csv_row.extra:
+                raise _bad("This line has more values than the first line has columns")
             a = _participant(db, project.id, row.get("participant_a", ""), "A")
             b = _participant(db, project.id, row.get("participant_b", ""), "B")
             if a.id == b.id:

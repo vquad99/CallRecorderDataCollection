@@ -32,6 +32,7 @@ const ICONS = {
   previous: "CaretLeft",
   waveform: "Waveform",
   upload: "UploadSimple",
+  download: "DownloadSimple",
   stop: "Stop",
   play: "Play",
   phone: "Phone",

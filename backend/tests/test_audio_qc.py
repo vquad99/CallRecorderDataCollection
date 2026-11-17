@@ -377,7 +377,7 @@ def test_the_details_file_goes_with_the_recording(world: dict[str, Any]) -> None
     derived = kinds["FTF_DERIVED_PCM"]
     assert (derived["sample_rate"], derived["bit_depth"], derived["channels"]) == (16000, 16, 1)
     assert len(derived["sha256"]) == 64
-    assert derived["processing"][0]["tool"] == "python-soxr"
+    assert derived["processing"][0]["tool"] == "ccp float32 to int16"
     assert body["audio_qc"]["automatic"]["outcome"] == "PASS"
     assert body["audio_qc"]["decision"] is None
     qc = _assign_qc(world)

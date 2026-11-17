@@ -59,7 +59,7 @@ def test_peak_and_rms_match_an_independent_calculation(tmp_path: Path, signal: n
 
 def test_digital_silence_is_reported_as_silence_with_no_level(tmp_path: Path) -> None:
     raw = fx.write_raw(tmp_path / "s.f32", fx.silence(3.0))
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav")
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav")
     levels = media.measure(tmp_path / "d.wav")
     assert (levels.peak_dbfs, levels.rms_dbfs, levels.silence_pct, levels.clip_count) == (
         None,
@@ -76,14 +76,14 @@ def test_silence_share_and_threshold(
     # 7 s of speech-level tone, then 3 s at a level either side of the -50 dBFS silence threshold.
     signal = np.concatenate([fx.tone(7.0, dbfs=-12.0), fx.tone(3.0, dbfs=quiet_dbfs)])
     raw = fx.write_raw(tmp_path / "s.f32", signal)
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav")
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav")
     expected = 30.0 if counts_as_silence else 0.0
     assert media.measure(tmp_path / "d.wav").silence_pct == pytest.approx(expected, abs=0.5)
 
 
 def test_low_volume_is_measured_not_hidden(tmp_path: Path) -> None:
     raw = fx.write_raw(tmp_path / "s.f32", fx.tone(2.0, dbfs=-42.0))
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav")
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav")
     levels = media.measure(tmp_path / "d.wav")
     assert levels.peak_dbfs == pytest.approx(-42.0, abs=0.2)
     assert levels.rms_dbfs == pytest.approx(-45.01, abs=0.2)  # a sine's RMS is 3.01 dB below peak
@@ -108,7 +108,7 @@ def test_over_range_capture_is_kept_in_the_original_and_clipped_in_the_delivery(
     media.write_float_wav(raw, tmp_path / "o.wav", fx.RATE)
     original, _ = soundfile.read(tmp_path / "o.wav", dtype="float32")
     assert float(np.max(original)) == pytest.approx(1.6, abs=1e-6), "original never altered"
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav")
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav")
     derived = media.measure(tmp_path / "d.wav")
     assert derived.clip_count > 0
     assert derived.peak_dbfs == pytest.approx(0.0, abs=0.01)
@@ -120,12 +120,16 @@ RATES = [8_000, 11_025, 16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000, 
 
 
 @pytest.mark.parametrize("rate", RATES)
-def test_every_capture_rate_converts_to_16k_with_the_same_length(tmp_path: Path, rate: int) -> None:
+def test_every_provider_rate_converts_to_16k_with_the_same_length(
+    tmp_path: Path, rate: int
+) -> None:
+    """A phone provider's file, whatever its rate, becomes the 16 kHz delivery file (D-101).
+    (Face-to-face recordings are made at 16 kHz and never converted, D-123.)"""
     signal = fx.tone(3.0, rate=rate, freq=300.0)
     raw = fx.write_raw(tmp_path / "s.f32", signal)
     media.write_float_wav(raw, tmp_path / "o.wav", rate)
-    media.resample_to_pcm16(raw, rate, tmp_path / "a.wav")
-    media.resample_to_pcm16(raw, rate, tmp_path / "b.wav")
+    media.resample_keep_channels_to_pcm16(raw, rate, tmp_path / "a.wav", 1)
+    media.resample_keep_channels_to_pcm16(raw, rate, tmp_path / "b.wav", 1)
     assert media.sha256_file(tmp_path / "a.wav") == media.sha256_file(tmp_path / "b.wav")
     original, derived = media.inspect_wav(tmp_path / "o.wav"), media.inspect_wav(tmp_path / "a.wav")
     assert (derived.sample_rate, derived.channels, derived.codec) == (16_000, 1, "pcm_s16le")
@@ -146,15 +150,15 @@ def test_any_channel_count_keeps_all_channels_and_delivers_channel_one(
     data, _ = soundfile.read(tmp_path / "o.wav", dtype="float32", always_2d=True)
     assert data.shape == (fx.RATE, channels)
     assert all(np.array_equal(data[:, c], parts[c]) for c in range(channels))
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav", channels)
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav", channels)
     first = fx.write_raw(tmp_path / "first.f32", parts[0])
-    media.resample_to_pcm16(first, fx.RATE, tmp_path / "ref.wav")
+    media.pcm16_delivery(first, fx.RATE, tmp_path / "ref.wav")
     assert media.sha256_file(tmp_path / "d.wav") == media.sha256_file(tmp_path / "ref.wav")
 
 
 def test_a_very_short_recording_still_converts(tmp_path: Path) -> None:
     raw = fx.write_raw(tmp_path / "s.f32", fx.tone(0.01))  # 10 ms
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "d.wav")
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "d.wav")
     assert media.inspect_wav(tmp_path / "d.wav").duration_ms == 10
 
 
@@ -256,10 +260,10 @@ def test_ffprobe_agrees_on_unusual_formats(tmp_path: Path, rate: int, channels: 
     parts = [fx.tone(1.0, rate=rate, freq=200.0 * (c + 1)) for c in range(channels)]
     raw = fx.write_raw(tmp_path / "s.f32", fx.interleave(*parts))
     media.write_float_wav(raw, tmp_path / "o.wav", rate, channels)
-    media.resample_to_pcm16(raw, rate, tmp_path / "d.wav", channels)
+    media.pcm16_delivery(raw, rate, tmp_path / "d.wav", channels)
     for path, expected in (
         (tmp_path / "o.wav", ("pcm_f32le", str(rate), channels)),
-        (tmp_path / "d.wav", ("pcm_s16le", "16000", 1)),
+        (tmp_path / "d.wav", ("pcm_s16le", str(rate), 1)),
     ):
         out = subprocess.run(  # noqa: S603
             [ffprobe, "-v", "error", "-show_streams", "-of", "json", str(path)],

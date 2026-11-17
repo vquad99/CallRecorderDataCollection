@@ -10,6 +10,7 @@ import {
 } from "../../api/system";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { IconTile } from "../../components/Icon";
+import { when } from "../../lib/format";
 
 type LoadState =
   | { kind: "loading" }
@@ -89,7 +90,7 @@ export function StatusPage() {
               {state.alerts.active.map((a) => (
                 <li key={a.code}>
                   <strong>{a.summary}</strong>
-                  <div className="muted">Since {new Date(a.since).toLocaleString()}</div>
+                  <div className="muted">Since {when(a.since)}</div>
                 </li>
               ))}
             </ul>

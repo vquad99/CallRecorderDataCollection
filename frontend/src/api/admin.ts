@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, query, type Page } from "./client";
 
 export interface User {
   id: string;
@@ -10,15 +10,8 @@ export interface User {
   password_set: boolean;
   last_login_at: string | null;
   created_at: string;
-  /** The moderator's TxContact agent seat; their phone calls ring there (D-101). */
+  /** The moderator's phone seat at TxContact; their phone calls go through it (D-101). */
   telephony_agent_id?: string | null;
-}
-
-export interface Page<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
 }
 
 export interface ImportRow {
@@ -45,15 +38,6 @@ export const ROLE_LABELS: Record<string, string> = {
   CLIENT_VIEWER: "Client Viewer",
 };
 export const ROLE_CODES = Object.keys(ROLE_LABELS);
-
-export function query(params: Record<string, string | number | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") search.set(key, String(value));
-  }
-  const text = search.toString();
-  return text ? `?${text}` : "";
-}
 
 export const listUsers = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<User>>(`/api/v1/users${query(params)}`);

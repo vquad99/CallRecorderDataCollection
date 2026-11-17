@@ -1,5 +1,5 @@
 // Requirements: PART-001, PART-008, PART-009, PART-012
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +35,7 @@ const asha = {
   dialect: "",
   display_label: "Asha",
   phone: "+919876543210",
+  phone_masked: false,
   has_phone: true,
   consent_visible: true,
   notes: "",
@@ -86,7 +87,7 @@ describe("participants tab", () => {
     expect(screen.getAllByText("Hidden")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Add participant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export contacts" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Consent" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Consent history" })).not.toBeInTheDocument();
   });
 
   it("shows recorded, approved and payable minutes when the server sends them (D-095)", async () => {
@@ -131,10 +132,12 @@ describe("participants tab", () => {
     );
     renderAt("/projects/p1/participants");
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
-    await userEvent.type(screen.getByLabelText(/Name or label/), "Chitra");
-    await userEvent.selectOptions(screen.getByLabelText(/Language code/), "hi");
-    await userEvent.click(screen.getByRole("button", { name: "Add participant" }));
+    const form = within(screen.getByRole("dialog", { name: "Add participant" }));
+    await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    await userEvent.click(form.getByRole("button", { name: "Add participant" }));
     expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       display_label: "Chitra",
       phone: null,
@@ -144,8 +147,13 @@ describe("participants tab", () => {
       notes: "",
     });
 
-    vi.spyOn(window, "prompt").mockReturnValue("Asked to be removed");
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const box = within(screen.getByRole("dialog", { name: "Delete P000001?" }));
+    await userEvent.type(
+      box.getByLabelText(/Why is this participant deleted/),
+      "Asked to be removed",
+    );
+    await userEvent.click(box.getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("P000001 deleted.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/delete"))?.body).toEqual({
       reason: "Asked to be removed",
@@ -168,14 +176,15 @@ describe("participants tab", () => {
     );
     renderAt("/projects/p1/participants");
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
-    await userEvent.type(screen.getByLabelText(/Name or label/), "Chitra");
-    await userEvent.selectOptions(screen.getByLabelText(/Language code/), "ta");
-    await userEvent.type(screen.getByLabelText(/Phone number/), "98765-4");
-    expect(screen.getByText("Type exactly 10 digits (you typed 6).")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add participant" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText(/Phone number/), "32109");
-    await userEvent.selectOptions(screen.getByLabelText("Country code"), "+44");
-    await userEvent.click(screen.getByRole("button", { name: "Add participant" }));
+    const form = within(screen.getByRole("dialog", { name: "Add participant" }));
+    await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.selectOptions(form.getByLabelText(/^Language/), "ta");
+    await userEvent.type(form.getByLabelText(/Phone number/), "98765-4");
+    expect(form.getByText("Type exactly 10 digits (you typed 6).")).toBeInTheDocument();
+    expect(form.getByRole("button", { name: "Add participant" })).toBeDisabled();
+    await userEvent.type(form.getByLabelText(/Phone number/), "32109");
+    await userEvent.selectOptions(form.getByLabelText("Country code"), "+44");
+    await userEvent.click(form.getByRole("button", { name: "Add participant" }));
     expect(await screen.findByText("P000003 added.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       phone: "+449876543210",
@@ -254,5 +263,26 @@ describe("participants tab", () => {
     // Select all takes every one shown.
     await userEvent.click(screen.getByLabelText(/^Select all shown/));
     expect(screen.getByRole("button", { name: "Add selected (3)" })).toBeEnabled();
+  });
+
+  it("edits a participant without sending a masked phone back as the number", async () => {
+    const masked = { ...asha, phone: "••••••3210", phone_masked: true, has_email: false };
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [masked], total: 1, page: 1, page_size: 25 },
+        ],
+        "PATCH /api/v1/projects/p1/participants/a1": () => [200, masked],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const form = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    expect(form.getByLabelText(/Phone number/)).toHaveValue("");
+    await userEvent.click(form.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("P000001 saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({ phone: null });
   });
 });

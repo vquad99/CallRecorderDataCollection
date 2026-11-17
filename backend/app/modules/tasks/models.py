@@ -19,7 +19,6 @@ TASK_STATUSES = (
     "ADMIN_REVIEW",
     "APPROVED",
     "REJECTED",
-    "RETURNED",
     "CANCELLED",
     "ON_HOLD",
 )

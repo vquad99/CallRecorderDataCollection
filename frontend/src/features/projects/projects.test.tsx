@@ -84,8 +84,13 @@ describe("project detail", () => {
       await screen.findByRole("heading", { name: "HINDI · Hindi conversations" }),
     ).toBeInTheDocument();
     // The Overview tab loads on first visit (O11): wait for it, not just the page heading.
-    await userEvent.click(await screen.findByRole("button", { name: "Change status" }));
-    expect(await screen.findByText("Status changed.")).toBeInTheDocument();
+    // One button for each status the project can move to; no list to pick from first.
+    expect(screen.queryByLabelText("Change status to")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Make active" }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Make active" }),
+    );
+    expect(await screen.findByText("Status changed to Active.")).toBeInTheDocument();
     expect(screen.getByText("This project accepts new work.")).toBeInTheDocument();
     expect(calls.find((c) => c.path === "/api/v1/projects/p1/status")?.body).toEqual({
       status: "ACTIVE",
@@ -93,7 +98,7 @@ describe("project detail", () => {
     });
   });
 
-  it("makes a paused project active again without choosing anything else first", async () => {
+  it("pauses a project and makes it active again, archiving only with a reason", async () => {
     let current = { ...project, status: "ACTIVE", accepts_new_work: true };
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage", "projects.members"], {
@@ -108,14 +113,25 @@ describe("project detail", () => {
       }),
     );
     renderAt("/projects/p1");
-    // Active -> Paused (the first choice offered for an active project).
-    await userEvent.click(await screen.findByRole("button", { name: "Change status" }));
+    const confirmIn = async (name: string) =>
+      userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name }));
+    // Archiving an active project needs a reason in words.
+    await userEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Archive" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Go back" }),
+    );
+    // Active -> Paused.
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await confirmIn("Pause");
     expect(
       await screen.findByText("This project does not accept new work until it is active."),
     ).toBeInTheDocument();
-    // The box now offers Active first; one more click sends it.
-    expect(screen.getByLabelText("Change status to")).toHaveValue("ACTIVE");
-    await userEvent.click(screen.getByRole("button", { name: "Change status" }));
+    // A paused project offers Make active; one click and a confirmation send it.
+    await userEvent.click(screen.getByRole("button", { name: "Make active" }));
+    await confirmIn("Make active");
     expect(await screen.findByText("This project accepts new work.")).toBeInTheDocument();
     expect(calls.filter((c) => c.path === "/api/v1/projects/p1/status").map((c) => c.body)).toEqual(
       [
@@ -130,7 +146,7 @@ describe("project detail", () => {
     renderAt("/projects/p1");
     await screen.findByRole("heading", { name: "HINDI · Hindi conversations" });
     expect(await screen.findByLabelText(/^Name/)).toBeDisabled(); // the tab has loaded
-    expect(screen.queryByRole("button", { name: "Change status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Make active" })).not.toBeInTheDocument();
   });
 
   it("renders each tab", async () => {
@@ -143,9 +159,10 @@ describe("project detail", () => {
     renderAt("/projects/p1/team");
     expect(await screen.findByText("No members yet")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Audio rules" }));
-    expect(await screen.findByRole("group", { name: "Telephony" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Phone call" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Languages" }));
     expect(await screen.findByText(/Hindi \(hi\), Awadhi/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
     // Each box shows a faded example under it, tied to the box for screen readers (D-086).
@@ -204,7 +221,7 @@ describe("project detail", () => {
     );
     renderAt("/projects/p1/export");
     expect(await screen.findByText("3 recordings")).toBeInTheDocument();
-    expect(screen.getByText(/2 face-to-face, 1 telephony · about 240 MB of audio/)).toBeVisible();
+    expect(screen.getByText(/2 face-to-face, 1 phone call · about 240 MB of audio/)).toBeVisible();
     expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("radio", { name: /Audio only/ }));
@@ -240,7 +257,7 @@ describe("project detail", () => {
     const list = await screen.findByRole("table", { name: "Prepared exports" });
     expect(await within(list).findByText("Being prepared")).toBeInTheDocument();
     expect(list).toHaveTextContent(
-      "Audio only · every finished recording · Telephony · Hindi (hi) · with originals · TSV",
+      "Audio only · every finished recording · Phone call · Hindi (hi) · with originals · TSV",
     );
     expect(within(list).queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
     // It is looked at again by itself until it is ready.
@@ -252,6 +269,9 @@ describe("project detail", () => {
       await screen.findByText(`Downloading ${JOB.file_name}. The link works for 5 minutes.`),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: `Remove ${JOB.file_name}` }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Remove" }),
+    );
     expect(await screen.findByText(`${JOB.file_name} removed.`)).toBeInTheDocument();
     expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
   }, 20000);

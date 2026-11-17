@@ -15,8 +15,8 @@ const RECORDING = {
   state: "READY",
   saved_seconds: 600,
   assets: [
-    { id: "a1", kind: "BROWSER_ORIGINAL" },
-    { id: "a2", kind: "FTF_DERIVED_PCM" },
+    { id: "a1", kind: "BROWSER_ORIGINAL", sample_rate: 16000, channels: 1 },
+    { id: "a2", kind: "FTF_DERIVED_PCM", sample_rate: 16000, channels: 1 },
   ],
 };
 
@@ -45,7 +45,7 @@ function open(permissions: string[]) {
           can_decide: false,
           can_assign: false,
           can_recheck: false,
-          reasons: { FAIL: [], RETURN: [] },
+          reasons: { FAIL: [] },
           results: [],
         },
       ],
@@ -72,12 +72,11 @@ describe("recordings on the task page", () => {
     });
   });
 
-  it("offers no download without the download right", async () => {
+  it("shows one recording file in plain words, and no download without the right", async () => {
     open(ALL_PERMISSIONS.filter((p) => p !== "recordings.download"));
     renderAt("/tasks/t1");
-    expect(
-      await screen.findByText(/audio \+ consent record/, {}, { timeout: 5000 }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("16000 Hz, mono", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("Recording 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download with consent form" })).toBeNull();
   });
 });

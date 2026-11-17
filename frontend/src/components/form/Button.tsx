@@ -1,8 +1,9 @@
-// Accessible button (FND-019): defaults to type="button"; busy state is announced.
+// Accessible button (FND-019): defaults to type="button"; busy state is announced. "danger" is for
+// an action that deletes, rejects or ends something.
 import type { ButtonHTMLAttributes } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "danger";
   busy?: boolean;
 }
 

@@ -29,12 +29,13 @@ function phone(ending: string): string {
 
 async function giveConsent(page: Page, people: Participant[]) {
   for (const p of people) {
-    await page
-      .getByRole("group", { name: `Consent of ${p.participant_code}` })
-      .getByRole("button", { name: "Consent given" })
-      .click();
+    const group = page.getByRole("group", { name: `Consent of ${p.participant_code}` });
+    await group.getByRole("button", { name: "Agreed" }).click();
+    await expect(group.getByRole("button", { name: "Agreed" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   }
-  await expect(page.getByText("Given").first()).toBeVisible();
 }
 
 test("a moderator calls, confirms both people, closes the call and sends the recording to QC", async ({
@@ -88,11 +89,11 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   const main = await task(asha);
   const blocked = await task(refused);
 
-  await test.step("the Super Admin gives the moderator a TxContact agent seat", async () => {
+  await test.step("the Super Admin gives the moderator a phone seat", async () => {
     await admin.goto(`/admin/users/${moderatorId}`);
-    await admin.getByLabel("TxContact agent seat").fill(`seat-${code}`);
-    await admin.getByRole("button", { name: "Save agent seat" }).click();
-    await expect(admin.getByText("Agent seat saved.")).toBeVisible();
+    await admin.getByLabel("Phone seat").fill(`seat-${code}`);
+    await admin.getByRole("button", { name: "Save phone seat" }).click();
+    await expect(admin.getByText("Phone seat saved.")).toBeVisible();
   });
 
   const moderator = await (await browser.newContext()).newPage();
@@ -112,19 +113,23 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await moderator.getByRole("button", { name: "Start session" }).click();
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("heading", { name: "On the call" })).toBeVisible();
-    // What the provider answered is on the page, in the call's history.
-    await expect(moderator.getByText(/TXCONTACT answered HTTP 200/)).toBeVisible();
+    // The call's history in plain words; the provider's own answer is for the Super Admin only.
+    await expect(
+      moderator.getByText("The phone system is ringing participant A").first(),
+    ).toBeVisible();
+    await expect(moderator.getByText(/TXCONTACT answered HTTP 200/)).toHaveCount(0);
     // The call cannot be closed before both people are confirmed on it.
     await expect(moderator.getByRole("button", { name: "Close call" })).toBeDisabled();
     await moderator.getByRole("checkbox", { name: /Participant A is on the call/ }).check();
     // B is rung into the same call from here (D-111).
     await moderator.getByRole("button", { name: "Call participant B" }).click();
-    await expect(moderator.getByText(/TxContact is ringing participant B/)).toBeVisible();
-    await expect(moderator.getByText(/TXCONTACT answered HTTP 200/).first()).toBeVisible();
+    await expect(
+      moderator.getByText(/The phone system is ringing participant B/).first(),
+    ).toBeVisible();
     await moderator.getByRole("checkbox", { name: /Participant B is on the call/ }).check();
     // D-119: no recording before both consents.
-    await moderator.getByRole("button", { name: "Start recording" }).click();
-    await expect(moderator.getByText(/Consent is missing for participant A and B/)).toBeVisible();
+    await expect(moderator.getByRole("button", { name: "Start recording" })).toBeDisabled();
+    await expect(moderator.getByText("Note both people's consent below first.")).toBeVisible();
     await giveConsent(moderator, [asha, bina]);
     // Both on the line: the moderator marks where the conversation starts (D-113).
     await moderator.getByRole("button", { name: "Start recording" }).click();
@@ -143,12 +148,14 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByRole("heading", { name: "Check the call recording" })).toBeVisible({
       timeout: 90_000,
     });
-    await expect(moderator.getByText(/Recording stored: 8000 Hz, 1 channel/)).toBeVisible();
+    // The delivered file: 16 kHz, cut to the marked part (about 4 s plus a second each side).
+    const delivered = moderator.getByRole("row").filter({ hasText: "16000 Hz, mono" });
+    await expect(delivered).toContainText(/[4-9] s/);
   });
 
   await test.step("the moderator listens, sees the check passed, and sends it to QC", async () => {
     await moderator.getByRole("button", { name: "Listen" }).first().click();
-    const played = await playToEnd(moderator, "Recording being checked");
+    const played = await playToEnd(moderator, "Recording");
     expect(played.error).toBeNull();
     expect(played.ended).toBe(true);
     // The stand-in's file is 12 s from the moment A was rung; the delivery file is cut to the
@@ -167,6 +174,8 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await admin.goto("/calls");
     await admin.getByLabel("Project", { exact: true }).selectOption(project.id);
     await expect(admin.getByRole("heading", { name: "Calls per day" })).toBeVisible();
+    // Every call is on its own tab (UI review 2026-11-17).
+    await admin.getByRole("tab", { name: "All calls" }).click();
     const row = admin.getByRole("row").filter({ hasText: main.task_code });
     await expect(row).toContainText("Recording stored");
     await expect(row).toContainText(/[4-9] s/);
@@ -207,7 +216,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await admin.getByLabel("Project", { exact: true }).selectOption(project.id);
     const row = admin.getByRole("row").filter({ hasText: asha.participant_code });
     await row.getByRole("button", { name: "View" }).click();
-    const panel = admin.getByRole("region", { name: "Participant details" });
+    const panel = admin.getByRole("dialog", { name: "Participant details" });
     await expect(panel.getByRole("heading", { name: "Sessions" })).toBeVisible();
     for (const title of ["Profile", "Work in this project", "Personal link", "Consent form"]) {
       await expect(panel.getByRole("heading", { name: title, exact: true })).toBeVisible();
@@ -216,7 +225,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(panel).toContainText("Phone calls to them1");
     await expect(panel).toContainText("Calls with a recording1");
     const session = panel.getByRole("row").filter({ hasText: main.task_code });
-    await expect(session).toContainText("Telephony");
+    await expect(session).toContainText("Phone call");
     await expect(session).toContainText("Participant A");
     await expect(session).toContainText(bina.participant_code);
     await expect(session).toContainText("Agreed");

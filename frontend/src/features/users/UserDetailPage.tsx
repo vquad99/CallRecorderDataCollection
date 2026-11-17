@@ -1,58 +1,85 @@
-// Edit one user: name, email, roles, status, password link, sessions (USER-001..003, USER-008).
-import { useState, type FormEvent } from "react";
+// Edit one user: name, email, roles, status, password link, sessions, phone seat
+// (USER-001..003, USER-008).
+import { useState } from "react";
 import { useParams } from "react-router";
 
 import * as admin from "../../api/admin";
-import type { ApiError } from "../../api/client";
 import { setAgentSeat } from "../../api/telephony";
+import { BackLink } from "../../components/BackLink";
+import { useConfirm } from "../../components/ConfirmDialog";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
 import { RoleCheckboxes } from "./RoleCheckboxes";
 
 function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
   const [name, setName] = useState(user.display_name);
   const [email, setEmail] = useState(user.email);
   const [roles, setRoles] = useState(user.roles);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const { busy, error, message, run, setMessage } = useAction();
+  const confirm = useConfirm(setMessage);
+  const active = user.status === "ACTIVE";
 
-  async function run(action: () => Promise<admin.User | string>) {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await action();
-      if (typeof result === "string") {
-        setMessage(result);
-      } else {
-        onSaved(result);
-        setMessage("Saved.");
-      }
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    await run(async () => {
+  const save = () =>
+    void run(async () => {
       let updated = await admin.updateUser(user.id, { display_name: name, email });
       if ([...roles].sort().join() !== [...user.roles].sort().join()) {
         updated = await admin.setUserRoles(user.id, roles);
       }
-      return updated;
+      onSaved(updated);
+      return "Saved.";
+    }, "save");
+  const enable = () =>
+    void run(async () => {
+      onSaved(await admin.setUserStatus(user.id, true));
+      return "Account enabled.";
+    }, "status");
+  const disable = () =>
+    confirm.ask({
+      title: `Disable the account of ${user.display_name}?`,
+      message: "They are signed out and cannot sign in until the account is enabled again.",
+      confirmLabel: "Disable account",
+      danger: true,
+      action: async () => {
+        onSaved(await admin.setUserStatus(user.id, false));
+        return "Account disabled.";
+      },
     });
-  }
+  const signOutEverywhere = () =>
+    confirm.ask({
+      title: `Sign ${user.display_name} out everywhere?`,
+      message: "Every device they are signed in on is signed out.",
+      confirmLabel: "Sign out everywhere",
+      action: async () =>
+        `${(await admin.revokeUserSessions(user.id)).sessions_revoked} session(s) signed out.`,
+    });
+  const resetTwoStep = () =>
+    confirm.ask({
+      title: `Reset two-step sign-in for ${user.display_name}?`,
+      message:
+        "Only when they have lost their authenticator. They are signed out and set it up again at their next sign-in.",
+      confirmLabel: "Reset two-step sign-in",
+      danger: true,
+      action: async () => {
+        await admin.resetUserMfa(user.id);
+        onSaved({ ...user, mfa_enabled: false });
+        return "Two-step sign-in reset. They are signed out everywhere.";
+      },
+    });
 
   return (
     <div className="stack">
-      <form onSubmit={(e) => void save(e)} noValidate className="card">
+      <form
+        noValidate
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
         <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
         <TextField
           label="Email"
@@ -62,110 +89,78 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
           onChange={(e) => setEmail(e.target.value)}
         />
         <RoleCheckboxes value={roles} onChange={setRoles} />
-        <Button type="submit" busy={busy} disabled={roles.length === 0}>
+        <Button type="submit" busy={busy === "save"} disabled={roles.length === 0}>
           Save changes
         </Button>
       </form>
       <div className="card actions">
         <Button
           variant="secondary"
-          busy={busy}
-          onClick={() => void run(() => admin.setUserStatus(user.id, user.status !== "ACTIVE"))}
+          busy={busy === "status"}
+          disabled={busy !== null}
+          onClick={active ? disable : enable}
         >
-          {user.status === "ACTIVE" ? "Disable account" : "Enable account"}
+          {active ? "Disable account" : "Enable account"}
         </Button>
         <Button
           variant="secondary"
-          busy={busy}
-          disabled={user.status !== "ACTIVE"}
+          busy={busy === "link"}
+          disabled={!active || busy !== null}
           onClick={() =>
-            void run(async () =>
-              (await admin.sendPasswordLink(user.id)).sent
-                ? "Password link sent by email."
-                : "The email could not be sent. Check the email settings.",
+            void run(
+              async () =>
+                (await admin.sendPasswordLink(user.id)).sent
+                  ? "Password link sent by email."
+                  : "The email could not be sent. Check the email settings.",
+              "link",
             )
           }
         >
           Send password link
         </Button>
-        <Button
-          variant="secondary"
-          busy={busy}
-          onClick={() =>
-            void run(
-              async () =>
-                `${(await admin.revokeUserSessions(user.id)).sessions_revoked} session(s) signed out.`,
-            )
-          }
-        >
+        <Button variant="secondary" disabled={busy !== null} onClick={signOutEverywhere}>
           Sign out everywhere
         </Button>
         {user.mfa_enabled ? (
-          <Button
-            variant="secondary"
-            busy={busy}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Reset two-step sign-in for ${user.display_name}? Only when they have lost their ` +
-                    "authenticator. They are signed out and set it up again at their next sign-in.",
-                )
-              )
-                return;
-              void run(async () => {
-                await admin.resetUserMfa(user.id);
-                onSaved({ ...user, mfa_enabled: false });
-                return "Two-step sign-in reset. They are signed out everywhere.";
-              });
-            }}
-          >
+          <Button variant="secondary" disabled={busy !== null} onClick={resetTwoStep}>
             Reset two-step sign-in
           </Button>
         ) : null}
       </div>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
+      {confirm.dialog}
     </div>
   );
 }
 
-/** The TxContact agent seat a moderator's phone calls ring (D-101); one seat per person. */
-function AgentSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
+/** The phone seat a moderator's calls go through (D-101); one seat per person. */
+function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
   const [seat, setSeat] = useState(user.telephony_agent_id ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const { busy, error, message, run } = useAction();
   return (
     <form
       className="card"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        setBusy(true);
-        setError(null);
-        setMessage(null);
-        setAgentSeat(user.id, seat.trim())
-          .then((r) => {
-            onSaved({ ...user, telephony_agent_id: r.telephony_agent_id });
-            setMessage(r.telephony_agent_id ? "Agent seat saved." : "Agent seat removed.");
-          })
-          .catch((err: unknown) => setError(toApiError(err)))
-          .finally(() => setBusy(false));
+        void run(async () => {
+          const r = await setAgentSeat(user.id, seat.trim());
+          onSaved({ ...user, telephony_agent_id: r.telephony_agent_id });
+          return r.telephony_agent_id ? "Phone seat saved." : "Phone seat removed.";
+        });
       }}
     >
       <h2>Phone calls</h2>
-      <p className="muted">
-        The TxContact agent seat this person signs in to. Calls they start ring them there. Leave it
-        empty for people who do not make phone calls.
-      </p>
       <TextField
-        label="TxContact agent seat"
+        label="Phone seat"
+        hint="The seat number TxContact gave for this moderator (for example 80003). One seat per person."
         value={seat}
         maxLength={40}
         onChange={(e) => setSeat(e.target.value)}
       />
-      <Button type="submit" variant="secondary" busy={busy}>
-        Save agent seat
+      <Button type="submit" variant="secondary" busy={busy !== null}>
+        Save phone seat
       </Button>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
@@ -178,7 +173,8 @@ export function UserDetailPage() {
   const { state, reload, replace } = useResource(() => admin.getUser(userId), [userId]);
   return (
     <section aria-labelledby="user-title" className="stack">
-      <h1 id="user-title">User</h1>
+      <BackLink to="/admin/users">All users</BackLink>
+      <h1 id="user-title">{state.status === "loaded" ? state.data.display_name : "User"}</h1>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
@@ -188,11 +184,11 @@ export function UserDetailPage() {
             {state.data.mfa_enabled ? "on" : "off"} · Password:{" "}
             {state.data.password_set ? "set" : "invitation pending"}
           </p>
-          <Editor key={state.data.id + state.data.status} user={state.data} onSaved={replace} />
+          <Editor key={state.data.id} user={state.data} onSaved={replace} />
           {/* Also for someone who is no longer a moderator but still holds a seat: it can be
               freed for the next person. */}
           {state.data.roles.includes("MODERATOR") || state.data.telephony_agent_id ? (
-            <AgentSeat key={`seat-${state.data.id}`} user={state.data} onSaved={replace} />
+            <PhoneSeat key={`seat-${state.data.id}`} user={state.data} onSaved={replace} />
           ) : null}
         </>
       ) : null}

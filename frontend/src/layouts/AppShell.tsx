@@ -6,6 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { ROLE_LABELS } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
+import { IdleWarning } from "../auth/IdleWarning";
 import { BrandMark, Icon, type IconName } from "../components/Icon";
 
 import { LoginArt } from "../components/Art";
@@ -230,6 +231,9 @@ export function AppShell() {
               Stop viewing
             </button>
           </div>
+        ) : null}
+        {user?.session_idle_minutes ? (
+          <IdleWarning idleMinutes={user.session_idle_minutes} />
         ) : null}
         <main id="main" className="shell__main" tabIndex={-1}>
           <div className="shell__content">

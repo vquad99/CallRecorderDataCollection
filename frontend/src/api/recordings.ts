@@ -115,7 +115,7 @@ export async function putChunk(
   }
 }
 
-/** The 16 kHz delivery file of a recording: face-to-face, or a phone call (D-101). */
+/** The delivery file of a recording: face-to-face, or a phone call (D-101). */
 export const DELIVERY_KINDS: readonly string[] = [
   "FTF_DERIVED_PCM",
   "TELEPHONY_DERIVED_PCM",
@@ -128,6 +128,10 @@ export const deliveryAsset = (assets: readonly Asset[]): Asset | undefined =>
       (best, a) => (!best || a.version > best.version ? a : best),
       undefined,
     );
+
+/** A file's format in plain words: "16000 Hz, mono". */
+export const formatLabel = (asset: Asset): string =>
+  `${asset.sample_rate} Hz, ${asset.channels === 1 ? "mono" : `${asset.channels} channels`}`;
 
 /** A recording's length for people: seconds under a minute, minutes after. */
 export const lengthLabel = (seconds: number): string =>

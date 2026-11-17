@@ -56,7 +56,15 @@ def test_not_found_uses_standard_body() -> None:
 
 
 def test_validation_error_does_not_echo_input() -> None:
-    response = _client().post("/api/v1/_test/validate", json={"count": "secret-input-value"})
+    client = _client()
+    # A state-changing API call reaches validation only with its session and CSRF credentials.
+    client.cookies.set("ccp_session", "s")
+    client.cookies.set("csrf_token", "t")
+    response = client.post(
+        "/api/v1/_test/validate",
+        json={"count": "secret-input-value"},
+        headers={"X-CSRF-Token": "t"},
+    )
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "VALIDATION_ERROR"

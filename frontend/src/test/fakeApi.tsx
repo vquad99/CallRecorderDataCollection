@@ -52,6 +52,7 @@ export const ME = {
   ],
   project_ids: [],
   mfa_enabled: false,
+  session_idle_minutes: 10,
 };
 
 export function signedInAs(permissions: string[], extra: Record<string, Handler> = {}) {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 import uuid
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -56,7 +57,8 @@ class SmtpSender:
             raise EmailSendError("SMTP_HOST is not configured")
         try:
             with smtplib.SMTP(host, s.smtp_port, timeout=15) as client:
-                client.starttls()
+                # A verified certificate for the host, not any certificate at all.
+                client.starttls(context=ssl.create_default_context())
                 if s.smtp_username and s.smtp_password is not None:
                     client.login(s.smtp_username, s.smtp_password.get_secret_value())
                 client.send_message(_build(message, s.email_from))

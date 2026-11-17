@@ -1,19 +1,25 @@
 // A project's Export tab (D-094, D-105): reports as one table (CSV or TSV), and recordings as a
 // bundle that is prepared in the background, listed here with its state, and downloaded through a
 // link that works for a few minutes.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-import { apiBase, type ApiError } from "../../api/client";
+import { apiBase } from "../../api/client";
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { StatusBadge } from "../../components/StatusBadge";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { StatusBadge, type Tone } from "../../components/StatusBadge";
+import { useAction } from "../../hooks/useAction";
+import { usePolling } from "../../hooks/usePolling";
+import { useResource } from "../../hooks/useResource";
+import { plural, when } from "../../lib/format";
+import { labelFor, MODE_LABELS } from "../../lib/labels";
 import { languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
 import "./export.css";
@@ -45,21 +51,17 @@ const CONTENTS: { value: api.BundleContent; label: string; detail: string }[] = 
     detail: "Each recording's details file (JSON) and consent record.",
   },
 ];
-const STATE: Record<api.ExportState, [string, string]> = {
-  QUEUED: ["DRAFT", "Waiting"],
-  RUNNING: ["IN_PROGRESS", "Being prepared"],
-  READY: ["APPROVED", "Ready"],
-  FAILED: ["REJECTED", "Failed"],
-  EXPIRED: ["ARCHIVED", "Removed"],
+const STATE: Record<api.ExportState, [Tone, string]> = {
+  QUEUED: ["neutral", "Waiting"],
+  RUNNING: ["progress", "Being prepared"],
+  READY: ["success", "Ready"],
+  FAILED: ["danger", "Failed"],
+  EXPIRED: ["neutral", "Removed"],
 };
 const CONTENT_WORDS: Record<string, string> = {
   both: "Audio + metadata",
   audio: "Audio only",
   metadata: "Metadata only",
-};
-const MODE_WORDS: Record<string, string> = {
-  FACE_TO_FACE: "Face-to-face",
-  TELEPHONY: "Telephony",
 };
 const POLL_MS = 3000;
 
@@ -69,8 +71,6 @@ const megabytes = (n: number) =>
     : n >= 1e6
       ? `about ${Math.ceil(n / 1e6)} MB`
       : "less than 1 MB";
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "-");
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** What was chosen for an export, in words: "Audio + metadata · every finished recording · ..." */
 function chosen(job: api.ExportJob): string {
@@ -78,7 +78,7 @@ function chosen(job: api.ExportJob): string {
   return [
     CONTENT_WORDS[job.content] ?? job.content,
     job.scope === "approved" ? "approved tasks" : "every finished recording",
-    f.mode ? MODE_WORDS[f.mode] : null,
+    f.mode ? labelFor(MODE_LABELS, f.mode) : null,
     f.language ? languageLabel(f.language) : null,
     f.recorded_from || f.recorded_to
       ? `${f.recorded_from ?? "start"} to ${f.recorded_to ?? "today"}`
@@ -111,7 +111,7 @@ function Reports({ projectId }: { projectId: string }) {
                   download
                   aria-label={`${r.label} as ${format.toUpperCase()}`}
                 >
-                  <Icon name="upload" size={15} />
+                  <Icon name="download" size={15} />
                   {format.toUpperCase()}
                 </a>
               ))}
@@ -139,12 +139,8 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
   const { project } = useProject();
   const { can } = useAuth();
   const [choice, setChoice] = useState<api.ExportChoice>(START);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const set = (patch: Partial<api.ExportChoice>) => {
-    setChoice((c) => ({ ...c, ...patch }));
-    setError(null);
-  };
+  const { busy, error, run } = useAction();
+  const set = (patch: Partial<api.ExportChoice>) => setChoice((c) => ({ ...c, ...patch }));
   const backwards =
     choice.recorded_from !== null &&
     choice.recorded_to !== null &&
@@ -160,22 +156,14 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
   const empty = ready !== null && ready.recordings === 0;
   const languages = [...new Set(project.languages.map((l) => l.language_code))];
 
-  function prepare() {
-    setBusy(true);
-    setError(null);
-    api
-      .requestExport(project.id, asked)
-      .then(onAsked)
-      .catch((err: unknown) => setError(toApiError(err)))
-      .finally(() => setBusy(false));
-  }
+  const prepare = () => void run(async () => onAsked(await api.requestExport(project.id, asked)));
 
   return (
     <section className="card stack" aria-labelledby="export-bundle">
       <div>
         <h2 id="export-bundle">Recordings</h2>
         <p className="muted">
-          One ZIP with a folder for face-to-face and one for telephony recordings, a table of the
+          One ZIP with a folder for face-to-face recordings and one for phone calls, a table of the
           recordings, and a list of every file with its checksum.
         </p>
       </div>
@@ -210,9 +198,9 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
           value={choice.mode ?? ""}
           onChange={(e) => set({ mode: (e.target.value || null) as api.ExportChoice["mode"] })}
           options={[
-            { value: "", label: "Face-to-face and telephony" },
+            { value: "", label: "Every recording type" },
             { value: "FACE_TO_FACE", label: "Face-to-face only" },
-            { value: "TELEPHONY", label: "Telephony only" },
+            { value: "TELEPHONY", label: "Phone calls only" },
           ]}
         />
         <Select
@@ -292,7 +280,7 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
               <strong>{plural(ready.recordings, "recording")}</strong>
               {ready.recordings > 0 ? (
                 <span>
-                  {ready.face_to_face} face-to-face, {ready.telephony} telephony
+                  {ready.face_to_face} face-to-face, {plural(ready.telephony, "phone call")}
                   {choice.content !== "metadata" && ready.audio_bytes > 0
                     ? ` · ${megabytes(ready.audio_bytes)} of audio`
                     : ""}
@@ -307,7 +295,7 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
             </p>
           ) : null}
         </div>
-        <Button busy={busy} disabled={!ready || empty || backwards} onClick={prepare}>
+        <Button busy={busy !== null} disabled={!ready || empty || backwards} onClick={prepare}>
           Prepare export
         </Button>
       </div>
@@ -324,38 +312,28 @@ function ExportList({
   jobs: api.ExportJob[];
   onChanged: () => void;
 }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  function act(job: api.ExportJob, action: () => Promise<string>) {
-    setBusy(job.id);
-    setError(null);
-    setMessage(null);
-    action()
-      .then((text) => {
-        setMessage(text);
-        onChanged();
-      })
-      .catch((err: unknown) => {
-        setError(toApiError(err));
-        onChanged();
-      })
-      .finally(() => setBusy(null));
-  }
+  const { busy, error, message, run, setMessage } = useAction(onChanged);
+  const confirm = useConfirm(setMessage);
   const download = (job: api.ExportJob) =>
-    act(job, async () => {
+    void run(async () => {
       const link = await api.exportLink(projectId, job.id);
       const a = document.createElement("a");
       a.href = link.url;
       a.rel = "noopener";
       a.click();
       return `Downloading ${link.file_name}. The link works for ${Math.round(link.valid_seconds / 60)} minutes.`;
-    });
+    }, job.id);
   const remove = (job: api.ExportJob) =>
-    act(job, async () => {
-      await api.removeExport(projectId, job.id);
-      return `${job.file_name} removed.`;
+    confirm.ask({
+      title: `Remove ${job.file_name}?`,
+      message: "The prepared file is deleted. You can prepare it again later.",
+      confirmLabel: "Remove",
+      danger: true,
+      action: async () => {
+        await api.removeExport(projectId, job.id);
+        onChanged();
+        return `${job.file_name} removed.`;
+      },
     });
 
   return (
@@ -369,126 +347,110 @@ function ExportList({
           removed.
         </p>
       ) : (
-        <div className="table-wrap">
-          <table className="table" aria-label="Prepared exports">
-            <thead>
-              <tr>
-                <th scope="col">Asked</th>
-                <th scope="col">What</th>
-                <th scope="col">State</th>
-                <th scope="col">Recordings</th>
-                <th scope="col">Size</th>
-                <th scope="col">Kept until</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job) => {
-                const [tone, label] = STATE[job.state];
-                return (
-                  <tr key={job.id}>
-                    <td>
-                      {when(job.created_at)}
-                      <div className="muted">{job.requested_by ?? "-"}</div>
-                    </td>
-                    <td>
-                      <span className="mono">{job.file_name}</span>
-                      <div className="muted">{chosen(job)}</div>
-                      {job.state === "FAILED" && job.error ? (
-                        <div className="export__error">{job.error}</div>
-                      ) : null}
-                    </td>
-                    <td>
-                      <StatusBadge status={tone} label={label} />
-                    </td>
-                    <td>{job.recordings}</td>
-                    <td>{job.state === "READY" ? megabytes(job.size_bytes) : "-"}</td>
-                    <td>
-                      {job.state === "READY" ? when(job.expires_at) : "-"}
-                      {job.downloads > 0 ? (
-                        <div className="muted">Downloaded {plural(job.downloads, "time")}</div>
-                      ) : null}
-                    </td>
-                    <td className="actions">
-                      {job.state === "READY" ? (
-                        <Button
-                          variant="secondary"
-                          busy={busy === job.id}
-                          onClick={() => download(job)}
-                          aria-label={`Download ${job.file_name}`}
-                        >
-                          <Icon name="upload" size={15} />
-                          Download
-                        </Button>
-                      ) : null}
-                      {job.state === "READY" || job.state === "QUEUED" ? (
-                        <Button
-                          variant="secondary"
-                          busy={busy === job.id}
-                          onClick={() => remove(job)}
-                          aria-label={`Remove ${job.file_name}`}
-                        >
-                          <Icon name="trash" size={15} />
-                          Remove
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable label="Prepared exports">
+          <thead>
+            <tr>
+              <th scope="col">Asked</th>
+              <th scope="col">What</th>
+              <th scope="col">State</th>
+              <th scope="col">Recordings</th>
+              <th scope="col">Size</th>
+              <th scope="col">Kept until</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((job) => {
+              const [tone, label] = STATE[job.state];
+              return (
+                <tr key={job.id}>
+                  <td>
+                    {when(job.created_at)}
+                    <div className="muted">{job.requested_by ?? "-"}</div>
+                  </td>
+                  <td>
+                    <span className="mono">{job.file_name}</span>
+                    <div className="muted">{chosen(job)}</div>
+                    {job.state === "FAILED" && job.error ? (
+                      <div className="export__error">{job.error}</div>
+                    ) : null}
+                  </td>
+                  <td>
+                    <StatusBadge status={tone} label={label} />
+                  </td>
+                  <td>{job.recordings}</td>
+                  <td>{job.state === "READY" ? megabytes(job.size_bytes) : "-"}</td>
+                  <td>
+                    {job.state === "READY" ? when(job.expires_at) : "-"}
+                    {job.downloads > 0 ? (
+                      <div className="muted">Downloaded {plural(job.downloads, "time")}</div>
+                    ) : null}
+                  </td>
+                  <td className="actions">
+                    {job.state === "READY" ? (
+                      <Button
+                        variant="secondary"
+                        busy={busy === job.id}
+                        disabled={busy !== null}
+                        onClick={() => download(job)}
+                        aria-label={`Download ${job.file_name}`}
+                      >
+                        <Icon name="download" size={15} />
+                        Download
+                      </Button>
+                    ) : null}
+                    {job.state === "READY" || job.state === "QUEUED" ? (
+                      <Button
+                        variant="secondary"
+                        busy={busy === job.id}
+                        disabled={busy !== null}
+                        onClick={() => remove(job)}
+                        aria-label={`Remove ${job.file_name}`}
+                      >
+                        <Icon name="trash" size={15} />
+                        Remove
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </DataTable>
       )}
+      {confirm.dialog}
     </section>
   );
 }
 
-/** The project's exports, looked at again every few seconds while one is being prepared. A
- * refresh never empties the list: the newest answer replaces the one before. */
-function useExports(projectId: string) {
-  const [jobs, setJobs] = useState<api.ExportJob[] | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const latest = useRef(0);
-  const refresh = useCallback(() => {
-    const mine = ++latest.current;
-    api
-      .listExports(projectId)
-      .then((page) => {
-        if (mine !== latest.current) return;
-        setJobs(page.items);
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (mine === latest.current) setError(toApiError(err));
-      });
-  }, [projectId]);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-  const open = jobs?.some((j) => j.state === "QUEUED" || j.state === "RUNNING") ?? false;
-  useEffect(() => {
-    if (!open) return;
-    const timer = window.setInterval(refresh, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [open, refresh]);
-  return { jobs, error, refresh, setJobs };
-}
+/** The project's exports, looked at again every few seconds while one is being prepared. */
+const preparing = (jobs: api.ExportJob[]) =>
+  jobs.some((j) => j.state === "QUEUED" || j.state === "RUNNING");
 
 export function ExportTab() {
   const { project } = useProject();
-  const { jobs, error, refresh, setJobs } = useExports(project.id);
+  const exports = usePolling(
+    async () => (await api.listExports(project.id)).items,
+    [project.id],
+    POLL_MS,
+    preparing,
+  );
+  const jobs = exports.state.status === "loaded" ? exports.state.data : null;
   return (
     <div className="stack export">
       <BundleForm
         onAsked={(job) => {
-          setJobs((before) => [job, ...(before ?? []).filter((j) => j.id !== job.id)]);
-          refresh();
+          exports.replace([job, ...(jobs ?? []).filter((j) => j.id !== job.id)]);
+          void exports.refresh();
         }}
       />
-      {jobs === null && error === null ? <LoadingState label="Loading the exports" /> : null}
-      {jobs === null && error !== null ? <ErrorState error={error} onRetry={refresh} /> : null}
-      {jobs !== null ? <ExportList projectId={project.id} jobs={jobs} onChanged={refresh} /> : null}
+      {exports.state.status === "loading" ? <LoadingState label="Loading the exports" /> : null}
+      {exports.state.status === "failed" ? (
+        <ErrorState error={exports.state.error} onRetry={exports.reload} />
+      ) : null}
+      {jobs ? (
+        <ExportList projectId={project.id} jobs={jobs} onChanged={() => void exports.refresh()} />
+      ) : null}
       <Reports projectId={project.id} />
     </div>
   );

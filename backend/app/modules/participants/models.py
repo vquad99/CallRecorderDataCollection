@@ -4,24 +4,31 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal, get_args
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    ColumnElement,
     DateTime,
     ForeignKey,
     Index,
     String,
     Text,
     UniqueConstraint,
+    and_,
     text,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
-CONSENT_STATUSES = ("GIVEN", "REFUSED", "WITHDRAWN")
-CONSENT_METHODS = ("VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL")
+ConsentStatus = Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+ConsentMethod = Literal["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"]
+ReviewStatus = Literal["PENDING", "APPROVED", "REJECTED"]
+CONSENT_STATUSES: tuple[str, ...] = get_args(ConsentStatus)
+CONSENT_METHODS: tuple[str, ...] = get_args(ConsentMethod)
 
 
 class Participant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -75,6 +82,8 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(f"status IN {CONSENT_STATUSES}", name="status_allowed"),
         CheckConstraint(f"method IN {CONSENT_METHODS}", name="method_allowed"),
         Index("ix_consent_records_participant_task", "participant_id", "task_id"),
+        # A task's own consent records (task page, delete check), without the participant.
+        Index("ix_consent_records_task", "task_id"),
     )
     participant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False
@@ -108,6 +117,17 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @hybrid_property
+    def is_own_answer(self) -> bool:
+        """The participant's own answer on the project's consent form (D-067): not noted for a
+        task, not recorded by staff."""
+        return self.task_id is None and self.captured_by is None
+
+    @is_own_answer.inplace.expression
+    @classmethod
+    def _is_own_answer_expression(cls) -> ColumnElement[bool]:
+        return and_(cls.task_id.is_(None), cls.captured_by.is_(None))
 
 
 class ParticipantPortalLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):

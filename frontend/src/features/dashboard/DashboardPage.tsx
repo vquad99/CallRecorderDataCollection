@@ -1,24 +1,22 @@
 // Dashboard (DASH-001..006). One page, three views decided by the server: a client sees collection
 // progress only; moderators and QC see their own work; managers also see what needs attention.
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
-import { TASK_STATUS_LABELS, type TaskStatus } from "../../api/work";
-import {
-  getDashboard,
-  type Dashboard,
-  type DashboardFilters,
-  type DayTotals,
-} from "../../api/dashboard";
+import { getDashboard, type Dashboard, type DashboardFilters } from "../../api/dashboard";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { Bars, DayChart, Stat } from "../../components/charts/Charts";
 import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useResource } from "../../hooks/useResource";
+import { bytes, hours } from "../../lib/format";
+import { labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
 import "./dashboard.css";
+import { DataTable } from "../../components/DataTable";
 
 const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
   client: { title: "Collection progress", lead: "Hours collected and approved for your projects." },
@@ -26,93 +24,8 @@ const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
   manager: { title: "Dashboard", lead: "Progress against targets and what needs attention." },
 };
 
-const hours = (h: number) =>
-  h >= 10 ? `${h.toFixed(0)} h` : h >= 1 ? `${h.toFixed(1)} h` : `${Math.round(h * 60)} min`;
 const percent = (part: number, whole: number) =>
   whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0;
-const dayLabel = (iso: string, opts: Intl.DateTimeFormatOptions) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, opts);
-
-function bytes(n: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = n;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i += 1;
-  }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-type Tone = "blue" | "teal" | "violet" | "amber" | "rose" | "green" | "slate";
-
-function Sparkline({ values }: { values: number[] }) {
-  const max = Math.max(...values, 0.0001);
-  const step = 100 / Math.max(1, values.length - 1);
-  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(28 - (v / max) * 24).toFixed(1)}`);
-  return (
-    <svg className="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-      <polygon points={`0,30 ${pts.join(" ")} 100,30`} />
-      <polyline points={pts.join(" ")} />
-    </svg>
-  );
-}
-
-function Ring({ value }: { value: number }) {
-  const r = 20;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg className="ring" viewBox="0 0 52 52" aria-hidden="true">
-      <circle cx="26" cy="26" r={r} className="ring__track" />
-      <circle
-        cx="26"
-        cy="26"
-        r={r}
-        className="ring__value"
-        strokeDasharray={`${(value / 100) * c} ${c}`}
-        transform="rotate(-90 26 26)"
-      />
-      <text x="26" y="30" textAnchor="middle">
-        {value}%
-      </text>
-    </svg>
-  );
-}
-
-function Stat({
-  icon,
-  tone,
-  label,
-  value,
-  note,
-  ring,
-  spark,
-}: {
-  icon: IconName;
-  tone: Tone;
-  label: string;
-  value: string;
-  note?: string;
-  ring?: number | undefined;
-  spark?: number[];
-}) {
-  return (
-    <div className="stat">
-      <div className="stat__head">
-        <IconTile name={icon} tone={tone} size={34} />
-        <span className="stat__label">{label}</span>
-      </div>
-      <div className="stat__body">
-        <div>
-          <p className="stat__value">{value}</p>
-          {note ? <p className="stat__note">{note}</p> : null}
-        </div>
-        {ring !== undefined ? <Ring value={ring} /> : null}
-        {spark ? <Sparkline values={spark} /> : null}
-      </div>
-    </div>
-  );
-}
 
 const DONUT: Record<string, string> = {
   APPROVED: "var(--ok)",
@@ -122,7 +35,6 @@ const DONUT: Record<string, string> = {
   IN_PROGRESS: "var(--primary)",
   ASSIGNED: "var(--violet)",
   DRAFT: "var(--border-strong)",
-  RETURNED: "var(--series-waiting)",
   REJECTED: "var(--danger)",
   ON_HOLD: "var(--amber)",
   CANCELLED: "var(--muted)",
@@ -161,166 +73,19 @@ function Donut({ parts, total }: { parts: [string, number][]; total: number }) {
   );
 }
 
-/** Daily hours as stacked bars (approved + awaiting approval) with the daily target as a line. */
-function DailyChart({ days, target }: { days: DayTotals[]; target: number }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const titleId = useId();
-  const max = Math.max(target, ...days.map((d) => d.recorded_hours));
-  const empty = days.every((d) => d.recorded_hours === 0);
-  const top = max > 0 ? max * 1.15 : 1;
-  const W = 1000;
-  const H = 260;
-  const PAD_L = 40;
-  const PAD_B = 26;
-  const plotW = W - PAD_L;
-  const plotH = H - PAD_B - 8;
-  const slot = plotW / days.length;
-  const barW = Math.max(3, Math.min(18, slot - 4));
-  const y = (v: number) => 8 + plotH - (v / top) * plotH;
-  // Each tick once: with very small totals the three round to the same number, and two grid
-  // lines with one label (and one React key) are a mistake.
-  const ticks = Array.from(new Set([0, top / 2, top].map((t) => Math.round(t * 10) / 10)));
-  const labelEvery = days.length > 31 ? 14 : days.length > 14 ? 7 : 1;
-  const shown = hover === null ? null : days[hover];
-
-  return (
-    <figure className="chart" aria-labelledby={titleId}>
-      <figcaption className="chart__head">
-        <h2 id={titleId}>Hours per day</h2>
-        <ul className="legend">
-          <li>
-            <span className="legend__swatch legend__swatch--approved" aria-hidden="true" />
-            Approved
-          </li>
-          <li>
-            <span className="legend__swatch legend__swatch--waiting" aria-hidden="true" />
-            Recorded, not yet approved
-          </li>
-          {target > 0 ? (
-            <li>
-              <span className="legend__line" aria-hidden="true" />
-              Daily target
-            </li>
-          ) : null}
-        </ul>
-      </figcaption>
-      <div className="chart__plot">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Hours per day, see the table below">
-          {ticks.map((t) => (
-            <g key={t}>
-              <line className="chart__grid" x1={PAD_L} x2={W} y1={y(t)} y2={y(t)} />
-              <text className="chart__tick" x={PAD_L - 8} y={y(t) + 4} textAnchor="end">
-                {t}
-              </text>
-            </g>
-          ))}
-          {days.map((d, i) => {
-            const x = PAD_L + i * slot + (slot - barW) / 2;
-            const approved = d.approved_hours;
-            const waiting = Math.max(0, d.recorded_hours - d.approved_hours);
-            const yA = y(approved);
-            const yW = y(approved + waiting);
-            return (
-              <g
-                key={d.day}
-                className={hover === i ? "chart__day is-hover" : "chart__day"}
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <rect
-                  className="chart__hit"
-                  x={PAD_L + i * slot}
-                  y={8}
-                  width={slot}
-                  height={plotH}
-                />
-                {approved > 0 ? (
-                  <rect
-                    className="chart__bar chart__bar--approved"
-                    x={x}
-                    y={yA}
-                    width={barW}
-                    height={Math.max(1, y(0) - yA)}
-                    rx={Math.min(4, barW / 2)}
-                  />
-                ) : null}
-                {waiting > 0 ? (
-                  <rect
-                    className="chart__bar chart__bar--waiting"
-                    x={x}
-                    y={yW}
-                    width={barW}
-                    height={Math.max(1, yA - yW - (approved > 0 ? 2 : 0))}
-                    rx={Math.min(4, barW / 2)}
-                  />
-                ) : null}
-                {(days.length - 1 - i) % labelEvery === 0 ? (
-                  <text className="chart__tick" x={x + barW / 2} y={H - 6} textAnchor="middle">
-                    {dayLabel(d.day, { day: "numeric", month: "short" })}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-          <line className="chart__axis" x1={PAD_L} x2={W} y1={y(0)} y2={y(0)} />
-          {target > 0 ? (
-            <line className="chart__target" x1={PAD_L} x2={W} y1={y(target)} y2={y(target)} />
-          ) : null}
-        </svg>
-        {empty ? (
-          <p className="chart__empty">
-            <span>No finished recordings in this period yet.</span>
-          </p>
-        ) : null}
-        {shown ? (
-          <div
-            className="chart__tooltip"
-            style={{ left: `${((PAD_L + (hover ?? 0) * slot + slot / 2) / W) * 100}%` }}
-            aria-hidden="true"
-          >
-            <strong>
-              {dayLabel(shown.day, { weekday: "short", day: "numeric", month: "short" })}
-            </strong>
-            <span>Recorded {hours(shown.recorded_hours)}</span>
-            <span>Approved {hours(shown.approved_hours)}</span>
-          </div>
-        ) : null}
-      </div>
-      <details className="chart__table">
-        <summary>Show as a table</summary>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">Day</th>
-                <th scope="col">Recorded</th>
-                <th scope="col">Approved</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...days].reverse().map((d) => (
-                <tr key={d.day}>
-                  <td>{dayLabel(d.day, { weekday: "short", day: "numeric", month: "short" })}</td>
-                  <td>{hours(d.recorded_hours)}</td>
-                  <td>{hours(d.approved_hours)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-    </figure>
-  );
-}
-
-const QUEUES: { key: string; label: string; icon: IconName }[] = [
-  { key: "waiting_for_qc", label: "Waiting for audio QC", icon: "verified" },
+/** What needs someone. A queue of tasks in one status opens the task list filtered to it. */
+const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] = [
+  { key: "waiting_for_qc", label: "Waiting for audio QC", icon: "verified", status: "AUDIO_QC" },
   { key: "processing", label: "Being processed", icon: "waveform" },
   { key: "failed_processing", label: "Processing failed", icon: "failed" },
   { key: "interrupted", label: "Interrupted recordings", icon: "warning" },
   { key: "stale_uploads", label: "Stalled uploads", icon: "upload" },
-  { key: "on_hold", label: "Tasks on hold", icon: "stop" },
+  { key: "on_hold", label: "Tasks on hold", icon: "stop", status: "ON_HOLD" },
 ];
+
+/** The task list filtered to a status (and the chosen project). */
+const tasksLink = (status: string, projectId: string | null) =>
+  `/tasks?status=${status}${projectId ? `&project=${projectId}` : ""}`;
 
 function Body({ data }: { data: Dashboard }) {
   const todayPct = percent(data.today_hours, data.target_hours_per_day);
@@ -331,7 +96,6 @@ function Body({ data }: { data: Dashboard }) {
         .sort((a, b) => b[1] - a[1]),
     [data.tasks_by_status],
   );
-  const maxStatus = Math.max(1, ...statuses.map(([, n]) => n));
   return (
     <>
       <div className="stats">
@@ -376,7 +140,24 @@ function Body({ data }: { data: Dashboard }) {
       </div>
 
       <div className="card">
-        <DailyChart days={data.daily} target={data.target_hours_per_day} />
+        <DayChart
+          title="Hours per day"
+          days={data.daily}
+          target={data.target_hours_per_day}
+          emptyText="No finished recordings in this period yet."
+          series={[
+            { label: "Approved", className: "series--approved", value: (d) => d.approved_hours },
+            {
+              label: "Recorded, not yet approved",
+              className: "series--waiting",
+              value: (d) => Math.max(0, d.recorded_hours - d.approved_hours),
+            },
+          ]}
+          columns={[
+            { label: "Recorded", value: (d) => hours(d.recorded_hours) },
+            { label: "Approved", value: (d) => hours(d.approved_hours) },
+          ]}
+        />
       </div>
 
       <div className="split">
@@ -388,7 +169,7 @@ function Body({ data }: { data: Dashboard }) {
                 tone={m.mode === "TELEPHONY" ? "violet" : "teal"}
                 size={28}
               />
-              {m.mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}
+              {labelFor(MODE_LABELS, m.mode)}
             </h2>
             <dl className="checks">
               <div className="checks__row">
@@ -419,22 +200,15 @@ function Body({ data }: { data: Dashboard }) {
             ) : (
               <div className="status-split">
                 <Donut parts={statuses} total={statuses.reduce((n, [, v]) => n + v, 0)} />
-                <ul className="bars">
-                  {statuses.map(([s, n]) => (
-                    <li key={s}>
-                      <StatusBadge status={s} label={TASK_STATUS_LABELS[s as TaskStatus] ?? s} />
-                      <span className="bars__track" aria-hidden="true">
-                        <span
-                          style={{
-                            width: `${(n / maxStatus) * 100}%`,
-                            background: DONUT[s] ?? "var(--muted)",
-                          }}
-                        />
-                      </span>
-                      <span className="bars__value">{n}</span>
-                    </li>
-                  ))}
-                </ul>
+                <Bars
+                  empty="No tasks yet."
+                  rows={statuses.map(([s, n]) => ({
+                    key: s,
+                    label: <StatusBadge status={s} label={labelFor(TASK_STATUS_LABELS, s)} />,
+                    n,
+                    color: DONUT[s] ?? "var(--muted)",
+                  }))}
+                />
               </div>
             )}
           </section>
@@ -445,10 +219,6 @@ function Body({ data }: { data: Dashboard }) {
                 <div className="checks__row">
                   <dt>Passed</dt>
                   <dd>{data.qc.passed}</dd>
-                </div>
-                <div className="checks__row">
-                  <dt>Returned</dt>
-                  <dd>{data.qc.returned}</dd>
                 </div>
                 <div className="checks__row">
                   <dt>Rejected</dt>
@@ -485,11 +255,21 @@ function Body({ data }: { data: Dashboard }) {
           <div className="queues">
             {QUEUES.map((q) => {
               const n = data.queues?.[q.key] ?? 0;
-              return (
-                <div key={q.key} className={n > 0 ? "queue queue--active" : "queue"}>
+              const inner = (
+                <>
                   <Icon name={q.icon} size={18} />
                   <span className="queue__label">{q.label}</span>
                   <span className="queue__value">{n}</span>
+                </>
+              );
+              const className = n > 0 ? "queue queue--active" : "queue";
+              return q.status ? (
+                <Link key={q.key} className={className} to={tasksLink(q.status, data.project_id)}>
+                  {inner}
+                </Link>
+              ) : (
+                <div key={q.key} className={className}>
+                  {inner}
                 </div>
               );
             })}
@@ -540,7 +320,7 @@ function Body({ data }: { data: Dashboard }) {
             {data.team.length === 0 ? (
               <p className="muted">No finished recordings yet.</p>
             ) : (
-              <table className="table">
+              <DataTable>
                 <thead>
                   <tr>
                     <th scope="col">Moderator</th>
@@ -562,7 +342,7 @@ function Body({ data }: { data: Dashboard }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             )}
           </section>
           <section className="card" aria-labelledby="storage-title">
@@ -688,9 +468,8 @@ export function DashboardPage() {
           value={filters.mode}
           onChange={(e) => set({ mode: e.target.value })}
           options={[
-            { value: "", label: "Face-to-face and telephony" },
-            { value: "FACE_TO_FACE", label: "Face-to-face" },
-            { value: "TELEPHONY", label: "Telephony" },
+            { value: "", label: "Every recording type" },
+            ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
           ]}
         />
         <Select

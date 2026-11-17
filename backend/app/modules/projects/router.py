@@ -10,10 +10,13 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import AfterValidator, BaseModel, Field
 
+from app.core.errors import forbidden
 from app.core.permissions import Perm
-from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, forbidden, require
+from app.db.paging import Page, PageNumber, PageSize
+from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.projects import service
-from app.modules.projects.models import ASSET_KINDS, Project
+from app.modules.projects.models import Project
+from app.modules.recordings.models import ASSET_KINDS
 
 # Every project route needs projects.view; finer checks and membership live in the service.
 router = APIRouter(
@@ -115,11 +118,8 @@ def detail(p: Project) -> ProjectDetail:
     )
 
 
-class ProjectPage(BaseModel):
-    items: list[ProjectSummary]
-    total: int
-    page: int
-    page_size: int
+class ProjectPage(Page[ProjectSummary]):
+    pass
 
 
 @router.get("", response_model=ProjectPage)
@@ -128,8 +128,8 @@ def list_projects(
     db: DbSession,
     search: Annotated[str | None, Query(max_length=200)] = None,
     status: Status | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: PageNumber = 1,
+    page_size: PageSize = 25,
 ) -> ProjectPage:
     items, total = service.list_projects(
         db, principal, search=search, status=status, page=page, page_size=page_size

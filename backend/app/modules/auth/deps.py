@@ -10,25 +10,22 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select, true
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
+from app.core.security import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, UNSAFE_METHODS
 from app.db.session import get_db_session
 from app.modules.audit.service import VIEWER_KEY
 from app.modules.auth.models import User, UserSession
 from app.modules.auth.security import hash_token, tokens_equal
 from app.modules.projects.models import ProjectMembership
 
-SESSION_COOKIE = "ccp_session"
-CSRF_COOKIE = "csrf_token"
-CSRF_HEADER = "X-CSRF-Token"
-_UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 _LAST_SEEN_WRITE_INTERVAL = timedelta(seconds=60)
 
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -70,8 +67,10 @@ def unauthenticated(code: str = "UNAUTHENTICATED", message: str = "Sign in requi
     return AppError(message, code=code, status_code=401)
 
 
-def forbidden() -> AppError:
-    return AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+def in_projects(principal: Principal, column: Any) -> ColumnElement[bool]:
+    """SQL condition: `column` names a project this person may see (any project for a Super
+    Admin). A person in no project matches nothing."""
+    return true() if principal.is_super_admin else column.in_(sorted(principal.project_ids))
 
 
 def client_ip(request: Request) -> str | None:
@@ -179,7 +178,7 @@ def viewing(principal: Principal, viewer: User) -> Principal:
 
 
 def refuse_changes_while_viewing(request: Request) -> None:
-    if request.method in _UNSAFE and (request.method, request.url.path) not in (
+    if request.method in UNSAFE_METHODS and (request.method, request.url.path) not in (
         _ALLOWED_WHILE_VIEWING
     ):
         raise AppError(
@@ -204,7 +203,7 @@ def require(perm: Perm) -> Callable[[Principal], Principal]:
 
 def csrf_protect(request: Request) -> None:
     """Double-submit check on every state-changing request under /api/v1."""
-    if request.method not in _UNSAFE:
+    if request.method not in UNSAFE_METHODS:
         return
     cookie = request.cookies.get(CSRF_COOKIE, "")
     header = request.headers.get(CSRF_HEADER, "")

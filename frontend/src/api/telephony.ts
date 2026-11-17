@@ -1,6 +1,6 @@
 // Phone calls through TxContact (D-101, D-102, D-103): start, checklist, close, cancel, pick the
 // right recording, retry; and the figures, list and spreadsheet of calls.
-import { apiDownload, apiRequest } from "./client";
+import { apiDownload, apiRequest, query, type Page } from "./client";
 
 export type CallState =
   | "DIALLING"
@@ -229,13 +229,6 @@ export interface CallListItem {
   recording_seconds: number | null;
 }
 
-export interface CallPage {
-  items: CallListItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
 export interface ProviderTraffic {
   available: boolean;
   message: string;
@@ -244,26 +237,19 @@ export interface ProviderTraffic {
   data: unknown;
 }
 
-const qs = (params: Record<string, string | number | undefined>) => {
-  const parts = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
-  return parts.length
-    ? `?${parts.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&")}`
-    : "";
-};
-
 export const callAnalytics = (params: { project_id?: string | undefined; days: number }) =>
-  apiRequest<CallAnalytics>(`/api/v1/telephony/analytics${qs(params)}`);
+  apiRequest<CallAnalytics>(`/api/v1/telephony/analytics${query(params)}`);
 export const listAllCalls = (params: {
   project_id?: string | undefined;
   state?: string | undefined;
   page: number;
   page_size: number;
-}) => apiRequest<CallPage>(`/api/v1/calls${qs(params)}`);
+}) => apiRequest<Page<CallListItem>>(`/api/v1/calls${query(params)}`);
 export const providerTraffic = (days: number) =>
-  apiRequest<ProviderTraffic>(`/api/v1/telephony/provider-traffic${qs({ days })}`);
+  apiRequest<ProviderTraffic>(`/api/v1/telephony/provider-traffic${query({ days })}`);
 /** Every call of the period as a spreadsheet file. */
 export const downloadCallsCsv = (params: { project_id?: string | undefined; days: number }) =>
-  apiDownload(`/api/v1/calls/export${qs(params)}`, "phone_calls.csv");
+  apiDownload(`/api/v1/calls/export${query(params)}`, "phone_calls.csv");
 
 export const FAILURE_LABELS: Record<string, string> = {
   PROVIDER_REFUSED: "TxContact refused the call",
@@ -287,5 +273,4 @@ export const AUTOMATIC_CHECK_LABELS: Record<string, string> = {
 export const QC_DECISION_LABELS: Record<string, string> = {
   PASS: "Passed",
   FAIL: "Rejected",
-  RETURN: "Returned",
 };

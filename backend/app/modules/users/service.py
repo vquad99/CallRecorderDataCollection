@@ -2,40 +2,33 @@
 
 from __future__ import annotations
 
-import csv
-import io
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
-from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.contact import clean_account_email
+from app.core.csvio import read_rows, write_table
 from app.core.email import EmailSender
-from app.core.errors import AppError
+from app.core.errors import AppError, not_found
 from app.core.permissions import Role
+from app.db.paging import paginate
 from app.modules.audit import service as audit
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import PasswordResetToken, RoleRecord, User, UserRole
 from app.modules.tasks.models import ASSIGNMENT_ROLES, TaskAssignment
 
+logger = logging.getLogger("app.users")
+
 MAX_IMPORT_ROWS = 1000
 IMPORT_COLUMNS = ("email", "display_name", "roles")
-
-
-def not_found() -> AppError:
-    return AppError("User not found", code="NOT_FOUND", status_code=404)
-
-
-def clean_email(raw: str) -> str:
-    try:
-        return validate_email(raw.strip(), check_deliverability=False).normalized.lower()
-    except EmailNotValidError:
-        raise AppError(
-            "Email address is not valid", code="INVALID_EMAIL", status_code=422
-        ) from None
+EXPORT_COLUMNS = ("email", "display_name", "status", "roles", "last_login_at", "created_at")
+SEND_INVITATIONS_TASK = "users.send_invitations"
 
 
 def _roles_by_code(db: Session, codes: list[str]) -> list[RoleRecord]:
@@ -54,7 +47,7 @@ def _roles_by_code(db: Session, codes: list[str]) -> list[RoleRecord]:
 def get_user(db: Session, user_id: uuid.UUID) -> User:
     user = db.get(User, user_id)
     if user is None:
-        raise not_found()
+        raise not_found("User")
     return user
 
 
@@ -68,9 +61,14 @@ def list_users(
     page_size: int,
 ) -> tuple[list[User], int]:
     query = select(User)
-    if search:
-        like = f"%{search.strip().lower()}%"
-        query = query.where(or_(User.email.like(like), func.lower(User.display_name).like(like)))
+    if search and search.strip():
+        term = search.strip()
+        query = query.where(
+            or_(
+                User.email.icontains(term, autoescape=True),
+                User.display_name.icontains(term, autoescape=True),
+            )
+        )
     if role:
         query = query.where(
             User.id.in_(
@@ -81,11 +79,7 @@ def list_users(
         )
     if status:
         query = query.where(User.status == status)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    items = db.scalars(
-        query.order_by(User.email).offset((page - 1) * page_size).limit(page_size)
-    ).all()
-    return list(items), int(total)
+    return paginate(db, query.order_by(User.email), page, page_size)
 
 
 def ensure_staff_capacity(db: Session, adding: int = 1) -> None:
@@ -119,8 +113,11 @@ def create_user(
     display_name: str,
     roles: list[str],
     ip: str | None,
+    invite: bool = True,
 ) -> tuple[User, bool]:
-    email = clean_email(email)
+    """The new account, and whether its invitation email went out (`invite=False`: none is
+    sent here; the caller sends it)."""
+    email = clean_account_email(email)
     if db.scalar(select(User.id).where(User.email == email)):
         raise AppError("A user with this email already exists", code="EMAIL_TAKEN", status_code=409)
     ensure_staff_capacity(db)
@@ -142,8 +139,9 @@ def create_user(
         },
     )
     db.commit()
-    sent = auth_service.issue_password_link(db, settings, sender, user, purpose="INVITE")
-    return user, sent
+    if not invite:
+        return user, False
+    return user, auth_service.issue_password_link(db, settings, sender, user, purpose="INVITE")
 
 
 def update_user(
@@ -158,7 +156,7 @@ def update_user(
     user = get_user(db, user_id)
     before = {"email": user.email, "display_name": user.display_name}
     if email is not None:
-        new_email = clean_email(email)
+        new_email = clean_account_email(email)
         if new_email != user.email and db.scalar(select(User.id).where(User.email == new_email)):
             raise AppError(
                 "A user with this email already exists", code="EMAIL_TAKEN", status_code=409
@@ -361,33 +359,22 @@ class ImportRow:
 
 
 def parse_import(db: Session, text: str) -> list[ImportRow]:
-    reader = csv.DictReader(io.StringIO(text.lstrip("﻿")))
-    header = [h.strip().lower() for h in (reader.fieldnames or [])]
-    if tuple(header) != IMPORT_COLUMNS:
-        raise AppError(
-            f"CSV header must be exactly: {','.join(IMPORT_COLUMNS)}",
-            code="INVALID_CSV_HEADER",
-            status_code=422,
-        )
+    lines = read_rows(text, IMPORT_COLUMNS, max_rows=MAX_IMPORT_ROWS, noun="users")
     known_roles = set(db.scalars(select(RoleRecord.code)).all())
     existing = set(db.scalars(select(User.email)).all())
     rows: list[ImportRow] = []
     seen: set[str] = set()
-    for index, raw in enumerate(reader, start=2):
-        if index - 1 > MAX_IMPORT_ROWS:
-            raise AppError(
-                f"At most {MAX_IMPORT_ROWS} rows per import", code="TOO_MANY_ROWS", status_code=422
-            )
-        values = {k.strip().lower(): (v or "").strip() for k, v in raw.items() if k}
+    for line in lines:
+        values = line.values
         roles = [r.strip().upper() for r in values.get("roles", "").split(";") if r.strip()]
         row = ImportRow(
-            line=index,
+            line=line.line,
             email=values.get("email", ""),
             display_name=values.get("display_name", ""),
             roles=roles,
         )
         try:
-            row.email = clean_email(row.email)
+            row.email = clean_account_email(row.email)
         except AppError:
             row.errors.append("email is not valid")
         if not row.display_name:
@@ -416,15 +403,13 @@ def confirm_import(
     actor_id: uuid.UUID,
     text: str,
     ip: str | None,
-) -> tuple[int, list[ImportRow], int]:
+) -> tuple[list[User], list[ImportRow]]:
+    """Creates every valid row (all or nothing on capacity); returns the new accounts, whose
+    invitations the caller sends (send_invitations_job), and the rows skipped."""
     rows = parse_import(db, text)
     ensure_staff_capacity(db, adding=sum(1 for r in rows if r.valid))  # all or nothing
-    created = 0
-    invites_failed = 0
-    for row in rows:
-        if not row.valid:
-            continue
-        _, sent = create_user(
+    created = [
+        create_user(
             db,
             settings,
             sender,
@@ -433,30 +418,47 @@ def confirm_import(
             display_name=row.display_name,
             roles=row.roles,
             ip=ip,
-        )
-        created += 1
-        invites_failed += 0 if sent else 1
-    return created, [r for r in rows if not r.valid], invites_failed
+            invite=False,
+        )[0]
+        for row in rows
+        if row.valid
+    ]
+    return created, [r for r in rows if not r.valid]
 
 
-def _safe_cell(value: str) -> str:
-    """Stop spreadsheet formula injection in exported cells."""
-    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+def send_invitations_job(state: Any, user_ids: list[str]) -> None:
+    """Background: the invitation email for each new account of an import. A failed email is
+    logged (the account's Send link button sends it again) and the others still go out."""
+    with state.session_factory() as db:
+        for uid in user_ids:
+            user = db.get(User, uuid.UUID(uid))
+            if user is None or user.status != "ACTIVE" or user.password_hash is not None:
+                continue  # gone, disabled or already signed up since the import
+            try:
+                sent = auth_service.issue_password_link(
+                    db, state.settings, state.email_sender, user, purpose="INVITE"
+                )
+            except Exception:
+                db.rollback()
+                logger.exception("invitation_failed", extra={"user_id": uid})
+                continue
+            if not sent:
+                logger.warning("invitation_email_failed", extra={"user_id": uid})
 
 
 def export_csv(db: Session) -> str:
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(["email", "display_name", "status", "roles", "last_login_at", "created_at"])
-    for user in db.scalars(select(User).order_by(User.email)).all():
-        writer.writerow(
+    users = db.scalars(select(User).order_by(User.email))
+    return write_table(
+        EXPORT_COLUMNS,
+        (
             [
-                _safe_cell(user.email),
-                _safe_cell(user.display_name),
+                user.email,
+                user.display_name,
                 user.status,
                 ";".join(sorted(r.code for r in user.roles)),
                 user.last_login_at.isoformat() if user.last_login_at else "",
                 user.created_at.isoformat(),
             ]
-        )
-    return out.getvalue()
+            for user in users
+        ),
+    )

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import soundfile
 
-from app.modules.audio_qc import service as qc
+from app.modules.audio_qc import rules as qc
 from tests.audio_fixtures import pcm16_wav
 
 RATE = 16_000

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden
 
 TERMINAL = frozenset({"APPROVED", "REJECTED", "CANCELLED"})
 
@@ -26,7 +26,6 @@ REASONS: dict[str, frozenset[str]] = {
         {"PARTICIPANT_UNAVAILABLE", "CONSENT_REFUSED", "DUPLICATE_TASK", "CLIENT_REQUEST", "OTHER"}
     ),
     "REJECTED": frozenset({"AUDIO_QUALITY", "CONSENT_PROBLEM", "WRONG_SPEAKERS", "OTHER"}),
-    "RETURNED": frozenset({"RE_RECORD", "NEEDS_CORRECTION", "OTHER"}),
 }
 
 _T: dict[str, dict[str, str]] = {
@@ -37,10 +36,9 @@ _T: dict[str, dict[str, str]] = {
     "RECORDED": {"AUDIO_QC": "moderator", "IN_PROGRESS": "moderator", "CANCELLED": "assign"},
     # A pass at audio QC goes to the project admin for the final word (D-092); a reject is the QC
     # Executive's decision (D-062: no manual transcription). D-118: no "return to record again"
-    # from QC or admin review any more, only reject; RETURNED stays for tasks returned before.
+    # from QC or admin review, only reject; tasks returned before went back to Assigned (0026).
     "AUDIO_QC": {"ADMIN_REVIEW": "system", "REJECTED": "system"},
     "ADMIN_REVIEW": {"APPROVED": "assign", "REJECTED": "assign"},
-    "RETURNED": {"ASSIGNED": "assign", "CANCELLED": "assign"},
     "ON_HOLD": {"CANCELLED": "assign"},  # resuming to the held status is handled below
 }
 
@@ -98,9 +96,7 @@ def check(
             kind == "moderator" and actor.is_moderator
         )
         if not allowed:
-            raise AppError(
-                "You do not have permission to do this", code="FORBIDDEN", status_code=403
-            )
+            raise forbidden()
     if target in REASONS:
         if reason_code not in REASONS[target]:
             raise AppError(

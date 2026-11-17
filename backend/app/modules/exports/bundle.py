@@ -23,9 +23,7 @@ person asking may export personal data and asked for them.
 
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
 import uuid
 import zipfile
@@ -39,11 +37,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
-from app.core.permissions import Perm
+from app.core.csvio import write_table
+from app.core.errors import AppError, forbidden
+from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
 from app.modules.audio_qc import service as audio_qc
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import schemas
@@ -51,15 +50,18 @@ from app.modules.exports.models import BUNDLE_CONTENTS, SCOPES, TABLE_FORMATS
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project, ProjectLanguage
 from app.modules.recordings import consent_form
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import (
+    DELIVERY_KINDS,
+    ORIGINAL_KINDS,
+    AudioAsset,
+    Recording,
+)
 from app.modules.tasks.models import Task, TaskAssignment
 
 MODES = ("FACE_TO_FACE", "TELEPHONY")
 FOLDERS = {"FACE_TO_FACE": "face_to_face", "TELEPHONY": "telephony"}
-ORIGINAL_KINDS = ("BROWSER_ORIGINAL", "PROVIDER_ORIGINAL_MIXED", "PROVIDER_ORIGINAL_TRACK")
 MAX_RECORDINGS = 5000  # one bundle; more is split with the filters
 NO_TRANSCRIPTS = "Not included: this version of the platform makes no transcripts."
-BOM = "﻿"  # spreadsheet software reads a UTF-8 table correctly only with it (EXP-007)
 
 
 class BundleError(Exception):
@@ -200,68 +202,55 @@ def _ref(asset: AudioAsset) -> FileRef:
 
 
 def select_entries(db: Session, project: Project, sel: Selection, tz_name: str) -> list[Entry]:
-    """The newest finished recording of each task that fits the selection, by task code."""
-    newest = (
-        select(Recording)
+    """The newest finished recording of each task that fits the selection, by task code. Mode,
+    language and days narrow the tasks in the database."""
+    newest_q = (
+        select(Recording.id, Recording.task_id, Recording.started_at)
         .join(Task, Task.id == Recording.task_id)
         .where(Task.project_id == project.id, Recording.state == "READY")
         .ext(distinct_on(Recording.task_id))
         .order_by(Recording.task_id, Recording.started_at.desc())
     )
     if sel.scope == "approved":
-        newest = newest.where(Task.status == "APPROVED")
-    recordings = {r.task_id: r for r in db.scalars(newest)}
-    if not recordings:
-        return []
-    tasks = list(
-        db.scalars(select(Task).where(Task.id.in_(list(recordings))).order_by(Task.task_code))
-    )
+        newest_q = newest_q.where(Task.status == "APPROVED")
+    newest = newest_q.subquery()
+    query = select(Task, newest.c.id).join(newest, newest.c.task_id == Task.id)
     if sel.mode:
-        tasks = [t for t in tasks if t.recording_mode == sel.mode]
+        query = query.where(Task.recording_mode == sel.mode)
     if sel.language:
-        speakers = set(
-            db.scalars(select(Participant.id).where(Participant.language_code == sel.language))
+        speakers = select(Participant.id).where(Participant.language_code == sel.language)
+        query = query.where(
+            or_(Task.participant_a_id.in_(speakers), Task.participant_b_id.in_(speakers))
         )
-        tasks = [
-            t for t in tasks if t.participant_a_id in speakers or t.participant_b_id in speakers
-        ]
     zone = ZoneInfo(tz_name)
-    first = datetime.combine(sel.recorded_from, time.min, zone) if sel.recorded_from else None
-    after = (
-        datetime.combine(sel.recorded_to + timedelta(days=1), time.min, zone)
-        if sel.recorded_to
-        else None
-    )
-
-    def in_days(rec: Recording) -> bool:
-        if first is None and after is None:
-            return True
-        at = rec.started_at
-        if at is None:
-            return False
-        return (first is None or at >= first) and (after is None or at < after)
-
-    tasks = [t for t in tasks if in_days(recordings[t.id])]
-    if len(tasks) > MAX_RECORDINGS:
+    if sel.recorded_from:
+        first = datetime.combine(sel.recorded_from, time.min, zone)
+        query = query.where(newest.c.started_at >= first)
+    if sel.recorded_to:
+        after = datetime.combine(sel.recorded_to + timedelta(days=1), time.min, zone)
+        query = query.where(newest.c.started_at < after)
+    found = db.execute(query.order_by(Task.task_code).limit(MAX_RECORDINGS + 1)).all()
+    if len(found) > MAX_RECORDINGS:
         raise AppError(
             f"More than {MAX_RECORDINGS} recordings: narrow the export by mode, language or days",
             code="TOO_LARGE",
             status_code=422,
         )
-    wanted = [recordings[t.id].id for t in tasks]
     assets: dict[uuid.UUID, list[AudioAsset]] = {}
-    if wanted:
+    if found:
         for asset in db.scalars(
             select(AudioAsset)
-            .where(AudioAsset.recording_id.in_(wanted), AudioAsset.deleted_at.is_(None))
+            .where(
+                AudioAsset.recording_id.in_([rid for _, rid in found]),
+                AudioAsset.deleted_at.is_(None),
+            )
             .order_by(AudioAsset.kind, AudioAsset.version)
         ):
             assets.setdefault(asset.recording_id, []).append(asset)
     entries = []
-    for task in tasks:
-        rec = recordings[task.id]
-        mine = assets.get(rec.id, [])
-        delivery = [a for a in mine if a.kind in audio_qc.DELIVERY_KINDS]
+    for task, recording_id in found:
+        mine = assets.get(recording_id, [])
+        delivery = [a for a in mine if a.kind in DELIVERY_KINDS]
         final = delivery[-1] if delivery else None  # the newest version
         originals = (
             tuple(_ref(a) for a in mine if a.kind in ORIGINAL_KINDS) if sel.originals else ()
@@ -269,7 +258,7 @@ def select_entries(db: Session, project: Project, sel: Selection, tz_name: str) 
         entries.append(
             Entry(
                 task_id=task.id,
-                recording_id=rec.id,
+                recording_id=recording_id,
                 task_code=task.task_code,
                 mode=task.recording_mode,
                 audio=_ref(final) if final else None,
@@ -291,21 +280,10 @@ def file_name(project: Project, sel: Selection, now: datetime | None = None) -> 
     return f"{sel.content}_{project.code}_{stamp}.zip"
 
 
-def safe_cell(value: object) -> str:
-    """A cell that spreadsheet software will not run as a formula."""
-    text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
-
-
 def table(columns: list[str], rows: list[list[object]], table_format: str) -> str:
     """A CSV or TSV table as text, with the mark that makes spreadsheet software read it as
     UTF-8 (EXP-007)."""
-    out = io.StringIO()
-    writer = csv.writer(out, delimiter="\t" if table_format == "tsv" else ",")
-    writer.writerow(columns)
-    for row in rows:
-        writer.writerow([safe_cell(v) for v in row])
-    return BOM + out.getvalue()
+    return write_table(columns, rows, delimiter="\t" if table_format == "tsv" else ",", bom=True)
 
 
 class _Sink:
@@ -517,7 +495,7 @@ class Bundle:
             .join(TaskAssignment, TaskAssignment.user_id == User.id)
             .where(
                 TaskAssignment.task_id == task.id,
-                TaskAssignment.role_code == "MODERATOR",
+                TaskAssignment.role_code == Role.MODERATOR.value,
                 TaskAssignment.active.is_(True),
             )
             .limit(1)

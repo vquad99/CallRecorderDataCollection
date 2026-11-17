@@ -93,14 +93,14 @@ export function ProjectForm({
           />
         </div>
         <fieldset className="field">
-          <legend className="field__label">Recording modes allowed</legend>
+          <legend className="field__label">Recording types allowed</legend>
           <label className="checkbox">
             <input
               type="checkbox"
               checked={f.allows_telephony}
               onChange={(e) => set("allows_telephony", e.target.checked)}
             />
-            Telephony
+            Phone call
           </label>
           <label className="checkbox">
             <input
@@ -112,7 +112,7 @@ export function ProjectForm({
           </label>
         </fieldset>
         <TextField
-          label="Telephony target (hours per day)"
+          label="Phone call target (hours per day)"
           type="number"
           min={0}
           step="0.5"

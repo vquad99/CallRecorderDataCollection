@@ -1,11 +1,12 @@
 // Participants section (D-073): everyone in a project in one place, with the work done on many at
 // once - add from a file, assign to another project, send consent forms, remove - and the review
-// of each participant's own consent answer (approve, reject with a note, resend the form).
+// of each participant's own consent answer (approve, reject with a note, send the form again).
 import { useState } from "react";
 
-import type { ApiError } from "../../api/client";
 import { getProject, listProjects } from "../../api/projects";
 import * as work from "../../api/work";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
@@ -14,42 +15,28 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
-import { toApiError, useResource } from "../../hooks/useResource";
-import { ConsentList, EMPTY, ParticipantForm } from "../projects/ParticipantsTab";
-import { ParticipantDetailsPanel } from "./ParticipantDetails";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { CONSENT_REVIEW, consentAnswer } from "../../lib/labels";
+import { languageLabel } from "../projects/choices";
+import { emailConsentForm, useParticipantWindows } from "./ParticipantEditor";
 
-const ANSWER: Record<string, [string, string]> = {
-  NONE: ["DRAFT", "Not answered"],
-  GIVEN: ["ACTIVE", "Agreed"],
-  REFUSED: ["REJECTED", "Did not agree"],
-  WITHDRAWN: ["RETURNED", "Withdrawn"],
-};
-const REVIEW: Record<string, [string, string]> = {
-  PENDING: ["ON_HOLD", "Waiting for review"],
-  APPROVED: ["APPROVED", "Approved"],
-  REJECTED: ["REJECTED", "Sent back"],
-};
 const SAMPLE =
   "name,phone,email,language,dialect,district\nAsha Rao,+919876543210,asha@example.org,hi,,Pune\n";
 
 function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [csv, setCsv] = useState("");
-  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<work.ImportResult | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  function send(confirm: boolean) {
-    setBusy(true);
-    setError(null);
-    work
-      .importParticipants(projectId, csv, confirm)
-      .then((r) => {
+  const { busy, error, run } = useAction();
+  const send = (confirm: boolean) =>
+    void run(
+      async () => {
+        const r = await work.importParticipants(projectId, csv, confirm);
         setResult(r);
         if (confirm) onDone();
-      })
-      .catch((err: unknown) => setError(toApiError(err)))
-      .finally(() => setBusy(false));
-  }
+      },
+      confirm ? "add" : "check",
+    );
 
   return (
     <section className="card stack stack--tight" aria-labelledby="bulk-add-title">
@@ -89,12 +76,17 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
             }}
           />
         </label>
-        <Button variant="secondary" busy={busy} disabled={!csv.trim()} onClick={() => send(false)}>
+        <Button
+          variant="secondary"
+          busy={busy === "check"}
+          disabled={!csv.trim() || busy !== null}
+          onClick={() => send(false)}
+        >
           Check rows
         </Button>
         <Button
-          busy={busy}
-          disabled={!result || result.ready === 0 || result.created > 0}
+          busy={busy === "add"}
+          disabled={!result || result.ready === 0 || result.created > 0 || busy !== null}
           onClick={() => send(true)}
         >
           Add {result?.ready ?? 0} participants
@@ -108,29 +100,27 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
               ? `${result.created} added.`
               : `${result.ready} of ${result.rows.length} rows are ready.`}
           </p>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Line</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Result</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">Line</th>
+                <th scope="col">Name</th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.rows.map((r) => (
+                <tr key={r.line} className={r.ok ? "" : "row--invalid"}>
+                  <td>{r.line}</td>
+                  <td>{r.name || "-"}</td>
+                  <td>
+                    {r.message}
+                    {r.participant_code ? ` (${r.participant_code})` : ""}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {result.rows.map((r) => (
-                  <tr key={r.line} className={r.ok ? "" : "row--invalid"}>
-                    <td>{r.line}</td>
-                    <td>{r.name || "-"}</td>
-                    <td>
-                      {r.message}
-                      {r.participant_code ? ` (${r.participant_code})` : ""}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </DataTable>
         </>
       ) : null}
     </section>
@@ -139,24 +129,17 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
 
 export function ParticipantsPage() {
   const projects = useResource(() => listProjects({ page: 1, page_size: 100 }), []);
-  const [chosen, setChosen] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [panel, setPanel] = useState<"add" | "bulk" | null>(null);
-  const [editing, setEditing] = useState<work.Participant | null>(null);
-  const [consentFor, setConsentFor] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [bulkAdd, setBulkAdd] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [target, setTarget] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<work.BulkResult | null>(null);
 
   const all = projects.state.status === "loaded" ? projects.state.data.items : [];
   // Nothing is chosen for the person: consent forms, links and removals belong to one project,
   // so the project is always picked by hand first.
-  const projectId = chosen;
   const list = useResource(
     () =>
       projectId
@@ -164,43 +147,64 @@ export function ParticipantsPage() {
         : Promise.resolve(null),
     [projectId, search, page],
   );
+  const { busy, error, message, run, setMessage } = useAction(list.reload);
+  const confirm = useConfirm(setMessage);
   const rows = list.state.status === "loaded" && list.state.data ? list.state.data.items : [];
-  // The chosen project's languages fill the participant form's language dropdown.
+  // The chosen project's languages fill the participant form's language list.
   const detail = useResource(
     () => (projectId ? getProject(projectId) : Promise.resolve(null)),
     [projectId],
   );
   const languages =
     detail.state.status === "loaded" && detail.state.data ? detail.state.data.languages : [];
+  const windows = useParticipantWindows({
+    projectId,
+    languages,
+    onSaved: (text) => {
+      setMessage(text);
+      list.reload();
+    },
+  });
   const live = rows.filter((p) => !p.deleted);
 
-  async function run(action: () => Promise<string>) {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    setOutcome(null);
-    try {
-      setMessage(await action());
-      list.reload();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const bulk = (
+  /** One action for every selected participant; the ones it could not do are listed. */
+  const bulkAction = async (
     action: "assign" | "remove" | "send_consent",
     extra: { target_project_id?: string; reason?: string } = {},
-  ) =>
-    run(async () => {
-      const r = await work.bulkParticipants(projectId, {
-        action,
-        participant_ids: selected,
-        ...extra,
-      });
-      setOutcome(r);
-      setSelected([]);
-      return `${r.done} done, ${r.failed} not done.`;
+  ) => {
+    setOutcome(null);
+    const r = await work.bulkParticipants(projectId, {
+      action,
+      participant_ids: selected,
+      ...extra,
+    });
+    setOutcome(r);
+    setSelected([]);
+    list.reload();
+    return `${r.done} done, ${r.failed} not done.`;
+  };
+  const bulk = (action: "assign" | "send_consent", extra = {}) =>
+    void run(() => bulkAction(action, extra), `bulk-${action}`);
+  const removeSelected = () =>
+    confirm.ask({
+      title: `Remove ${selected.length} participant(s)?`,
+      message: "Their personal data is deleted. Their codes stay in the records.",
+      askReason: "Why are they removed?",
+      confirmLabel: "Remove",
+      danger: true,
+      action: ({ comment }) => bulkAction("remove", { reason: comment }),
+    });
+  const rejectConsent = (p: work.Participant) =>
+    confirm.ask({
+      title: `Reject the consent of ${p.participant_code}?`,
+      askReason: "Why is it not accepted? The participant sees this.",
+      confirmLabel: "Reject consent",
+      danger: true,
+      action: async ({ comment }) => {
+        await work.reviewConsent(projectId, p.id, "REJECTED", comment);
+        list.reload();
+        return `Consent of ${p.participant_code} sent back.`;
+      },
     });
   const toggle = (id: string) =>
     setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
@@ -217,18 +221,11 @@ export function ParticipantsPage() {
           Participants
         </h1>
         <div className="actions">
-          <Button
-            variant="secondary"
-            disabled={!projectId}
-            onClick={() => (setPanel(panel === "bulk" ? null : "bulk"), setEditing(null))}
-          >
+          <Button variant="secondary" disabled={!projectId} onClick={() => setBulkAdd(!bulkAdd)}>
             <Icon name="upload" size={15} />
             Add many
           </Button>
-          <Button
-            disabled={!projectId}
-            onClick={() => (setPanel(panel === "add" ? null : "add"), setEditing(null))}
-          >
+          <Button disabled={!projectId} onClick={() => windows.open({ kind: "add" })}>
             <Icon name="plus" size={15} weight="bold" />
             Add participant
           </Button>
@@ -242,7 +239,7 @@ export function ParticipantsPage() {
             label="Project"
             value={projectId}
             onChange={(e) => {
-              setChosen(e.target.value);
+              setProjectId(e.target.value);
               setPage(1);
               setSelected([]);
               setOutcome(null);
@@ -270,48 +267,7 @@ export function ParticipantsPage() {
           message="Participants, consent forms and links belong to a project. Choose one above to see its participants and work with them."
         />
       ) : null}
-      {panel === "add" && projectId ? (
-        <ParticipantForm
-          initial={EMPTY}
-          languages={languages}
-          submitLabel="Add participant"
-          busy={busy}
-          onSubmit={(f) =>
-            void run(async () => {
-              const p = await work.createParticipant(projectId, f);
-              setPanel(null);
-              return `${p.participant_code} added.`;
-            })
-          }
-        />
-      ) : null}
-      {panel === "bulk" && projectId ? (
-        <BulkAdd projectId={projectId} onDone={() => list.reload()} />
-      ) : null}
-      {editing ? (
-        <ParticipantForm
-          key={editing.id}
-          languages={languages}
-          initial={{
-            display_label: editing.display_label ?? "",
-            phone: editing.phone?.startsWith("•") ? null : editing.phone,
-            language_code: editing.language_code,
-            dialect: editing.dialect,
-            district: editing.district ?? "",
-            notes: editing.notes ?? "",
-            email: editing.email ?? (editing.has_email ? undefined : ""),
-          }}
-          submitLabel={`Save ${editing.participant_code}`}
-          busy={busy}
-          onSubmit={(f) =>
-            void run(async () => {
-              await work.correctParticipant(projectId, editing.id, f);
-              setEditing(null);
-              return `${editing.participant_code} saved.`;
-            })
-          }
-        />
-      ) : null}
+      {bulkAdd && projectId ? <BulkAdd projectId={projectId} onDone={list.reload} /> : null}
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       {outcome && outcome.failed > 0 ? (
@@ -328,7 +284,12 @@ export function ParticipantsPage() {
       {selected.length > 0 ? (
         <div className="card bulkbar" role="group" aria-label="Actions for selected participants">
           <strong>{selected.length} selected</strong>
-          <Button variant="secondary" busy={busy} onClick={() => void bulk("send_consent")}>
+          <Button
+            variant="secondary"
+            busy={busy === "bulk-send_consent"}
+            disabled={busy !== null}
+            onClick={() => bulk("send_consent")}
+          >
             <Icon name="mail" size={15} />
             Send consent form
           </Button>
@@ -345,24 +306,18 @@ export function ParticipantsPage() {
           />
           <Button
             variant="secondary"
-            busy={busy}
-            disabled={!target}
-            onClick={() => void bulk("assign", { target_project_id: target })}
+            busy={busy === "bulk-assign"}
+            disabled={!target || busy !== null}
+            onClick={() => bulk("assign", { target_project_id: target })}
           >
             Add to that project
           </Button>
-          <Button
-            variant="secondary"
-            busy={busy}
-            onClick={() => {
-              const reason = window.prompt(
-                `Why remove ${selected.length} participant(s)? Their personal data will be deleted.`,
-              );
-              if (reason) void bulk("remove", { reason });
-            }}
-          >
+          <Button variant="secondary" disabled={busy !== null} onClick={removeSelected}>
             <Icon name="trash" size={15} />
             Remove
+          </Button>
+          <Button variant="secondary" disabled={busy !== null} onClick={() => setSelected([])}>
+            Clear selection
           </Button>
         </div>
       ) : null}
@@ -378,164 +333,134 @@ export function ParticipantsPage() {
       ) : null}
       {rows.length > 0 && list.state.status === "loaded" && list.state.data ? (
         <>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all on this page"
-                      checked={live.length > 0 && live.every((p) => selected.includes(p.id))}
-                      onChange={(e) => setSelected(e.target.checked ? live.map((p) => p.id) : [])}
-                    />
-                  </th>
-                  <th scope="col">Code</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Contact</th>
-                  <th scope="col">Language</th>
-                  <th scope="col">Consent form</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => {
-                  const answer = ANSWER[p.consent_status ?? ""];
-                  const review = REVIEW[p.consent_review ?? ""];
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        {p.deleted ? null : (
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${p.participant_code}`}
-                            checked={selected.includes(p.id)}
-                            onChange={() => toggle(p.id)}
-                          />
-                        )}
-                      </td>
-                      <td className="mono">{p.participant_code}</td>
-                      <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
-                      <td>
-                        {p.phone ?? (p.has_phone ? "Phone on file" : "")}
-                        {p.has_email ? (
-                          <div className="muted">{p.email ?? "Email on file"}</div>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all on this page"
+                    checked={live.length > 0 && live.every((p) => selected.includes(p.id))}
+                    onChange={(e) => setSelected(e.target.checked ? live.map((p) => p.id) : [])}
+                  />
+                </th>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Contact</th>
+                <th scope="col">Language</th>
+                <th scope="col">Consent form</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => {
+                const answer = consentAnswer(p.consent_status);
+                const review = CONSENT_REVIEW[p.consent_review ?? ""];
+                const given = p.consent_status === "GIVEN";
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      {p.deleted ? null : (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${p.participant_code}`}
+                          checked={selected.includes(p.id)}
+                          onChange={() => toggle(p.id)}
+                        />
+                      )}
+                    </td>
+                    <td className="mono">{p.participant_code}</td>
+                    <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
+                    <td>
+                      {p.phone ?? (p.has_phone ? "Phone on file" : "")}
+                      {p.has_email ? (
+                        <div className="muted">{p.email ?? "Email on file"}</div>
+                      ) : null}
+                    </td>
+                    <td>
+                      {languageLabel(p.language_code)}
+                      {p.dialect ? <div className="muted">{p.dialect}</div> : null}
+                    </td>
+                    <td>
+                      <span className="actions">
+                        <StatusBadge tone={answer.tone} label={answer.label} />
+                        {given && review ? (
+                          <StatusBadge tone={review.tone} label={review.label} />
                         ) : null}
-                      </td>
-                      <td>
-                        {p.language_code}
-                        {p.dialect ? ` (${p.dialect})` : ""}
-                      </td>
-                      <td>
-                        <span className="actions">
-                          {answer ? <StatusBadge status={answer[0]} label={answer[1]} /> : null}
-                          {p.consent_status === "GIVEN" && review ? (
-                            <StatusBadge status={review[0]} label={review[1]} />
+                      </span>
+                    </td>
+                    <td className="actions">
+                      {p.deleted ? (
+                        <span className="muted">Removed</span>
+                      ) : (
+                        <>
+                          {given && p.consent_review !== "APPROVED" ? (
+                            <Button
+                              variant="secondary"
+                              busy={busy === `approve-${p.id}`}
+                              disabled={busy !== null}
+                              onClick={() =>
+                                void run(async () => {
+                                  await work.reviewConsent(projectId, p.id, "APPROVED");
+                                  return `Consent of ${p.participant_code} approved.`;
+                                }, `approve-${p.id}`)
+                              }
+                            >
+                              Approve consent
+                            </Button>
                           ) : null}
-                        </span>
-                      </td>
-                      <td className="actions">
-                        {p.deleted ? (
-                          <span className="muted">Removed</span>
-                        ) : (
-                          <>
-                            {p.consent_status === "GIVEN" && p.consent_review !== "APPROVED" ? (
-                              <Button
-                                variant="secondary"
-                                busy={busy}
-                                onClick={() =>
-                                  void run(async () => {
-                                    await work.reviewConsent(projectId, p.id, "APPROVED");
-                                    return `Consent of ${p.participant_code} approved.`;
-                                  })
-                                }
-                              >
-                                Approve
-                              </Button>
-                            ) : null}
-                            {p.consent_status === "GIVEN" && p.consent_review !== "REJECTED" ? (
-                              <Button
-                                variant="secondary"
-                                busy={busy}
-                                onClick={() => {
-                                  const note = window.prompt(
-                                    `Why is the consent of ${p.participant_code} not accepted? The participant will see this.`,
-                                  );
-                                  if (note)
-                                    void run(async () => {
-                                      await work.reviewConsent(projectId, p.id, "REJECTED", note);
-                                      return `Consent of ${p.participant_code} sent back.`;
-                                    });
-                                }}
-                              >
-                                Reject
-                              </Button>
-                            ) : null}
-                            {p.has_email ? (
-                              <Button
-                                variant="secondary"
-                                busy={busy}
-                                onClick={() =>
-                                  void run(async () => {
-                                    const r = await work.emailPortalLink(projectId, p.id);
-                                    if (!r.sent) throw new Error("The email could not be sent.");
-                                    return `Consent form sent to ${p.participant_code}.`;
-                                  })
-                                }
-                              >
-                                {p.link_active ? "Resend" : "Send"}
-                              </Button>
-                            ) : null}
+                          {given && p.consent_review !== "REJECTED" ? (
                             <Button
                               variant="secondary"
-                              onClick={() => (
-                                setViewing(viewing === p.id ? null : p.id),
-                                setConsentFor(null)
-                              )}
+                              disabled={busy !== null}
+                              onClick={() => rejectConsent(p)}
                             >
-                              View
+                              Reject consent
                             </Button>
+                          ) : null}
+                          {p.has_email ? (
                             <Button
                               variant="secondary"
-                              onClick={() => (
-                                setConsentFor(consentFor === p.id ? null : p.id),
-                                setViewing(null)
-                              )}
+                              busy={busy === `email-${p.id}`}
+                              disabled={busy !== null}
+                              onClick={() =>
+                                void run(() => emailConsentForm(projectId, p), `email-${p.id}`)
+                              }
                             >
-                              History
+                              Email consent form
                             </Button>
-                            <Button
-                              variant="secondary"
-                              onClick={() => (setEditing(p), setPanel(null))}
-                            >
-                              Correct
-                            </Button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {viewing ? (
-            <ParticipantDetailsPanel
-              key={viewing}
-              projectId={projectId}
-              participantId={viewing}
-              onClose={() => setViewing(null)}
-            />
-          ) : null}
-          {consentFor ? (
-            <section className="card" aria-label="Consent history">
-              <h2>Consent history</h2>
-              <ConsentList projectId={projectId} participantId={consentFor} />
-            </section>
-          ) : null}
+                          ) : null}
+                          <Button
+                            variant="secondary"
+                            onClick={() => windows.open({ kind: "details", participant: p })}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => windows.open({ kind: "history", participant: p })}
+                          >
+                            Consent history
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => windows.open({ kind: "edit", participant: p })}
+                          >
+                            Edit
+                          </Button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
           <Pagination page={page} pageSize={25} total={list.state.data.total} onPage={setPage} />
         </>
       ) : null}
+      {windows.dialog}
+      {confirm.dialog}
     </section>
   );
 }

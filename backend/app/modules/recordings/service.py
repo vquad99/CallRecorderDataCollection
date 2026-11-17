@@ -16,6 +16,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,23 +26,24 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm
 from app.core.storage import ListedObject, ObjectStorage
 from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
-from app.modules.projects.models import Project, ProjectRetentionRule
-from app.modules.recordings import media
-from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording, RecordingChunk
+from app.modules.auth.deps import Principal, in_projects
+from app.modules.projects.models import Project, ProjectAudioRule, ProjectRetentionRule
+from app.modules.recordings import assets, media
+from app.modules.recordings.models import (
+    FTF_DELIVERY_KIND,
+    AudioAsset,
+    Recording,
+    RecordingChunk,
+)
 from app.modules.tasks import service as tasks
 from app.modules.tasks.models import Task
 
 logger = logging.getLogger("app.recordings")
-
-
-def not_found() -> AppError:
-    return AppError("Recording not found", code="NOT_FOUND", status_code=404)
 
 
 def storage_unavailable() -> AppError:
@@ -52,10 +54,6 @@ def storage_unavailable() -> AppError:
         status_code=503,
         headers={"Retry-After": "5"},
     )
-
-
-def _prefix(project: Project, task: Task, when: datetime) -> str:
-    return f"{project.code}/face-to-face/{when:%Y/%m/%d}/{task.id}"
 
 
 @dataclass(frozen=True)
@@ -76,16 +74,20 @@ def start(
     task = tasks.get_task(db, principal, task_id)
     if not principal.can_in_project(Perm.RECORDINGS_CREATE, task.project_id):
         raise forbidden()
-    moderator = tasks.active_assignee(db, task.id, "MODERATOR")
-    if moderator is None or moderator.user_id != principal.user_id:
-        raise AppError(
-            "Only the assigned moderator records this task", code="FORBIDDEN", status_code=403
-        )
+    tasks.require_moderator(db, principal, task, "Only the assigned moderator records this task")
     if task.recording_mode != "FACE_TO_FACE":
         raise AppError("This is not a face-to-face task", code="MODE_NOT_ALLOWED", status_code=422)
     if task.status != "IN_PROGRESS":
         raise AppError(
             "Start the task before recording", code="TASK_NOT_IN_PROGRESS", status_code=409
+        )
+    rate = required_rate(db, task.project_id)
+    if data.native_sample_rate != rate:
+        # The delivery file is the recording itself, never converted (D-123).
+        raise AppError(
+            f"Record at {rate} Hz: use the latest Chrome or Edge.",
+            code="SAMPLE_RATE_NOT_ALLOWED",
+            status_code=422,
         )
     tasks.require_consent(db, task)
     open_one = db.scalar(
@@ -133,16 +135,27 @@ def start(
     return rec
 
 
+def required_rate(db: Session, project_id: uuid.UUID) -> int:
+    """The sample rate a face-to-face recording of this project is made at: the project's audio
+    rule for face-to-face (16 kHz unless the project says otherwise)."""
+    rate = db.scalar(
+        select(ProjectAudioRule.sample_rate).where(
+            ProjectAudioRule.project_id == project_id, ProjectAudioRule.mode == "FACE_TO_FACE"
+        )
+    )
+    return rate or media.TARGET_RATE
+
+
 def get_recording(
     db: Session, principal: Principal, recording_id: uuid.UUID
 ) -> tuple[Recording, Task]:
     rec = db.get(Recording, recording_id)
     if rec is None:
-        raise not_found()
+        raise not_found("Recording")
     try:
         task = tasks.get_task(db, principal, rec.task_id)
     except AppError:
-        raise not_found() from None
+        raise not_found("Recording") from None
     return rec, task
 
 
@@ -151,16 +164,16 @@ def _owned_open(
 ) -> tuple[Recording, Task]:
     rec, task = get_recording(db, principal, recording_id)
     if rec.created_by != principal.user_id:
-        raise AppError(
-            "Only the moderator who started this recording can change it",
-            code="FORBIDDEN",
-            status_code=403,
-        )
+        raise forbidden("Only the moderator who started this recording can change it")
+    _require_state(rec, states)
+    return rec, task
+
+
+def _require_state(rec: Recording, states: tuple[str, ...]) -> None:
     if rec.state not in states:
         raise AppError(
             f"The recording is {rec.state.lower()}", code="RECORDING_CLOSED", status_code=409
         )
-    return rec, task
 
 
 def put_chunk(
@@ -196,6 +209,11 @@ def put_chunk(
             code="INVALID_AUDIO",
             status_code=422,
         )
+    # Parts sent at the same moment are taken one after the other: the row is locked and read
+    # again, so the length and size checks below see every part stored before this one, and two
+    # parts with one number cannot both be written to storage. Held until the commit.
+    db.refresh(rec, with_for_update=True)
+    _require_state(rec, ("RECORDING",))
     existing = db.scalar(
         select(RecordingChunk).where(
             RecordingChunk.recording_id == rec.id, RecordingChunk.seq == seq
@@ -209,17 +227,22 @@ def put_chunk(
             code="CHUNK_CONFLICT",
             status_code=409,
         )
-    seconds = (rec.frames_received + len(data) // frame_bytes) / rec.native_sample_rate
-    if seconds > settings.max_recording_seconds:
+    frames = rec.frames_received + len(data) // frame_bytes
+    if frames / rec.native_sample_rate > settings.max_recording_seconds:
         raise AppError(
             "Recording is longer than the allowed maximum", code="TOO_LONG", status_code=422
         )
-    project = db.get(Project, task.project_id)
-    assert project is not None  # noqa: S101
-    key = f"{_prefix(project, task, rec.started_at)}/original/chunks/{rec.id}/{seq:06d}.f32"
+    if frames * frame_bytes > settings.max_recording_bytes:
+        raise AppError(
+            "Recording is larger than the allowed maximum", code="TOO_LARGE", status_code=422
+        )
+    project = db.get_one(Project, task.project_id)
+    key = f"{assets.storage_prefix(project, task, rec.started_at)}/original/chunks/{rec.id}/"
+    key += f"{seq:06d}.f32"
     try:
         storage.put_bytes(key, data, content_type="application/octet-stream", sha256=actual)
     except (BotoCoreError, ClientError):
+        db.rollback()
         logger.warning("chunk_storage_failed", extra={"recording_id": str(rec.id), "seq": seq})
         raise storage_unavailable() from None
     chunk = RecordingChunk(
@@ -321,58 +344,52 @@ def discard(
     return rec
 
 
-def _asset(
+def _store_original(
     db: Session,
+    storage: ObjectStorage,
     rec: Recording,
     project: Project,
-    kind: str,
-    key: str,
+    base: str,
+    chunks: Sequence[RecordingChunk],
     path: Path,
-    parent: AudioAsset | None,
 ) -> AudioAsset:
-    info = media.inspect_wav(path)
-    levels = media.measure(path)
-    version = (
-        db.scalar(
-            select(func.max(AudioAsset.version)).where(
-                AudioAsset.recording_id == rec.id, AudioAsset.kind == kind
-            )
+    """The browser original: the WAV header, then the stored parts in order. One copy on disk,
+    never the whole file in memory (O3)."""
+    total = sum(chunk.size_bytes for chunk in chunks)
+    frame_bytes = 4 * rec.channel_count
+    if total % frame_bytes:
+        raise RuntimeError("stored parts are not whole frames")
+    with path.open("wb") as handle:
+        handle.write(
+            media.float_wav_header(total // frame_bytes, rec.native_sample_rate, rec.channel_count)
         )
-        or 0
-    ) + 1
-    return AudioAsset(
-        id=uuid.uuid4(),
-        recording_id=rec.id,
-        project_id=project.id,
-        kind=kind,
-        version=version,
-        parent_asset_id=parent.id if parent else None,
-        storage_key=key,
-        file_extension="wav",
-        container=info.container,
-        codec=info.codec,
-        sample_format=info.sample_format,
-        sample_rate=info.sample_rate,
-        bit_depth=info.bit_depth,
-        channels=info.channels,
-        duration_ms=info.duration_ms,
-        size_bytes=info.size_bytes,
-        sha256=media.sha256_file(path),
-        peak_dbfs=levels.peak_dbfs,
-        rms_dbfs=levels.rms_dbfs,
-        clip_count=levels.clip_count,
-        clip_pct=levels.clip_pct,
-        silence_pct=levels.silence_pct,
-        dynamic_range_db=levels.dynamic_range_db,
-        content_fingerprint=levels.content_fingerprint,
+        for chunk in chunks:
+            if storage.append_to(chunk.storage_key, handle) != chunk.size_bytes:
+                raise RuntimeError(f"chunk {chunk.seq} size changed in storage")
+    original = assets.wav_asset(
+        rec, project, "BROWSER_ORIGINAL", 1, f"{base}/original/{rec.id}.wav", path, None
     )
-
-
-def _check_stored(storage: ObjectStorage, asset: AudioAsset, label: str) -> None:
-    """The object in storage has the expected size and carries the expected SHA-256 (O4)."""
-    stored = storage.head(asset.storage_key)
-    if stored is None or (stored.size, stored.sha256) != (asset.size_bytes, asset.sha256):
-        raise RuntimeError(f"{label} file did not arrive intact in storage")
+    expected = ("pcm_f32le", rec.native_sample_rate, rec.channel_count)
+    actual = (original.codec, original.sample_rate, original.channels)
+    if actual != expected:
+        raise RuntimeError(f"original file is {actual}, expected {expected}")
+    if original.duration_ms != round(rec.frames_received * 1000 / rec.native_sample_rate):
+        raise RuntimeError("original file length does not match the frames received")
+    assets.store_asset(
+        db,
+        storage,
+        original,
+        path,
+        assets.Step(
+            "ccp chunk assembly",
+            "1",
+            f"{len(chunks)} float32 chunks joined in order, WAV header; "
+            f"{rec.channel_count} channel(s) interleaved as captured",
+        ),
+        label="original",
+    )
+    db.flush()
+    return original
 
 
 def process(
@@ -385,7 +402,7 @@ def process(
     PROCESSING_STALE_MINUTES was abandoned by a stopped process and may be claimed again (H).
     """
     if db.get(Recording, recording_id) is None:
-        raise not_found()
+        raise not_found("Recording")
     stale = datetime.now(UTC) - timedelta(minutes=settings.processing_stale_minutes)
     claimed = (
         db.execute(
@@ -404,18 +421,16 @@ def process(
         is not None
     )
     db.commit()
-    rec = db.get(Recording, recording_id)
-    assert rec is not None  # noqa: S101
+    rec = db.get_one(Recording, recording_id)
     db.refresh(rec)
     if not claimed:
         logger.info("processing_already_claimed", extra={"recording_id": str(recording_id)})
         return rec
-    task = db.get(Task, rec.task_id)
-    project = db.get(Project, task.project_id) if task else None
-    assert task is not None  # noqa: S101
-    assert project is not None  # noqa: S101
+    task = db.get_one(Task, rec.task_id)
+    project = db.get_one(Project, task.project_id)
     work = Path(settings.media_work_dir)
     work.mkdir(parents=True, exist_ok=True)
+    base = assets.storage_prefix(project, task, rec.started_at)
     try:
         with tempfile.TemporaryDirectory(dir=work) as tmp:
             original, derived = Path(tmp) / "original.wav", Path(tmp) / "derived.wav"
@@ -430,73 +445,13 @@ def process(
                 )
             )
             if original_asset is None:
-                # Header first, then the parts in order: one copy on disk, never the whole file in
-                # memory (Option O3).
-                total = sum(chunk.size_bytes for chunk in chunks)
-                frame_bytes = 4 * rec.channel_count
-                if total % frame_bytes:
-                    raise RuntimeError("stored parts are not whole frames")
-                with original.open("wb") as handle:
-                    handle.write(
-                        media.float_wav_header(
-                            total // frame_bytes, rec.native_sample_rate, rec.channel_count
-                        )
-                    )
-                    for chunk in chunks:
-                        if storage.append_to(chunk.storage_key, handle) != chunk.size_bytes:
-                            raise RuntimeError(f"chunk {chunk.seq} size changed in storage")
-                base = _prefix(project, task, rec.started_at)
-                original_asset = _asset(
-                    db,
-                    rec,
-                    project,
-                    "BROWSER_ORIGINAL",
-                    f"{base}/original/{rec.id}.wav",
-                    original,
-                    None,
-                )
-                expected = ("pcm_f32le", rec.native_sample_rate, rec.channel_count)
-                actual = (
-                    original_asset.codec,
-                    original_asset.sample_rate,
-                    original_asset.channels,
-                )
-                if actual != expected:
-                    raise RuntimeError(f"original file is {actual}, expected {expected}")
-                if original_asset.duration_ms != round(
-                    rec.frames_received * 1000 / rec.native_sample_rate
-                ):
-                    raise RuntimeError("original file length does not match the frames received")
-                storage.put_file(
-                    original_asset.storage_key,
-                    original,
-                    content_type="audio/wav",
-                    sha256=original_asset.sha256,
-                )
-                _check_stored(storage, original_asset, "original")
-                db.add(original_asset)
-                db.flush()
-                db.add(
-                    AssetProcessingStep(
-                        asset_id=original_asset.id,
-                        seq=1,
-                        tool="ccp chunk assembly",
-                        tool_version="1",
-                        parameters=(
-                            f"{len(chunks)} float32 chunks joined in order, WAV header; "
-                            f"{rec.channel_count} channel(s) interleaved as captured"
-                        ),
-                        input_sha256=None,
-                        output_sha256=original_asset.sha256,
-                    )
-                )
-                db.flush()
+                original_asset = _store_original(db, storage, rec, project, base, chunks, original)
             else:
                 storage.get_to_file(original_asset.storage_key, original)
                 if media.sha256_file(original) != original_asset.sha256:
                     raise RuntimeError("stored original no longer matches its checksum")
             info = media.inspect_wav(original)
-            media.resample_to_pcm16(
+            media.pcm16_delivery(
                 original,
                 rec.native_sample_rate,
                 derived,
@@ -504,50 +459,33 @@ def process(
                 offset=info.data_offset,
                 length=info.data_bytes,
             )
-            channels = info.channels
-            base = _prefix(project, task, rec.started_at)
-            version = (
-                db.scalar(
-                    select(func.max(AudioAsset.version)).where(
-                        AudioAsset.recording_id == rec.id, AudioAsset.kind == "FTF_DERIVED_PCM"
-                    )
-                )
-                or 0
-            ) + 1
-            derived_asset = _asset(
-                db,
+            version = assets.next_version(db, rec.id, FTF_DELIVERY_KIND)
+            derived_asset = assets.wav_asset(
                 rec,
                 project,
-                "FTF_DERIVED_PCM",
+                FTF_DELIVERY_KIND,
+                version,
                 f"{base}/derived/{rec.id}_v{version}.wav",
                 derived,
                 original_asset,
             )
             if (derived_asset.codec, derived_asset.sample_rate, derived_asset.channels) != (
                 "pcm_s16le",
-                16000,
+                rec.native_sample_rate,
                 1,
             ):
-                raise RuntimeError("derived file does not match the 16 kHz mono 16-bit target")
-            storage.put_file(
-                derived_asset.storage_key,
+                raise RuntimeError("delivery file is not the recording as 16-bit mono")
+            assets.store_asset(
+                db,
+                storage,
+                derived_asset,
                 derived,
-                content_type="audio/wav",
-                sha256=derived_asset.sha256,
-            )
-            _check_stored(storage, derived_asset, "derived")
-            db.add(derived_asset)
-            db.flush()
-            db.add(
-                AssetProcessingStep(
-                    asset_id=derived_asset.id,
-                    seq=1,
-                    tool="python-soxr",
-                    tool_version=media.SOXR_VERSION,
-                    parameters=media.conversion_parameters(channels),
-                    input_sha256=original_asset.sha256,
-                    output_sha256=derived_asset.sha256,
-                )
+                assets.Step(
+                    *media.DELIVERY_TOOL,
+                    media.delivery_parameters(info.channels, rec.native_sample_rate),
+                    original_asset.sha256,
+                ),
+                label="derived",
             )
         for chunk in chunks:
             if not chunk.object_deleted:
@@ -559,16 +497,15 @@ def process(
     except Exception as exc:
         db.rollback()
         logger.exception("recording_processing_failed", extra={"recording_id": str(recording_id)})
-        rec = db.get(Recording, recording_id)
-        assert rec is not None  # noqa: S101
+        rec = db.get_one(Recording, recording_id)
         rec.state = "FAILED"
         rec.failure_reason = type(exc).__name__
         db.commit()
         raise
-    task = db.get(Task, rec.task_id)
-    if task is not None and task.status == "IN_PROGRESS":
+    db.refresh(task)  # the status as it is now
+    if task.status == "IN_PROGRESS":
         tasks.system_transition(db, task, "RECORDED", comment="Face-to-face recording ready")
-    if task is not None and task.status == "RECORDED":
+    if task.status == "RECORDED":
         try:
             audio_qc.run_automatic(db, rec.id)
         except Exception:
@@ -702,9 +639,8 @@ def asset_url(
 ) -> tuple[str, int]:
     asset = db.get(AudioAsset, asset_id)
     if asset is None or asset.deleted_at is not None:
-        raise AppError("File not found", code="NOT_FOUND", status_code=404)
-    rec = db.get(Recording, asset.recording_id)
-    assert rec is not None  # noqa: S101
+        raise not_found("File")
+    rec = db.get_one(Recording, asset.recording_id)
     # Task visibility first: assigned people and project managers only. Client Viewers receive final
     # files through exports (Phase 9), not through recording links.
     get_recording(db, principal, rec.id)
@@ -779,8 +715,5 @@ def usage(db: Session, principal: Principal) -> list[tuple[str, str, int, int]]:
         .group_by(Project.code, AudioAsset.kind)
         .order_by(Project.code, AudioAsset.kind)
     )
-    if not principal.is_super_admin:
-        query = query.where(
-            AudioAsset.project_id.in_(list(principal.project_ids) or [uuid.UUID(int=0)])
-        )
+    query = query.where(in_projects(principal, AudioAsset.project_id))
     return [(code, kind, int(n), int(size)) for code, kind, n, size in db.execute(query).all()]

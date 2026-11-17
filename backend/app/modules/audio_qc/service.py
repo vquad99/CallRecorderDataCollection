@@ -1,13 +1,9 @@
 """Audio quality check (AQC-001..010, D-079).
 
 Read-only (AQC-009): the automatic check reads the measurements taken when the delivery file was
-made, and a re-check reads a downloaded copy; neither ever changes the audio.
-
-Limits come from the project's audio rule for the recording mode (AQC-001): sample rate, bit depth,
-channels, length, silence and clipping. Where the project sets no limit, the value is shown and
-nothing is judged; no universal "good audio" limit is invented. Outcome: FAIL when any check fails,
-NEEDS_REVIEW when any check needs a person's ear, otherwise PASS. The automatic result never
-approves or rejects anything: the QC Executive assigned to the task decides (PASS, FAIL, RETURN).
+made, and a re-check reads a downloaded copy; neither ever changes the audio. The checks
+themselves are in rules.py. The automatic result never approves or rejects anything: the QC
+Executive assigned to the task decides (PASS or FAIL, D-118).
 """
 
 from __future__ import annotations
@@ -15,552 +11,57 @@ from __future__ import annotations
 import logging
 import tempfile
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
 from app.modules.audio_qc.models import AudioQcCheck, AudioQcResult
+from app.modules.audio_qc.rules import (
+    Check,
+    Duplicate,
+    Limits,
+    Measured,
+    analyze_file,
+    comparable,
+    evaluate,
+    from_asset,
+    limits_of,
+    outcome_of,
+    summary,
+)
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
-from app.modules.participants.models import ConsentRecord, Participant
-from app.modules.projects.models import Project, ProjectAudioRule, ProjectMembership
-from app.modules.recordings import media
-from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording
+from app.modules.participants import consent
+from app.modules.participants.models import Participant
+from app.modules.projects.models import Project, ProjectAudioRule
+from app.modules.recordings.models import (
+    DELIVERY_KINDS,
+    AssetProcessingStep,
+    AudioAsset,
+    Recording,
+)
 from app.modules.tasks import service as tasks
 from app.modules.tasks import workflow
-from app.modules.tasks.models import Task, TaskAssignment
+from app.modules.tasks.models import Task
+from app.modules.telephony import service as telephony
+from app.modules.telephony.models import Call, CallEvent
 
 logger = logging.getLogger("app.audio_qc")
 
-# The 16 kHz file each mode delivers: face-to-face, and telephony (D-101).
-DELIVERY_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM")
 # Statuses in which a QC Executive may be (re)assigned: anything still open.
-QC_ASSIGNABLE = frozenset(
-    {"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD", "RETURNED"}
-)
+QC_ASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD"})
 # A pass goes to the project admin for the final approval (D-092).
 # D-118: pass or reject only; no return to record again.
 DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED"}
-# Content comparison needs enough sound to be meaningful: a short or mostly silent file has a level
-# pattern many unrelated files share.
-FINGERPRINT_MIN_MS = 5000
-FINGERPRINT_MAX_SILENCE_PCT = 90.0
-# Left and right count as the same sound when they correlate this closely (a mono mix copied into
-# both channels gives 1.0; two people on separate channels stay far below).
-IDENTICAL_CHANNELS = 0.999
-
-
-@dataclass(frozen=True)
-class Measured:
-    container: str
-    codec: str
-    sample_rate: int
-    bit_depth: int
-    channels: int
-    duration_ms: int
-    size_bytes: int
-    sha256: str
-    peak_dbfs: float | None
-    rms_dbfs: float | None
-    clip_pct: float
-    silence_pct: float
-    dynamic_range_db: float | None
-    content_fingerprint: str | None
-    channel_correlation: float | None = None
-    levels_measured: bool = True
-
-
-@dataclass(frozen=True)
-class Limits:
-    sample_rate: int
-    bit_depth: int
-    channels: int
-    max_silence_pct: float
-    max_clipping_pct: float | None
-    min_duration_seconds: int
-    max_duration_seconds: int | None
-
-
-@dataclass(frozen=True)
-class Duplicate:
-    exact: bool
-    recording_id: uuid.UUID
-
-
-@dataclass(frozen=True)
-class Check:
-    code: str
-    state: str  # PASS, FAIL, REVIEW, INFO, NOT_APPLICABLE
-    measured: str = ""
-    expected: str = ""
-    message: str = ""
-    reason: str | None = None  # reason code the result carries when this check decides it
-
-
-def not_found() -> AppError:
-    return AppError("Task not found", code="NOT_FOUND", status_code=404)
-
-
-def limits_of(rule: ProjectAudioRule) -> Limits:
-    return Limits(
-        sample_rate=rule.sample_rate,
-        bit_depth=rule.bit_depth,
-        channels=rule.channels,
-        max_silence_pct=float(rule.max_silence_pct),
-        max_clipping_pct=None if rule.max_clipping_pct is None else float(rule.max_clipping_pct),
-        min_duration_seconds=rule.min_duration_seconds,
-        max_duration_seconds=rule.max_duration_seconds,
-    )
-
-
-def from_asset(asset: AudioAsset) -> Measured:
-    """The measurements taken from these exact bytes when the file was made."""
-    return Measured(
-        container=asset.container,
-        codec=asset.codec,
-        sample_rate=asset.sample_rate,
-        bit_depth=asset.bit_depth,
-        channels=asset.channels,
-        duration_ms=asset.duration_ms,
-        size_bytes=asset.size_bytes,
-        sha256=asset.sha256,
-        peak_dbfs=asset.peak_dbfs,
-        rms_dbfs=asset.rms_dbfs,
-        clip_pct=asset.clip_pct,
-        silence_pct=asset.silence_pct,
-        dynamic_range_db=asset.dynamic_range_db,
-        content_fingerprint=asset.content_fingerprint,
-    )
-
-
-def _channel_correlation(path: Path, info: media.WavInfo) -> float | None:
-    """Correlation of the first two channels over the whole file (AQC-005 indicator)."""
-    if info.channels < 2 or info.codec not in ("pcm_s16le", "pcm_f32le"):
-        return None
-    dtype = "<i2" if info.codec == "pcm_s16le" else "<f4"
-    count = info.data_bytes // np.dtype(dtype).itemsize
-    data = np.memmap(path, dtype=dtype, mode="r", offset=info.data_offset, shape=(count,))
-    frames = data[: count - count % info.channels].reshape(-1, info.channels)
-    sums = np.zeros(5)  # sum l, sum r, sum ll, sum rr, sum lr
-    for start in range(0, len(frames), media.BLOCK):
-        block = np.asarray(frames[start : start + media.BLOCK, :2], dtype=np.float64)
-        left, right = block[:, 0], block[:, 1]
-        sums += (
-            left.sum(),
-            right.sum(),
-            (left * left).sum(),
-            (right * right).sum(),
-            (left * right).sum(),
-        )
-    n = len(frames)
-    del data, frames
-    if n == 0:
-        return None
-    mean_l, mean_r = sums[0] / n, sums[1] / n
-    var_l = sums[2] / n - mean_l * mean_l
-    var_r = sums[3] / n - mean_r * mean_r
-    if var_l <= 0 or var_r <= 0:
-        return None
-    return round(float((sums[4] / n - mean_l * mean_r) / np.sqrt(var_l * var_r)), 4)
-
-
-def analyze_file(path: Path) -> tuple[Measured | None, str | None]:
-    """(measurements, None) or (None, decode error). Reads the file only (AQC-006, AQC-009)."""
-    if not path.exists():
-        return None, None
-    if path.stat().st_size == 0:
-        return None, "The file is empty"
-    try:
-        info = media.inspect_wav(path)
-        measurable = info.codec in media.MEASURABLE_CODECS
-        levels = media.measure(path) if measurable else media.Levels(None, None, 0, 0.0, 0.0)
-        correlation = _channel_correlation(path, info)
-    except (ValueError, OSError) as exc:
-        return None, str(exc) or type(exc).__name__
-    return (
-        Measured(
-            container=info.container,
-            codec=info.codec,
-            sample_rate=info.sample_rate,
-            bit_depth=info.bit_depth,
-            channels=info.channels,
-            duration_ms=info.duration_ms,
-            size_bytes=info.size_bytes,
-            sha256=media.sha256_file(path),
-            peak_dbfs=levels.peak_dbfs,
-            rms_dbfs=levels.rms_dbfs,
-            clip_pct=levels.clip_pct,
-            silence_pct=levels.silence_pct,
-            dynamic_range_db=levels.dynamic_range_db,
-            content_fingerprint=levels.content_fingerprint,
-            channel_correlation=correlation,
-            levels_measured=measurable,
-        ),
-        None,
-    )
-
-
-def _seconds(ms: int) -> str:
-    return f"{ms / 1000:.1f} s"
-
-
-def evaluate(
-    measured: Measured | None,
-    limits: Limits | None,
-    *,
-    decode_error: str | None = None,
-    duplicate: Duplicate | None = None,
-    expected_sha256: str | None = None,
-) -> list[Check]:
-    """Every check, in a fixed order. Pure: the same inputs always give the same list."""
-    if decode_error is not None:
-        return [
-            Check(
-                "DECODES",
-                "FAIL",
-                decode_error,
-                "A readable WAV file",
-                "The file could not be read",
-                "DECODE_ERROR",
-            )
-        ]
-    if measured is None:
-        return [
-            Check(
-                "AUDIO_PRESENT",
-                "FAIL",
-                "No file",
-                "The delivery file",
-                "There is no audio file for this recording",
-                "MISSING_AUDIO",
-            )
-        ]
-    m = measured
-    out = [
-        Check(
-            "DECODES",
-            "PASS",
-            "Read to the end",
-            "A readable WAV file",
-            "The whole file was read without errors",
-        )
-    ]
-    if expected_sha256 is not None and m.sha256 != expected_sha256:
-        out.append(
-            Check(
-                "CHECKSUM",
-                "FAIL",
-                m.sha256[:16],
-                expected_sha256[:16],
-                "The stored file changed after it was made",
-                "CHECKSUM_MISMATCH",
-            )
-        )
-    else:
-        out.append(
-            Check(
-                "CHECKSUM",
-                "PASS",
-                m.sha256[:16],
-                "Recorded SHA-256",
-                "Fingerprint of the file recorded; the stored copy matched it",
-            )
-        )
-    uncompressed = m.container == "wav" and m.codec.startswith("pcm_")
-    out.append(
-        Check(
-            "FORMAT",
-            "PASS" if uncompressed else "FAIL",
-            f"{m.container.upper()} {m.codec}",
-            "WAV, uncompressed PCM",
-            "" if uncompressed else "Not an uncompressed WAV file",
-            None if uncompressed else "WRONG_FORMAT",
-        )
-    )
-    bytes_per_frame = max(1, m.channels * m.bit_depth // 8)
-    data_ms = (m.size_bytes - 44) / bytes_per_frame / m.sample_rate * 1000 if m.sample_rate else 0
-    if m.duration_ms <= 0:
-        out.append(
-            Check(
-                "FILE_SIZE",
-                "FAIL",
-                f"{m.size_bytes} bytes",
-                "Some audio",
-                "The file holds no audio",
-                "EMPTY_FILE",
-            )
-        )
-    elif abs(data_ms - m.duration_ms) > 50:
-        out.append(
-            Check(
-                "FILE_SIZE",
-                "FAIL",
-                f"{m.size_bytes} bytes",
-                "Size fits the length",
-                "The file size does not match its length",
-                "FILE_SIZE_MISMATCH",
-            )
-        )
-    else:
-        out.append(Check("FILE_SIZE", "PASS", f"{m.size_bytes:,} bytes", "Size fits the length"))
-    if limits is None:
-        out.append(
-            Check(
-                "PROJECT_RULE",
-                "REVIEW",
-                "None",
-                "The project's audio rule",
-                "This project has no audio rule for this recording type",
-                "NO_RULE",
-            )
-        )
-    else:
-        for code, have, want, reason in (
-            ("SAMPLE_RATE", m.sample_rate, limits.sample_rate, "WRONG_SAMPLE_RATE"),
-            ("BIT_DEPTH", m.bit_depth, limits.bit_depth, "WRONG_BIT_DEPTH"),
-        ):
-            unit = " Hz" if code == "SAMPLE_RATE" else "-bit"
-            out.append(
-                Check(
-                    code,
-                    "PASS" if have == want else "FAIL",
-                    f"{have}{unit}",
-                    f"{want}{unit}",
-                    "" if have == want else "Does not match the project",
-                    None if have == want else reason,
-                )
-            )
-        if m.channels == limits.channels:
-            out.append(Check("CHANNELS", "PASS", str(m.channels), str(limits.channels)))
-        else:
-            missing = m.channels < limits.channels
-            out.append(
-                Check(
-                    "CHANNELS",
-                    "FAIL",
-                    str(m.channels),
-                    str(limits.channels),
-                    "A track is missing" if missing else "More tracks than the project",
-                    "MISSING_TRACK" if missing else "WRONG_CHANNELS",
-                )
-            )
-        low, high = limits.min_duration_seconds, limits.max_duration_seconds
-        expected = f"{low} s or more" + (f", at most {high} s" if high is not None else "")
-        if not low and high is None:
-            out.append(Check("DURATION", "INFO", _seconds(m.duration_ms), "No length limit set"))
-        elif m.duration_ms < low * 1000:
-            out.append(
-                Check(
-                    "DURATION",
-                    "FAIL",
-                    _seconds(m.duration_ms),
-                    expected,
-                    "Shorter than the project allows",
-                    "TOO_SHORT",
-                )
-            )
-        elif high is not None and m.duration_ms > high * 1000:
-            out.append(
-                Check(
-                    "DURATION",
-                    "FAIL",
-                    _seconds(m.duration_ms),
-                    expected,
-                    "Longer than the project allows",
-                    "TOO_LONG",
-                )
-            )
-        else:
-            out.append(Check("DURATION", "PASS", _seconds(m.duration_ms), expected))
-    if not m.levels_measured:
-        for code in ("SILENCE", "CLIPPING", "LEVELS", "DYNAMIC_RANGE"):
-            out.append(
-                Check(code, "INFO", "Not measured", "", f"Levels are not measured for {m.codec}")
-            )
-    else:
-        if m.peak_dbfs is None and m.duration_ms > 0:
-            out.append(
-                Check(
-                    "SIGNAL",
-                    "FAIL",
-                    "No sound at all",
-                    "Some sound",
-                    "Every sample is zero: nothing was captured",
-                    "NO_SIGNAL",
-                )
-            )
-        if limits is not None:
-            over = m.silence_pct > limits.max_silence_pct
-            out.append(
-                Check(
-                    "SILENCE",
-                    "REVIEW" if over else "PASS",
-                    f"{m.silence_pct:.1f} %",
-                    f"{limits.max_silence_pct:g} % or less",
-                    "More silence than the project allows; listen to it" if over else "",
-                    "TOO_MUCH_SILENCE" if over else None,
-                )
-            )
-            if limits.max_clipping_pct is None:
-                out.append(
-                    Check(
-                        "CLIPPING",
-                        "INFO",
-                        f"{m.clip_pct:.3f} %",
-                        "No clipping limit set for this project",
-                    )
-                )
-            else:
-                clipped = m.clip_pct > limits.max_clipping_pct
-                out.append(
-                    Check(
-                        "CLIPPING",
-                        "REVIEW" if clipped else "PASS",
-                        f"{m.clip_pct:.3f} %",
-                        f"{limits.max_clipping_pct:g} % or less",
-                        "Too loud in places (clipped); listen to it" if clipped else "",
-                        "CLIPPING" if clipped else None,
-                    )
-                )
-        levels = (
-            f"peak {m.peak_dbfs:.1f} dBFS, average {m.rms_dbfs:.1f} dBFS"
-            if m.peak_dbfs is not None and m.rms_dbfs is not None
-            else "silent"
-        )
-        out.append(Check("LEVELS", "INFO", levels, "Shown, not judged"))
-        out.append(
-            Check(
-                "DYNAMIC_RANGE",
-                "INFO",
-                f"{m.dynamic_range_db:.1f} dB"
-                if m.dynamic_range_db is not None
-                else "Not measured (file made before this check existed)",
-                "Shown, not judged",
-            )
-        )
-    out.append(
-        Check(
-            "SNR",
-            "NOT_APPLICABLE",
-            "Not measured",
-            "",
-            "No validated signal-to-noise method for this recording type, so it is left "
-            "empty rather than guessed",
-        )
-    )
-    if m.channels < 2:
-        out.append(
-            Check(
-                "CHANNEL_LEAKAGE",
-                "NOT_APPLICABLE",
-                "One channel",
-                "",
-                "Only for recordings with one speaker per channel",
-            )
-        )
-    elif m.channel_correlation is None:
-        out.append(
-            Check(
-                "CHANNEL_LEAKAGE",
-                "INFO",
-                "Not measured",
-                "",
-                "Measured on a re-check, from the file itself",
-            )
-        )
-    elif m.channel_correlation >= IDENTICAL_CHANNELS:
-        out.append(
-            Check(
-                "CHANNEL_LEAKAGE",
-                "REVIEW",
-                f"correlation {m.channel_correlation:.3f}",
-                "Separate speakers per channel",
-                "Left and right carry the same sound: a mixed recording, not one "
-                "speaker per channel",
-                "SAME_SOUND_BOTH_CHANNELS",
-            )
-        )
-    else:
-        out.append(
-            Check(
-                "CHANNEL_LEAKAGE",
-                "INFO",
-                f"correlation {m.channel_correlation:.3f}",
-                "Shown, not judged",
-            )
-        )
-    if duplicate is not None and duplicate.exact:
-        out.append(
-            Check(
-                "DUPLICATE",
-                "FAIL",
-                f"Same file as recording {duplicate.recording_id}",
-                "No copy in this project",
-                "This exact file is already in the project",
-                "DUPLICATE",
-            )
-        )
-    elif duplicate is not None:
-        out.append(
-            Check(
-                "DUPLICATE",
-                "REVIEW",
-                f"Matches recording {duplicate.recording_id}",
-                "No copy in this project",
-                "Sounds like another recording in this project; compare them",
-                "POSSIBLE_DUPLICATE",
-            )
-        )
-    elif not comparable(m):
-        out.append(
-            Check(
-                "DUPLICATE",
-                "INFO",
-                "Exact copies only",
-                "No copy in this project",
-                "Too short or too quiet to compare the sound itself",
-            )
-        )
-    else:
-        out.append(Check("DUPLICATE", "PASS", "No match", "No copy in this project"))
-    return out
-
-
-def comparable(m: Measured) -> bool:
-    return (
-        m.content_fingerprint is not None
-        and m.duration_ms >= FINGERPRINT_MIN_MS
-        and m.silence_pct < FINGERPRINT_MAX_SILENCE_PCT
-    )
-
-
-def outcome_of(checks: list[Check]) -> tuple[str, str | None]:
-    for state, outcome in (("FAIL", "FAIL"), ("REVIEW", "NEEDS_REVIEW")):
-        hits = [c for c in checks if c.state == state]
-        if hits:
-            return outcome, hits[0].reason
-    return "PASS", None
-
-
-def summary(checks: list[Check]) -> str:
-    fails = [c.code.replace("_", " ").lower() for c in checks if c.state == "FAIL"]
-    reviews = [c.code.replace("_", " ").lower() for c in checks if c.state == "REVIEW"]
-    if fails:
-        return "Failed: " + ", ".join(fails)
-    if reviews:
-        return "Listen and decide: " + ", ".join(reviews)
-    return "All checks passed"
 
 
 def find_duplicate(
@@ -671,9 +172,8 @@ def run_automatic(db: Session, recording_id: uuid.UUID) -> AudioQcResult:
     """Check the newest delivery file of a ready recording; the moderator then sends it on."""
     rec = db.get(Recording, recording_id)
     if rec is None:
-        raise AppError("Recording not found", code="NOT_FOUND", status_code=404)
-    task = db.get(Task, rec.task_id)
-    assert task is not None  # noqa: S101  (foreign key guarantees it)
+        raise not_found("Recording")
+    task = db.get_one(Task, rec.task_id)
     asset = delivery_asset(db, rec.id)
     measured = from_asset(asset) if asset is not None else None
     duplicate = find_duplicate(db, task.project_id, rec.id, measured) if measured else None
@@ -775,69 +275,22 @@ def assign_qc(
         raise AppError(
             f"A {task.status} task cannot get a QC Executive", code="TASK_LOCKED", status_code=409
         )
-    user = db.get(User, user_id)
-    is_member = user is not None and db.scalar(
-        select(ProjectMembership.id).where(
-            ProjectMembership.project_id == task.project_id, ProjectMembership.user_id == user.id
-        )
-    )
-    if user is None or not is_member:
-        raise AppError(
-            "The QC Executive must be a member of the project",
-            code="NOT_PROJECT_MEMBER",
-            status_code=422,
-        )
-    if user.status != "ACTIVE" or Role.QC_EXECUTIVE.value not in {r.code for r in user.roles}:
-        raise AppError(
-            "Choose an active user with the QC Executive role",
-            code="NOT_A_QC_EXECUTIVE",
-            status_code=422,
-        )
-    moderator = tasks.active_assignee(db, task.id, Role.MODERATOR.value)
-    recorded = db.scalar(
-        select(Recording.id).where(Recording.task_id == task.id, Recording.created_by == user.id)
-    )
-    if (moderator is not None and moderator.user_id == user.id) or recorded is not None:
-        raise AppError(
-            "The person who records a session cannot check it", code="SAME_PERSON", status_code=422
-        )
-    current = tasks.active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
-    if current is not None and current.user_id == user.id:
-        raise AppError(
-            "Already assigned to this QC Executive", code="ALREADY_ASSIGNED", status_code=409
-        )
-    if current is not None and not (reason and reason.strip()):
-        raise AppError("Give a reason for reassigning", code="REASON_REQUIRED", status_code=422)
+    user = tasks.require_member_with_role(db, task.project_id, user_id, Role.QC_EXECUTIVE)
+    if user.id in tasks.recording_people(db, task):
+        raise _same_person()
     try:
-        if current is not None:
-            current.active = False
-            current.ended_at = datetime.now(UTC)
-            db.flush()
-        db.add(
-            TaskAssignment(
-                task_id=task.id,
-                user_id=user.id,
-                role_code=Role.QC_EXECUTIVE.value,
-                assigned_by=principal.user_id,
-                reason=(reason or "").strip() or None,
-            )
-        )
-        audit.record(
-            db,
-            action="task.qc_reassigned" if current else "task.qc_assigned",
-            entity_type="task",
-            entity_id=task.id,
-            project_id=task.project_id,
-            actor_id=principal.user_id,
-            ip=ip,
-            before={"qc": str(current.user_id)} if current else None,
-            after={"qc": str(user.id), "reason": (reason or "").strip()},
-        )
+        tasks.replace_assignee(db, principal, task, user, Role.QC_EXECUTIVE, reason, ip)
         db.commit()
     except Exception:
         db.rollback()
         raise
     return task
+
+
+def _same_person() -> AppError:
+    return AppError(
+        "The person who records a session cannot check it", code="SAME_PERSON", status_code=422
+    )
 
 
 def _latest(db: Session, task_id: uuid.UUID, *, automated: bool) -> AudioQcResult | None:
@@ -858,8 +311,9 @@ def decide(
     comment: str,
     ip: str | None,
 ) -> AudioQcResult:
-    """The QC Executive's decision (AQC-008): PASS approves, FAIL rejects, RETURN asks for a new
-    recording. Stored with reason, comment, time and reviewer; the task moves in the same commit."""
+    """The QC Executive's decision (AQC-008): PASS sends the task to the project admin, FAIL
+    rejects it (D-118: no return). Stored with reason, comment, time and reviewer; the task moves
+    in the same commit."""
     task = tasks.get_task(db, principal, task_id)
     if not _is_qc(db, principal, task):
         raise forbidden()
@@ -869,16 +323,8 @@ def decide(
         )
     # Checked at decision time too, for every caller including a Super Admin: assigning the QC
     # first and the moderator second used to let one person record and approve (D-088).
-    moderator = tasks.active_assignee(db, task.id, Role.MODERATOR.value)
-    recorded = db.scalar(
-        select(Recording.id).where(
-            Recording.task_id == task.id, Recording.created_by == principal.user_id
-        )
-    )
-    if (moderator is not None and moderator.user_id == principal.user_id) or recorded is not None:
-        raise AppError(
-            "The person who records a session cannot check it", code="SAME_PERSON", status_code=422
-        )
+    if principal.user_id in tasks.recording_people(db, task):
+        raise _same_person()
     target = DECISIONS.get(outcome)
     if target is None:
         raise AppError("Choose PASS or FAIL", code="VALIDATION_ERROR", status_code=422)
@@ -902,8 +348,7 @@ def decide(
         reason_code=reason_code,
         comment=comment,
     )
-    rec = db.get(Recording, automatic.recording_id)
-    assert rec is not None  # noqa: S101
+    rec = db.get_one(Recording, automatic.recording_id)
     result = AudioQcResult(
         id=uuid.uuid4(),
         recording_id=automatic.recording_id,
@@ -1030,15 +475,14 @@ def metadata(
     measurements and processing, consent status and audio QC. Participants by code only."""
     rec = db.get(Recording, recording_id)
     if rec is None:
-        raise AppError("Recording not found", code="NOT_FOUND", status_code=404)
+        raise not_found("Recording")
     try:
         task = tasks.get_task(db, principal, rec.task_id)
     except AppError:
-        raise AppError("Recording not found", code="NOT_FOUND", status_code=404) from None
+        raise not_found("Recording") from None
     if not principal.can_in_project(Perm.RECORDINGS_DOWNLOAD, task.project_id):
         raise forbidden()
-    project = db.get(Project, task.project_id)
-    assert project is not None  # noqa: S101
+    project = db.get_one(Project, task.project_id)
     body = metadata_body(db, rec, task, project)
     audit.record(
         db,
@@ -1073,22 +517,12 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
     for step in steps:
         by_asset.setdefault(step.asset_id, []).append(step)
     people = []
-    for slot, participant_id in (("A", task.participant_a_id), ("B", task.participant_b_id)):
-        participant = db.get(Participant, participant_id)
-        assert participant is not None  # noqa: S101
-        records = db.scalars(
-            select(ConsentRecord)
-            .where(
-                ConsentRecord.participant_id == participant_id,
-                ConsentRecord.project_id == task.project_id,
-            )
-            .order_by(ConsentRecord.created_at.desc())
-        ).all()
-        session = next((r for r in records if r.task_id == task.id), None)
-        own = next((r for r in records if r.task_id is None and r.captured_by is None), None)
+    for side in consent.for_task(db, task):
+        participant = db.get_one(Participant, side.participant_id)
+        session, own = side.latest_noted, side.latest_own
         people.append(
             {
-                "slot": slot,
+                "slot": side.side,
                 "participant_code": participant.participant_code,
                 "language": participant.language_code,
                 "session_consent": session.status if session else None,
@@ -1205,10 +639,6 @@ def _call_details(db: Session, rec: Recording) -> dict[str, Any] | None:
     """The phone call a recording came from, for its details file (D-103): who called from which
     seat and when, what the moderator confirmed on the call, and every step until the file was
     stored. No phone number: the last two digits only."""
-    # Imported here: the telephony service itself imports this module.
-    from app.modules.telephony import service as telephony
-    from app.modules.telephony.models import Call, CallEvent
-
     call = db.scalar(select(Call).where(Call.recording_id == rec.id))
     if call is None:
         return None

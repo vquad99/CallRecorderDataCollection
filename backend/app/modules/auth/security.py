@@ -114,10 +114,6 @@ def totp_step(secret: str, code: str, at: float | None = None) -> int | None:
     return matched
 
 
-def verify_totp(secret: str, code: str, at: float | None = None) -> bool:
-    return totp_step(secret, code, at) is not None
-
-
 def fernet_keys(value: str) -> list[str]:
     """DATA_ENCRYPTION_KEY holds one key, or several separated by commas: the first encrypts,
     every one decrypts. Rotation: put a new key first, run `rotate-keys`, then drop the old one."""

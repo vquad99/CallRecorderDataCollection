@@ -9,11 +9,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 
 from app.core.permissions import Perm
+from app.db.paging import Page, PageNumber, paginate
 from app.modules.audit.models import AuditLog
-from app.modules.auth.deps import DbSession, Principal, require
+from app.modules.auth.deps import DbSession, Principal, in_projects, require
 from app.modules.auth.models import User
 
 router = APIRouter(prefix="/audit-logs", tags=["audit"])
@@ -34,11 +35,8 @@ class AuditOut(BaseModel):
     request_id: str | None
 
 
-class AuditPage(BaseModel):
-    items: list[AuditOut]
-    total: int
-    page: int
-    page_size: int
+class AuditPage(Page[AuditOut]):
+    pass
 
 
 def _load(value: str | None) -> Any:
@@ -55,15 +53,15 @@ def list_audit(
     project_id: uuid.UUID | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: PageNumber = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> AuditPage:
-    query = select(AuditLog, User.email).outerjoin(User, User.id == AuditLog.actor_id)
-    if not principal.is_super_admin:
-        # Project Admins see entries about their own projects only.
-        query = query.where(
-            AuditLog.project_id.in_(list(principal.project_ids) or [uuid.UUID(int=0)])
-        )
+    # Project Admins see entries about their own projects only.
+    query = (
+        select(AuditLog, User.email)
+        .outerjoin(User, User.id == AuditLog.actor_id)
+        .where(in_projects(principal, AuditLog.project_id))
+    )
     if action:
         query = query.where(or_(AuditLog.action == action, AuditLog.action.like(f"{action}.%")))
     if entity_type:
@@ -76,10 +74,9 @@ def list_audit(
         query = query.where(AuditLog.created_at >= since)
     if until:
         query = query.where(AuditLog.created_at < until)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    rows = db.execute(
-        query.order_by(AuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-    ).all()
+    rows, total = paginate(
+        db, query.order_by(AuditLog.created_at.desc()), page, page_size, scalars=False
+    )
     items = [
         AuditOut(
             id=log.id,
@@ -96,4 +93,4 @@ def list_audit(
         )
         for log, email in rows
     ]
-    return AuditPage(items=items, total=int(total), page=page, page_size=page_size)
+    return AuditPage(items=items, total=total, page=page, page_size=page_size)

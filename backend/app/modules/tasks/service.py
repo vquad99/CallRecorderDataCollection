@@ -9,28 +9,47 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
+from app.db.paging import paginate
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
+from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
 from app.modules.projects.models import Project, ProjectMembership
-from app.modules.projects.service import ensure_accepts_new_work
-from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.projects.service import ensure_accepts_new_work, get_manageable
 from app.modules.tasks import workflow
 from app.modules.tasks.models import Task, TaskAssignment, TaskComment, TaskStatusHistory
 
-REASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "ON_HOLD", "RETURNED"})
+# Statuses in which the moderator may still be changed.
+REASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "ON_HOLD"})
 CONSENT_OPEN = frozenset({"ASSIGNED", "IN_PROGRESS"})
 
 
-def not_found() -> AppError:
-    return AppError("Task not found", code="NOT_FOUND", status_code=404)
+class _RoleWords(NamedTuple):
+    noun: str  # in messages
+    wrong_role: str  # error code for someone without the role
+    audit_prefix: str  # audit actions <prefix>assigned / <prefix>reassigned
+    audit_key: str
+
+
+# The roles a person is assigned to a task in.
+_ROLE_WORDS = {
+    Role.MODERATOR: _RoleWords("moderator", "NOT_A_MODERATOR", "task.", "moderator"),
+    Role.QC_EXECUTIVE: _RoleWords("QC Executive", "NOT_A_QC_EXECUTIVE", "task.qc_", "qc"),
+}
+
+
+def _role_noun(role_code: str) -> str:
+    """How a task role reads at the start of a history line ("Moderator", "QC Executive")."""
+    noun = next((w.noun for r, w in _ROLE_WORDS.items() if r.value == role_code), role_code)
+    return noun[:1].upper() + noun[1:]
 
 
 def active_assignee(db: Session, task_id: uuid.UUID, role_code: str) -> TaskAssignment | None:
@@ -57,12 +76,30 @@ def _is_assigned(db: Session, task_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     )
 
 
-def actor_for(db: Session, principal: Principal, task: Task) -> workflow.Actor:
-    moderator = active_assignee(db, task.id, "MODERATOR")
+def is_moderator(db: Session, principal: Principal, task: Task) -> bool:
+    """The caller is the task's assigned moderator."""
+    moderator = active_assignee(db, task.id, Role.MODERATOR.value)
+    return moderator is not None and moderator.user_id == principal.user_id
+
+
+def require_moderator(db: Session, principal: Principal, task: Task, message: str) -> None:
+    """Only the task's assigned moderator may do this; anyone else gets 403 with `message`."""
+    if not is_moderator(db, principal, task):
+        raise forbidden(message)
+
+
+def actor_from(
+    principal: Principal, task: Task, moderator: TaskAssignment | None
+) -> workflow.Actor:
+    """The caller as the workflow sees them, given the task's moderator assignment."""
     return workflow.Actor(
         can_assign=principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id),
         is_moderator=moderator is not None and moderator.user_id == principal.user_id,
     )
+
+
+def actor_for(db: Session, principal: Principal, task: Task) -> workflow.Actor:
+    return actor_from(principal, task, active_assignee(db, task.id, Role.MODERATOR.value))
 
 
 def get_task(db: Session, principal: Principal, task_id: uuid.UUID) -> Task:
@@ -70,16 +107,16 @@ def get_task(db: Session, principal: Principal, task_id: uuid.UUID) -> Task:
         raise forbidden()
     task = db.get(Task, task_id)
     if task is None:
-        raise not_found()
+        raise not_found("Task")
     if principal.is_super_admin:
         return task
     if task.project_id not in principal.project_ids:
-        raise not_found()
+        raise not_found("Task")
     if principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id) or _is_assigned(
         db, task.id, principal.user_id
     ):
         return task
-    raise not_found()
+    raise not_found("Task")
 
 
 @dataclass(frozen=True)
@@ -103,11 +140,9 @@ def list_tasks(
         TaskAssignment.active.is_(True),
     )
     if not principal.is_super_admin:
-        projects = list(principal.project_ids) or [uuid.UUID(int=0)]
-        if principal.can(Perm.TASKS_ASSIGN):
-            query = query.where(Task.project_id.in_(projects))
-        else:
-            query = query.where(Task.project_id.in_(projects), mine)
+        query = query.where(in_projects(principal, Task.project_id))
+        if not principal.can(Perm.TASKS_ASSIGN):
+            query = query.where(mine)
     if f.mine:
         query = query.where(mine)
     if f.project_id:
@@ -119,23 +154,18 @@ def list_tasks(
     if f.search and f.search.strip():
         # Codes only (T000123, P000045): never names or phone numbers, so no personal data is
         # searchable here. LIKE wildcards in the input are matched literally.
-        term = (
-            f.search.strip().upper().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        term = f.search.strip().upper()
+        people = select(Participant.id).where(
+            Participant.participant_code.contains(term, autoescape=True)
         )
-        like = f"%{term}%"
-        people = select(Participant.id).where(Participant.participant_code.like(like, escape="\\"))
         query = query.where(
             or_(
-                Task.task_code.like(like, escape="\\"),
+                Task.task_code.contains(term, autoescape=True),
                 Task.participant_a_id.in_(people),
                 Task.participant_b_id.in_(people),
             )
         )
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    items = db.scalars(
-        query.order_by(Task.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-    ).all()
-    return list(items), int(total)
+    return paginate(db, query.order_by(Task.created_at.desc()), page, page_size)
 
 
 def _record_transition(
@@ -208,25 +238,34 @@ def transition(
     return task
 
 
+def recording_people(db: Session, task: Task) -> set[uuid.UUID]:
+    """The task's moderator and everyone who made one of its recordings: none of them may check
+    the task in QC (D-088)."""
+    from app.modules.recordings.models import Recording
+
+    people = set(db.scalars(select(Recording.created_by).where(Recording.task_id == task.id)))
+    moderator = active_assignee(db, task.id, Role.MODERATOR.value)
+    if moderator is not None:
+        people.add(moderator.user_id)
+    return people
+
+
 def auto_assign_qc(db: Session, task: Task) -> uuid.UUID | None:
     """Gives a task reaching QC to a QC Executive of its project (D-116), when it has none: the
     active QC Executive with the fewest tasks waiting in QC; on a tie, the one given a task
     longest ago (round robin). Never the task's moderator or someone who recorded it. Nobody
     fits: the task waits, and a project admin assigns it by hand. Returns the person chosen."""
-    from app.modules.recordings.models import Recording
-
     if active_assignee(db, task.id, Role.QC_EXECUTIVE.value) is not None:
         return None
     # One choice at a time per project, so two tasks sent together are spread, not doubled.
     db.execute(
         text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"qc-assign:{task.project_id}"}
     )
-    moderator = active_assignee(db, task.id, Role.MODERATOR.value)
-    recorders = set(db.scalars(select(Recording.created_by).where(Recording.task_id == task.id)))
-    excluded = recorders | ({moderator.user_id} if moderator else set())
+    excluded = recording_people(db, task)
     qc_role = select(RoleRecord.id).where(RoleRecord.code == Role.QC_EXECUTIVE.value)
-    candidates = list(
-        db.scalars(
+    candidates = [
+        u
+        for u in db.scalars(
             select(User)
             .join(ProjectMembership, ProjectMembership.user_id == User.id)
             .where(
@@ -237,10 +276,11 @@ def auto_assign_qc(db: Session, task: Task) -> uuid.UUID | None:
                 ),
             )
         )
-    )
-    candidates = [u for u in candidates if u.id not in excluded]
+        if u.id not in excluded
+    ]
     if not candidates:
         return None
+    ids = [u.id for u in candidates]
     waiting = dict(
         db.execute(
             select(TaskAssignment.user_id, func.count())
@@ -249,7 +289,7 @@ def auto_assign_qc(db: Session, task: Task) -> uuid.UUID | None:
                 TaskAssignment.role_code == Role.QC_EXECUTIVE.value,
                 TaskAssignment.active.is_(True),
                 Task.status == "AUDIO_QC",
-                TaskAssignment.user_id.in_([u.id for u in candidates]),
+                TaskAssignment.user_id.in_(ids),
             )
             .group_by(TaskAssignment.user_id)
         ).all()
@@ -259,7 +299,7 @@ def auto_assign_qc(db: Session, task: Task) -> uuid.UUID | None:
             select(TaskAssignment.user_id, func.max(TaskAssignment.created_at))
             .where(
                 TaskAssignment.role_code == Role.QC_EXECUTIVE.value,
-                TaskAssignment.user_id.in_([u.id for u in candidates]),
+                TaskAssignment.user_id.in_(ids),
             )
             .group_by(TaskAssignment.user_id)
         ).all()
@@ -328,9 +368,7 @@ class TaskInput:
 def create_task(
     db: Session, principal: Principal, project_id: uuid.UUID, data: TaskInput, ip: str | None
 ) -> Task:
-    project = get_visible_project(db, principal, project_id)
-    if not principal.can_in_project(Perm.TASKS_ASSIGN, project.id):
-        raise forbidden()
+    project = get_manageable(db, principal, project_id, Perm.TASKS_ASSIGN)
     ensure_accepts_new_work(project)
     allowed = (data.recording_mode == "TELEPHONY" and project.allows_telephony) or (
         data.recording_mode == "FACE_TO_FACE" and project.allows_face_to_face
@@ -390,8 +428,12 @@ def create_task(
     return task
 
 
-def check_moderator(db: Session, project_id: uuid.UUID, user_id: uuid.UUID) -> User:
-    """The user may moderate this project's tasks: an active member with the Moderator role."""
+def require_member_with_role(
+    db: Session, project_id: uuid.UUID, user_id: uuid.UUID, role: Role
+) -> User:
+    """The user may take this role on the project's tasks: an active member holding the role.
+    422 NOT_PROJECT_MEMBER, or NOT_A_MODERATOR / NOT_A_QC_EXECUTIVE."""
+    words = _ROLE_WORDS[role]
     user = db.get(User, user_id)
     is_member = user is not None and db.scalar(
         select(ProjectMembership.id).where(
@@ -400,15 +442,67 @@ def check_moderator(db: Session, project_id: uuid.UUID, user_id: uuid.UUID) -> U
     )
     if user is None or not is_member:
         raise AppError(
-            "The moderator must be a member of the project",
+            f"The {words.noun} must be a member of the project",
             code="NOT_PROJECT_MEMBER",
             status_code=422,
         )
-    if user.status != "ACTIVE" or Role.MODERATOR.value not in {r.code for r in user.roles}:
+    if user.status != "ACTIVE" or role.value not in {r.code for r in user.roles}:
+        title = words.noun[0].upper() + words.noun[1:]
         raise AppError(
-            "Choose an active user with the Moderator role", code="NOT_A_MODERATOR", status_code=422
+            f"Choose an active user with the {title} role", code=words.wrong_role, status_code=422
         )
     return user
+
+
+def replace_assignee(
+    db: Session,
+    principal: Principal,
+    task: Task,
+    user: User,
+    role: Role,
+    reason: str | None,
+    ip: str | None,
+) -> TaskAssignment | None:
+    """Gives the task's `role` to `user`, ending the assignment of whoever held it; replacing
+    someone needs a reason. Audited, not committed. Returns the assignment that was ended."""
+    words = _ROLE_WORDS[role]
+    current = active_assignee(db, task.id, role.value)
+    if current is not None and current.user_id == user.id:
+        raise AppError(
+            f"Already assigned to this {words.noun}", code="ALREADY_ASSIGNED", status_code=409
+        )
+    reason = (reason or "").strip()
+    if current is not None and not reason:
+        raise AppError("Give a reason for reassigning", code="REASON_REQUIRED", status_code=422)
+    if current is not None:
+        current.active = False
+        current.ended_at = datetime.now(UTC)
+        db.flush()  # the one-active-assignment index must see the old one ended first
+    db.add(
+        TaskAssignment(
+            task_id=task.id,
+            user_id=user.id,
+            role_code=role.value,
+            assigned_by=principal.user_id,
+            reason=reason or None,
+        )
+    )
+    audit.record(
+        db,
+        action=f"{words.audit_prefix}{'reassigned' if current else 'assigned'}",
+        entity_type="task",
+        entity_id=task.id,
+        project_id=task.project_id,
+        actor_id=principal.user_id,
+        ip=ip,
+        before={words.audit_key: str(current.user_id)} if current else None,
+        after={words.audit_key: str(user.id), "reason": reason},
+    )
+    return current
+
+
+def can_reassign(actor: workflow.Actor, task: Task) -> bool:
+    return actor.can_assign and task.status in REASSIGNABLE
 
 
 def assign_moderator(
@@ -426,50 +520,20 @@ def assign_moderator(
         raise AppError(
             f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
         )
-    user = check_moderator(db, task.project_id, user_id)
+    user = require_member_with_role(db, task.project_id, user_id, Role.MODERATOR)
     qc = active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
     if qc is not None and qc.user_id == user.id:
         # The QC Executive of a task cannot also record it, whichever was assigned first (D-088).
         raise AppError(
             "The person who checks a session cannot record it", code="SAME_PERSON", status_code=422
         )
-    current = active_assignee(db, task.id, "MODERATOR")
-    if current is not None and current.user_id == user.id:
-        raise AppError(
-            "Already assigned to this moderator", code="ALREADY_ASSIGNED", status_code=409
-        )
-    if current is not None and not (reason and reason.strip()):
-        raise AppError("Give a reason for reassigning", code="REASON_REQUIRED", status_code=422)
     try:
-        if current is not None:
-            current.active = False
-            current.ended_at = datetime.now(UTC)
-            db.flush()
-        db.add(
-            TaskAssignment(
-                task_id=task.id,
-                user_id=user.id,
-                role_code="MODERATOR",
-                assigned_by=principal.user_id,
-                reason=(reason or "").strip() or None,
-            )
-        )
-        audit.record(
-            db,
-            action="task.reassigned" if current else "task.assigned",
-            entity_type="task",
-            entity_id=task.id,
-            project_id=task.project_id,
-            actor_id=principal.user_id,
-            ip=ip,
-            before={"moderator": str(current.user_id)} if current else None,
-            after={"moderator": str(user.id), "reason": (reason or "").strip()},
-        )
-        if task.status in ("DRAFT", "RETURNED"):
+        replace_assignee(db, principal, task, user, Role.MODERATOR, reason, ip)
+        if task.status == "DRAFT":
             workflow.check(
                 task.status,
                 "ASSIGNED",
-                workflow.SYSTEM if task.status == "DRAFT" else workflow.Actor(can_assign=True),
+                workflow.SYSTEM,
                 held_from=None,
                 reason_code=None,
                 comment="",
@@ -497,11 +561,7 @@ def capture_consent(
     task = get_task(db, principal, task_id)
     if not principal.can_in_project(Perm.CONSENT_CAPTURE, task.project_id):
         raise forbidden()
-    moderator = active_assignee(db, task.id, "MODERATOR")
-    if moderator is None or moderator.user_id != principal.user_id:
-        raise AppError(
-            "Only the assigned moderator records consent", code="FORBIDDEN", status_code=403
-        )
+    require_moderator(db, principal, task, "Only the assigned moderator records consent")
     if task.status not in CONSENT_OPEN:
         raise AppError(
             "Consent is recorded while the task is assigned or in progress",
@@ -512,8 +572,7 @@ def capture_consent(
         raise AppError(
             "Participant is not on this task", code="PARTICIPANT_NOT_ON_TASK", status_code=422
         )
-    project = db.get(Project, task.project_id)
-    assert project is not None  # noqa: S101  (foreign key guarantees it)
+    project = db.get_one(Project, task.project_id)
     record = ConsentRecord(
         participant_id=participant_id,
         project_id=task.project_id,
@@ -544,58 +603,21 @@ def capture_consent(
     return record
 
 
-def latest_consent(db: Session, task: Task) -> dict[uuid.UUID, ConsentRecord]:
-    rows = db.scalars(
-        select(ConsentRecord)
-        .where(ConsentRecord.task_id == task.id)
-        .order_by(ConsentRecord.created_at)
-    ).all()
-    return {r.participant_id: r for r in rows}
-
-
-def sides_without_consent(db: Session, task: Task) -> list[str]:
-    """Which of A and B have no consent to record (D-119). Consent counts when the newest word
-    is "given": either consent noted for this task by the moderator, or the participant's own
-    answer on the project's consent form (not sent back by staff). A later refusal or withdrawal,
-    in either place, takes it away."""
-    noted = latest_consent(db, task)
-    pids = (task.participant_a_id, task.participant_b_id)
-    own_rows = db.scalars(
-        select(ConsentRecord)
-        .where(
-            ConsentRecord.project_id == task.project_id,
-            ConsentRecord.task_id.is_(None),
-            ConsentRecord.captured_by.is_(None),
-            ConsentRecord.participant_id.in_(pids),
-        )
-        .order_by(ConsentRecord.created_at)
-    ).all()
-    own = {r.participant_id: r for r in own_rows}
-    missing = []
-    for side, pid in zip(("A", "B"), pids, strict=True):
-        words = [r for r in (noted.get(pid), own.get(pid)) if r is not None]
-        newest = max(words, key=lambda r: r.created_at) if words else None
-        ok = (
-            newest is not None
-            and newest.status == "GIVEN"
-            and not (newest.task_id is None and newest.review_status == "REJECTED")
-        )
-        if not ok:
-            missing.append(side)
-    return missing
+def consent_missing_error(missing: list[str]) -> AppError:
+    return AppError(
+        f"Consent is missing for participant {' and '.join(missing)}. Note their consent on "
+        "the task page, or have them answer their consent form, before recording.",
+        code="CONSENT_MISSING",
+        status_code=409,
+        details=[{"missing": missing}],
+    )
 
 
 def require_consent(db: Session, task: Task) -> None:
     """Recording needs consent from both participants first (D-119)."""
-    missing = sides_without_consent(db, task)
+    missing = consent.missing(consent.for_task(db, task))
     if missing:
-        raise AppError(
-            f"Consent is missing for participant {' and '.join(missing)}. Note their consent on "
-            "the task page, or have them answer their consent form, before recording.",
-            code="CONSENT_MISSING",
-            status_code=409,
-            details=[{"missing": missing}],
-        )
+        raise consent_missing_error(missing)
 
 
 def add_comment(
@@ -671,6 +693,11 @@ class TimelineEntry:
     kind: str
     actor: str | None
     text: str
+    # Status changes only: the change itself, so a page need not read it back out of `text`.
+    from_status: str | None = None
+    to_status: str | None = None
+    reason_code: str | None = None
+    comment: str | None = None
 
 
 def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[TimelineEntry]:
@@ -696,6 +723,10 @@ def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[Time
                 "status",
                 names.get(h.actor_id) if h.actor_id else "Platform",
                 f"{label} {extra}".strip(),
+                from_status=h.from_status,
+                to_status=h.to_status,
+                reason_code=h.reason_code,
+                comment=h.comment,
             )
         )
     for a in assignments:
@@ -705,7 +736,7 @@ def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[Time
                 a.created_at,
                 "assignment",
                 names.get(a.assigned_by) if a.assigned_by else None,
-                f"{a.role_code.title()} assigned: {names.get(a.user_id, a.user_id)}{reason}",
+                f"{_role_noun(a.role_code)} assigned: {names.get(a.user_id, a.user_id)}{reason}",
             )
         )
     for c in comments:

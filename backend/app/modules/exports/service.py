@@ -13,21 +13,22 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.permissions import Perm
-from app.modules.audio_qc import service as audio_qc
+from app.core.permissions import Perm, Role
+from app.modules.audio_qc.models import AudioQcResult
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.exports import minutes
 from app.modules.exports.bundle import table
 from app.modules.exports.models import TABLE_FORMATS
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
-from app.modules.projects.service import get_visible as get_visible_project
-from app.modules.recordings.models import Recording
+from app.modules.projects.service import get_manageable
+from app.modules.recordings.models import DELIVERY_KINDS, AudioAsset, Recording
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
 from app.modules.telephony.models import Call
 
@@ -44,10 +45,7 @@ def report_project(
     """The project of a report this person may download (EXP-008)."""
     if content not in REPORTS or table_format not in TABLE_FORMATS:
         raise AppError("Choose what to export", code="VALIDATION_ERROR", status_code=422)
-    project = get_visible_project(db, principal, project_id)
-    if not principal.can_in_project(Perm.EXPORTS_CREATE, project.id):
-        raise forbidden()
-    return project
+    return get_manageable(db, principal, project_id, Perm.EXPORTS_CREATE)
 
 
 def record(
@@ -86,112 +84,151 @@ def report(db: Session, project: Project, content: str, table_format: str) -> st
 
 
 def progress_table(db: Session, project: Project, table_format: str = "csv") -> str:
-    rows: list[list[object]] = []
+    """One row per task. Every column comes from one query over the whole project, so the
+    report costs the same dozen queries for ten tasks or ten thousand."""
     columns = [
-        *[
-            "task_code",
-            "status",
-            "mode",
-            "priority",
-            "due_date",
-            "created_at",
-            "participant_a",
-            "participant_a_language",
-            "participant_b",
-            "participant_b_language",
-            "moderator",
-            "qc_executive",
-            "finished_recordings",
-            "latest_recording_minutes",
-            "automatic_check",
-            "qc_decision",
-            "approved_at",
-            "phone_calls",
-            "last_call_state",
-        ]
+        "task_code",
+        "status",
+        "mode",
+        "priority",
+        "due_date",
+        "created_at",
+        "participant_a",
+        "participant_a_language",
+        "participant_b",
+        "participant_b_language",
+        "moderator",
+        "qc_executive",
+        "finished_recordings",
+        "latest_recording_minutes",
+        "automatic_check",
+        "qc_decision",
+        "approved_at",
+        "phone_calls",
+        "last_call_state",
     ]
-    # Phone calls per task, and the state of the newest one (D-103): two queries for the project,
-    # not two per task.
+    tasks = list(
+        db.scalars(select(Task).where(Task.project_id == project.id).order_by(Task.task_code))
+    )
+    in_project = select(Task.id).where(Task.project_id == project.id)
+    people_ids = {pid for t in tasks for pid in (t.participant_a_id, t.participant_b_id)}
+    people = (
+        {
+            pid: (code, language)
+            for pid, code, language in db.execute(
+                select(
+                    Participant.id, Participant.participant_code, Participant.language_code
+                ).where(Participant.id.in_(people_ids))
+            )
+        }
+        if people_ids
+        else {}
+    )
+    assignees = {
+        (tid, role): name
+        for tid, role, name in db.execute(
+            select(TaskAssignment.task_id, TaskAssignment.role_code, User.display_name)
+            .join(User, User.id == TaskAssignment.user_id)
+            .where(TaskAssignment.active.is_(True), TaskAssignment.task_id.in_(in_project))
+        )
+    }
+    finished = {
+        tid: int(n)
+        for tid, n in db.execute(
+            select(Recording.task_id, func.count())
+            .where(Recording.state == "READY", Recording.task_id.in_(in_project))
+            .group_by(Recording.task_id)
+        )
+    }
+    # The newest finished recording of each task, its delivery file and its audio QC results.
+    latest = {
+        tid: rid
+        for rid, tid in db.execute(
+            select(Recording.id, Recording.task_id)
+            .where(Recording.state == "READY", Recording.task_id.in_(in_project))
+            .ext(distinct_on(Recording.task_id))
+            .order_by(Recording.task_id, Recording.started_at.desc())
+        )
+    }
+    latest_ids = list(latest.values())
+    delivery_ms: dict[uuid.UUID, int] = {}
+    automatic: dict[uuid.UUID, str] = {}
+    decision: dict[uuid.UUID, str] = {}
+    if latest_ids:
+        delivery_ms = {
+            rid: int(ms or 0)
+            for rid, ms in db.execute(
+                select(AudioAsset.recording_id, AudioAsset.duration_ms)
+                .where(
+                    AudioAsset.recording_id.in_(latest_ids),
+                    AudioAsset.kind.in_(DELIVERY_KINDS),
+                    AudioAsset.deleted_at.is_(None),
+                )
+                .ext(distinct_on(AudioAsset.recording_id))
+                .order_by(AudioAsset.recording_id, AudioAsset.version.desc())
+            )
+        }
+        # Newest first: the first result seen of each kind is the one that counts.
+        for rid, automated, outcome in db.execute(
+            select(AudioQcResult.recording_id, AudioQcResult.automated, AudioQcResult.outcome)
+            .where(AudioQcResult.recording_id.in_(latest_ids))
+            .order_by(AudioQcResult.created_at.desc())
+        ):
+            (automatic if automated else decision).setdefault(rid, outcome)
+    approved_at = dict(
+        db.execute(
+            select(TaskStatusHistory.task_id, func.max(TaskStatusHistory.created_at))
+            .where(
+                TaskStatusHistory.to_status == "APPROVED",
+                TaskStatusHistory.task_id.in_(in_project),
+            )
+            .group_by(TaskStatusHistory.task_id)
+        ).all()
+    )
+    # Phone calls per task, and the state of the newest one (D-103).
     call_counts = {
         tid: int(n)
         for tid, n in db.execute(
             select(Call.task_id, func.count())
             .where(Call.project_id == project.id)
             .group_by(Call.task_id)
-        ).all()
+        )
     }
-    last_call: dict[uuid.UUID, str] = {}
-    for tid, state in db.execute(
-        select(Call.task_id, Call.state)
-        .where(Call.project_id == project.id)
-        .order_by(Call.dialled_at)
-    ).all():
-        last_call[tid] = state
-    for task in db.scalars(
-        select(Task).where(Task.project_id == project.id).order_by(Task.task_code)
-    ):
-        people = [
-            db.get(Participant, pid) for pid in (task.participant_a_id, task.participant_b_id)
-        ]
-
-        def assignee(role: str, task_id: uuid.UUID = task.id) -> str:
-            a = db.scalar(
-                select(TaskAssignment).where(
-                    TaskAssignment.task_id == task_id,
-                    TaskAssignment.role_code == role,
-                    TaskAssignment.active.is_(True),
-                )
-            )
-            user = db.get(User, a.user_id) if a else None
-            return user.display_name if user else ""
-
-        finished = (
-            db.scalar(
-                select(func.count())
-                .select_from(Recording)
-                .where(Recording.task_id == task.id, Recording.state == "READY")
-            )
-            or 0
-        )
-        latest = db.scalar(
-            select(Recording)
-            .where(Recording.task_id == task.id, Recording.state == "READY")
-            .order_by(Recording.started_at.desc())
-            .limit(1)
-        )
-        asset = audio_qc.delivery_asset(db, latest.id) if latest else None
-        results = audio_qc.results_for(db, task.id)
-        mine = [r for r in results if latest is not None and r.recording_id == latest.id]
-        automatic = next((r for r in mine if r.automated), None)
-        decision = next((r for r in mine if not r.automated), None)
-        approved_at = db.scalar(
-            select(func.max(TaskStatusHistory.created_at)).where(
-                TaskStatusHistory.task_id == task.id, TaskStatusHistory.to_status == "APPROVED"
-            )
-        )
+    last_call = dict(
+        db.execute(
+            select(Call.task_id, Call.state)
+            .where(Call.project_id == project.id)
+            .ext(distinct_on(Call.task_id))
+            .order_by(Call.task_id, Call.dialled_at.desc())
+        ).all()
+    )
+    rows: list[list[object]] = []
+    for task in tasks:
+        a_code, a_language = people.get(task.participant_a_id, ("", ""))
+        b_code, b_language = people.get(task.participant_b_id, ("", ""))
+        newest = latest.get(task.id)
+        ms = delivery_ms.get(newest) if newest else None
         rows.append(
             [
-                *(
-                    task.task_code,
-                    task.status,
-                    task.recording_mode,
-                    task.priority,
-                    task.due_at.date().isoformat() if task.due_at else "",
-                    _iso(task.created_at),
-                    people[0].participant_code if people[0] else "",
-                    people[0].language_code if people[0] else "",
-                    people[1].participant_code if people[1] else "",
-                    people[1].language_code if people[1] else "",
-                    assignee("MODERATOR"),
-                    assignee("QC_EXECUTIVE"),
-                    finished,
-                    round((asset.duration_ms or 0) / 60000, 2) if asset else "",
-                    automatic.outcome if automatic else "",
-                    decision.outcome if decision else "",
-                    _iso(approved_at) if task.status == "APPROVED" else "",
-                    call_counts.get(task.id, 0) if task.recording_mode == "TELEPHONY" else "",
-                    last_call.get(task.id, ""),
-                )
+                task.task_code,
+                task.status,
+                task.recording_mode,
+                task.priority,
+                task.due_at.date().isoformat() if task.due_at else "",
+                _iso(task.created_at),
+                a_code,
+                a_language,
+                b_code,
+                b_language,
+                assignees.get((task.id, Role.MODERATOR.value), ""),
+                assignees.get((task.id, Role.QC_EXECUTIVE.value), ""),
+                finished.get(task.id, 0),
+                round(ms / 60000, 2) if ms is not None else "",
+                automatic.get(newest, "") if newest else "",
+                decision.get(newest, "") if newest else "",
+                _iso(approved_at.get(task.id)) if task.status == "APPROVED" else "",
+                call_counts.get(task.id, 0) if task.recording_mode == "TELEPHONY" else "",
+                last_call.get(task.id, ""),
             ]
         )
     return table(columns, rows, table_format)

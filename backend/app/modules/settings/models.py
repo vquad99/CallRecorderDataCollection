@@ -14,9 +14,7 @@ VALUE_TYPES = ("text", "int", "bool")
 
 class SystemSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "system_settings"
-    __table_args__ = (
-        CheckConstraint("value_type IN ('text', 'int', 'bool')", name="value_type_allowed"),
-    )
+    __table_args__ = (CheckConstraint(f"value_type IN {VALUE_TYPES}", name="value_type_allowed"),)
 
     key: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     value_type: Mapped[str] = mapped_column(String(20), nullable=False)

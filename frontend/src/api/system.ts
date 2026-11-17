@@ -13,17 +13,6 @@ export interface VersionInfo {
   environment: string;
 }
 
-export function getReadiness(signal?: AbortSignal): Promise<Readiness> {
-  return apiRequest<Readiness>("/health/ready", {
-    acceptStatuses: [503],
-    ...(signal ? { signal } : {}),
-  });
-}
-
-export function getVersion(signal?: AbortSignal): Promise<VersionInfo> {
-  return apiRequest<VersionInfo>("/api/v1/version", signal ? { signal } : {});
-}
-
 /** What the platform found wrong with itself at its last look (D-109). */
 export interface OperationAlerts {
   /** Whether anyone is told by email (ALERT_EMAIL), and to how many addresses. */

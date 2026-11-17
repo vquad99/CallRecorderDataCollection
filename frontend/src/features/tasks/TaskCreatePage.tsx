@@ -2,16 +2,19 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import type { ApiError } from "../../api/client";
 import { getProject, listMembers, listProjects } from "../../api/projects";
 import { createTask, importTasks, listParticipants, type TaskImportResult } from "../../api/work";
+import { BackLink } from "../../components/BackLink";
 import { Button } from "../../components/form/Button";
 import { Icon } from "../../components/Icon";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { DataTable } from "../../components/DataTable";
+import { MODE_LABELS, PRIORITY_LABELS } from "../../lib/labels";
 
 const SAMPLE =
   "participant_a,participant_b,mode,priority,due_date,moderator\n" +
@@ -31,18 +34,11 @@ function downloadSample() {
 /** Many tasks at once from a CSV of participant codes (D-083): check the rows, then add. */
 function BulkTasks({ projectId }: { projectId: string }) {
   const [csv, setCsv] = useState("");
-  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TaskImportResult | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  function send(confirm: boolean) {
-    setBusy(true);
-    setError(null);
-    importTasks(projectId, csv, confirm)
-      .then(setResult)
-      .catch((err: unknown) => setError(toApiError(err)))
-      .finally(() => setBusy(false));
-  }
+  const { busy: working, error, run } = useAction();
+  const busy = working !== null;
+  const send = (confirm: boolean) =>
+    void run(async () => setResult(await importTasks(projectId, csv, confirm)));
 
   return (
     <section className="card stack stack--tight" aria-labelledby="bulk-tasks-title">
@@ -106,30 +102,28 @@ function BulkTasks({ projectId }: { projectId: string }) {
               ? `${result.created} tasks added.`
               : `${result.ready} of ${result.rows.length} rows are ready.`}
           </p>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Line</th>
-                  <th scope="col">Participants</th>
-                  <th scope="col">Result</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">Line</th>
+                <th scope="col">Participants</th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.rows.map((r) => (
+                <tr key={r.line} className={r.ok ? "" : "row--invalid"}>
+                  <td>{r.line}</td>
+                  <td>{r.pair}</td>
+                  <td>
+                    {r.task_code ? <Link to="/tasks">{r.task_code}</Link> : null}
+                    {r.task_code ? " " : ""}
+                    {r.message}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {result.rows.map((r) => (
-                  <tr key={r.line} className={r.ok ? "" : "row--invalid"}>
-                    <td>{r.line}</td>
-                    <td>{r.pair}</td>
-                    <td>
-                      {r.task_code ? <Link to="/tasks">{r.task_code}</Link> : null}
-                      {r.task_code ? " " : ""}
-                      {r.message}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </DataTable>
         </>
       ) : null}
     </section>
@@ -147,8 +141,7 @@ export function TaskCreatePage() {
   const [priority, setPriority] = useState("NORMAL");
   const [due, setDue] = useState("");
   const [moderator, setModerator] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
   const projects = useResource(() => listProjects({ status: "ACTIVE", page_size: 100 }), []);
   const project = useResource(
     () => (projectId ? getProject(projectId) : Promise.resolve(null)),
@@ -175,8 +168,10 @@ export function TaskCreatePage() {
   const detail = project.state.status === "loaded" ? project.state.data : null;
   const modes = detail
     ? [
-        ...(detail.allows_telephony ? [{ value: "TELEPHONY", label: "Telephony" }] : []),
-        ...(detail.allows_face_to_face ? [{ value: "FACE_TO_FACE", label: "Face-to-face" }] : []),
+        ...(detail.allows_telephony ? [{ value: "TELEPHONY", label: MODE_LABELS.TELEPHONY }] : []),
+        ...(detail.allows_face_to_face
+          ? [{ value: "FACE_TO_FACE", label: MODE_LABELS.FACE_TO_FACE }]
+          : []),
       ]
     : [];
   const options =
@@ -192,11 +187,9 @@ export function TaskCreatePage() {
       ? people.state.data.total
       : null;
 
-  async function submit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
+    void run(async () => {
       const task = await createTask({
         project_id: projectId,
         recording_mode: mode,
@@ -206,12 +199,8 @@ export function TaskCreatePage() {
         due_at: due ? new Date(due).toISOString() : null,
         ...(moderator ? { moderator_id: moderator } : {}),
       });
-      navigate(`/tasks/${task.id}`);
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
+      void navigate(`/tasks/${task.id}`);
+    });
   }
 
   if (projects.state.status === "loading") return <LoadingState label="Loading projects" />;
@@ -236,8 +225,9 @@ export function TaskCreatePage() {
       : [];
   return (
     <section aria-labelledby="new-task-title" className="stack">
+      <BackLink to="/tasks">All tasks</BackLink>
       <h1 id="new-task-title">New task</h1>
-      <form className="card" onSubmit={(e) => void submit(e)} noValidate>
+      <form className="card" onSubmit={submit} noValidate>
         <Select
           label="Project (active projects)"
           value={projectId}
@@ -261,10 +251,10 @@ export function TaskCreatePage() {
         {projectId ? (
           <>
             <Select
-              label="Recording mode"
+              label="Recording type"
               value={mode}
               onChange={(e) => setMode(e.target.value)}
-              options={[{ value: "", label: "Choose a mode" }, ...modes]}
+              options={[{ value: "", label: "Choose a recording type" }, ...modes]}
             />
             <Select
               label="Participant A"
@@ -285,9 +275,9 @@ export function TaskCreatePage() {
               label="Priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              options={["LOW", "NORMAL", "HIGH", "URGENT"].map((v) => ({
-                value: v,
-                label: v.toLowerCase(),
+              options={Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
+                value,
+                label,
               }))}
             />
             <Select
@@ -319,7 +309,7 @@ export function TaskCreatePage() {
           </>
         ) : null}
         <ErrorNotice error={error} />
-        <Button type="submit" busy={busy} disabled={!projectId || !mode || !a || !b}>
+        <Button type="submit" busy={busy !== null} disabled={!projectId || !mode || !a || !b}>
           Create task
         </Button>
       </form>

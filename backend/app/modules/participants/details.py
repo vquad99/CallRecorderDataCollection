@@ -16,8 +16,8 @@ from datetime import UTC, datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.permissions import Perm
-from app.modules.auth.deps import Principal, forbidden
+from app.core.permissions import Perm, Role
+from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
 from app.modules.participants import service
 from app.modules.participants.models import (
@@ -27,11 +27,10 @@ from app.modules.participants.models import (
     ParticipantProjectLink,
 )
 from app.modules.projects.models import Project
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import Recording, final_length_subquery
 from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.telephony.models import Call
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 MAX_SESSIONS = 200
 
 
@@ -102,9 +101,9 @@ class Details:
 def get(
     db: Session, principal: Principal, project_id: uuid.UUID, participant_id: uuid.UUID
 ) -> Details:
-    project, participant = service.get_in_project(db, principal, project_id, participant_id)
-    if not principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        raise forbidden()
+    project, participant = service.get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
 
     def name(user_id: uuid.UUID | None) -> str | None:
         user = db.get(User, user_id) if user_id else None
@@ -182,7 +181,7 @@ def get(
             .join(User, User.id == TaskAssignment.user_id)
             .where(
                 TaskAssignment.task_id.in_(task_ids),
-                TaskAssignment.role_code == "MODERATOR",
+                TaskAssignment.role_code == Role.MODERATOR.value,
                 TaskAssignment.active.is_(True),
             )
         ).all():
@@ -199,12 +198,7 @@ def get(
             if record.task_id is not None:
                 consents[record.task_id] = record
         # Finished recordings of each session: how many, and the newest one's length and time.
-        length = (
-            select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms"))
-            .where(AudioAsset.kind.in_(FINAL_KINDS))
-            .group_by(AudioAsset.recording_id)
-            .subquery()
-        )
+        length = final_length_subquery()
         for tid, started_at, ms in db.execute(
             select(Recording.task_id, Recording.started_at, length.c.ms)
             .outerjoin(length, length.c.recording_id == Recording.id)

@@ -6,15 +6,17 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.api.deps import AppSettings, Mailer
+from app.core.background import dispatch
 from app.core.permissions import Perm
+from app.db.paging import Page, PageNumber, PageSize
 from app.modules.auth.deps import DbSession, Principal, client_ip, require
 from app.modules.auth.models import RoleRecord, User
-from app.modules.auth.router import AppSettings
 from app.modules.users import service
 
 router = APIRouter(tags=["users"])
@@ -49,11 +51,8 @@ def user_out(user: User) -> UserOut:
     )
 
 
-class UserPage(BaseModel):
-    items: list[UserOut]
-    total: int
-    page: int
-    page_size: int
+class UserPage(Page[UserOut]):
+    pass
 
 
 @router.get("/users", response_model=UserPage)
@@ -63,8 +62,8 @@ def list_users(
     search: Annotated[str | None, Query(max_length=200)] = None,
     role: Annotated[str | None, Query(max_length=50)] = None,
     status: Literal["ACTIVE", "DISABLED"] | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: PageNumber = 1,
+    page_size: PageSize = 25,
 ) -> UserPage:
     items, total = service.list_users(
         db, search=search, role=role, status=status, page=page, page_size=page_size
@@ -85,12 +84,17 @@ class CreatedUser(BaseModel):
 
 @router.post("/users", response_model=CreatedUser, status_code=201)
 def create_user(
-    body: CreateUserBody, request: Request, admin: Admin, db: DbSession, settings: AppSettings
+    body: CreateUserBody,
+    request: Request,
+    admin: Admin,
+    db: DbSession,
+    settings: AppSettings,
+    mailer: Mailer,
 ) -> CreatedUser:
     user, sent = service.create_user(
         db,
         settings,
-        request.app.state.email_sender,
+        mailer,
         actor_id=admin.user_id,
         email=body.email,
         display_name=body.display_name,
@@ -145,22 +149,36 @@ def import_preview(body: ImportBody, _: Admin, db: DbSession) -> ImportPreview:
 class ImportResult(BaseModel):
     created: int
     skipped: list[ImportRowOut]
+    # Invitations that could not be handed to the email worker; each one is sent again with the
+    # account's "send link" button. Invitations are emailed after this answer.
     invites_failed: int
 
 
 @router.post("/users/import/confirm", response_model=ImportResult)
 def import_confirm(
-    body: ImportBody, request: Request, admin: Admin, db: DbSession, settings: AppSettings
+    body: ImportBody,
+    request: Request,
+    background: BackgroundTasks,
+    admin: Admin,
+    db: DbSession,
+    settings: AppSettings,
+    mailer: Mailer,
 ) -> ImportResult:
-    created, skipped, failed = service.confirm_import(
-        db,
-        settings,
-        request.app.state.email_sender,
-        actor_id=admin.user_id,
-        text=body.csv,
-        ip=client_ip(request),
+    created, skipped = service.confirm_import(
+        db, settings, mailer, actor_id=admin.user_id, text=body.csv, ip=client_ip(request)
     )
-    return ImportResult(created=created, skipped=[_row(r) for r in skipped], invites_failed=failed)
+    queued = not created or dispatch(
+        request.app,
+        service.SEND_INVITATIONS_TASK,
+        [[str(u.id) for u in created]],
+        service.send_invitations_job,
+        background,
+    )
+    return ImportResult(
+        created=len(created),
+        skipped=[_row(r) for r in skipped],
+        invites_failed=0 if queued else len(created),
+    )
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
@@ -228,12 +246,17 @@ class SentOut(BaseModel):
 
 @router.post("/users/{user_id}/send-password-link", response_model=SentOut)
 def send_password_link(
-    user_id: uuid.UUID, request: Request, admin: Admin, db: DbSession, settings: AppSettings
+    user_id: uuid.UUID,
+    request: Request,
+    admin: Admin,
+    db: DbSession,
+    settings: AppSettings,
+    mailer: Mailer,
 ) -> SentOut:
     sent = service.send_password_link(
         db,
         settings,
-        request.app.state.email_sender,
+        mailer,
         actor_id=admin.user_id,
         user_id=user_id,
         ip=client_ip(request),

@@ -1,7 +1,8 @@
 // Coloured status pill. The colour only repeats what the text already says (WCAG 1.4.1).
 
-type Tone = "neutral" | "info" | "progress" | "warning" | "success" | "danger";
+export type Tone = "neutral" | "info" | "progress" | "warning" | "success" | "danger";
 
+/** Tones for the statuses of tasks, projects and accounts. */
 const TONES: Record<string, Tone> = {
   // tasks
   DRAFT: "neutral",
@@ -12,7 +13,6 @@ const TONES: Record<string, Tone> = {
   ADMIN_REVIEW: "info",
   APPROVED: "success",
   REJECTED: "danger",
-  RETURNED: "warning",
   CANCELLED: "neutral",
   ON_HOLD: "warning",
   // projects and accounts
@@ -25,11 +25,17 @@ const TONES: Record<string, Tone> = {
   LOCKED: "danger",
 };
 
-export function StatusBadge({ status, label }: { status: string; label: string }) {
+/** A pill for a task, project or account status, or for anything else with its own tone. */
+export function StatusBadge({
+  label,
+  status,
+  tone,
+}: {
+  label: string;
+  status?: string;
+  tone?: Tone;
+}) {
   return (
-    <span className={`badge badge--${TONES[status] ?? "neutral"}`}>
-      <span className="badge__dot" aria-hidden="true" />
-      {label}
-    </span>
+    <span className={`badge badge--${tone ?? TONES[status ?? ""] ?? "neutral"}`}>{label}</span>
   );
 }

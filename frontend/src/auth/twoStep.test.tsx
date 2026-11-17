@@ -114,8 +114,6 @@ describe("two-step sign-in for admins", () => {
   });
 
   it("lets a Super Admin reset the two-step sign-in of someone who lost their phone", async () => {
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirm);
     const { calls } = fakeApi(
       signedInAs(ALL_PERMISSIONS, {
         ...worldHandlers(),
@@ -126,7 +124,9 @@ describe("two-step sign-in for admins", () => {
     renderAt("/admin/users/u2");
     expect(await screen.findByText(/Two-step sign-in: on/, {}, { timeout: 5000 })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Reset two-step sign-in" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("lost their authenticator"));
+    const box = within(screen.getByRole("dialog"));
+    expect(box.getByText(/lost their authenticator/)).toBeInTheDocument();
+    await userEvent.click(box.getByRole("button", { name: "Reset two-step sign-in" }));
     expect(
       await screen.findByText("Two-step sign-in reset. They are signed out everywhere."),
     ).toBeInTheDocument();

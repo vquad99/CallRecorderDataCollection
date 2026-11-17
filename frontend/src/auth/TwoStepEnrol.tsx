@@ -4,11 +4,10 @@
 import { useMemo, useState } from "react";
 
 import * as authApi from "../api/auth";
-import type { ApiError } from "../api/client";
 import { Button } from "../components/form/Button";
 import { TextField } from "../components/form/TextField";
 import { ErrorNotice } from "../components/Notice";
-import { toApiError } from "../hooks/useResource";
+import { useAction } from "../hooks/useAction";
 import { qrCode, qrPath } from "./qr";
 import "./twostep.css";
 
@@ -20,20 +19,7 @@ export function TwoStepEnrol({ onDone }: { onDone: () => Promise<void> | void })
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { busy, error, run } = useAction();
 
   // The link the authenticator app reads, as a code to scan (made here, D-107).
   const qr = useMemo(() => (enrolment ? qrCode(enrolment.otpauth_uri) : null), [enrolment]);
@@ -58,7 +44,7 @@ export function TwoStepEnrol({ onDone }: { onDone: () => Promise<void> | void })
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <Button type="submit" busy={busy} disabled={!password}>
+        <Button type="submit" busy={busy !== null} disabled={!password}>
           Turn on two-step sign-in
         </Button>
         <ErrorNotice error={error} />
@@ -125,7 +111,7 @@ export function TwoStepEnrol({ onDone }: { onDone: () => Promise<void> | void })
         value={code}
         onChange={(e) => setCode(e.target.value)}
       />
-      <Button type="submit" busy={busy}>
+      <Button type="submit" busy={busy !== null}>
         Confirm
       </Button>
       <ErrorNotice error={error} />

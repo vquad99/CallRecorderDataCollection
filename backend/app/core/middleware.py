@@ -6,10 +6,12 @@ every response, including unexpected 500s, which it answers itself in the standa
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 import uuid
+from collections import deque
 from time import perf_counter
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -17,6 +19,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.errors import error_body
 from app.core.logging import request_id_var
+from app.core.security import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, UNSAFE_METHODS
 from app.db.session import db_stats_var
 
 logger = logging.getLogger("app.request")
@@ -29,15 +32,40 @@ _CHUNK_PATH = re.compile(r"^/api/v1/recordings/[^/]+/chunks/[^/]+$")
 # A JSON \u0000 escape: preceded by an even number of backslashes (an odd number means the text
 # itself contains a backslash followed by "u0000", which is allowed).
 _JSON_NUL = re.compile(rb"(?<!\\)(?:\\\\)*\\u0000")
+API_PREFIX = "/api/v1/"
+# State-changing API calls that work without a session: signing in, the password links (reset and
+# invitation), and the participant's own page, whose credential is the X-Portal-Token header. Every
+# other one needs the session cookie, and every one needs the CSRF cookie and header.
+SESSIONLESS_WRITES = frozenset(
+    {
+        "/api/v1/auth/login",
+        "/api/v1/auth/password/forgot",
+        "/api/v1/auth/password/reset",
+        "/api/v1/portal/consent",
+    }
+)
+# Bodies larger than this (or of unknown size) are read only a few at a time per process.
+LARGE_BODY_BYTES = 256 * 1024
+BODY_READ_SLOTS = 16
+BODY_READ_WAIT_SECONDS = 15.0
+
+_NUL = (422, "VALIDATION_ERROR", "Text must not contain NUL characters")
+_BUSY = (503, "BUSY", "The service is busy. Try again in a moment.")
 
 
 class RequestLimitsMiddleware:
     """Input limits applied before the application reads a request (SEC-006).
 
+    Who: a state-changing API call without the CSRF cookie and header, or (outside
+    SESSIONLESS_WRITES) without the session cookie, is refused before a byte of its body is read,
+    with the answer the auth checks would give later. Only presence is checked here; the values
+    are checked by the auth dependencies as before.
+
     Size: audio chunk uploads may be up to MAX_CHUNK_BYTES, everything else up to MAX_REQUEST_BYTES;
     larger bodies get 413. The declared Content-Length is checked first; a body sent without one
     (chunked transfer) is read up to the limit and refused as soon as it passes it, so memory use
-    stays bounded either way.
+    stays bounded either way. At most BODY_READ_SLOTS large bodies are read at once in a process;
+    others wait their turn and get 503 BUSY when no turn comes in BODY_READ_WAIT_SECONDS.
 
     NUL characters: PostgreSQL text cannot hold them, so a NUL in the path, the query string or a
     JSON body is refused with 422 here instead of failing as a server error deeper down (any caller,
@@ -48,52 +76,52 @@ class RequestLimitsMiddleware:
         self.app = app
         self.default_limit = default_limit
         self.chunk_limit = chunk_limit
+        self._large_reads = asyncio.Semaphore(BODY_READ_SLOTS)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        if "\x00" in scope["path"] or b"%00" in scope.get("query_string", b""):
-            await self._refuse_nul(send)
+        path: str = scope["path"]
+        if "\x00" in path or b"%00" in scope.get("query_string", b""):
+            await _send_error(send, *_NUL)
             return
-        if scope["method"] in ("GET", "HEAD", "OPTIONS"):
+        if scope["method"] not in UNSAFE_METHODS:
             await self.app(scope, receive, send)
             return
-        is_chunk = bool(_CHUNK_PATH.match(scope["path"]))
-        limit = self.chunk_limit if is_chunk else self.default_limit
         headers = Headers(scope=scope)
+        refusal = _missing_credentials(path, headers) if path.startswith(API_PREFIX) else None
+        if refusal is not None:
+            await _send_error(send, *refusal)
+            return
+        is_chunk = bool(_CHUNK_PATH.match(path))
+        limit = self.chunk_limit if is_chunk else self.default_limit
         declared = headers.get("content-length")
         if declared is not None and (not declared.isdigit() or int(declared) > limit):
             await self._refuse(send, limit)
             return
-        parts: list[bytes] = []
-        size = 0
-        while True:
-            message = await receive()
-            if message["type"] != "http.request":
-                return  # client went away before sending the whole body
-            part = message.get("body", b"")
-            size += len(part)
-            if size > limit:
-                await self._refuse(send, limit)
+        if declared is not None and int(declared) <= LARGE_BODY_BYTES:
+            body = await _read(receive, limit)
+        else:
+            try:
+                async with asyncio.timeout(BODY_READ_WAIT_SECONDS):
+                    await self._large_reads.acquire()
+            except TimeoutError:
+                await _send_error(send, *_BUSY)
                 return
-            parts.append(part)
-            if not message.get("more_body", False):
-                break
-        body = b"".join(parts)
-        if not is_chunk and _JSON_NUL.search(body):
-            await self._refuse_nul(send)
+            try:
+                body = await _read(receive, limit)
+            finally:
+                self._large_reads.release()
+        if body is None:
+            await self._refuse(send, limit)
             return
-        delivered = False
-
-        async def replay() -> Message:
-            nonlocal delivered
-            if delivered:
-                return await receive()
-            delivered = True
-            return {"type": "http.request", "body": body, "more_body": False}
-
-        await self.app(scope, replay, send)
+        if not body.complete:
+            return  # client went away before sending the whole body
+        if not is_chunk and _JSON_NUL.search(body.joined()):
+            await _send_error(send, *_NUL)
+            return
+        await self.app(scope, body.replay(receive), send)
 
     @staticmethod
     async def _refuse(send: Send, limit: int) -> None:
@@ -101,9 +129,77 @@ class RequestLimitsMiddleware:
             send, 413, "PAYLOAD_TOO_LARGE", f"Request body is larger than {limit} bytes"
         )
 
-    @staticmethod
-    async def _refuse_nul(send: Send) -> None:
-        await _send_error(send, 422, "VALIDATION_ERROR", "Text must not contain NUL characters")
+
+class _Body:
+    """A request body read ahead of the application, kept in the pieces it arrived in, so an audio
+    part is not copied into one more buffer here."""
+
+    def __init__(self) -> None:
+        self.parts: deque[bytes] = deque()
+        self.size = 0
+        self.complete = False
+
+    def joined(self) -> bytes:
+        """The body as one piece (for the NUL check of a small JSON body); joined once."""
+        if len(self.parts) != 1:
+            whole = b"".join(self.parts)
+            self.parts.clear()
+            self.parts.append(whole)
+        return self.parts[0]
+
+    def replay(self, receive: Receive) -> Receive:
+        """Hands the body to the application piece by piece, letting go of each piece as it goes;
+        after the body, messages (such as a disconnect) come from the client again."""
+        parts = self.parts
+        sent_last = False
+
+        async def replayed() -> Message:
+            nonlocal sent_last
+            if not sent_last:
+                part = parts.popleft() if parts else b""
+                sent_last = not parts
+                return {"type": "http.request", "body": part, "more_body": not sent_last}
+            return await receive()
+
+        return replayed
+
+
+async def _read(receive: Receive, limit: int) -> _Body | None:
+    """The whole body (incomplete when the client went away), or None once it passes `limit`."""
+    body = _Body()
+    while True:
+        message = await receive()
+        if message["type"] != "http.request":
+            return body
+        part = message.get("body", b"")
+        body.size += len(part)
+        if body.size > limit:
+            return None
+        if part:
+            body.parts.append(part)
+        if not message.get("more_body", False):
+            body.complete = True
+            return body
+
+
+def _missing_credentials(path: str, headers: Headers) -> tuple[int, str, str] | None:
+    """The answer for a state-changing API call that cannot pass the auth checks, or None."""
+    cookies = _cookie_names(headers.get("cookie", ""))
+    if CSRF_COOKIE not in cookies or not headers.get(CSRF_HEADER):
+        return 403, "CSRF_FAILED", "Missing or invalid CSRF token"
+    if SESSION_COOKIE not in cookies and path not in SESSIONLESS_WRITES:
+        return 401, "UNAUTHENTICATED", "Sign in required"
+    return None
+
+
+def _cookie_names(header: str) -> set[str]:
+    """Names of the cookies that carry a value."""
+    names = set()
+    for pair in header.split(";"):
+        name, sep, value = pair.partition("=")
+        if sep and value.strip():
+            names.add(name.strip())
+    return names
 
 
 async def _send_error(send: Send, status: int, code: str, message: str) -> None:

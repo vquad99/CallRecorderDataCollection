@@ -2,13 +2,14 @@
 // checklist and closes it; the page shows only what the server says and keeps what is typed while
 // it refreshes; a call that needs a person offers the provider's calls to choose from; a call can
 // be cancelled while its recording is fetched; the finished recording can be listened to; and a
-// Super Admin gives a moderator their TxContact agent seat.
+// Super Admin gives a moderator their phone seat. Moderators read plain words; the provider's own
+// answers are in the Super Admin's technical log; recording waits for both people's consent.
 // Requirements: TEL-002, TEL-018, TEL-036, TEL-037, GEN-004
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { fakeApi, ME, renderAt, signedInAs } from "../../test/fakeApi";
 import { ALL_PERMISSIONS, TASK, USER, worldHandlers } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,6 +19,7 @@ const PHONE_TASK = {
   recording_mode: "TELEPHONY",
   status: "IN_PROGRESS",
   allowed_transitions: ["ON_HOLD", "CANCELLED"],
+  can_reassign: false,
 };
 
 function call(state: string, extra: Record<string, unknown> = {}) {
@@ -114,7 +116,9 @@ describe("phone calls on the task page", () => {
       await screen.findByRole("button", { name: "Start call" }, { timeout: 5000 }),
     );
     expect(await screen.findByRole("heading", { name: "On the call" })).toBeInTheDocument();
-    expect(screen.getAllByText(/Contact queued/).length).toBeGreaterThan(0);
+    expect(screen.getByText("The phone system is ringing participant A")).toBeInTheDocument();
+    // The provider's own answer is in the Super Admin's technical log.
+    expect(screen.getByText("Technical log")).toBeInTheDocument();
     // Both people must be confirmed on the call before it can be closed.
     expect(screen.getByRole("button", { name: "Close call" })).toBeDisabled();
     // B is rung from here once A is on the line (D-111).
@@ -126,7 +130,7 @@ describe("phone calls on the task page", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Call participant B" }));
     expect(
-      await screen.findByText(/TxContact is ringing participant B \(number ending 78/),
+      await screen.findByText(/The phone system is ringing participant B \(number ending 78/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ring B again (2 left)" })).toBeEnabled();
     await userEvent.click(
@@ -180,8 +184,9 @@ describe("phone calls on the task page", () => {
       await user.click(
         await screen.findByRole("button", { name: "Cancel this call" }, { timeout: 5000 }),
       );
-      await user.selectOptions(screen.getByLabelText("Why"), "POOR_QUALITY");
-      await user.type(screen.getByLabelText("Note"), "echo on the line");
+      const box = within(screen.getByRole("dialog", { name: "Cancel this call?" }));
+      await user.selectOptions(box.getByLabelText(/^Reason/), "POOR_QUALITY");
+      await user.type(box.getByLabelText(/^Note$/), "echo on the line");
       const before = api.calls.filter((c) => c.path === "/api/v1/tasks/t1/calls").length;
       await vi.advanceTimersByTimeAsync(11_000); // two refreshes
       await waitFor(() =>
@@ -189,8 +194,8 @@ describe("phone calls on the task page", () => {
           before,
         ),
       );
-      expect(screen.getByLabelText("Note")).toHaveValue("echo on the line");
-      expect(screen.getByLabelText("Why")).toHaveValue("POOR_QUALITY");
+      expect(box.getByLabelText(/^Note$/)).toHaveValue("echo on the line");
+      expect(box.getByLabelText(/^Reason/)).toHaveValue("POOR_QUALITY");
       expect(screen.queryByText("Loading the phone call")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -283,7 +288,14 @@ describe("phone calls on the task page", () => {
               saved_seconds: 42,
               assets: [
                 { id: "a1", kind: "PROVIDER_ORIGINAL_MIXED", version: 1 },
-                { id: "a2", kind: "TELEPHONY_DERIVED_PCM", version: 1 },
+                {
+                  id: "a2",
+                  kind: "TELEPHONY_DERIVED_PCM",
+                  version: 1,
+                  sample_rate: 16000,
+                  channels: 1,
+                  duration_ms: 36_000, // cut to the recording marks from the provider's 42 s
+                },
               ],
             },
           ],
@@ -297,7 +309,7 @@ describe("phone calls on the task page", () => {
             can_decide: false,
             can_assign: false,
             can_recheck: false,
-            reasons: { FAIL: [], RETURN: [] },
+            reasons: { FAIL: [] },
             results: [],
           },
         ],
@@ -308,16 +320,17 @@ describe("phone calls on the task page", () => {
       await screen.findByRole("heading", { name: "Check the call recording" }, { timeout: 5000 }),
     ).toBeInTheDocument();
     // In the moderator's card and in the Recordings table: a recording under a minute is shown
-    // in seconds, with its two files.
+    // in seconds, as one file in plain words: the delivered file's length, not the whole call's.
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /Listen/ }).length).toBeGreaterThanOrEqual(2),
     );
-    expect(screen.getByText("42 s")).toBeInTheDocument();
-    expect(screen.getByText(/2 audio \+ consent record/)).toBeInTheDocument();
+    expect(screen.getByText("36 s")).toBeInTheDocument();
+    expect(screen.queryByText("42 s")).not.toBeInTheDocument();
+    expect(screen.getByText("16000 Hz, mono")).toBeInTheDocument();
     expect(screen.queryByText("No recording yet.")).not.toBeInTheDocument();
   });
 
-  it("gives a moderator their TxContact agent seat", { timeout: 15000 }, async () => {
+  it("gives a moderator their phone seat", { timeout: 15000 }, async () => {
     const api = fakeApi(
       signedInAs(ALL_PERMISSIONS, {
         ...worldHandlers(),
@@ -329,12 +342,75 @@ describe("phone calls on the task page", () => {
     );
     renderAt("/admin/users/u2");
     await userEvent.type(
-      await screen.findByLabelText("TxContact agent seat", {}, { timeout: 5000 }),
+      await screen.findByLabelText("Phone seat", {}, { timeout: 5000 }),
       "70001",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Save agent seat" }));
-    expect(await screen.findByText("Agent seat saved.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save phone seat" }));
+    expect(await screen.findByText("Phone seat saved.")).toBeInTheDocument();
     expect(api.calls.find((c) => c.method === "PUT")?.body).toEqual({ agent_id: "70001" });
     expect(USER.roles).toContain("MODERATOR");
+  });
+});
+
+describe("phone calls in plain words (UI review 2026-11-17)", () => {
+  const MODERATOR = { ...ME, roles: ["MODERATOR"], permissions: ALL_PERMISSIONS };
+
+  it("waits for both people's consent before the recording starts, and asks for it right under the call (D-119)", async () => {
+    fakeApi({
+      ...signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, { ...PHONE_TASK, consent_missing: ["B"] }],
+        "GET /api/v1/tasks/t1/calls": () => [
+          200,
+          [call("DIALLING", { checklist: { A_JOINED: "x", B_JOINED: "y" } })],
+        ],
+      }),
+      "GET /api/v1/auth/me": () => [200, MODERATOR],
+    });
+    renderAt("/tasks/t1");
+    const start = await screen.findByRole("button", { name: "Start recording" }, { timeout: 5000 });
+    expect(start).toBeDisabled();
+    expect(screen.getByText("Note both people's consent below first.")).toBeInTheDocument();
+    // The consent card sits between the call card and the call history.
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    const at = (name: string) => headings.findIndex((h) => h?.includes(name));
+    expect(at("On the call")).toBeLessThan(at("Consent"));
+    expect(at("Consent")).toBeLessThan(at("Phone calls"));
+  });
+
+  it("tells a moderator what went wrong in plain words, without the provider's answer", async () => {
+    fakeApi({
+      ...signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, PHONE_TASK],
+        "GET /api/v1/tasks/t1/calls": () => [
+          200,
+          [
+            call("DIAL_FAILED", {
+              failure_code: "PROVIDER_REFUSED",
+              failure_detail: "TXCONTACT answered HTTP 500: boom",
+              events: [
+                {
+                  at: "2026-11-13T10:00:00Z",
+                  kind: "DIAL_FAILED",
+                  actor: null,
+                  text: "TXCONTACT answered HTTP 500: boom",
+                },
+              ],
+            }),
+          ],
+        ],
+      }),
+      "GET /api/v1/auth/me": () => [200, MODERATOR],
+    });
+    renderAt("/tasks/t1");
+    const alert = await screen.findByRole("alert", {}, { timeout: 5000 });
+    expect(alert).toHaveTextContent(
+      "The phone system did not place the call. Ask your admin to check the phone settings.",
+    );
+    expect(screen.queryByText(/HTTP 500/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Technical log")).not.toBeInTheDocument();
+    expect(screen.queryByText(/TxContact/)).not.toBeInTheDocument();
+    expect(within(alert).queryByText(/seat/)).toBeNull();
   });
 });

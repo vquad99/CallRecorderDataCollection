@@ -19,8 +19,9 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
+from app.core.errors import AppError, not_found
 from app.core.storage import ObjectStorage
+from app.db.paging import paginate
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
@@ -29,7 +30,6 @@ from app.modules.exports import bundle
 from app.modules.exports.models import OPEN_STATES, ExportJob
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_visible as get_visible_project
-from app.modules.projects.service import not_found
 
 logger = logging.getLogger("app.exports")
 
@@ -121,20 +121,13 @@ def list_jobs(
 ) -> tuple[list[Listed], int]:
     project = _project(db, principal, project_id)
     bundle.check(db, principal, project, bundle.Selection())  # may this person export at all
-    total = int(
-        db.scalar(
-            select(func.count()).select_from(ExportJob).where(ExportJob.project_id == project.id)
-        )
-        or 0
-    )
-    jobs = list(
-        db.scalars(
-            select(ExportJob)
-            .where(ExportJob.project_id == project.id)
-            .order_by(ExportJob.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
+    jobs, total = paginate(
+        db,
+        select(ExportJob)
+        .where(ExportJob.project_id == project.id)
+        .order_by(ExportJob.created_at.desc()),
+        page,
+        page_size,
     )
     names = _names(db, jobs)
     return [Listed(j, names.get(j.requested_by)) for j in jobs], total
@@ -145,7 +138,7 @@ def get(db: Session, principal: Principal, project_id: uuid.UUID, job_id: uuid.U
     bundle.check(db, principal, project, bundle.Selection())
     job = db.get(ExportJob, job_id)
     if job is None or job.project_id != project.id:
-        raise not_found()
+        raise not_found("Project")
     return Listed(job, _names(db, [job]).get(job.requested_by))
 
 
@@ -164,7 +157,7 @@ def download_link(
     project = _project(db, principal, project_id)
     job = db.get(ExportJob, job_id)
     if job is None or job.project_id != project.id:
-        raise not_found()
+        raise not_found("Project")
     bundle.check(db, principal, project, bundle.Selection.from_filters(job.filters))
     now = datetime.now(UTC)
     if job.state != "READY" or job.storage_key is None:
@@ -202,7 +195,7 @@ def remove(
     bundle.check(db, principal, project, bundle.Selection())
     job = db.scalar(select(ExportJob).where(ExportJob.id == job_id).with_for_update())
     if job is None or job.project_id != project.id:
-        raise not_found()
+        raise not_found("Project")
     if job.state == "RUNNING":
         raise _conflict("This export is being made; remove it when it is ready", "EXPORT_RUNNING")
     if job.state not in ("READY", "QUEUED"):
@@ -252,8 +245,7 @@ def run(
     db.commit()
     if claimed is None:
         return None
-    job = db.get(ExportJob, job_id)
-    assert job is not None  # noqa: S101
+    job = db.get_one(ExportJob, job_id)
     # Each try writes its own object: a try that was given up cannot spoil the next one's file.
     attempt = job.attempts
     key = f"exports/{job.project_id}/{job.id}-{attempt}.zip"
@@ -299,8 +291,7 @@ def run(
         if reason is None:
             logger.exception("export_failed", extra={"export_id": str(job_id)})
         _cleanup(storage, key)
-        failed = db.scalar(select(ExportJob).where(ExportJob.id == job_id).with_for_update())
-        assert failed is not None  # noqa: S101
+        failed = db.get_one(ExportJob, job_id, with_for_update=True, populate_existing=True)
         if failed.state != "RUNNING" or failed.attempts != attempt:
             db.commit()  # another try has the job now: its outcome is not this one's to write
             return failed.state
@@ -309,8 +300,7 @@ def run(
         failed.finished_at = datetime.now(UTC)
         db.commit()
         return "FAILED"
-    done = db.scalar(select(ExportJob).where(ExportJob.id == job_id).with_for_update())
-    assert done is not None  # noqa: S101
+    done = db.get_one(ExportJob, job_id, with_for_update=True, populate_existing=True)
     if done.state != "RUNNING" or done.attempts != attempt:
         # Taken back while it was made (the sweep found it stale): leave nothing behind.
         _cleanup(storage, key)

@@ -34,20 +34,19 @@ from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm
 from app.modules.audio_qc.models import AudioQcResult
-from app.modules.auth.deps import Principal
+from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import User
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import AudioAsset, Recording, final_length_subquery
 from app.modules.tasks.models import TASK_STATUSES, Task, TaskAssignment
 from app.modules.telephony.models import Call
 
 View = Literal["client", "worker", "manager"]
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 MODES = ("FACE_TO_FACE", "TELEPHONY")
 MAX_PROJECTS = 200  # the project picker; a Super Admin with more narrows by project
 MAX_TEAM = 25  # busiest moderators shown to managers
@@ -113,14 +112,12 @@ class Summary:
     date_to: date | None = None
 
 
-def _view(principal: Principal, project_ids: list[uuid.UUID]) -> View:
+def _view(principal: Principal) -> View:
     if principal.is_super_admin:
         return "manager"
     if not principal.can(Perm.TASKS_VIEW):
         return "client"
-    if principal.can(Perm.TASKS_ASSIGN) and project_ids:
-        return "manager"
-    return "worker"
+    return "manager" if principal.can(Perm.TASKS_ASSIGN) else "worker"
 
 
 def _hours(ms: Any) -> float:
@@ -138,10 +135,12 @@ def summary(
 ) -> Summary:
     f = filters or Filters()
     if not principal.can(Perm.DASHBOARD_VIEW):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
-    projects_q = select(Project.id, Project.code, Project.name).order_by(Project.code)
-    if not principal.is_super_admin:
-        projects_q = projects_q.where(Project.id.in_(principal.project_ids or [uuid.UUID(int=0)]))
+        raise forbidden()
+    projects_q = (
+        select(Project.id, Project.code, Project.name)
+        .where(in_projects(principal, Project.id))
+        .order_by(Project.code)
+    )
     projects = [
         {"id": r.id, "code": r.code, "name": r.name}
         for r in db.execute(projects_q.limit(MAX_PROJECTS))
@@ -149,20 +148,20 @@ def summary(
     if project_id is not None:
         visible = principal.is_super_admin or project_id in principal.project_ids
         if not visible or db.get(Project, project_id) is None:
-            raise AppError("Item not found", code="NOT_FOUND", status_code=404)
+            raise not_found("Item")
         scope = [project_id]
     elif principal.is_super_admin:
         scope = None  # every project
     else:
-        scope = list(principal.project_ids) or [uuid.UUID(int=0)]
-    view = _view(principal, scope or [])
+        scope = sorted(principal.project_ids)
+    view = _view(principal)
     if f.mode is not None and f.mode not in MODES:
         raise _invalid("Choose face-to-face or telephony")
     if f.status is not None and f.status not in TASK_STATUSES:
         raise _invalid("That is not a task status")
     if f.staff_id is not None and view != "manager":
         # Other people's work is for those who run the project.
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
+        raise forbidden()
 
     tz = ZoneInfo(timezone)
     today = datetime.now(UTC).astimezone(tz).date()
@@ -225,12 +224,7 @@ def summary(
             query = query.where(Task.created_at >= range_start, Task.created_at < range_end)
         return query
 
-    final = (
-        select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms"))
-        .where(AudioAsset.kind.in_(FINAL_KINDS))
-        .group_by(AudioAsset.recording_id)
-        .subquery()
-    )
+    final = final_length_subquery()
     approved = Task.status == "APPROVED"
     day = func.date(func.timezone(timezone, Recording.started_at)).label("day")
     base = (
@@ -327,7 +321,6 @@ def summary(
     result.qc = {
         "passed": statuses.get("APPROVED", 0),
         "rejected": statuses.get("REJECTED", 0),
-        "returned": statuses.get("RETURNED", 0),
         "waiting": statuses.get("AUDIO_QC", 0),
     }
     # What the automatic check said about the recordings now waiting for a QC decision (D-079).

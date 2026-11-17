@@ -67,11 +67,11 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.getByRole("link", { name: projectCode, exact: true }).click();
     await expect(admin.getByRole("heading", { level: 1 })).toHaveText(`${projectCode} · ${name}`);
     projectUrl = new URL(admin.url()).pathname;
-    await admin.getByLabel("Change status to").selectOption("ACTIVE");
-    await admin.getByRole("button", { name: "Change status" }).click();
+    await admin.getByRole("button", { name: "Make active" }).click();
+    await admin.getByRole("dialog").getByRole("button", { name: "Make active" }).click();
     await expect(admin.getByText("This project accepts new work.")).toBeVisible();
     await admin.getByRole("link", { name: "Languages" }).click();
-    await admin.getByLabel(/^Language code/).selectOption("hi");
+    await admin.getByLabel(/^Language/).selectOption("hi");
     await admin.getByRole("button", { name: "Add language" }).click();
     await expect(admin.getByRole("listitem").filter({ hasText: /^Hindi \(hi\)/ })).toBeVisible();
   });
@@ -115,9 +115,10 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .click();
     for (const person of ["Asha", "Bina"]) {
       await admin.getByRole("button", { name: "Add participant" }).first().click();
-      await admin.getByLabel(/^Name or label/).fill(`${person} ${code}`);
-      await admin.getByLabel(/^Language code/).selectOption("hi");
-      await admin.getByRole("button", { name: "Add participant" }).last().click();
+      const form = admin.getByRole("dialog", { name: "Add participant" });
+      await form.getByLabel(/^Name or label/).fill(`${person} ${code}`);
+      await form.getByLabel(/^Language/).selectOption("hi");
+      await form.getByRole("button", { name: "Add participant" }).click();
       await expect(admin.getByRole("cell", { name: `${person} ${code}` })).toBeVisible();
     }
   });
@@ -131,7 +132,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin
       .getByLabel("Project (active projects)")
       .selectOption({ label: `${projectCode} ${name}` });
-    await admin.getByLabel("Recording mode").selectOption("FACE_TO_FACE");
+    await admin.getByLabel("Recording type").selectOption("FACE_TO_FACE");
     await pickParticipant(admin, "Participant A", `Asha ${code}`);
     await pickParticipant(admin, "Participant B", `Bina ${code}`);
     await admin.getByRole("button", { name: "Create task" }).click();
@@ -157,8 +158,8 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await expect(moderator.getByText("In progress").first()).toBeVisible();
     for (const which of ["A", "B"]) {
       const row = moderator.locator(".consent__row").filter({ hasText: `Participant ${which}` });
-      await row.getByRole("button", { name: "Consent given" }).click();
-      await expect(row.getByRole("button", { name: "Consent given" })).toHaveAttribute(
+      await row.getByRole("button", { name: "Agreed" }).click();
+      await expect(row.getByRole("button", { name: "Agreed" })).toHaveAttribute(
         "aria-pressed",
         "true",
       );
@@ -175,12 +176,11 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await expect(moderator.getByRole("heading", { name: "Recording saved" })).toBeVisible({
       timeout: 60_000,
     });
-    await expect(
-      moderator.getByRole("row").filter({ hasText: "16 kHz delivery file" }),
-    ).toContainText("16000 Hz, 16-bit, mono (pcm_s16le)");
-    await expect(moderator.getByRole("row").filter({ hasText: "Original capture" })).toContainText(
-      "32-bit",
-    );
+    // Recorded at the project's rate and kept as recorded (owner 2026-11-17): one file, named in
+    // plain words; the original capture is in the Super Admin's technical details only.
+    await expect(moderator.getByText("Recorded at 16000 Hz.")).toBeVisible();
+    await expect(moderator.getByText("Recording, 16000 Hz, mono")).toBeVisible();
+    await expect(moderator.getByText("Original capture")).toHaveCount(0);
     await moderator.getByRole("button", { name: "Listen" }).click();
     const played = await playToEnd(moderator, "Recorded conversation");
     expect(played.error).toBeNull();
@@ -192,7 +192,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
   await test.step("the task shows as recorded, with its history", async () => {
     await admin.goto(taskUrl);
     await expect(admin.getByText("Recorded").first()).toBeVisible();
-    await expect(admin.getByText(/IN_PROGRESS -> RECORDED/)).toBeVisible();
+    await expect(admin.getByText("In progress → Recorded")).toBeVisible();
   });
 
   await test.step("the Super Admin downloads both files through short-lived links", async () => {
@@ -234,7 +234,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await expect(admin.getByRole("button", { name: "Prepare export" })).toBeDisabled();
     await admin.getByLabel("Which recordings").selectOption("finished");
     await expect(admin.getByText("1 recording", { exact: true })).toBeVisible();
-    await expect(admin.getByText(/1 face-to-face, 0 telephony/)).toBeVisible();
+    await expect(admin.getByText(/1 face-to-face, 0 phone calls/)).toBeVisible();
     await admin.getByRole("button", { name: "Prepare export" }).click();
     const list = admin.getByRole("table", { name: "Prepared exports" });
     await expect(list.getByText("Ready", { exact: true })).toBeVisible({ timeout: 60_000 });

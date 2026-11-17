@@ -1,6 +1,5 @@
 // Dashboard summary (GET /api/v1/dashboard). The server decides the view from the caller's role.
-import { apiRequest } from "./client";
-import { query } from "./admin";
+import { apiRequest, query } from "./client";
 
 export type DashboardView = "client" | "worker" | "manager";
 
@@ -36,7 +35,6 @@ export interface Dashboard {
   qc: {
     passed: number;
     rejected: number;
-    returned: number;
     waiting: number;
     auto_pass: number;
     auto_review: number;

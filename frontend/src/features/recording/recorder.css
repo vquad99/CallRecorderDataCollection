@@ -1,0 +1,46 @@
+/* Face-to-face recorder: the audio rules note, the input level and the live recording card. */
+.callout {
+  display: flex;
+  gap: 10px;
+  color: var(--text-2);
+}
+.callout .icon {
+  margin-top: 1px;
+  color: var(--primary);
+}
+meter {
+  width: 100%;
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+meter::-webkit-meter-bar {
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+meter::-webkit-meter-optimum-value,
+meter::-webkit-meter-suboptimum-value,
+meter::-webkit-meter-even-less-good-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--teal), var(--primary));
+}
+.recorder-live .status {
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.rec-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rose);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--rose) 50%, transparent);
+  animation: rec-pulse 1.4s ease-out infinite;
+}
+@keyframes rec-pulse {
+  to {
+    box-shadow: 0 0 0 12px transparent;
+  }
+}

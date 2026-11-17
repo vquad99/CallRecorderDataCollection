@@ -13,6 +13,8 @@ export interface Me {
   mfa_setup_required?: boolean;
   /** Set while a Super Admin views the app as this user; everything is read-only then (D-100). */
   viewer?: { id: string; display_name: string } | null;
+  /** Minutes without a request after which the server ends the session (D-122). */
+  session_idle_minutes: number;
 }
 
 export interface SessionInfo {

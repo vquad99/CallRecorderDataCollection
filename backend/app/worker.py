@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 from celery import Celery
 
 from app.adapters.txcontact import TxContact
 from app.core.config import load_settings
+from app.core.email import build_sender
 from app.core.logging import configure_logging
 from app.core.storage import build_storage
 from app.db.session import create_db_engine, make_session_factory
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import jobs as export_jobs
+from app.modules.portal import service as portal
 from app.modules.recordings import service
-from app.modules.telephony import service as telephony
+from app.modules.telephony import fetch as telephony
+from app.modules.users import service as users
 
 settings = load_settings()
 configure_logging(settings.log_level, settings.secret_values())
@@ -28,6 +32,13 @@ _sessions = make_session_factory(create_db_engine(settings))
 _storage = build_storage(settings)
 _telephony = TxContact(settings) if settings.telephony_configured else None
 _cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
+# What background jobs (app.core.background) read; the web app passes its app.state instead.
+_state = SimpleNamespace(
+    session_factory=_sessions,
+    settings=settings,
+    cipher=_cipher,
+    email_sender=build_sender(settings),
+)
 
 
 @celery_app.task(
@@ -56,3 +67,17 @@ def build_export(job_id: str) -> None:
     so one sent twice is made once; the sweep sends a job again when a worker stopped half-way."""
     with _sessions() as db:
         export_jobs.run(db, settings, _storage, _cipher, uuid.UUID(job_id))
+
+
+@celery_app.task(name=portal.SEND_LINKS_TASK)  # type: ignore[untyped-decorator]
+def send_consent_links(
+    project_id: str, participant_ids: list[str], actor_id: str, ip: str | None
+) -> None:
+    """Email a fresh personal link to each participant of a bulk "send consent form" (D-073)."""
+    portal.send_links_job(_state, project_id, participant_ids, actor_id, ip)
+
+
+@celery_app.task(name=users.SEND_INVITATIONS_TASK)  # type: ignore[untyped-decorator]
+def send_invitations(user_ids: list[str]) -> None:
+    """Email the invitation of each account a user import created."""
+    users.send_invitations_job(_state, user_ids)

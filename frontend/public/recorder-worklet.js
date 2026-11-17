@@ -1,7 +1,8 @@
-// AudioWorklet: copies raw microphone samples (32-bit float, the device's native rate) to the page in
-// batches. Every channel the browser delivers is kept, interleaved frame by frame, so the stored
-// original is exactly what was captured; the server makes the mono delivery file from channel 1
-// (D-041, D-048). No processing of any kind happens here (D-003, AUDIO-004).
+// AudioWorklet: copies raw microphone samples (32-bit float) to the page in batches, at the audio
+// context's rate: the project's delivery rate, normally 16000 Hz (owner 2026-11-17). Every channel
+// the browser delivers is kept, interleaved frame by frame, so the stored original is exactly what
+// was captured; the recording file is channel 1 (D-041, D-048). No processing of any kind happens
+// here (D-003, AUDIO-004).
 const FRAMES = 4096;
 
 class RawCapture extends AudioWorkletProcessor {

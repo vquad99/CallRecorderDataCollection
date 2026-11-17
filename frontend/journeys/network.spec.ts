@@ -25,8 +25,7 @@ test("a network drop mid-recording loses nothing", async ({ browser }, info) => 
   const page = await context.newPage();
   await signIn(page, SEEDED.moderator, SEEDED_PASSWORD);
   await page.goto(`/tasks/${setup.taskId}`);
-  await page.getByLabel("Move to").selectOption("IN_PROGRESS");
-  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Start session" }).click();
   await consentBoth(page);
   await page.getByRole("link", { name: "Open the recorder" }).click();
   await page.getByRole("button", { name: "Allow microphone" }).click();

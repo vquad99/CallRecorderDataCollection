@@ -33,7 +33,7 @@ test("a participant answers the consent form on their personal page", async ({
   await test.step("and creates the first participant's personal link", async () => {
     await page.goto(`/projects/${setup.projectId}/participants`);
     await page.getByRole("button", { name: "Personal link" }).first().click();
-    const card = page.getByRole("region", { name: "Personal link" });
+    const card = page.getByRole("dialog", { name: /Personal link/ });
     await expect(card).toBeVisible();
     link = (await card.locator(".mono").innerText()).trim();
     expect(link).toMatch(/\/portal#[A-Za-z0-9_-]{20,}$/);
@@ -66,17 +66,23 @@ test("a participant answers the consent form on their personal page", async ({
     await visitor.reload();
     await expect(visitor.getByText("You agreed")).toBeVisible();
     await visitor.getByRole("button", { name: "Withdraw my consent" }).click();
+    await visitor
+      .getByRole("dialog", { name: "Withdraw your consent?" })
+      .getByRole("button", { name: "Withdraw my consent" })
+      .click();
     await expect(visitor.getByText("You withdrew your consent")).toBeVisible();
   });
 
   await test.step("staff see both answers; a new link ends the old one", async () => {
     await page.reload();
-    await page.getByRole("button", { name: "Consent" }).first().click();
-    const history = page.getByRole("region", { name: "Consent history" });
-    await expect(history.getByText(/WITHDRAWN.*answered by the participant/)).toBeVisible();
-    await expect(history.getByText(/GIVEN.*answered by the participant/)).toBeVisible();
+    await page.getByRole("button", { name: "Consent history" }).first().click();
+    const history = page.getByRole("dialog", { name: /Consent history/ });
+    await expect(history.getByText("Withdrawn")).toBeVisible();
+    await expect(history.getByText("Agreed").first()).toBeVisible();
+    await expect(history.getByText(/answered by the participant/)).toHaveCount(2);
+    await history.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Personal link" }).first().click();
-    await expect(page.getByRole("region", { name: "Personal link" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /Personal link/ })).toBeVisible();
     await visitor.reload();
     await expect(visitor.getByRole("alert")).toContainText("not valid any more");
   });

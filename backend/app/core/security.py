@@ -1,4 +1,6 @@
-"""Baseline HTTP security headers on every API response (SEC-013, first part).
+"""Baseline HTTP security headers on every API response (SEC-013, first part), and the names of
+the cookies and header the session and CSRF checks use (shared by the middleware, the rate limiter
+and the auth dependencies).
 
 The frontend's own Content-Security-Policy is set by the web server that serves it (Phase 10).
 """
@@ -7,6 +9,11 @@ from __future__ import annotations
 
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+SESSION_COOKIE = "ccp_session"
+CSRF_COOKIE = "csrf_token"
+CSRF_HEADER = "X-CSRF-Token"
+UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 _BASE_HEADERS = {
     "X-Content-Type-Options": "nosniff",

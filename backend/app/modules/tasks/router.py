@@ -10,19 +10,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.core.permissions import Perm
+from app.core.permissions import Perm, Role
+from app.db.paging import Page, PageNumber, PageSize
 from app.modules.audio_qc import service as audio_qc
-from app.modules.auth.deps import (
-    CurrentPrincipal,
-    DbSession,
-    Principal,
-    client_ip,
-    forbidden,
-    require,
-)
+from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.models import User
-from app.modules.participants.models import Participant
-from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.participants import consent as consents
+from app.modules.participants.models import ConsentMethod, ConsentStatus, Participant
+from app.modules.projects.service import get_manageable
 from app.modules.tasks import bulk, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
 
@@ -39,7 +34,6 @@ Status = Literal[
     "ADMIN_REVIEW",
     "APPROVED",
     "REJECTED",
-    "RETURNED",
     "CANCELLED",
     "ON_HOLD",
 ]
@@ -75,6 +69,8 @@ class TaskDetail(TaskSummary):
     allowed_transitions: list[str]
     reasons: dict[str, list[str]]
     can_assign: bool
+    # The caller may change the moderator now (assigns tasks, and the status still allows it).
+    can_reassign: bool
     is_moderator: bool
     # D-119: participants (A, B) without consent to record; recording is refused until empty.
     consent_missing: list[str]
@@ -85,19 +81,18 @@ def summary(t: Task) -> TaskSummary:
 
 
 def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
-    consent = service.latest_consent(db, t)
-    moderator = service.active_assignee(db, t.id, "MODERATOR")
-    actor = service.actor_for(db, principal, t)
+    sides = consents.for_task(db, t)
+    moderator = service.active_assignee(db, t.id, Role.MODERATOR.value)
+    actor = service.actor_from(principal, t, moderator)
 
-    def party(pid: uuid.UUID) -> PartyOut:
-        p = db.get(Participant, pid)
-        assert p is not None  # noqa: S101
-        c = consent.get(pid)
+    def party(side: consents.SideConsent) -> PartyOut:
+        p = db.get_one(Participant, side.participant_id)
+        noted = side.latest_noted
         return PartyOut(
             id=p.id,
             participant_code=p.participant_code,
-            consent_status=c.status if c else None,
-            consent_at=c.created_at if c else None,
+            consent_status=noted.status if noted else None,
+            consent_at=noted.created_at if noted else None,
         )
 
     mod_name = (
@@ -109,23 +104,21 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         **summary(t).model_dump(),
         held_from=t.held_from,
         reason_code=t.reason_code,
-        participant_a=party(t.participant_a_id),
-        participant_b=party(t.participant_b_id),
+        participant_a=party(sides[0]),
+        participant_b=party(sides[1]),
         moderator_id=moderator.user_id if moderator else None,
         moderator_name=mod_name,
         allowed_transitions=workflow.user_options(t.status, t.held_from, actor),
         reasons={k: sorted(v) for k, v in workflow.REASONS.items()},
         can_assign=actor.can_assign,
+        can_reassign=service.can_reassign(actor, t),
         is_moderator=actor.is_moderator,
-        consent_missing=service.sides_without_consent(db, t),
+        consent_missing=consents.missing(sides),
     )
 
 
-class TaskPage(BaseModel):
-    items: list[TaskSummary]
-    total: int
-    page: int
-    page_size: int
+class TaskPage(Page[TaskSummary]):
+    pass
 
 
 @router.get("", response_model=TaskPage)
@@ -137,8 +130,8 @@ def list_tasks(
     mode: Mode | None = None,
     mine: bool = False,
     search: Annotated[str | None, Query(max_length=40)] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: PageNumber = 1,
+    page_size: PageSize = 25,
 ) -> TaskPage:
     f = service.TaskFilter(
         project_id=project_id, status=status, mode=mode, mine=mine, search=search
@@ -173,10 +166,8 @@ def create_task(
     if body.moderator_id is not None:
         # Checked before the task exists, so a wrong choice never leaves a half-made task;
         # only someone who may add tasks here learns who is a moderator of the project.
-        project = get_visible_project(db, principal, body.project_id)
-        if not principal.can_in_project(Perm.TASKS_ASSIGN, project.id):
-            raise forbidden()
-        service.check_moderator(db, project.id, body.moderator_id)
+        project = get_manageable(db, principal, body.project_id, Perm.TASKS_ASSIGN)
+        service.require_member_with_role(db, project.id, body.moderator_id, Role.MODERATOR)
     task = service.create_task(db, principal, body.project_id, data, ip)
     if body.moderator_id is not None:
         task = service.assign_moderator(db, principal, task.id, body.moderator_id, None, ip)
@@ -304,8 +295,8 @@ def transition(
 
 class ConsentBody(BaseModel):
     participant_id: uuid.UUID
-    status: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
-    method: Literal["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"]
+    status: ConsentStatus
+    method: ConsentMethod
     note: str = Field(default="", max_length=2000)
 
 
@@ -339,6 +330,11 @@ class TimelineOut(BaseModel):
     kind: str
     actor: str | None
     text: str
+    # Set for status changes only (kind "status"); null for assignments and comments.
+    from_status: str | None = None
+    to_status: str | None = None
+    reason_code: str | None = None
+    comment: str | None = None
 
 
 @router.post("/{task_id}/comments", status_code=201, response_model=TimelineOut)
@@ -356,7 +352,7 @@ def add_comment(
 @router.get("/{task_id}/timeline", response_model=list[TimelineOut])
 def timeline(task_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession) -> list[TimelineOut]:
     return [
-        TimelineOut(at=e.at, kind=e.kind, actor=e.actor, text=e.text)
+        TimelineOut.model_validate(e, from_attributes=True)
         for e in service.timeline(db, principal, task_id)
     ]
 

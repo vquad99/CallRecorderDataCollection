@@ -11,8 +11,9 @@ from sqlalchemy import ColumnElement, and_, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.contact import normalize_email
 from app.core.email import EmailSender, EmailSendError, OutgoingEmail
-from app.core.errors import AppError
+from app.core.errors import AppError, not_found
 from app.core.ratelimit import address_key
 from app.modules.audit import service as audit
 from app.modules.auth.models import LoginAttempt, PasswordResetToken, User, UserSession
@@ -32,10 +33,6 @@ logger = logging.getLogger("app.auth")
 
 INVALID_CREDENTIALS = "Invalid email or password"
 MAX_RESETS_PER_HOUR = 3
-
-
-def normalize_email(email: str) -> str:
-    return email.strip().lower()
 
 
 def check_password_policy(settings: Settings, password: str, email: str) -> None:
@@ -58,7 +55,7 @@ def check_password_policy(settings: Settings, password: str, email: str) -> None
 def _user(db: Session, user_id: uuid.UUID) -> User:
     user = db.get(User, user_id)
     if user is None:
-        raise AppError("User not found", code="NOT_FOUND", status_code=404)
+        raise not_found("User")
     return user
 
 
@@ -276,7 +273,7 @@ def revoke_own_session(
 ) -> None:
     session = db.get(UserSession, session_id)
     if session is None or session.user_id != user_id or session.revoked_at is not None:
-        raise AppError("Session not found", code="NOT_FOUND", status_code=404)
+        raise not_found("Session")
     session.revoked_at = datetime.now(UTC)
     audit.record(
         db,

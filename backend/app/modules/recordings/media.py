@@ -1,10 +1,12 @@
-"""Audio files: browser original, 16 kHz derived file, inspection, measurements.
+"""Audio files: browser original, delivery file, inspection, measurements.
 
-AUDIO-019..022: a deterministic pipeline. The original (32-bit float, native rate, every channel
-the browser delivered, interleaved) is never changed. The derived file keeps the first channel
-(D-041), resamples it with libsoxr "VHQ" (the resampler FFmpeg uses for `aresample=resampler=soxr`),
-then converts float -> signed 16-bit by rounding to nearest and clipping, with no dither, no gain,
-no filtering, no channel mixing. Every step is recorded by the caller.
+AUDIO-019..022: a deterministic pipeline. The original (32-bit float, every channel the browser
+delivered, interleaved) is never changed. Face-to-face (D-123): the browser records at the
+project's rate (16 kHz) and the delivery file is the recording itself: the first channel (D-041),
+its samples stored as signed 16-bit by rounding to nearest and clipping, with no resampling, no
+dither, no gain, no filtering, no channel mixing. Telephony (D-101): the provider's file is
+resampled with libsoxr "VHQ" (the resampler FFmpeg uses for `aresample=resampler=soxr`) to 16 kHz,
+with the same rounding and clipping. Every step is recorded by the caller.
 """
 
 from __future__ import annotations
@@ -40,12 +42,22 @@ def channel_handling(channels: int) -> str:
     return "mono" if channels == 1 else f"first channel of {channels}"
 
 
-def conversion_parameters(channels: int) -> str:
+# The step that makes a face-to-face delivery file (AUDIO-017): no resampler is involved.
+DELIVERY_TOOL = ("ccp float32 to int16", "1")
+
+
+def delivery_parameters(channels: int, rate: int) -> str:
+    """How a face-to-face delivery file was made, in plain words (D-123)."""
     kept = "mono input" if channels == 1 else f"channel 1 of {channels} kept, others not mixed in"
     return (
-        f"{kept}; libsoxr quality=VHQ, {TARGET_RATE} Hz, mono, "
-        "float32 -> int16 round-half-even, clip, no dither"
+        f"{kept}; recorded at {rate} Hz; samples kept as recorded, stored as 16-bit "
+        "(float32 -> int16 round-half-even, clip, no dither); no resampling"
     )
+
+
+def to_pcm16(samples: np.ndarray) -> np.ndarray:
+    """float32 in [-1, 1) to signed 16-bit: round half to even, clip, no dither."""
+    return np.clip(np.round(samples.astype(np.float64) * 32768.0), -32768, 32767).astype("<i2")
 
 
 def float_wav_header(frames: int, rate: int, channels: int) -> bytes:
@@ -81,7 +93,7 @@ def write_float_wav(raw: Path, out: Path, rate: int, channels: int = 1) -> None:
             dst.write(part)
 
 
-def resample_to_pcm16(
+def pcm16_delivery(
     raw: Path,
     rate: int,
     out: Path,
@@ -90,7 +102,8 @@ def resample_to_pcm16(
     offset: int = 0,
     length: int | None = None,
 ) -> None:
-    """Derived file: first channel of the interleaved float32 input, 16 kHz, signed 16-bit.
+    """Face-to-face delivery file (D-123): the first channel of the interleaved float32 input,
+    at the rate it was recorded, as signed 16-bit. Nothing else changes: no resampling.
 
     Reads `length` bytes from `offset` (a WAV file's data chunk can be read in place, without a
     second copy), one block at a time, so memory use does not grow with the recording's length.
@@ -98,26 +111,20 @@ def resample_to_pcm16(
     length = raw.stat().st_size - offset if length is None else length
     if channels < 1 or length % (4 * channels):
         raise ValueError("raw float32 data is not a whole number of frames")
-    stream = soxr.ResampleStream(rate, TARGET_RATE, 1, dtype="float32", quality="VHQ")
     block_bytes = BLOCK * 4 * channels  # whole frames per read
     remaining = length
     with raw.open("rb") as src, wave.open(str(out), "wb") as dst:
         src.seek(offset)
         dst.setnchannels(1)
         dst.setsampwidth(2)
-        dst.setframerate(TARGET_RATE)
-        while True:
+        dst.setframerate(rate)
+        while remaining > 0:
             part = src.read(min(block_bytes, remaining))
-            remaining -= len(part)
-            last = remaining <= 0 or len(part) == 0
-            samples = np.ascontiguousarray(np.frombuffer(part, dtype="<f4")[::channels])
-            resampled = stream.resample_chunk(samples, last=last)
-            pcm = np.clip(np.round(resampled.astype(np.float64) * 32768.0), -32768, 32767).astype(
-                "<i2"
-            )
-            dst.writeframes(pcm.tobytes())
-            if last:
+            if not part:
                 break
+            remaining -= len(part)
+            samples = np.frombuffer(part, dtype="<f4")[::channels]
+            dst.writeframes(to_pcm16(samples).tobytes())
 
 
 def resample_keep_channels_to_pcm16(
@@ -142,10 +149,7 @@ def resample_keep_channels_to_pcm16(
             remaining -= len(part)
             last = remaining <= 0 or len(part) == 0
             frames = np.frombuffer(part, dtype="<f4").reshape(-1, channels)
-            resampled = stream.resample_chunk(frames, last=last)
-            pcm = np.clip(np.round(resampled.astype(np.float64) * 32768.0), -32768, 32767).astype(
-                "<i2"
-            )
+            pcm = to_pcm16(stream.resample_chunk(frames, last=last))
             dst.writeframes(np.ascontiguousarray(pcm).tobytes())
             if last:
                 break

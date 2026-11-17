@@ -18,21 +18,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.modules.recordings.models import ASSET_KINDS
 
 PROJECT_STATUSES = ("DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED")
 RECORDING_MODES = ("TELEPHONY", "FACE_TO_FACE")
 PHONE_POLICIES = ("ADMINS_ONLY", "ASSIGNED_MODERATOR")
-ASSET_KINDS = (
-    "PROVIDER_ORIGINAL_TRACK",
-    "PROVIDER_ORIGINAL_MIXED",
-    "TELEPHONY_FINAL_STEREO",
-    "CONSENT_RECORDING",
-    "BROWSER_ORIGINAL",
-    "FTF_DERIVED_PCM",
-    "TELEPHONY_DERIVED_PCM",
-    "TRANSCRIPT_FILE",
-    "EXPORT_PACKAGE",
-)
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:

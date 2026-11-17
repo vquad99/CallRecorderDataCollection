@@ -49,14 +49,6 @@ class Perm(StrEnum):
     ASSETS_DELETE = "assets.delete"
 
 
-ROLE_LABELS: dict[Role, str] = {
-    Role.SUPER_ADMIN: "Super Admin",
-    Role.PROJECT_ADMIN: "Project Admin",
-    Role.MODERATOR: "Moderator",
-    Role.QC_EXECUTIVE: "QC Executive",
-    Role.CLIENT_VIEWER: "Client Viewer",
-}
-
 # Mirrors docs/ARCHITECTURE.md section 5 (checked by tests/test_permissions.py). Super Admin holds
 # every permission except starting calls and recording face-to-face, which belong to the assigned
 # moderator only.

@@ -15,8 +15,11 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Subquery,
     Text,
     UniqueConstraint,
+    func,
+    select,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -109,6 +112,16 @@ ASSET_KINDS = (
     "TRANSCRIPT_FILE",
     "EXPORT_PACKAGE",
 )
+# The file each mode delivers: face-to-face (the recording itself, D-123), and telephony (16 kHz,
+# D-101).
+FTF_DELIVERY_KIND = "FTF_DERIVED_PCM"
+TELEPHONY_DELIVERY_KIND = "TELEPHONY_DERIVED_PCM"
+DELIVERY_KINDS = (FTF_DELIVERY_KIND, TELEPHONY_DELIVERY_KIND)
+# Files whose length is the conversation's length: the delivery files, and the stereo phone file
+# of the first telephony design.
+FINAL_KINDS = (*DELIVERY_KINDS, "TELEPHONY_FINAL_STEREO")
+# What was recorded before any processing.
+ORIGINAL_KINDS = ("BROWSER_ORIGINAL", "PROVIDER_ORIGINAL_MIXED", "PROVIDER_ORIGINAL_TRACK")
 
 
 class AudioAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -170,3 +183,30 @@ class AssetProcessingStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     parameters: Mapped[str] = mapped_column(Text, nullable=False)
     input_sha256: Mapped[str | None] = mapped_column(String(64))
     output_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+def final_length_subquery() -> Subquery:
+    """(recording_id, ms): each recording's length, from its final file. Lengths stay counted
+    after retention deletes the file."""
+    return (
+        select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms"))
+        .where(AudioAsset.kind.in_(FINAL_KINDS))
+        .group_by(AudioAsset.recording_id)
+        .subquery()
+    )
+
+
+def newest_ready_subquery() -> Subquery:
+    """(recording_id, task_id, rank): finished recordings, ranked newest first within each task;
+    rank 1 is the one a task delivers (re-recorded tasks count once)."""
+    return (
+        select(
+            Recording.id.label("recording_id"),
+            Recording.task_id,
+            func.row_number()
+            .over(partition_by=Recording.task_id, order_by=Recording.started_at.desc())
+            .label("rank"),
+        )
+        .where(Recording.state == "READY")
+        .subquery()
+    )

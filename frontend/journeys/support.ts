@@ -93,7 +93,7 @@ export function sha256(data: Buffer): string {
 
 /** Plays an <audio> element to its end (muted, fast) and reports what the browser saw. */
 export async function playToEnd(page: Page, label: string) {
-  return page.getByLabel(label).evaluate(async (node) => {
+  return page.getByLabel(label, { exact: true }).evaluate(async (node) => {
     const audio = node as HTMLAudioElement;
     if (audio.readyState < 1)
       await new Promise((resolve, reject) => {
@@ -121,8 +121,8 @@ export interface Setup {
 export async function consentBoth(page: Page): Promise<void> {
   for (const which of ["A", "B"]) {
     const row = page.locator(".consent__row").filter({ hasText: `Participant ${which}` });
-    await row.getByRole("button", { name: "Consent given" }).click();
-    await expect(row.getByRole("button", { name: "Consent given" })).toHaveAttribute(
+    await row.getByRole("button", { name: "Agreed" }).click();
+    await expect(row.getByRole("button", { name: "Agreed" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-RATE = 48_000
+RATE = 16_000  # what the recorder captures (D-123)
 
 
 def tone(seconds: float, rate: int = RATE, freq: float = 440.0, dbfs: float = -6.0) -> np.ndarray:

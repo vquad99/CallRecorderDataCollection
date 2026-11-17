@@ -1,124 +1,28 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
-// them; the server decides what each role receives.
+// them; the server decides what each role receives. Adding, editing, the consent history and the
+// details open in the same windows as on the Participants page.
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
-import { apiDownload, type ApiError } from "../../api/client";
+import { apiDownload } from "../../api/client";
 import * as work from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
-import type { Language } from "../../api/projects";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { Icon } from "../../components/Icon";
+import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
-import { COUNTRY_CODES, languageLabel, languageOptions, PHONE_DIGITS, splitPhone } from "./choices";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { day } from "../../lib/format";
+import { emailConsentForm, useParticipantWindows } from "../participants/ParticipantEditor";
+import "../participants/participants.css";
+import { languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
-
-export const EMPTY: work.ParticipantFields = {
-  display_label: "",
-  phone: null,
-  language_code: "",
-  dialect: "",
-  district: "",
-  notes: "",
-};
-
-export function ParticipantForm({
-  initial,
-  languages,
-  submitLabel,
-  onSubmit,
-  busy,
-}: {
-  initial: work.ParticipantFields;
-  languages: readonly Language[]; // the project's languages; empty means any
-  submitLabel: string;
-  onSubmit: (f: work.ParticipantFields) => void;
-  busy: boolean;
-}) {
-  const [f, setF] = useState(initial);
-  const [phone, setPhone] = useState(() => splitPhone(initial.phone));
-  const phoneError =
-    phone.digits && phone.digits.length !== PHONE_DIGITS
-      ? `Type exactly ${PHONE_DIGITS} digits (you typed ${phone.digits.length}).`
-      : undefined;
-  return (
-    <form
-      className="card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (phoneError) return;
-        onSubmit({
-          ...f,
-          phone: phone.digits ? `${phone.cc}${phone.digits}` : null,
-          email: f.email?.trim(),
-        });
-      }}
-    >
-      <TextField
-        label="Name or label"
-        required
-        value={f.display_label}
-        onChange={(e) => setF({ ...f, display_label: e.target.value })}
-      />
-      <Select
-        label="Country code"
-        value={phone.cc}
-        onChange={(e) => setPhone({ ...phone, cc: e.target.value })}
-        options={COUNTRY_CODES.map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }))}
-      />
-      <TextField
-        label="Phone number"
-        hint={`${PHONE_DIGITS} digits, without the country code. Needed for telephony tasks.`}
-        inputMode="numeric"
-        autoComplete="tel-national"
-        maxLength={PHONE_DIGITS}
-        value={phone.digits}
-        {...(phoneError ? { error: phoneError } : {})}
-        onChange={(e) => setPhone({ ...phone, digits: e.target.value.replace(/\D/g, "") })}
-      />
-      <TextField
-        label="Email address"
-        type="email"
-        hint="Optional. Used to send the participant their consent form link."
-        value={f.email ?? ""}
-        onChange={(e) => setF({ ...f, email: e.target.value })}
-      />
-      <Select
-        label="Language code"
-        required
-        value={f.language_code}
-        onChange={(e) => setF({ ...f, language_code: e.target.value })}
-        options={languageOptions(languages, initial.language_code)}
-      />
-      <TextField
-        label="Dialect"
-        value={f.dialect}
-        onChange={(e) => setF({ ...f, dialect: e.target.value })}
-      />
-      <TextField
-        label="District"
-        value={f.district}
-        onChange={(e) => setF({ ...f, district: e.target.value })}
-      />
-      <TextField
-        label="Internal notes"
-        value={f.notes}
-        onChange={(e) => setF({ ...f, notes: e.target.value })}
-      />
-      <Button
-        type="submit"
-        busy={busy}
-        disabled={!f.display_label.trim() || !f.language_code.trim() || Boolean(phoneError)}
-      >
-        {submitLabel}
-      </Button>
-    </form>
-  );
-}
 
 /** People who already exist in another of the caller's projects, added here as they are (D-090). */
 function AddExisting({
@@ -236,35 +140,8 @@ function AddExisting({
   );
 }
 
-export function ConsentList({
-  projectId,
-  participantId,
-}: {
-  projectId: string;
-  participantId: string;
-}) {
-  const { state, reload } = useResource(
-    () => work.consentHistory(projectId, participantId),
-    [projectId, participantId],
-  );
-  if (state.status === "loading") return <LoadingState label="Loading consent" />;
-  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
-  if (state.data.length === 0) return <p className="muted">No consent recorded yet.</p>;
-  return (
-    <ul className="list">
-      {state.data.map((c) => (
-        <li key={c.id}>
-          {c.status} ({c.method.toLowerCase().replace(/_/g, " ")}), policy v{c.policy_version},{" "}
-          {new Date(c.created_at).toLocaleString()}
-          {c.captured_by === null ? " · answered by the participant" : ""}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 const minutesText = (value: number | undefined) =>
-  value === undefined ? "–" : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  value === undefined ? "–" : value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 export function ParticipantsTab() {
   const { project } = useProject();
@@ -274,67 +151,60 @@ export function ParticipantsTab() {
   const canOpenPage = Boolean(user?.roles.includes("SUPER_ADMIN"));
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<work.Participant | null>(null);
-  const [consentFor, setConsentFor] = useState<string | null>(null);
   const [link, setLink] = useState<{ code: string; url: string; expires_at: string } | null>(null);
   const [addingExisting, setAddingExisting] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const list = useResource(
     () => work.listParticipants(project.id, { search, page, page_size: 25 }),
     [project.id, search, page],
   );
+  const { busy, error, message, run, setMessage } = useAction(list.reload);
+  const confirm = useConfirm(setMessage);
+  const windows = useParticipantWindows({
+    projectId: project.id,
+    languages: project.languages,
+    onSaved: (text) => {
+      setMessage(text);
+      list.reload();
+    },
+  });
 
   // The server sends minutes only to people who may export the project (D-095).
   const showMinutes =
     list.state.status === "loaded" && list.state.data.items.some((p) => p.minutes != null);
 
-  async function run(action: () => Promise<string>) {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      setMessage(await action());
-      list.reload();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const remove = (p: work.Participant) =>
+    confirm.ask({
+      title: `Delete ${p.participant_code}?`,
+      message: "Their personal data is removed. Their code stays in the records.",
+      askReason: "Why is this participant deleted?",
+      confirmLabel: "Delete",
+      danger: true,
+      action: async ({ comment }) => {
+        await work.deleteParticipant(project.id, p.id, comment);
+        list.reload();
+        return `${p.participant_code} deleted.`;
+      },
+    });
 
   return (
     <div className="stack">
       <div className="actions">
         {canManage ? (
-          <Button
-            onClick={() => {
-              setAdding(!adding);
-              setAddingExisting(false);
-              setEditing(null);
-            }}
-          >
-            {adding ? "Close form" : "Add participant"}
+          <Button onClick={() => windows.open({ kind: "add" })}>
+            <Icon name="plus" size={15} weight="bold" />
+            Add participant
           </Button>
         ) : null}
         {canManage ? (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setAddingExisting(!addingExisting);
-              setAdding(false);
-              setEditing(null);
-            }}
-          >
+          <Button variant="secondary" onClick={() => setAddingExisting(!addingExisting)}>
             {addingExisting ? "Close search" : "Add existing participant"}
           </Button>
         ) : null}
         {can("participants.export") ? (
           <Button
             variant="secondary"
+            busy={busy === "export"}
             onClick={() =>
               void run(async () => {
                 await apiDownload(
@@ -342,9 +212,10 @@ export function ParticipantsTab() {
                   "participants.csv",
                 );
                 return "Contact list downloaded.";
-              })
+              }, "export")
             }
           >
+            <Icon name="download" size={15} />
             Export contacts
           </Button>
         ) : null}
@@ -353,7 +224,7 @@ export function ParticipantsTab() {
         <AddExisting
           projectId={project.id}
           refresh={refresh}
-          busy={busy}
+          busy={busy === "link"}
           onAdd={(codes) =>
             void run(async () => {
               // One after the other: each is checked and audited on its own; a refusal names
@@ -370,46 +241,7 @@ export function ParticipantsTab() {
               return codes.length === 1
                 ? `${codes[0]} added to this project.`
                 : `${added.length} participants added to this project.`;
-            })
-          }
-        />
-      ) : null}
-      {adding ? (
-        <ParticipantForm
-          initial={EMPTY}
-          languages={project.languages}
-          submitLabel="Add participant"
-          busy={busy}
-          onSubmit={(f) =>
-            void run(async () => {
-              const p = await work.createParticipant(project.id, f);
-              setAdding(false);
-              return `${p.participant_code} added.`;
-            })
-          }
-        />
-      ) : null}
-      {editing ? (
-        <ParticipantForm
-          key={editing.id}
-          languages={project.languages}
-          initial={{
-            display_label: editing.display_label ?? "",
-            phone: editing.phone?.startsWith("•") ? null : editing.phone,
-            language_code: editing.language_code,
-            dialect: editing.dialect,
-            district: editing.district ?? "",
-            notes: editing.notes ?? "",
-            email: editing.email ?? (editing.has_email ? undefined : ""),
-          }}
-          submitLabel={`Save ${editing.participant_code}`}
-          busy={busy}
-          onSubmit={(f) =>
-            void run(async () => {
-              const p = await work.correctParticipant(project.id, editing.id, f);
-              setEditing(null);
-              return `${p.participant_code} corrected.`;
-            })
+            }, "link")
           }
         />
       ) : null}
@@ -433,168 +265,147 @@ export function ParticipantsTab() {
       ) : null}
       {list.state.status === "loaded" && list.state.data.items.length > 0 ? (
         <>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Code</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Phone</th>
-                  <th scope="col">Language</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Phone</th>
+                <th scope="col">Language</th>
+                {showMinutes ? (
+                  <>
+                    <th scope="col" className="num">
+                      Recorded min
+                    </th>
+                    <th scope="col" className="num">
+                      Approved min
+                    </th>
+                    <th
+                      scope="col"
+                      className="num"
+                      title="Half of approved: two participants share each conversation"
+                    >
+                      Payable min
+                    </th>
+                  </>
+                ) : null}
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.state.data.items.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.participant_code}</td>
+                  <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
+                  <td>
+                    {p.phone ?? (p.has_phone ? <span className="muted">Hidden</span> : "None")}
+                  </td>
+                  <td>
+                    {languageLabel(p.language_code)}
+                    {p.dialect ? <div className="muted">{p.dialect}</div> : null}
+                  </td>
                   {showMinutes ? (
                     <>
-                      <th scope="col" className="num">
-                        Recorded min
-                      </th>
-                      <th scope="col" className="num">
-                        Approved min
-                      </th>
-                      <th
-                        scope="col"
-                        className="num"
-                        title="Half of approved: two participants share each conversation"
-                      >
-                        Payable min
-                      </th>
+                      <td className="num">{minutesText(p.minutes?.recorded_minutes)}</td>
+                      <td className="num">{minutesText(p.minutes?.approved_minutes)}</td>
+                      <td className="num">
+                        <strong>{minutesText(p.minutes?.payable_minutes)}</strong>
+                      </td>
                     </>
                   ) : null}
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.state.data.items.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.participant_code}</td>
-                    <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
-                    <td>
-                      {p.phone ?? (p.has_phone ? <span className="muted">Hidden</span> : "None")}
-                    </td>
-                    <td>
-                      {p.language_code}
-                      {p.dialect ? ` (${p.dialect})` : ""}
-                    </td>
-                    {showMinutes ? (
-                      <>
-                        <td className="num">{minutesText(p.minutes?.recorded_minutes)}</td>
-                        <td className="num">{minutesText(p.minutes?.approved_minutes)}</td>
-                        <td className="num">
-                          <strong>{minutesText(p.minutes?.payable_minutes)}</strong>
-                        </td>
-                      </>
+                  <td className="actions">
+                    {canOpenPage ? (
+                      <Link
+                        className="button button--secondary"
+                        to={`/projects/${project.id}/participants/${p.id}/page`}
+                      >
+                        Their page
+                      </Link>
                     ) : null}
-                    <td className="actions">
-                      {canOpenPage ? (
-                        <Link
-                          className="button button--secondary"
-                          to={`/projects/${project.id}/participants/${p.id}/page`}
-                        >
-                          Their page
-                        </Link>
-                      ) : null}
-                      {p.consent_visible ? (
+                    {p.consent_visible ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => windows.open({ kind: "history", participant: p })}
+                      >
+                        Consent history
+                      </Button>
+                    ) : null}
+                    {canManage ? (
+                      <>
                         <Button
                           variant="secondary"
-                          onClick={() => setConsentFor(consentFor === p.id ? null : p.id)}
+                          busy={busy === `link-${p.id}`}
+                          disabled={busy !== null}
+                          onClick={() =>
+                            void run(async () => {
+                              const made = await work.createPortalLink(project.id, p.id);
+                              setLink({ code: p.participant_code, ...made });
+                            }, `link-${p.id}`)
+                          }
                         >
-                          Consent
+                          Personal link
                         </Button>
-                      ) : null}
-                      {canManage ? (
-                        <>
+                        {p.has_email ? (
                           <Button
                             variant="secondary"
-                            busy={busy}
-                            onClick={() => {
-                              setLink(null);
-                              void run(async () => {
-                                const made = await work.createPortalLink(project.id, p.id);
-                                setLink({ code: p.participant_code, ...made });
-                                return `Personal link created for ${p.participant_code}.`;
-                              });
-                            }}
+                            busy={busy === `email-${p.id}`}
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void run(() => emailConsentForm(project.id, p), `email-${p.id}`)
+                            }
                           >
-                            Personal link
+                            Email consent form
                           </Button>
-                          {p.has_email ? (
-                            <Button
-                              variant="secondary"
-                              busy={busy}
-                              onClick={() => {
-                                setLink(null);
-                                void run(async () => {
-                                  const r = await work.emailPortalLink(project.id, p.id);
-                                  if (!r.sent) throw new Error("The email could not be sent.");
-                                  return `Consent form link emailed to ${p.participant_code}.`;
-                                });
-                              }}
-                            >
-                              Email consent link
-                            </Button>
-                          ) : null}
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setEditing(p);
-                              setAdding(false);
-                            }}
-                          >
-                            Correct
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            busy={busy}
-                            onClick={() => {
-                              const reason = window.prompt(
-                                `Why delete ${p.participant_code}? Personal data will be removed.`,
-                              );
-                              if (reason)
-                                void run(async () => {
-                                  await work.deleteParticipant(project.id, p.id, reason);
-                                  return `${p.participant_code} deleted.`;
-                                });
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {link ? (
-            <section className="card stack stack--tight" aria-label="Personal link">
-              <h2>Personal link for {link.code}</h2>
-              <p className="muted">
-                Give this link to the participant only. It opens their consent form and their own
-                sessions, works until {new Date(link.expires_at).toLocaleDateString()}, and is shown
-                once: creating a new link ends this one.
-              </p>
-              <p className="mono break">{link.url}</p>
-              <div className="actions">
-                <Button
-                  variant="secondary"
-                  onClick={() => void navigator.clipboard.writeText(link.url)}
-                >
-                  Copy link
-                </Button>
-                <Button variant="secondary" onClick={() => setLink(null)}>
-                  Hide
-                </Button>
-              </div>
-            </section>
-          ) : null}
-          {consentFor ? (
-            <section className="card" aria-label="Consent history">
-              <h2>Consent history</h2>
-              <ConsentList projectId={project.id} participantId={consentFor} />
-            </section>
-          ) : null}
+                        ) : null}
+                        <Button
+                          variant="secondary"
+                          onClick={() => windows.open({ kind: "edit", participant: p })}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={busy !== null}
+                          onClick={() => remove(p)}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
           <Pagination page={page} pageSize={25} total={list.state.data.total} onPage={setPage} />
         </>
       ) : null}
+      {link ? (
+        <Modal title={`Personal link for ${link.code}`} onClose={() => setLink(null)}>
+          <div className="stack stack--tight">
+            <p className="muted">
+              Give this link to the participant only. It opens their consent form and their own
+              sessions, works until {day(link.expires_at)}, and is shown once: making a new link
+              ends this one.
+            </p>
+            <p className="mono break">{link.url}</p>
+            <div className="dialog__actions">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(link.url)
+                    .then(() => setMessage("Link copied."))
+                }
+              >
+                Copy link
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+      {windows.dialog}
+      {confirm.dialog}
     </div>
   );
 }

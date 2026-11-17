@@ -1,5 +1,4 @@
-import { apiRequest } from "./client";
-import { query, type Page } from "./admin";
+import { apiRequest, query, type Page } from "./client";
 
 export type ProjectStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type Mode = "TELEPHONY" | "FACE_TO_FACE";
@@ -98,6 +97,12 @@ export const NEXT_STATUSES: Record<ProjectStatus, ProjectStatus[]> = {
   COMPLETED: ["ACTIVE", "ARCHIVED"],
   ARCHIVED: ["ACTIVE"],
 };
+
+/** Moves that need a reason in words: archiving an active or paused project, and reopening a
+ * completed or archived one (mirrors the backend, which still decides). */
+export const needsStatusReason = (from: ProjectStatus, to: ProjectStatus) =>
+  (to === "ARCHIVED" && (from === "ACTIVE" || from === "PAUSED")) ||
+  (to === "ACTIVE" && (from === "COMPLETED" || from === "ARCHIVED"));
 
 const base = (id: string) => `/api/v1/projects/${id}`;
 

@@ -14,13 +14,14 @@ import uuid
 from datetime import UTC, datetime
 from html import escape
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
+from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
+from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import Project
 from app.modules.recordings import service
@@ -89,9 +90,8 @@ def build(
     """(file name, HTML). Needs the same rights as downloading the recording itself."""
     rec, task = service.get_recording(db, principal, recording_id)
     if not principal.can_in_project(Perm.RECORDINGS_DOWNLOAD, task.project_id):
-        raise AppError("You do not have permission to do this", code="FORBIDDEN", status_code=403)
-    project = db.get(Project, task.project_id)
-    assert project is not None  # noqa: S101  (foreign key guarantees it)
+        raise forbidden()
+    project = db.get_one(Project, task.project_id)
     html = render(db, rec, task, project)
     audit.record(
         db,
@@ -114,25 +114,14 @@ def render(db: Session, rec: Recording, task: Task, project: Project) -> str:
         .order_by(AudioAsset.kind)
     ).all()
     sections = []
-    for letter, participant_id in (("A", task.participant_a_id), ("B", task.participant_b_id)):
-        participant = db.get(Participant, participant_id)
-        assert participant is not None  # noqa: S101
-        records = db.scalars(
-            select(ConsentRecord)
-            .where(
-                ConsentRecord.participant_id == participant_id,
-                ConsentRecord.project_id == task.project_id,
-                or_(ConsentRecord.task_id == task.id, ConsentRecord.task_id.is_(None)),
-            )
-            .order_by(ConsentRecord.created_at)
-        ).all()
-        session = [r for r in records if r.task_id == task.id]
-        own = [r for r in records if r.task_id is None and r.captured_by is None]
+    for side in consent.for_task(db, task):
+        participant = db.get_one(Participant, side.participant_id)
         sections.append(
-            f"<h2>Participant {letter}: {escape(participant.participant_code)}</h2>"
+            f"<h2>Participant {side.side}: {escape(participant.participant_code)}</h2>"
             f"<table>{_row('Language', participant.language_code)}</table>"
-            f"<h3>Consent for this session</h3>{_events(session, own=False)}"
-            f"<h3>Participant's own answers on the consent form</h3>{_events(own, own=True)}"
+            f"<h3>Consent for this session</h3>{_events(side.noted, own=False)}"
+            f"<h3>Participant's own answers on the consent form</h3>"
+            f"{_events(side.own, own=True)}"
         )
     files = "".join(_row(a.kind.replace("_", " ").title(), f"SHA-256 {a.sha256}") for a in assets)
     html = (

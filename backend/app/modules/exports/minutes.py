@@ -14,13 +14,12 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import final_length_subquery, newest_ready_subquery
 from app.modules.tasks.models import Task
 
-FINAL_KINDS = ("FTF_DERIVED_PCM", "TELEPHONY_DERIVED_PCM", "TELEPHONY_FINAL_STEREO")
 SPEAKERS = 2  # one conversation, two participants, credited equally
 
 
@@ -45,23 +44,8 @@ def per_participant(
     db: Session, project_id: uuid.UUID, participant_ids: Iterable[uuid.UUID] | None = None
 ) -> dict[uuid.UUID, Minutes]:
     """Totals per participant in one project, in one query whatever the number of people."""
-    newest = (
-        select(
-            Recording.id.label("recording_id"),
-            Recording.task_id,
-            func.row_number()
-            .over(partition_by=Recording.task_id, order_by=Recording.started_at.desc())
-            .label("rank"),
-        )
-        .where(Recording.state == "READY")
-        .subquery()
-    )
-    length = (
-        select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms"))
-        .where(AudioAsset.kind.in_(FINAL_KINDS))
-        .group_by(AudioAsset.recording_id)
-        .subquery()
-    )
+    newest = newest_ready_subquery()
+    length = final_length_subquery()
     query = (
         select(Task.participant_a_id, Task.participant_b_id, Task.status, length.c.ms)
         .join(newest, (newest.c.task_id == Task.id) & (newest.c.rank == 1))

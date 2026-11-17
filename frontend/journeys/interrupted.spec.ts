@@ -30,8 +30,7 @@ test("an interrupted recording keeps the saved audio and can be finished", async
   await test.step("the moderator starts recording and the tab closes after the first part is saved", async () => {
     await signIn(first, SEEDED.moderator, SEEDED_PASSWORD);
     await first.goto(`/tasks/${setup.taskId}`);
-    await first.getByLabel("Move to").selectOption("IN_PROGRESS");
-    await first.getByRole("button", { name: "Apply" }).click();
+    await first.getByRole("button", { name: "Start session" }).click();
     await consentBoth(first);
     await first.getByRole("link", { name: "Open the recorder" }).click();
     await first.getByRole("button", { name: "Allow microphone" }).click();
@@ -79,6 +78,6 @@ test("an interrupted recording keeps the saved audio and can be finished", async
     expect(recording?.interrupted).toBe(true);
     expect(recording?.saved_seconds).toBe(keptSeconds);
     await admin.goto(`/tasks/${setup.taskId}`);
-    await expect(admin.getByText(/IN_PROGRESS -> RECORDED/)).toBeVisible();
+    await expect(admin.getByText("In progress → Recorded")).toBeVisible();
   });
 });

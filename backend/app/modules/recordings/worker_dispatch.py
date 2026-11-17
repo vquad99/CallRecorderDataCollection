@@ -80,7 +80,7 @@ def fetch_call_recordings(app: FastAPI) -> int:
     provider = getattr(app.state, "telephony", None)
     if provider is None or app.state.storage is None:
         return 0
-    from app.modules.telephony import service as telephony
+    from app.modules.telephony import fetch as telephony
 
     with app.state.session_factory() as db:
         due = telephony.due_calls(db)

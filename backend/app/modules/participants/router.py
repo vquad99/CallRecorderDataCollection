@@ -6,24 +6,21 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.api.deps import AppSettings, Cipher
+from app.core.background import dispatch
+from app.core.errors import forbidden
 from app.core.permissions import Perm
-from app.modules.auth.deps import (
-    CurrentPrincipal,
-    DbSession,
-    Principal,
-    client_ip,
-    forbidden,
-    require,
-)
-from app.modules.auth.router import AppSettings, Cipher
+from app.db.paging import Page, PageNumber, PageSize
+from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import minutes as minutes_report
 from app.modules.participants import consent_view, details, manage, service
-from app.modules.participants.models import Participant
+from app.modules.participants.models import ConsentStatus, Participant
+from app.modules.portal import service as portal
 from app.modules.projects.models import Project
 
 router = APIRouter(
@@ -66,6 +63,8 @@ class ParticipantOut(BaseModel):
     display_label: str | None
     phone: str | None
     has_phone: bool
+    # True when `phone` holds only the last two digits ("••••••12"), not the number.
+    phone_masked: bool
     email: str | None  # only for people who may see contact details
     has_email: bool
     # The participant's own answer on the consent form in this project, its staff review, and
@@ -91,7 +90,7 @@ def present(
     overview: dict[uuid.UUID, tuple[str, str | None, bool]] | None = None,
 ) -> ParticipantOut:
     v = service.visibility(db, principal, project, p.id, assigned_ids)
-    if p.phone_e164_enc is None:
+    if p.phone_e164_enc is None or not (v.profile or v.contact):
         phone = None
     elif v.contact:
         phone = cipher.decrypt(p.phone_e164_enc)
@@ -104,8 +103,9 @@ def present(
         dialect=p.dialect,
         district=p.district,
         display_label=p.display_label if v.profile else None,
-        phone=phone if v.profile or v.contact else None,
+        phone=phone,
         has_phone=p.phone_e164_enc is not None,
+        phone_masked=phone is not None and not v.contact,
         email=cipher.decrypt(p.email_enc) if p.email_enc and v.contact else None,
         has_email=p.email_enc is not None,
         notes=p.notes if v.notes else None,
@@ -120,11 +120,8 @@ def present(
     )
 
 
-class ParticipantPage(BaseModel):
-    items: list[ParticipantOut]
-    total: int
-    page: int
-    page_size: int
+class ParticipantPage(Page[ParticipantOut]):
+    pass
 
 
 @router.get("", response_model=ParticipantPage)
@@ -134,8 +131,8 @@ def list_participants(
     db: DbSession,
     cipher: Cipher,
     search: Annotated[str | None, Query(max_length=200)] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: PageNumber = 1,
+    page_size: PageSize = 25,
 ) -> ParticipantPage:
     project, items, total = service.list_participants(
         db, principal, project_id, search=search, page=page, page_size=page_size
@@ -307,7 +304,7 @@ def delete_participant(
 class ConsentOut(BaseModel):
     id: uuid.UUID
     task_id: uuid.UUID | None
-    status: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+    status: ConsentStatus
     method: str
     policy_version: str
     captured_by: uuid.UUID | None  # empty: the participant answered the form themselves
@@ -394,24 +391,31 @@ def bulk_action(
     project_id: uuid.UUID,
     body: BulkBody,
     request: Request,
+    background: BackgroundTasks,
     principal: CurrentPrincipal,
     db: DbSession,
-    settings: AppSettings,
-    cipher: Cipher,
 ) -> BulkOut:
+    ip = client_ip(request)
     results = manage.bulk(
         db,
-        settings,
-        cipher,
-        request.app.state.email_sender,
         principal,
         project_id,
         body.action,
         body.participant_ids,
         body.target_project_id,
         body.reason,
-        client_ip(request),
+        ip,
     )
+    to_email = [r for r in results if r.ok] if body.action == "send_consent" else []
+    if to_email and not dispatch(
+        request.app,
+        portal.SEND_LINKS_TASK,
+        [str(project_id), [str(r.participant_id) for r in to_email], str(principal.user_id), ip],
+        portal.send_links_job,
+        background,
+    ):
+        for r in to_email:
+            r.ok, r.message = False, "The emails could not be queued; try again in a moment"
     return BulkOut(
         results=[BulkRow.model_validate(r, from_attributes=True) for r in results],
         done=sum(1 for r in results if r.ok),
@@ -443,7 +447,7 @@ def review_consent(
 
 
 class AnswerOut(BaseModel):
-    status: Literal["GIVEN", "REFUSED", "WITHDRAWN"]
+    status: ConsentStatus
     answered_at: datetime
     policy_version: str
     review_status: str | None

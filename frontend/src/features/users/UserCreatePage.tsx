@@ -3,32 +3,23 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
 import { createUser, type User } from "../../api/admin";
-import type { ApiError } from "../../api/client";
+import { BackLink } from "../../components/BackLink";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
-import { toApiError } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
 import { RoleCheckboxes } from "./RoleCheckboxes";
 
 export function UserCreatePage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
   const [created, setCreated] = useState<{ user: User; invite_sent: boolean } | null>(null);
 
-  async function submit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      setCreated(await createUser({ email, display_name: name, roles }));
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    void run(async () => setCreated(await createUser({ email, display_name: name, roles })));
   }
 
   if (created) {
@@ -49,6 +40,7 @@ export function UserCreatePage() {
 
   return (
     <section aria-labelledby="new-user-title" className="stack">
+      <BackLink to="/admin/users">All users</BackLink>
       <h1 id="new-user-title">Add user</h1>
       <form onSubmit={submit} noValidate className="card">
         <TextField
@@ -61,7 +53,7 @@ export function UserCreatePage() {
         <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
         <RoleCheckboxes value={roles} onChange={setRoles} />
         <ErrorNotice error={error} />
-        <Button type="submit" busy={busy} disabled={!email || !name || roles.length === 0}>
+        <Button type="submit" busy={busy !== null} disabled={!email || !name || roles.length === 0}>
           Add and send invitation
         </Button>
       </form>

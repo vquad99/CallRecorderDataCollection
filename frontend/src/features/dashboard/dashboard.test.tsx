@@ -78,6 +78,21 @@ describe("dashboard filters", () => {
     ).toBe(false);
   });
 
+  it("opens the task list filtered to a queue that needs attention", async () => {
+    open();
+    const router = renderAt("/dashboard");
+    const qc = await screen.findByRole("link", { name: /Waiting for audio QC/ }, wait);
+    expect(qc).toHaveAttribute("href", "/tasks?status=AUDIO_QC");
+    expect(screen.getByRole("link", { name: /Tasks on hold/ })).toHaveAttribute(
+      "href",
+      "/tasks?status=ON_HOLD",
+    );
+    // Recording problems are not task statuses: no link that would show the wrong list.
+    expect(screen.queryByRole("link", { name: /Processing failed/ })).toBeNull();
+    await userEvent.click(qc);
+    expect(router.state.location.search).toBe("?status=AUDIO_QC");
+  });
+
   it("shows managers the phone calls, and offers no person filter to others", async () => {
     open();
     renderAt("/dashboard");

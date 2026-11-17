@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import Select, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
+from app.db.paging import paginate
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.projects.models import (
     Project,
@@ -51,15 +52,8 @@ DEFAULT_AUDIO = {
 DEFAULT_MAX_SILENCE_PCT = Decimal("25")
 
 
-def not_found() -> AppError:
-    return AppError("Project not found", code="NOT_FOUND", status_code=404)
-
-
-def visible_projects_query(principal: Principal):  # type: ignore[no-untyped-def]
-    query = select(Project)
-    if not principal.is_super_admin:
-        query = query.where(Project.id.in_(principal.project_ids or [uuid.UUID(int=0)]))
-    return query
+def visible_projects_query(principal: Principal) -> Select[Project]:
+    return select(Project).where(in_projects(principal, Project.id))
 
 
 def get_visible(db: Session, principal: Principal, project_id: uuid.UUID) -> Project:
@@ -68,7 +62,7 @@ def get_visible(db: Session, principal: Principal, project_id: uuid.UUID) -> Pro
         raise forbidden()
     project = db.get(Project, project_id)
     if project is None or not (principal.is_super_admin or project.id in principal.project_ids):
-        raise not_found()
+        raise not_found("Project")
     return project
 
 
@@ -103,20 +97,19 @@ def list_projects(
     if not principal.can(Perm.PROJECTS_VIEW):
         raise forbidden()
     query = visible_projects_query(principal)
-    if search:
-        like = f"%{search.strip().lower()}%"
+    if search and search.strip():
+        term = search.strip()
         query = query.where(
-            or_(func.lower(Project.code).like(like), func.lower(Project.name).like(like))
+            or_(
+                Project.code.icontains(term, autoescape=True),
+                Project.name.icontains(term, autoescape=True),
+            )
         )
     if status:
         query = query.where(Project.status == status)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    items = db.scalars(
-        query.order_by(Project.created_at.desc(), Project.code.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).all()
-    return list(items), int(total)
+    return paginate(
+        db, query.order_by(Project.created_at.desc(), Project.code.desc()), page, page_size
+    )
 
 
 @dataclass(frozen=True)
@@ -440,7 +433,7 @@ def add_member(
     project = get_manageable(db, principal, project_id, Perm.PROJECTS_MEMBERS)
     user = db.get(User, user_id)
     if user is None:
-        raise AppError("User not found", code="NOT_FOUND", status_code=404)
+        raise not_found("User")
     if user.status != "ACTIVE":
         raise AppError("Disabled users cannot be added", code="USER_DISABLED", status_code=409)
     exists = db.scalar(
@@ -474,7 +467,7 @@ def remove_member(
         )
     )
     if membership is None:
-        raise AppError("Not a member", code="NOT_FOUND", status_code=404)
+        raise not_found("Member")
     db.delete(membership)
     audit.record(
         db,
@@ -506,10 +499,13 @@ def member_candidates(
         ),
     )
     if principal.is_super_admin:
-        if search:
-            like = f"%{search.strip().lower()}%"
+        if search and search.strip():
+            term = search.strip()
             query = query.where(
-                or_(User.email.like(like), func.lower(User.display_name).like(like))
+                or_(
+                    User.email.icontains(term, autoescape=True),
+                    User.display_name.icontains(term, autoescape=True),
+                )
             )
     else:
         wanted = (search or "").strip().lower()

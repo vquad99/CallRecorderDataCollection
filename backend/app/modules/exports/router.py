@@ -10,8 +10,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.api.deps import AppSettings, Storage
 from app.core.permissions import Perm
 from app.core.storage import require_storage
+from app.db.paging import Page, PageNumber
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.exports import bundle, jobs, service
 from app.modules.exports.models import ExportJob
@@ -76,11 +78,8 @@ class ExportJobOut(BaseModel):
     last_downloaded_at: datetime | None
 
 
-class ExportJobPage(BaseModel):
-    items: list[ExportJobOut]
-    total: int
-    page: int
-    page_size: int
+class ExportJobPage(Page[ExportJobOut]):
+    pass
 
 
 class ExportLink(BaseModel):
@@ -116,9 +115,9 @@ def _out(job: ExportJob, requested_by: str | None) -> ExportJobOut:
 @router.get("/export/summary", response_model=ExportSummary)
 def summary(
     project_id: uuid.UUID,
-    request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
+    settings: AppSettings,
     content: Content = "both",
     scope: Scope = "approved",
     mode: Mode | None = None,
@@ -139,7 +138,7 @@ def summary(
         originals=originals,
     )
     bundle.check(db, principal, project, sel)
-    entries = bundle.select_entries(db, project, sel, request.app.state.settings.report_timezone)
+    entries = bundle.select_entries(db, project, sel, settings.report_timezone)
     return ExportSummary(
         recordings=len(entries),
         face_to_face=sum(1 for e in entries if e.mode == "FACE_TO_FACE"),
@@ -179,13 +178,14 @@ def request_export(
     background: BackgroundTasks,
     principal: CurrentPrincipal,
     db: DbSession,
+    settings: AppSettings,
 ) -> ExportJobOut:
     """Ask for a bundle of recordings. It is made in the background: the answer is the job, to
     be looked at again until it is READY."""
     require_storage(request)
     job = jobs.create(
         db,
-        request.app.state.settings,
+        settings,
         principal,
         project_id,
         body.selection(),
@@ -200,8 +200,8 @@ def list_exports(
     project_id: uuid.UUID,
     principal: CurrentPrincipal,
     db: DbSession,
-    page: int = Query(default=1, ge=1, le=10_000),
-    page_size: int = Query(default=20, ge=1, le=50),
+    page: PageNumber = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ExportJobPage:
     listed, total = jobs.list_jobs(db, principal, project_id, page, page_size)
     return ExportJobPage(
@@ -227,12 +227,14 @@ def export_download_link(
     request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
+    settings: AppSettings,
+    storage: Storage,
 ) -> ExportLink:
     """A link to the bundle that works for a few minutes; every link is audited."""
     url, seconds, job = jobs.download_link(
         db,
-        request.app.state.settings,
-        require_storage(request),
+        settings,
+        storage,
         principal,
         project_id,
         job_id,

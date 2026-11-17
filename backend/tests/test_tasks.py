@@ -149,7 +149,6 @@ def test_platform_only_steps_cannot_be_set_through_the_api(world: dict[str, Any]
         ("IN_PROGRESS", "RECORDED"),
         ("AUDIO_QC", "ADMIN_REVIEW"),
         ("AUDIO_QC", "APPROVED"),
-        ("AUDIO_QC", "RETURNED"),
     ]:
         set_status(db, tid, status)
         response = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": target})
@@ -390,7 +389,7 @@ def test_the_moderator_listens_first_then_qc_then_the_admin(world: dict[str, Any
         f"/api/v1/tasks/{tid}/transition",
         json={"to": "RETURNED", "reason_code": "RE_RECORD", "comment": ""},
     )
-    assert back.json()["error"]["code"] == "INVALID_TRANSITION", "no return any more (D-118)"
+    assert back.json()["error"]["code"] == "VALIDATION_ERROR", "no such status any more (D-118)"
     done = world["pa"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
     assert done.json()["status"] == "APPROVED"
 

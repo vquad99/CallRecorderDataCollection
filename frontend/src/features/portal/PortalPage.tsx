@@ -6,30 +6,39 @@ import { useLocation } from "react-router";
 
 import { ApiError } from "../../api/client";
 import { answerConsent, getPortal, type PortalView } from "../../api/portal";
+import { useConfirm } from "../../components/ConfirmDialog";
 import { Button } from "../../components/form/Button";
 import { BrandMark, Icon, IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
-import { StatusBadge } from "../../components/StatusBadge";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { StatusBadge, type Tone } from "../../components/StatusBadge";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { day } from "../../lib/format";
+import { CONSENT_ANSWER, labelFor, MODE_LABELS } from "../../lib/labels";
+import { languageLabel } from "../projects/choices";
 import "./portal.css";
+import { DataTable } from "../../components/DataTable";
 
-const day = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 const minutes = (m: number) =>
   m >= 60 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m * 10) / 10} min`;
-const TONE: Record<string, string> = {
-  Accepted: "APPROVED",
-  "Recorded, being checked": "AUDIO_QC",
-  Planned: "ASSIGNED",
-  "To be recorded again": "RETURNED",
-  "Not used": "CANCELLED",
+/** The session states the participant's page shows, as the server words them. */
+const TONE: Record<string, Tone> = {
+  Accepted: "success",
+  "Recorded, being checked": "warning",
+  Planned: "info",
+  "Not used": "neutral",
 };
-const ANSWER: Record<string, { label: string; tone: string }> = {
-  GIVEN: { label: "You agreed", tone: "APPROVED" },
-  REFUSED: { label: "You did not agree", tone: "REJECTED" },
-  WITHDRAWN: { label: "You withdrew your consent", tone: "RETURNED" },
+/** The participant's own answer, in their words; the colours are the shared consent ones. */
+const ANSWER: Record<string, string> = {
+  GIVEN: "You agreed",
+  REFUSED: "You did not agree",
+  WITHDRAWN: "You withdrew your consent",
 };
+const yourAnswer = (status: string) => ({
+  label: ANSWER[status] ?? labelFor({}, status),
+  tone: CONSENT_ANSWER[status]?.tone ?? "neutral",
+});
 
 function Consent({
   view,
@@ -41,26 +50,32 @@ function Consent({
   onChange: (v: PortalView) => void;
 }) {
   const [read, setRead] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const { busy, error, run } = useAction();
+  const confirm = useConfirm();
   const sentBack = view.consent_status === "GIVEN" && view.consent_review === "REJECTED";
-  const answer = sentBack
-    ? { label: "Please answer again", tone: "RETURNED" }
+  const answer: { label: string; tone: Tone } | undefined = sentBack
+    ? { label: "Please answer again", tone: "warning" }
     : view.consent_status === "GIVEN" && view.consent_review === "APPROVED"
-      ? { label: "You agreed · confirmed by the team", tone: "APPROVED" }
+      ? { label: "You agreed · confirmed by the team", tone: "success" }
       : view.consent_status
-        ? ANSWER[view.consent_status]
+        ? yourAnswer(view.consent_status)
         : undefined;
 
-  function send(decision: "GIVEN" | "REFUSED" | "WITHDRAWN") {
-    if (!token) return;
-    setBusy(true);
-    setError(null);
-    answerConsent(token, decision)
-      .then(onChange)
-      .catch((err: unknown) => setError(toApiError(err)))
-      .finally(() => setBusy(false));
-  }
+  const send = (decision: "GIVEN" | "REFUSED" | "WITHDRAWN") =>
+    void run(async () => {
+      if (token) onChange(await answerConsent(token, decision));
+    }, decision);
+  const withdraw = () =>
+    confirm.ask({
+      title: "Withdraw your consent?",
+      message:
+        "The project team is told, and your recordings are no longer used. You can agree again later.",
+      confirmLabel: "Withdraw my consent",
+      danger: true,
+      action: async () => {
+        if (token) onChange(await answerConsent(token, "WITHDRAWN"));
+      },
+    });
 
   return (
     <section className="card stack" aria-labelledby="consent-title">
@@ -70,9 +85,9 @@ function Consent({
           Consent form
         </h2>
         {answer ? (
-          <StatusBadge status={answer.tone} label={answer.label} />
+          <StatusBadge tone={answer.tone} label={answer.label} />
         ) : (
-          <StatusBadge status="ON_HOLD" label="Waiting for your answer" />
+          <StatusBadge tone="warning" label="Waiting for your answer" />
         )}
       </div>
       {view.consent_text.trim() ? (
@@ -90,7 +105,7 @@ function Consent({
           ) : null}
           {!token ? null : view.consent_status === "GIVEN" && !sentBack ? (
             <div className="actions">
-              <Button variant="secondary" busy={busy} onClick={() => send("WITHDRAWN")}>
+              <Button variant="secondary" onClick={withdraw}>
                 Withdraw my consent
               </Button>
             </div>
@@ -101,14 +116,18 @@ function Consent({
                 I have read and understood this form
               </label>
               <div className="actions">
-                <Button busy={busy} disabled={!read} onClick={() => send("GIVEN")}>
+                <Button
+                  busy={busy === "GIVEN"}
+                  disabled={!read || busy !== null}
+                  onClick={() => send("GIVEN")}
+                >
                   <Icon name="check" size={16} weight="bold" />I agree
                 </Button>
                 {view.consent_status !== "REFUSED" ? (
                   <Button
                     variant="secondary"
-                    busy={busy}
-                    disabled={!read}
+                    busy={busy === "REFUSED"}
+                    disabled={!read || busy !== null}
                     onClick={() => send("REFUSED")}
                   >
                     I do not agree
@@ -122,6 +141,7 @@ function Consent({
         <p className="muted">The project team has not published the consent form yet.</p>
       )}
       <ErrorNotice error={error} />
+      {confirm.dialog}
     </section>
   );
 }
@@ -139,7 +159,7 @@ export function ParticipantView({
   const details: [string, string][] = [
     ["Participant code", view.participant_code],
     ["Name", view.display_name],
-    ["Language", view.language_code],
+    ["Language", languageLabel(view.language_code)],
     ...(view.dialect ? ([["Dialect", view.dialect]] as [string, string][]) : []),
     ["Phone", view.phone_hint ? `ending in ${view.phone_hint}` : "Not given"],
   ];
@@ -191,37 +211,35 @@ export function ParticipantView({
         {view.sessions.length === 0 ? (
           <EmptyState title="No sessions yet" message="Your recording sessions will appear here." />
         ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Session</th>
-                  <th scope="col">Date</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Length</th>
-                  <th scope="col">State</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col">Session</th>
+                <th scope="col">Date</th>
+                <th scope="col">Type</th>
+                <th scope="col">Length</th>
+                <th scope="col">State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.sessions.map((s) => (
+                <tr key={s.task_code}>
+                  <td className="mono">{s.task_code}</td>
+                  <td>{day(s.day)}</td>
+                  <td>
+                    <span className="cell-icon">
+                      <Icon name={s.mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
+                      {labelFor(MODE_LABELS, s.mode)}
+                    </span>
+                  </td>
+                  <td>{s.minutes === null ? "-" : minutes(s.minutes)}</td>
+                  <td>
+                    <StatusBadge tone={TONE[s.state] ?? "neutral"} label={s.state} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {view.sessions.map((s) => (
-                  <tr key={s.task_code}>
-                    <td className="mono">{s.task_code}</td>
-                    <td>{day(s.day)}</td>
-                    <td>
-                      <span className="cell-icon">
-                        <Icon name={s.mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
-                        {s.mode === "TELEPHONY" ? "Phone call" : "In person"}
-                      </span>
-                    </td>
-                    <td>{s.minutes === null ? "-" : minutes(s.minutes)}</td>
-                    <td>
-                      <StatusBadge status={TONE[s.state] ?? "DRAFT"} label={s.state} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </DataTable>
         )}
       </section>
     </>

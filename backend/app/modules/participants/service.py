@@ -10,23 +10,24 @@ Others see a masked phone ("......12") or nothing.
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import hmac
-import io
-import re
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, func, or_, select, text, update
+from sqlalchemy import Select, exists, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
-from app.core.permissions import Perm
+from app.core.contact import clean_email, normalize_phone
+from app.core.csvio import write_table
+from app.core.errors import AppError, forbidden, not_found
+from app.core.permissions import Perm, Role
+from app.db.paging import paginate
 from app.modules.audit import service as audit
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.security import FieldCipher
 from app.modules.participants.models import (
     ConsentRecord,
@@ -35,25 +36,18 @@ from app.modules.participants.models import (
     ParticipantProjectLink,
 )
 from app.modules.projects.models import Project
-from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.projects.service import get_manageable
 from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.tasks.workflow import TERMINAL
 
-_PHONE = re.compile(r"^\+[1-9][0-9]{7,14}$")
-_PHONE_JUNK = re.compile(r"[\s\-().]")
-
-
-def normalize_phone(raw: str) -> str:
-    phone = _PHONE_JUNK.sub("", raw.strip())
-    if phone.startswith("00"):
-        phone = "+" + phone[2:]
-    if not _PHONE.match(phone):
-        raise AppError(
-            "Phone number must be in international format, e.g. +91 98765 43210",
-            code="INVALID_PHONE",
-            status_code=422,
-        )
-    return phone
+CONTACT_COLUMNS = (
+    "participant_code",
+    "display_label",
+    "phone",
+    "language_code",
+    "dialect",
+    "district",
+)
 
 
 def phone_hash(settings: Settings, phone: str) -> str:
@@ -61,10 +55,6 @@ def phone_hash(settings: Settings, phone: str) -> str:
     return hmac.new(
         settings.secret_key.get_secret_value().encode(), phone.encode(), hashlib.sha256
     ).hexdigest()
-
-
-def not_found() -> AppError:
-    return AppError("Participant not found", code="NOT_FOUND", status_code=404)
 
 
 def moderator_assigned(
@@ -76,7 +66,7 @@ def moderator_assigned(
                 exists().where(
                     TaskAssignment.task_id == Task.id,
                     TaskAssignment.user_id == user_id,
-                    TaskAssignment.role_code == "MODERATOR",
+                    TaskAssignment.role_code == Role.MODERATOR.value,
                     TaskAssignment.active.is_(True),
                     Task.project_id == project_id,
                     Task.status.not_in(TERMINAL),
@@ -97,7 +87,7 @@ def assigned_participants(db: Session, user_id: uuid.UUID, project_id: uuid.UUID
         .join(TaskAssignment, TaskAssignment.task_id == Task.id)
         .where(
             TaskAssignment.user_id == user_id,
-            TaskAssignment.role_code == "MODERATOR",
+            TaskAssignment.role_code == Role.MODERATOR.value,
             TaskAssignment.active.is_(True),
             Task.project_id == project_id,
             Task.status.not_in(TERMINAL),
@@ -138,11 +128,6 @@ def visibility(
     )
 
 
-def _require(principal: Principal, perm: Perm, project: Project) -> None:
-    if not principal.can_in_project(perm, project.id):
-        raise forbidden()
-
-
 def _require_every_project(db: Session, principal: Principal, participant: Participant) -> None:
     """A participant can belong to several projects, and an edit or a removal changes them in all
     of them: allowed only to someone who manages every one (D-088). Before, an admin of one
@@ -173,13 +158,20 @@ def _linked(db: Session, project_id: uuid.UUID, participant_id: uuid.UUID) -> bo
 
 
 def get_in_project(
-    db: Session, principal: Principal, project_id: uuid.UUID, participant_id: uuid.UUID
+    db: Session,
+    principal: Principal,
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    perm: Perm = Perm.PARTICIPANTS_VIEW,
 ) -> tuple[Project, Participant]:
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_VIEW, project)
+    """The participant in a project the caller sees: 404 for anyone not in it, then 403 when the
+    caller lacks `perm` in the project."""
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_VIEW)
     participant = db.get(Participant, participant_id)
     if participant is None or not _linked(db, project.id, participant.id):
-        raise not_found()
+        raise not_found("Participant")
+    if not principal.can_in_project(perm, project.id):
+        raise forbidden()
     return project, participant
 
 
@@ -192,30 +184,29 @@ def list_participants(
     page: int,
     page_size: int,
 ) -> tuple[Project, list[Participant], int]:
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_VIEW, project)
-    query = (
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_VIEW)
+    query = _in_project(project)
+    if search and search.strip():
+        term = search.strip()
+        by_code = Participant.participant_code.icontains(term, autoescape=True)
+        # Only people who may see names can search by name.
+        if principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
+            query = query.where(
+                or_(by_code, Participant.display_label.icontains(term, autoescape=True))
+            )
+        else:
+            query = query.where(by_code)
+    items, total = paginate(db, query.order_by(Participant.participant_code), page, page_size)
+    return project, items, total
+
+
+def _in_project(project: Project) -> Select[Participant]:
+    """The project's participants who are not deleted."""
+    return (
         select(Participant)
         .join(ParticipantProjectLink, ParticipantProjectLink.participant_id == Participant.id)
         .where(ParticipantProjectLink.project_id == project.id, Participant.deleted_at.is_(None))
     )
-    if search:
-        like = f"%{search.strip().lower()}%"
-        # Only people who may see names can search by name.
-        if principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-            query = query.where(
-                or_(
-                    func.lower(Participant.participant_code).like(like),
-                    func.lower(Participant.display_label).like(like),
-                )
-            )
-        else:
-            query = query.where(func.lower(Participant.participant_code).like(like))
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    items = db.scalars(
-        query.order_by(Participant.participant_code).offset((page - 1) * page_size).limit(page_size)
-    ).all()
-    return project, list(items), int(total)
 
 
 @dataclass(frozen=True)
@@ -229,7 +220,7 @@ class ParticipantInput:
     district: str = ""
 
 
-def _check_language(project: Project, language_code: str, dialect: str) -> None:
+def check_language(project: Project, language_code: str, dialect: str) -> None:
     if project.languages and (language_code, dialect) not in {
         (x.language_code, x.dialect) for x in project.languages
     }:
@@ -256,7 +247,7 @@ def _duplicate(
         db.scalar(
             select(ParticipantProjectLink.id).where(
                 ParticipantProjectLink.participant_id == existing.id,
-                ParticipantProjectLink.project_id.in_(principal.project_ids or [uuid.UUID(int=0)]),
+                in_projects(principal, ParticipantProjectLink.project_id),
             )
         )
     )
@@ -280,17 +271,6 @@ def _duplicate(
     )
 
 
-def clean_email(raw: str) -> str:
-    from email_validator import EmailNotValidError, validate_email
-
-    try:
-        return validate_email(raw.strip(), check_deliverability=False).normalized
-    except EmailNotValidError:
-        raise AppError(
-            "Enter a valid email address", code="INVALID_EMAIL", status_code=422
-        ) from None
-
-
 def _apply_phone(
     p: Participant, settings: Settings, cipher: FieldCipher, phone: str | None
 ) -> None:
@@ -311,9 +291,8 @@ def create_participant(
     data: ParticipantInput,
     ip: str | None,
 ) -> Participant:
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
-    _check_language(project, data.language_code, data.dialect)
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
+    check_language(project, data.language_code, data.dialect)
     phone = normalize_phone(data.phone) if data.phone else None
     if phone:
         _duplicate(db, principal, phone_hash(settings, phone))
@@ -356,26 +335,27 @@ def create_participant(
 def link_existing(
     db: Session, principal: Principal, project_id: uuid.UUID, participant_code: str, ip: str | None
 ) -> Participant:
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     participant = db.scalar(
         select(Participant).where(
             Participant.participant_code == participant_code.strip().upper(),
             Participant.deleted_at.is_(None),
         )
     )
-    if participant is None:
-        raise not_found()
-    if not principal.is_super_admin and not db.scalar(
-        select(ParticipantProjectLink.id).where(
-            ParticipantProjectLink.participant_id == participant.id,
-            ParticipantProjectLink.project_id.in_(principal.project_ids or [uuid.UUID(int=0)]),
+    # Only someone already in one of the caller's projects can be added (no code guessing).
+    if participant is None or not (
+        principal.is_super_admin
+        or db.scalar(
+            select(ParticipantProjectLink.id).where(
+                ParticipantProjectLink.participant_id == participant.id,
+                in_projects(principal, ParticipantProjectLink.project_id),
+            )
         )
     ):
-        raise not_found()
+        raise not_found("Participant")
     if _linked(db, project.id, participant.id):
         raise AppError("Already in this project", code="ALREADY_LINKED", status_code=409)
-    _check_language(project, participant.language_code, participant.dialect)
+    check_language(project, participant.language_code, participant.dialect)
     db.add(ParticipantProjectLink(participant_id=participant.id, project_id=project.id))
     audit.record(
         db,
@@ -396,8 +376,7 @@ def link_candidates(
     """People who can be added to this project as they are (D-090): not deleted, not already in
     it, in a project where the caller manages participants (a Super Admin: any project), and
     speaking one of this project's languages when it has a list. Search by code or name."""
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     already = select(ParticipantProjectLink.participant_id).where(
         ParticipantProjectLink.project_id == project.id
     )
@@ -407,22 +386,22 @@ def link_candidates(
     if not principal.is_super_admin:
         managed = [
             pid
-            for pid in (principal.project_ids or [])
+            for pid in principal.project_ids
             if principal.can_in_project(Perm.PARTICIPANTS_MANAGE, pid)
         ]
         visible = select(ParticipantProjectLink.participant_id).where(
-            ParticipantProjectLink.project_id.in_(managed or [uuid.UUID(int=0)])
+            ParticipantProjectLink.project_id.in_(managed)
         )
         query = query.where(Participant.id.in_(visible))
     codes = sorted({lang.language_code for lang in project.languages})
     if codes:
         query = query.where(Participant.language_code.in_(codes))
     if search and search.strip():
-        like = f"%{search.strip().lower()}%"
+        term = search.strip()
         query = query.where(
             or_(
-                func.lower(Participant.participant_code).like(like),
-                func.lower(Participant.display_label).like(like),
+                Participant.participant_code.icontains(term, autoescape=True),
+                Participant.display_label.icontains(term, autoescape=True),
             )
         )
     return list(db.scalars(query.order_by(Participant.participant_code).limit(limit)).all())
@@ -438,12 +417,13 @@ def correct_participant(
     data: ParticipantInput,
     ip: str | None,
 ) -> Participant:
-    project, participant = get_in_project(db, principal, project_id, participant_id)
-    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
+    project, participant = get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
     if participant.deleted_at is not None:
         raise AppError("This participant was deleted", code="PARTICIPANT_DELETED", status_code=409)
     _require_every_project(db, principal, participant)
-    _check_language(project, data.language_code, data.dialect)
+    check_language(project, data.language_code, data.dialect)
     phone = normalize_phone(data.phone) if data.phone else None
     new_hash = phone_hash(settings, phone) if phone else None
     if new_hash and new_hash != participant.phone_hash:
@@ -511,8 +491,9 @@ def delete_participant(
     ip: str | None,
 ) -> Participant:
     """Removes personal data now (PART-009); the row stays so tasks and audit keep their links."""
-    project, participant = get_in_project(db, principal, project_id, participant_id)
-    _require(principal, Perm.PARTICIPANTS_MANAGE, project)
+    project, participant = get_in_project(
+        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
+    )
     if participant.deleted_at is not None:
         raise AppError(
             "This participant was already deleted", code="PARTICIPANT_DELETED", status_code=409
@@ -557,35 +538,29 @@ def delete_participant(
     return participant
 
 
-def _safe_cell(value: str) -> str:
-    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
-
-
 def export_contacts(
     db: Session, cipher: FieldCipher, principal: Principal, project_id: uuid.UUID, ip: str | None
 ) -> str:
-    project = get_visible_project(db, principal, project_id)
-    _require(principal, Perm.PARTICIPANTS_EXPORT, project)
-    _, items, _ = list_participants(
-        db, principal, project.id, search=None, page=1, page_size=1_000_000
-    )
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(
-        ["participant_code", "display_label", "phone", "language_code", "dialect", "district"]
-    )
-    for p in items:
-        phone = cipher.decrypt(p.phone_e164_enc) if p.phone_e164_enc else ""
-        writer.writerow(
-            [
+    """Every participant of the project with their phone number, as CSV. Rows are read from the
+    database in batches, never all at once."""
+    project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_EXPORT)
+    written = 0
+
+    def rows() -> Iterator[list[object]]:
+        nonlocal written
+        query = _in_project(project).order_by(Participant.participant_code)
+        for p in db.scalars(query.execution_options(yield_per=500)):
+            written += 1
+            yield [
                 p.participant_code,
-                _safe_cell(p.display_label),
-                _safe_cell(phone),
+                p.display_label,
+                cipher.decrypt(p.phone_e164_enc) if p.phone_e164_enc else "",
                 p.language_code,
-                _safe_cell(p.dialect),  # free text: no formula may reach a spreadsheet (D-088)
-                _safe_cell(p.district),
+                p.dialect,
+                p.district,
             ]
-        )
+
+    out = write_table(CONTACT_COLUMNS, rows())
     audit.record(
         db,
         action="participant.contacts_exported",
@@ -594,17 +569,18 @@ def export_contacts(
         project_id=project.id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"rows": len(items)},
+        after={"rows": written},
     )
     db.commit()
-    return out.getvalue()
+    return out
 
 
 def consent_history(
     db: Session, principal: Principal, project_id: uuid.UUID, participant_id: uuid.UUID
 ) -> list[ConsentRecord]:
-    project, participant = get_in_project(db, principal, project_id, participant_id)
-    _require(principal, Perm.CONSENT_VIEW, project)
+    project, participant = get_in_project(
+        db, principal, project_id, participant_id, Perm.CONSENT_VIEW
+    )
     if not visibility(db, principal, project, participant.id).profile:
         # Matrix: consent.view is "A" for a Moderator - only people on their own open tasks (D-049).
         raise forbidden()

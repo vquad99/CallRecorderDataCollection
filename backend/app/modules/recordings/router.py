@@ -11,10 +11,10 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.api.deps import AppSettings, Storage
 from app.core.permissions import Perm
 from app.core.storage import require_storage
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.auth.router import AppSettings
 from app.modules.recordings import consent_form, service
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import dispatch_processing
@@ -86,10 +86,14 @@ def out(rec: Recording, assets: list[AudioAsset] | None = None) -> RecordingOut:
 
 
 class StartBody(BaseModel):
-    native_sample_rate: int = Field(ge=8000, le=192000)
+    # What a browser captures at most; the project's own rate (16 kHz) is checked by the service
+    # (D-123). Kept low so no recording can grow beyond what the platform delivers.
+    native_sample_rate: int = Field(ge=8000, le=48000)
     # Channels the capture delivers (every one is kept in the original); the server derives
-    # channel_handling from it, so the record cannot disagree with the file (D-048).
-    channel_count: int = Field(ge=1, le=8)
+    # channel_handling from it, so the record cannot disagree with the file (D-048). One or two:
+    # a phone or laptop microphone, or a stereo headset.
+    channel_count: int = Field(ge=1, le=2)
+    # What the browser reports for the microphone, which may have more channels than captured.
     device_channel_count: int | None = Field(default=None, ge=1, le=32)
     echo_cancellation: bool | None
     noise_suppression: bool | None
@@ -158,9 +162,9 @@ async def put_chunk(
     principal: CurrentPrincipal,
     db: DbSession,
     settings: AppSettings,
+    storage: Storage,
     x_content_sha256: Annotated[str, Header(min_length=64, max_length=64)],
 ) -> ChunkOut:
-    storage = require_storage(request)
     data = await request.body()
     chunk = await run_in_threadpool(
         service.put_chunk,

@@ -44,7 +44,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /auth/csrf | public; sets the CSRF cookie |
 | POST | /auth/login | public, throttled |
 | POST | /auth/logout | authenticated |
-| GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106) |
+| GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106) and `session_idle_minutes` (D-122, D-125) |
 | POST | /auth/password/forgot | public, throttled; same response whether or not the email exists |
 | POST | /auth/password/reset | public, single-use token |
 | GET | /auth/sessions | authenticated (own) |
@@ -107,13 +107,13 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment) |
 | POST | /tasks/{id}/comments | `tasks.view` |
-| GET | /tasks/{id}/timeline | `tasks.view` (status history, assignments, comments) |
+| GET | /tasks/{id}/timeline | `tasks.view` (status history, assignments, comments). Status entries also carry `from_status`, `to_status`, `reason_code`, `comment` (null on other entries, D-125) |
 
 ## Storage and face-to-face recording (STOR-*, FTF-*)
 
 | Method | Path | Permission |
 |---|---|---|
-| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS + both participants have consent (409 `CONSENT_MISSING` with `details[0].missing`, D-119) (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility |
+| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS + `native_sample_rate` equal to the project's face-to-face rate (422 `SAMPLE_RATE_NOT_ALLOWED`, D-123; at most 48000 Hz and 2 captured channels; a recording larger than `MAX_RECORDING_BYTES`, default 3 GB, gets 422 `TOO_LARGE`, D-124) + both participants have consent (409 `CONSENT_MISSING` with `details[0].missing`, D-119) (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility |
 | PUT | /recordings/{id}/chunks/{seq} | raw float32 body of whole frames (a multiple of 4 × channel_count bytes, else 422 INVALID_CHUNK), only real numbers (NaN or infinity: 422 INVALID_AUDIO), `X-Content-SHA256` header checked; same chunk again is accepted, a different one is 409 |
 | POST | /recordings/{id}/interrupted | the recording's moderator; body `{reason}` |
 | POST | /recordings/{id}/complete | the recording's moderator; body `{chunk_count}`; 409 MISSING_CHUNKS lists gaps; starts processing |
@@ -252,3 +252,8 @@ history, `captured_by` is `null` for the participant's own answers.
 | GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |
 | GET | /projects/{id}/participants/{id}/details | `participants.manage` in the project (403 otherwise; D-104). Everything about the participant there: `participant` (as in the list), `updated_at`, `added_by`, `projects` (only those the caller may see), `removed` `{at, by, reason}`, `link` `{active, created_at, created_by, expires_at, last_used_at, handed_out}`, `consent_form` (as above), `minutes` (for people who may export), `calls` `{total, recorded, last_at, last_state}`, `sessions` (newest 200: `task_id, task_code, mode, slot, status, other_participant_code, moderator, consent_status, consent_method, consent_at, recordings, recording_seconds, recorded_at, phone_calls, created_at`) and `sessions_total`. |
 | GET | /system/status | `settings.manage` (Super Admin only, D-075). `{status, checks, version}` for the System status page. Also `alerts` `{email_configured, recipients, active: [{code, summary, count, since}]}`: what the platform found wrong with itself at its last look (D-109). |
+
+## Request guard (D-124)
+
+A POST, PUT, PATCH or DELETE under `/api/v1/` without the session cookie gets 401, and one without the CSRF cookie or `X-CSRF-Token` header gets 403 `CSRF_FAILED`, **before its body is read**. Only `/auth/login`, `/auth/password/forgot`, `/auth/password/reset` (also invitation accept) and `/portal/consent` work without a session. Large bodies are read at most 16 at a time per process; a request that waits more than 15 s gets 503 `BUSY`. nginx limits `/api/` to 30 requests/s per address (burst 120) and chunk uploads to 5/s (burst 30, slowed rather than refused), with a JSON 429 when exceeded. Every list's `page` is at most 10 000. `TaskDetail` carries `can_reassign`; participants carry `phone_masked` (D-125). The task status `RETURNED` no longer exists (D-118, migration 0026): sending it gives 422.
+

@@ -2,12 +2,12 @@
 import { useState, type FormEvent } from "react";
 
 import { getSettings, updateSettings, type Setting } from "../../api/admin";
-import type { ApiError } from "../../api/client";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
 import { IconTile } from "../../components/Icon";
 
 const LABELS: Record<string, string> = {
@@ -16,43 +16,31 @@ const LABELS: Record<string, string> = {
   "capacity.participants_per_conversation": "Participants per conversation",
   "capacity.total_hours_per_day": "Total recording hours per day",
   "capacity.face_to_face_hours_per_day": "Face-to-face hours per day",
-  "capacity.telephony_hours_per_day": "Telephony hours per day",
+  "capacity.telephony_hours_per_day": "Phone call hours per day",
 };
 
 function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting[]) => void }) {
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(settings.map((s) => [s.key, String(s.value ?? "")])),
   );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
+  const { busy, error, message, run } = useAction();
 
-  async function submit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
+    void run(async () => {
       const changed = Object.fromEntries(
         settings
           .filter((s) => String(s.value ?? "") !== values[s.key])
           .map((s) => [s.key, Number(values[s.key])]),
       );
-      if (Object.keys(changed).length === 0) {
-        setOk("Nothing changed.");
-      } else {
-        onSaved(await updateSettings(changed));
-        setOk("Saved. New values apply immediately.");
-      }
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
+      if (Object.keys(changed).length === 0) return "Nothing changed.";
+      onSaved(await updateSettings(changed));
+      return "Saved. New values apply immediately.";
+    });
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate className="card">
+    <form onSubmit={submit} noValidate className="card">
       {settings.map((s) => (
         <TextField
           key={s.key}
@@ -66,8 +54,8 @@ function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting
         />
       ))}
       <ErrorNotice error={error} />
-      <SuccessNotice message={ok} />
-      <Button type="submit" busy={busy}>
+      <SuccessNotice message={message} />
+      <Button type="submit" busy={busy !== null}>
         Save targets
       </Button>
     </form>

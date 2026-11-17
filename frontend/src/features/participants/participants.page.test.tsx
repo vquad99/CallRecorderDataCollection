@@ -141,23 +141,32 @@ describe("participants section", () => {
     const row = screen.getByText("P000001").closest("tr") as HTMLElement;
     expect(within(row).getByText("Agreed")).toBeInTheDocument();
     expect(within(row).getByText("Waiting for review")).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Resend" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Email consent form" })).toBeInTheDocument();
+    // The language in words, not its code.
+    expect(within(row).getByText("Hindi (hi)")).toBeInTheDocument();
   });
 
   it("approves, and rejects only with a reason the participant will see", async () => {
-    vi.stubGlobal("prompt", () => "Signature of the wrong person");
     const { calls } = open({
       "POST /api/v1/projects/p1/participants/a1/consent-review": () => [200, {}],
     });
     await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve consent" }));
     expect(await screen.findByText("Consent of P000001 approved.")).toBeInTheDocument();
     await userEvent.click(
       within(screen.getByText("P000001").closest("tr") as HTMLElement).getByRole("button", {
-        name: "Reject",
+        name: "Reject consent",
       }),
     );
+    const box = within(screen.getByRole("dialog"));
+    expect(box.getByRole("button", { name: "Reject consent" })).toBeDisabled();
+    await userEvent.type(
+      box.getByLabelText(/participant sees this/),
+      "Signature of the wrong person",
+    );
+    await userEvent.click(box.getByRole("button", { name: "Reject consent" }));
+    expect(await screen.findByText("Consent of P000001 sent back.")).toBeInTheDocument();
     await waitFor(() =>
       expect(calls.filter((c) => c.path.endsWith("/consent-review")).map((c) => c.body)).toEqual([
         { decision: "APPROVED", note: "" },
@@ -255,7 +264,8 @@ describe("participants section", () => {
     await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "View" }));
-    const panel = await screen.findByRole("region", { name: "Participant details" });
+    // A window next to the row, not a panel far down the page.
+    const panel = await screen.findByRole("dialog", { name: "Participant details" });
     expect(await within(panel).findByRole("heading", { name: "P000001 · Asha" })).toBeVisible();
     for (const title of [
       "Profile",
@@ -290,12 +300,12 @@ describe("participants section", () => {
       "href",
       "/tasks/t7",
     );
-    expect(first).toHaveTextContent("Telephony");
+    expect(first).toHaveTextContent("Phone call");
     expect(first).toHaveTextContent("Participant A");
     expect(first).toHaveTextContent("P000002");
     expect(first).toHaveTextContent("Mohan");
     expect(first).toHaveTextContent("Agreed");
-    expect(first).toHaveTextContent("verbal noted");
+    expect(first).toHaveTextContent("Said yes (noted by the moderator)");
     expect(first).toHaveTextContent("7.0 min");
     const second = within(sessions).getByRole("link", { name: "T000003" }).closest("tr");
     expect(second).toHaveTextContent("Face-to-face");
@@ -307,7 +317,7 @@ describe("participants section", () => {
       "/api/v1/projects/p1/participants/a1/details",
     ]);
     await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("region", { name: "Participant details" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Participant details" })).toBeNull();
   });
 
   it("says so when a participant has no link, no calls and no sessions yet", async () => {
@@ -328,7 +338,7 @@ describe("participants section", () => {
     await openList();
     const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "View" }));
-    const panel = await screen.findByRole("region", { name: "Participant details" });
+    const panel = await screen.findByRole("dialog", { name: "Participant details" });
     expect(
       await within(panel).findByText("No personal link has been made for this participant."),
     ).toBeInTheDocument();

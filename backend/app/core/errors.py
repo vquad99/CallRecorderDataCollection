@@ -50,6 +50,15 @@ class AppError(Exception):
         self.details = details
 
 
+def not_found(what: str) -> AppError:
+    """404 for something that does not exist or that the caller may not know exists."""
+    return AppError(f"{what} not found", code="NOT_FOUND", status_code=404)
+
+
+def forbidden(message: str = "You do not have permission to do this") -> AppError:
+    return AppError(message, code="FORBIDDEN", status_code=403)
+
+
 def error_body(
     code: str, message: str, details: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:

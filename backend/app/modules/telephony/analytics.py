@@ -13,8 +13,6 @@ and is shown only when TxContact answers.
 
 from __future__ import annotations
 
-import csv
-import io
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
@@ -22,17 +20,19 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, Select, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError
-from app.core.permissions import Perm
+from app.core.csvio import write_table
+from app.core.errors import forbidden, not_found
+from app.core.permissions import Perm, Role
+from app.db.paging import paginate
 from app.modules.audio_qc.models import AudioQcResult
-from app.modules.auth.deps import Principal, forbidden
+from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import User
 from app.modules.projects.models import Project
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import TELEPHONY_DELIVERY_KIND, AudioAsset, Recording
 from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.telephony.models import CHECKLIST_ITEMS, Call
 from app.modules.telephony.service import checklist_of, mask
@@ -44,8 +44,7 @@ MAX_CSV_ROWS = 20_000
 # A call is counted as needing a person in these states.
 NEEDS_PERSON = ("NEEDS_MATCH", "FETCH_FAILED")
 CLOSED_BY_MODERATOR = ("WAITING_FOR_RECORDING", "NEEDS_MATCH", "FETCH_FAILED", "RECORDED")
-REACHED_QC = ("AUDIO_QC", "ADMIN_REVIEW", "APPROVED", "REJECTED", "RETURNED")
-DELIVERY_KIND = "TELEPHONY_DERIVED_PCM"
+REACHED_QC = ("AUDIO_QC", "ADMIN_REVIEW", "APPROVED", "REJECTED")
 
 
 def _check(principal: Principal) -> None:
@@ -67,7 +66,7 @@ def _visible_project(principal: Principal, project_id: uuid.UUID | None) -> None
     if project_id is None or principal.is_super_admin:
         return
     if project_id not in principal.project_ids:
-        raise AppError("Project not found", code="NOT_FOUND", status_code=404)
+        raise not_found("Project")
 
 
 def _call_scope(principal: Principal, project_id: uuid.UUID | None) -> list[ColumnElement[bool]]:
@@ -78,10 +77,7 @@ def _call_scope(principal: Principal, project_id: uuid.UUID | None) -> list[Colu
         conditions.append(Call.project_id == project_id)
     if principal.is_super_admin:
         return conditions
-    own = and_(
-        Call.moderator_id == principal.user_id,
-        Call.project_id.in_(list(principal.project_ids) or [uuid.UUID(int=0)]),
-    )
+    own = and_(Call.moderator_id == principal.user_id, in_projects(principal, Call.project_id))
     managed = _managed(principal)
     conditions.append(or_(Call.project_id.in_(managed), own) if managed else own)
     return conditions
@@ -181,7 +177,7 @@ def analytics(
         for cid, ms in db.execute(
             select(Call.id, func.max(AudioAsset.duration_ms))
             .join(AudioAsset, AudioAsset.recording_id == Call.recording_id)
-            .where(*scope, AudioAsset.kind == DELIVERY_KIND)
+            .where(*scope, AudioAsset.kind == TELEPHONY_DELIVERY_KIND)
             .group_by(Call.id)
         ).all()
     }
@@ -390,10 +386,10 @@ def _task_scope(principal: Principal, project_id: uuid.UUID | None) -> list[Colu
     if principal.is_super_admin:
         return conditions
     mine = and_(
-        Task.project_id.in_(list(principal.project_ids) or [uuid.UUID(int=0)]),
+        in_projects(principal, Task.project_id),
         exists().where(
             TaskAssignment.task_id == Task.id,
-            TaskAssignment.role_code == "MODERATOR",
+            TaskAssignment.role_code == Role.MODERATOR.value,
             TaskAssignment.active.is_(True),
             TaskAssignment.user_id == principal.user_id,
         ),
@@ -467,7 +463,10 @@ def _rows(db: Session, calls: list[Call], stale_before: datetime) -> list[CallRo
             rid: int(ms or 0)
             for rid, ms in db.execute(
                 select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms))
-                .where(AudioAsset.recording_id.in_(recording_ids), AudioAsset.kind == DELIVERY_KIND)
+                .where(
+                    AudioAsset.recording_id.in_(recording_ids),
+                    AudioAsset.kind == TELEPHONY_DELIVERY_KIND,
+                )
                 .group_by(AudioAsset.recording_id)
             ).all()
         }
@@ -513,15 +512,10 @@ def list_calls(
     _check(principal)
     stale_before = _stale_before(settings, datetime.now(UTC))
     conditions = [*_call_scope(principal, project_id), *_state_filter(state, stale_before)]
-    total = int(db.scalar(select(func.count()).select_from(Call).where(*conditions)) or 0)
-    query: Select[Any] = (
-        select(Call)
-        .where(*conditions)
-        .order_by(Call.dialled_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+    calls, total = paginate(
+        db, select(Call).where(*conditions).order_by(Call.dialled_at.desc()), page, page_size
     )
-    return _rows(db, list(db.scalars(query)), stale_before), total
+    return _rows(db, calls, stale_before), total
 
 
 CSV_COLUMNS = (
@@ -547,12 +541,6 @@ CSV_COLUMNS = (
     "tries_to_fetch",
     "note",
 )
-
-
-def _cell(value: object) -> str:
-    """A cell a spreadsheet will not run as a formula."""
-    text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 def calls_csv(
@@ -585,10 +573,7 @@ def calls_csv(
     def local(value: datetime | None) -> str:
         return value.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S") if value else ""
 
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(CSV_COLUMNS)
-    for row in _rows(db, calls, _stale_before(settings, now)):
+    def line(row: CallRow) -> list[object]:
         c = row.call
         ticked = checklist_of(c)
         seconds: object = (
@@ -596,32 +581,29 @@ def calls_csv(
             if c.closed_at is not None and c.state in CLOSED_BY_MODERATOR
             else ""
         )
-        writer.writerow(
-            [
-                _cell(v)
-                for v in (
-                    local(c.dialled_at),
-                    local(c.closed_at),
-                    row.project_code,
-                    row.task_code,
-                    row.moderator_name,
-                    c.agent_id,
-                    c.phone_hint,
-                    "LEFT_OPEN" if row.stale else c.state,
-                    c.cancel_reason or "",
-                    c.failure_code if c.failure_code and c.state != "RECORDED" else "",
-                    seconds,
-                    "" if row.recording_seconds is None else row.recording_seconds,
-                    *("yes" if item in ticked else "no" for item in CHECKLIST_ITEMS),
-                    c.provider,
-                    c.provider_reference or "",
-                    mask(c.provider_session_id or ""),
-                    c.fetch_attempts,
-                    c.note,
-                )
-            ]
-        )
-    return out.getvalue(), len(calls)
+        return [
+            local(c.dialled_at),
+            local(c.closed_at),
+            row.project_code,
+            row.task_code,
+            row.moderator_name,
+            c.agent_id,
+            c.phone_hint,
+            "LEFT_OPEN" if row.stale else c.state,
+            c.cancel_reason or "",
+            c.failure_code if c.failure_code and c.state != "RECORDED" else "",
+            seconds,
+            "" if row.recording_seconds is None else row.recording_seconds,
+            *("yes" if item in ticked else "no" for item in CHECKLIST_ITEMS),
+            c.provider,
+            c.provider_reference or "",
+            mask(c.provider_session_id or ""),
+            c.fetch_attempts,
+            c.note,
+        ]
+
+    rows = _rows(db, calls, _stale_before(settings, now))
+    return write_table(CSV_COLUMNS, (line(r) for r in rows)), len(calls)
 
 
 def day_range(days: int, tz_name: str, now: datetime | None = None) -> tuple[date, date]:

@@ -1,46 +1,40 @@
 // The signed-in user's own account: password, devices, two-step sign-in (AUTH-008, AUTH-010).
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 
 import * as authApi from "../../api/auth";
-import type { ApiError } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { TwoStepEnrol } from "../../auth/TwoStepEnrol";
-import { InstallCard } from "../../pwa/InstallCard";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
+import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { toApiError, useResource } from "../../hooks/useResource";
-import { IconTile } from "../../components/Icon";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { when } from "../../lib/format";
+import { describeUserAgent } from "../../lib/userAgent";
+import { InstallCard } from "../../pwa/InstallCard";
 
 function ChangePassword() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [ok, setOk] = useState<string | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await authApi.changePassword(current, next);
-      setOk("Password changed. Other devices have been signed out.");
-      setCurrent("");
-      setNext("");
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const { busy, error, message, run } = useAction();
   return (
     <section className="card" aria-labelledby="pw-title">
       <h2 id="pw-title">Change password</h2>
-      <form onSubmit={submit} noValidate>
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run(async () => {
+            await authApi.changePassword(current, next);
+            setCurrent("");
+            setNext("");
+            return "Password changed. Other devices have been signed out.";
+          });
+        }}
+      >
         <TextField
           label="Current password"
           type="password"
@@ -59,8 +53,8 @@ function ChangePassword() {
           onChange={(e) => setNext(e.target.value)}
         />
         <ErrorNotice error={error} />
-        <SuccessNotice message={ok} />
-        <Button type="submit" busy={busy}>
+        <SuccessNotice message={message} />
+        <Button type="submit" busy={busy !== null}>
           Change password
         </Button>
       </form>
@@ -70,25 +64,14 @@ function ChangePassword() {
 
 function Sessions() {
   const { state, reload } = useResource(authApi.listSessions, []);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function revoke(id: string) {
-    setError(null);
-    try {
-      await authApi.revokeSession(id);
-      reload();
-    } catch (err) {
-      setError(toApiError(err));
-    }
-  }
-
+  const { busy, error, run } = useAction(reload);
   return (
     <section className="card" aria-labelledby="sessions-title">
       <h2 id="sessions-title">Signed-in devices</h2>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
-        <table className="table">
+        <DataTable>
           <thead>
             <tr>
               <th scope="col">Device</th>
@@ -100,14 +83,20 @@ function Sessions() {
             {state.data.map((s) => (
               <tr key={s.id}>
                 <td>
-                  {s.user_agent ?? "Unknown browser"} {s.ip ? `(${s.ip})` : ""}
+                  {describeUserAgent(s.user_agent)}
+                  {s.ip ? <span className="muted"> · {s.ip}</span> : null}
                 </td>
-                <td>{new Date(s.last_seen_at).toLocaleString()}</td>
-                <td>
+                <td>{when(s.last_seen_at)}</td>
+                <td className="actions">
                   {s.current ? (
-                    "This device"
+                    <span className="muted">This device</span>
                   ) : (
-                    <Button variant="secondary" onClick={() => void revoke(s.id)}>
+                    <Button
+                      variant="secondary"
+                      busy={busy === s.id}
+                      disabled={busy !== null}
+                      onClick={() => void run(() => authApi.revokeSession(s.id), s.id)}
+                    >
                       Sign out
                     </Button>
                   )}
@@ -115,7 +104,7 @@ function Sessions() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       ) : null}
       <ErrorNotice error={error} />
     </section>
@@ -126,21 +115,7 @@ function TwoStep() {
   const { user, refresh } = useAuth();
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const { busy, error, run } = useAction();
   const enabled = user?.mfa_enabled ?? false;
   return (
     <section className="card" aria-labelledby="mfa-title">
@@ -175,7 +150,7 @@ function TwoStep() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
-          <Button type="submit" variant="secondary" busy={busy}>
+          <Button type="submit" variant="secondary" busy={busy !== null}>
             Turn off two-step sign-in
           </Button>
         </form>

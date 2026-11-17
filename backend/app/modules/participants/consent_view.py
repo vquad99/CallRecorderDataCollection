@@ -65,7 +65,7 @@ def get(
     # Same access rule as the consent history (raises 403 / 404 itself).
     history = service.consent_history(db, principal, project_id, participant_id)
     project, participant = service.get_in_project(db, principal, project_id, participant_id)
-    own = [r for r in history if r.task_id is None and r.captured_by is None]  # newest first
+    own = [r for r in history if r.is_own_answer]  # newest first
     latest = own[0] if own else None
     return ConsentForm(
         participant_code=participant.participant_code,

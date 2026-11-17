@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
@@ -29,11 +30,12 @@ from app.adapters.telephony import DialResult, ProviderError, ProviderSession
 from app.main import create_app
 from app.modules.audio_qc.models import AudioQcResult
 from app.modules.auth.models import User
+from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import ProjectAudioRule
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
-from app.modules.telephony import service
+from app.modules.telephony import fetch
 from app.modules.telephony.models import Call, CallEvent
 from tests.conftest import Api, build_settings, make_participant, make_project, make_user
 
@@ -348,7 +350,9 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     sweep(w)
     assert w["provider"].searches == 0
 
-    now = datetime.now(UTC)
+    # The provider's file starts after the marks: the whole 4 s file is kept, whatever the
+    # clock's resolution (cutting to the marks has its own test).
+    now = datetime.now(UTC) + timedelta(seconds=5)
     w["provider"].listed = [
         session("OLD", now - timedelta(hours=3)),  # an earlier call on the same seat
         session("OTHER", now, from_number="9000000000"),  # another person, same time
@@ -1148,14 +1152,14 @@ def test_the_window_is_found_or_the_whole_call_kept_with_the_reason() -> None:
 
     def window(
         start_s: float, stop_s: float, file_start: datetime | None, frames: int = 80_000
-    ) -> service.Window:
+    ) -> fetch.Window:
         c = Call(
             record_started_at=begin + timedelta(seconds=start_s),
             record_stopped_at=begin + timedelta(seconds=stop_s),
         )
         s = session("W", begin)
         s = ProviderSession(**{**s.__dict__, "start": file_start})
-        return service.recording_window(c, s, frames, 8000, 1.0)
+        return fetch.recording_window(c, s, frames, 8000, 1.0)
 
     inside = window(3, 7, begin)
     assert (inside.first_frame, inside.last_frame, inside.cut) == (16_000, 64_000, True)
@@ -1168,3 +1172,48 @@ def test_the_window_is_found_or_the_whole_call_kept_with_the_reason() -> None:
         False,
         "whole call kept: the provider gave no start time",
     )
+
+
+def test_a_participant_whose_newest_word_is_no_on_their_own_form_is_not_called(
+    world: dict[str, Any],
+) -> None:
+    """Calling follows the participant's newest word, noted for the session or answered on their
+    own consent form: a withdrawal on the form stops the call until consent is given again."""
+    w = world
+    give_seat(w)
+    tid = w["new_task"]()
+    w["db"].add(
+        ConsentRecord(
+            participant_id=uuid.UUID(w["a"]["id"]),
+            project_id=uuid.UUID(w["project_id"]),
+            task_id=None,
+            status="WITHDRAWN",
+            method="DIGITAL",
+            policy_version="1",
+            captured_by=None,
+        )
+    )
+    w["db"].commit()
+    no = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
+    assert (no.status_code, no.json()["error"]["code"]) == (409, "CONSENT_REFUSED")
+    assert "A" in no.json()["error"]["message"]
+    assert w["provider"].dials == []
+    consent(w, tid)  # given again, noted by the moderator: now the newest word
+    assert w["mod"].post(f"/api/v1/tasks/{tid}/calls").status_code == 201
+
+
+def test_participant_b_without_a_phone_number_is_named_as_b(world: dict[str, Any]) -> None:
+    w = world
+    give_seat(w)
+    tid = w["new_task"]()
+    call = start(w, tid)
+    w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "A_JOINED"})
+    w["db"].execute(
+        update(Participant)
+        .where(Participant.id == uuid.UUID(w["b"]["id"]))
+        .values(phone_e164_enc=None, phone_hash=None, phone_hint=None)
+    )
+    w["db"].commit()
+    answer = w["mod"].post(f"/api/v1/calls/{call['id']}/call-b")
+    assert (answer.status_code, answer.json()["error"]["code"]) == (409, "PHONE_MISSING")
+    assert answer.json()["error"]["message"] == "Participant B has no phone number"

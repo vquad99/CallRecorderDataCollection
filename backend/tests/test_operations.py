@@ -46,8 +46,8 @@ def test_a_wav_is_converted_in_place_exactly_like_its_raw_samples(tmp_path: Path
     raw = fx.write_raw(tmp_path / "s.f32", fx.interleave(fx.tone(2.0), fx.noise(2.0)))
     media.write_float_wav(raw, tmp_path / "o.wav", fx.RATE, 2)
     info = media.inspect_wav(tmp_path / "o.wav")
-    media.resample_to_pcm16(raw, fx.RATE, tmp_path / "a.wav", 2)
-    media.resample_to_pcm16(
+    media.pcm16_delivery(raw, fx.RATE, tmp_path / "a.wav", 2)
+    media.pcm16_delivery(
         tmp_path / "o.wav",
         fx.RATE,
         tmp_path / "b.wav",

@@ -6,9 +6,10 @@ import uuid
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from app.api.deps import AppSettings
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, require
 from app.modules.dashboard import service
@@ -71,9 +72,9 @@ class DashboardOut(BaseModel):
 
 @router.get("/dashboard", response_model=DashboardOut)
 def dashboard(
-    request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
+    settings: AppSettings,
     project_id: uuid.UUID | None = None,
     days: int = Query(default=30, ge=7, le=90),
     mode: Literal["FACE_TO_FACE", "TELEPHONY"] | None = None,
@@ -92,7 +93,7 @@ def dashboard(
         principal,
         project_id=project_id,
         days=days,
-        timezone=request.app.state.settings.report_timezone,
+        timezone=settings.report_timezone,
         filters=service.Filters(
             mode=mode,
             language=language,

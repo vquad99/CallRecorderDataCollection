@@ -1,48 +1,35 @@
-// Everything about one participant in one project (D-104), opened by "View" on the Participants
-// page: profile, who added them, the projects they are in, their personal link, the consent form
-// as they answered it, minutes, phone calls, and every session they were part of.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+// Everything about one participant in one project (D-104), opened by "View": profile, who added
+// them, the projects they are in, their personal link, the consent form as they answered it,
+// minutes, phone calls, and every session they were part of.
+import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { apiDownload, type ApiError } from "../../api/client";
-import { CALL_STATE_LABELS, type CallState } from "../../api/telephony";
+import { apiDownload } from "../../api/client";
+import { CALL_STATE_LABELS } from "../../api/telephony";
 import * as work from "../../api/work";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Icon, IconTile, type IconName } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
-import { toApiError, useResource } from "../../hooks/useResource";
+import { useAction } from "../../hooks/useAction";
+import { useResource } from "../../hooks/useResource";
+import { day, duration, when } from "../../lib/format";
+import {
+  CONSENT_METHOD_LABELS,
+  CONSENT_REVIEW,
+  consentAnswer,
+  labelFor,
+  MODE_LABELS,
+  TASK_STATUS_LABELS,
+} from "../../lib/labels";
+import { languageLabel } from "../projects/choices";
 import "./participants.css";
 
-const ANSWER_WORDS: Record<string, string> = {
-  NONE: "Not answered",
-  GIVEN: "Agreed",
-  REFUSED: "Did not agree",
-  WITHDRAWN: "Withdrew consent",
-};
-const ANSWER_TONE: Record<string, string> = {
-  NONE: "DRAFT",
-  GIVEN: "ACTIVE",
-  REFUSED: "REJECTED",
-  WITHDRAWN: "RETURNED",
-};
-const REVIEW_WORDS: Record<string, string> = {
-  PENDING: "Waiting for review",
-  APPROVED: "Approved",
-  REJECTED: "Sent back",
-};
-const REVIEW_TONE: Record<string, string> = {
-  PENDING: "ON_HOLD",
-  APPROVED: "APPROVED",
-  REJECTED: "REJECTED",
-};
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "-");
-const day = (iso: string) => new Date(iso).toLocaleDateString();
-const words = (s: string) => s.toLowerCase().replace(/_/g, " ");
 const minutes = (n: number) => `${n.toFixed(1)} min`;
-const length = (seconds: number) =>
-  seconds < 60 ? `${Math.round(seconds)} s` : `${(seconds / 60).toFixed(1)} min`;
+const language = (p: work.Participant) =>
+  `${languageLabel(p.language_code)}${p.dialect ? `, ${p.dialect}` : ""}`;
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -87,9 +74,7 @@ function Work({ d }: { d: work.ParticipantDetails }) {
           <>
             <Fact label="Calls with a recording">{c.recorded}</Fact>
             <Fact label="Last call">
-              {c.last_state
-                ? (CALL_STATE_LABELS[c.last_state as CallState] ?? words(c.last_state))
-                : "-"}
+              {c.last_state ? labelFor(CALL_STATE_LABELS, c.last_state) : "-"}
               <small>{when(c.last_at)}</small>
             </Fact>
           </>
@@ -110,10 +95,8 @@ function Profile({ d }: { d: work.ParticipantDetails }) {
         <Fact label="Name">{p.display_label ?? "Hidden"}</Fact>
         <Fact label="Phone">{p.phone ?? (p.has_phone ? "On file (hidden)" : "None")}</Fact>
         <Fact label="Email">{p.email ?? (p.has_email ? "On file (hidden)" : "None")}</Fact>
-        <Fact label="Language">
-          {p.language_code}
-          {p.dialect ? ` (${p.dialect})` : ""}
-        </Fact>
+        <Fact label="Language">{language(p)}</Fact>
+        {p.district ? <Fact label="District">{p.district}</Fact> : null}
         <Fact label="Added on">{when(p.created_at)}</Fact>
         <Fact label="Added by">{d.added_by ?? "-"}</Fact>
         <Fact label="Last changed">{when(d.updated_at)}</Fact>
@@ -154,16 +137,17 @@ function PersonalLink({ link }: { link: work.ParticipantDetails["link"] }) {
 
 function ConsentForm({ form }: { form: work.ConsentFormView }) {
   const now = form.current;
+  const review = now?.review_status ? CONSENT_REVIEW[now.review_status] : undefined;
   return (
     <Block icon="verified" title="Consent form">
       <dl className="checks">
-        <Fact label="Answer">{now ? ANSWER_WORDS[now.status] : "Not answered yet"}</Fact>
+        <Fact label="Answer">{now ? consentAnswer(now.status).label : "No answer yet"}</Fact>
         {now ? <Fact label="Answered on">{when(now.answered_at)}</Fact> : null}
         <Fact label="Form version">{form.form_version}</Fact>
-        {now?.review_status ? (
+        {review ? (
           <Fact label="Review">
-            {REVIEW_WORDS[now.review_status]}
-            {now.review_note ? `: ${now.review_note}` : ""}
+            {review.label}
+            {now?.review_note ? `: ${now.review_note}` : ""}
           </Fact>
         ) : null}
         {now?.reviewed_at ? <Fact label="Reviewed on">{when(now.reviewed_at)}</Fact> : null}
@@ -178,7 +162,7 @@ function ConsentForm({ form }: { form: work.ConsentFormView }) {
           <ul className="list">
             {form.earlier.map((a) => (
               <li key={a.answered_at}>
-                {when(a.answered_at)} · {ANSWER_WORDS[a.status]} · version {a.policy_version}
+                {when(a.answered_at)} · {consentAnswer(a.status).label} · version {a.policy_version}
               </li>
             ))}
           </ul>
@@ -195,47 +179,47 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
         <p className="muted">This participant has not been part of a session yet.</p>
       ) : (
         <>
-          <div className="table-wrap">
-            <table className="table" aria-label="Sessions of this participant">
-              <thead>
-                <tr>
-                  <th scope="col">Task</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">With</th>
-                  <th scope="col">Moderator</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Consent in session</th>
-                  <th scope="col">Recording</th>
-                  <th scope="col">Calls</th>
-                  <th scope="col">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.sessions.map((s) => (
+          <DataTable label="Sessions of this participant">
+            <thead>
+              <tr>
+                <th scope="col">Task</th>
+                <th scope="col">Recording type</th>
+                <th scope="col">Role</th>
+                <th scope="col">With</th>
+                <th scope="col">Moderator</th>
+                <th scope="col">Status</th>
+                <th scope="col">Consent in session</th>
+                <th scope="col">Recording</th>
+                <th scope="col">Calls</th>
+                <th scope="col">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.sessions.map((s) => {
+                const answer = s.consent_status ? consentAnswer(s.consent_status) : null;
+                return (
                   <tr key={s.task_id}>
                     <td className="mono">
                       <Link to={`/tasks/${s.task_id}`}>{s.task_code}</Link>
                     </td>
-                    <td>{s.mode === "TELEPHONY" ? "Telephony" : "Face-to-face"}</td>
+                    <td>{labelFor(MODE_LABELS, s.mode)}</td>
                     <td>Participant {s.slot}</td>
                     <td className="mono">{s.other_participant_code || "-"}</td>
                     <td>{s.moderator ?? <span className="muted">Nobody yet</span>}</td>
                     <td>
                       <StatusBadge
                         status={s.status}
-                        label={work.TASK_STATUS_LABELS[s.status] ?? words(s.status)}
+                        label={labelFor(TASK_STATUS_LABELS, s.status)}
                       />
                     </td>
                     <td>
-                      {s.consent_status ? (
+                      {answer ? (
                         <>
-                          <StatusBadge
-                            status={ANSWER_TONE[s.consent_status] ?? "DRAFT"}
-                            label={ANSWER_WORDS[s.consent_status] ?? words(s.consent_status)}
-                          />
+                          <StatusBadge tone={answer.tone} label={answer.label} />
                           <div className="muted">
-                            {s.consent_method ? `${words(s.consent_method)} · ` : ""}
+                            {s.consent_method
+                              ? `${labelFor(CONSENT_METHOD_LABELS, s.consent_method)} · `
+                              : ""}
                             {when(s.consent_at)}
                           </div>
                         </>
@@ -246,7 +230,9 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
                     <td>
                       {s.recordings > 0 ? (
                         <>
-                          {s.recording_seconds !== null ? length(s.recording_seconds) : "Recorded"}
+                          {s.recording_seconds !== null
+                            ? duration(s.recording_seconds)
+                            : "Recorded"}
                           {s.recordings > 1 ? ` (${s.recordings} recordings)` : ""}
                           <div className="muted">{when(s.recorded_at)}</div>
                         </>
@@ -257,10 +243,10 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
                     <td>{s.mode === "TELEPHONY" ? s.phone_calls : "-"}</td>
                     <td>{when(s.created_at)}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </DataTable>
           {d.sessions_total > d.sessions.length ? (
             <p className="muted">
               Showing the newest {d.sessions.length} of {d.sessions_total} sessions.
@@ -272,116 +258,86 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
   );
 }
 
-function Head({
-  d,
-  onDownload,
-  onClose,
-}: {
-  d: work.ParticipantDetails;
-  onDownload: (() => void) | null;
-  onClose: () => void;
-}) {
+function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() => void) | null }) {
   const p = d.participant;
+  const answer = p.consent_status ? consentAnswer(p.consent_status) : null;
+  const review =
+    p.consent_status === "GIVEN" && p.consent_review ? CONSENT_REVIEW[p.consent_review] : undefined;
   return (
     <div className="pd-head">
       <IconTile name="user" tone="blue" size={46} />
       <div className="pd-head__text">
-        <h2>
+        <h3>
           {p.participant_code}
           {p.display_label ? ` · ${p.display_label}` : ""}
-        </h2>
+        </h3>
         <p className="muted">
-          {p.language_code}
-          {p.dialect ? ` (${p.dialect})` : ""} · in the project since {day(p.created_at)}
+          {language(p)} · in the project since {day(p.created_at)}
         </p>
         <div className="pd-head__badges">
-          {d.removed ? <StatusBadge status="REJECTED" label="Removed" /> : null}
-          {p.consent_status ? (
-            <StatusBadge
-              status={ANSWER_TONE[p.consent_status] ?? "DRAFT"}
-              label={`Consent form: ${ANSWER_WORDS[p.consent_status] ?? words(p.consent_status)}`}
-            />
+          {d.removed ? <StatusBadge tone="danger" label="Removed" /> : null}
+          {answer ? (
+            <StatusBadge tone={answer.tone} label={`Consent form: ${answer.label}`} />
           ) : null}
-          {p.consent_status === "GIVEN" && p.consent_review ? (
-            <StatusBadge
-              status={REVIEW_TONE[p.consent_review] ?? "DRAFT"}
-              label={REVIEW_WORDS[p.consent_review] ?? words(p.consent_review)}
-            />
-          ) : null}
+          {review ? <StatusBadge tone={review.tone} label={review.label} /> : null}
           {d.link ? (
             <StatusBadge
-              status={d.link.active ? "ACTIVE" : "DRAFT"}
+              tone={d.link.active ? "success" : "neutral"}
               label={d.link.active ? "Personal link working" : "Personal link stopped"}
             />
           ) : null}
         </div>
       </div>
-      <div className="actions">
-        {onDownload ? (
+      {onDownload ? (
+        <div className="actions">
           <Button variant="secondary" onClick={onDownload}>
-            <Icon name="upload" size={15} />
+            <Icon name="download" size={15} />
             Download consent form
           </Button>
-        ) : null}
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function ParticipantDetailsPanel({
+export function ParticipantDetails({
   projectId,
   participantId,
-  onClose,
 }: {
   projectId: string;
   participantId: string;
-  onClose: () => void;
 }) {
   const { state, reload } = useResource(
     () => work.participantDetails(projectId, participantId),
     [projectId, participantId],
   );
-  const [error, setError] = useState<ApiError | null>(null);
-  const form = state.status === "loaded" ? state.data.consent_form : null;
-  // The panel opens under the table: bring it into view once it has its content.
-  const panel = useRef<HTMLElement>(null);
-  const loaded = state.status === "loaded";
-  useEffect(() => {
-    const el = panel.current;
-    if (loaded && el && "scrollIntoView" in el) {
-      el.scrollIntoView({ block: "start", behavior: "smooth" });
-    }
-  }, [loaded]);
+  const { error, run } = useAction();
+  if (state.status === "loading") return <LoadingState label="Loading the participant" />;
+  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
+  const d = state.data;
+  const form = d.consent_form;
   return (
-    <section ref={panel} className="card stack pd" aria-label="Participant details">
-      {state.status === "loading" ? <LoadingState label="Loading the participant" /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? (
-        <>
-          <Head
-            d={state.data}
-            onClose={onClose}
-            onDownload={
-              form
-                ? () =>
-                    void apiDownload(
-                      work.consentFormFileUrl(projectId, participantId),
-                      `consent_${form.project_code}_${form.participant_code}.html`,
-                    ).catch((err: unknown) => setError(toApiError(err)))
-                : null
-            }
-          />
-          <ErrorNotice error={error} />
-          <Work d={state.data} />
-          <Profile d={state.data} />
-          <PersonalLink link={state.data.link} />
-          {form ? <ConsentForm form={form} /> : null}
-          <Sessions d={state.data} />
-        </>
-      ) : null}
-    </section>
+    <div className="stack pd">
+      <Head
+        d={d}
+        onDownload={
+          form
+            ? () =>
+                void run(() =>
+                  apiDownload(
+                    work.consentFormFileUrl(projectId, participantId),
+                    `consent_${form.project_code}_${form.participant_code}.html`,
+                  ),
+                )
+            : null
+        }
+      />
+      <ErrorNotice error={error} />
+      <Work d={d} />
+      <Profile d={d} />
+      <PersonalLink link={d.link} />
+      {form ? <ConsentForm form={form} /> : null}
+      <Sessions d={d} />
+    </div>
   );
 }

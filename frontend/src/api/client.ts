@@ -49,6 +49,34 @@ export function apiBase(): string {
   return import.meta.env.VITE_API_BASE_URL ?? "";
 }
 
+/** One page of a list the server pages through. */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** "?a=1&b=x" from the given values; empty and missing values are left out. */
+export function query(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  const text = search.toString();
+  return text ? `?${text}` : "";
+}
+
+// When the server last heard from this page. A session ends after some minutes without requests
+// (D-122); the sign-out warning counts from here.
+let lastActivity = Date.now();
+/** The time (ms) of the last request that reached the server. */
+export const lastApiActivity = (): number => lastActivity;
+/** Note that the server was reached just now. */
+export function markApiActivity(): void {
+  lastActivity = Date.now();
+}
+
 function readCookie(name: string): string | null {
   const prefix = `${name}=`;
   for (const part of document.cookie.split(";")) {
@@ -111,6 +139,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Cannot reach the server" });
   }
 
+  markApiActivity();
   const body = await parseJson(response);
   if (response.ok || options.acceptStatuses?.includes(response.status)) return body as T;
   const error = errorFromBody(response, body);
@@ -130,6 +159,7 @@ export async function apiDownload(path: string, filename: string): Promise<void>
   } catch {
     throw new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Cannot reach the server" });
   }
+  markApiActivity();
   if (!response.ok) throw errorFromBody(response, await parseJson(response));
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");

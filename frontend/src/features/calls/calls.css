@@ -1,23 +1,5 @@
-/* Phone calls page (D-102). Three series checked with the dataviz validator (light surface
-   #ffffff, all pairs): lightness band, chroma, colour-vision separation (worst deltaE 20.5) and
-   3:1 contrast all pass. The legend and the table view carry the same information. */
-:root {
-  --calls-recorded: #2095f3;
-  --calls-open: #c47a12;
-  --calls-failed: #9d0000;
-}
-.calls-series--recorded {
-  fill: var(--calls-recorded);
-  background: var(--calls-recorded);
-}
-.calls-series--open {
-  fill: var(--calls-open);
-  background: var(--calls-open);
-}
-.calls-series--failed {
-  fill: var(--calls-failed);
-  background: var(--calls-failed);
-}
+/* Phone calls page (D-102) and the call card on a task page (D-103). The day chart, figures and
+   bars are in components/charts. */
 
 /* Calls by hour of the day: 24 thin bars, one series. */
 .hours {
@@ -43,7 +25,6 @@
   background: var(--primary);
 }
 .hours li:hover .hours__bar {
-  background: var(--calls-recorded);
   opacity: 0.8;
 }
 .hours__tick {
@@ -71,25 +52,6 @@
   font-size: 0.75rem;
 }
 
-/* Rows of label, bar, number: room for longer labels and a small note after the number. */
-.calls-bars li {
-  grid-template-columns: minmax(120px, 1.2fr) minmax(0, 1fr) minmax(64px, auto);
-}
-.calls-bars__note {
-  font-weight: 400;
-  font-size: 0.75rem;
-}
-
-/* On a narrow screen the day chart keeps a readable width and scrolls sideways inside its card. */
-.calls-plot {
-  overflow-x: auto;
-}
-@media (max-width: 640px) {
-  .calls-plot svg {
-    min-width: 560px;
-  }
-}
-
 /* The call card on the task page (D-103). */
 .call-checklist {
   display: grid;
@@ -105,9 +67,6 @@
   color: var(--text-2);
   font-size: 0.8125rem;
   font-weight: 600;
-}
-.call-cancel {
-  min-width: 220px;
 }
 .call__summary {
   display: inline-flex;
@@ -147,4 +106,24 @@
 }
 .call-b p {
   margin: 2px 0 0;
+}
+
+/* A call in the history: the arrow and the summary on one line, also on a phone. */
+.call > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.call > summary::-webkit-details-marker {
+  display: none;
+}
+.call > summary::before {
+  color: var(--text-2);
+  content: "\25B8";
+}
+.call[open] > summary::before {
+  content: "\25BE";
 }
