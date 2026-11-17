@@ -77,8 +77,13 @@ export interface TaskSummary {
 export interface Party {
   id: string;
   participant_code: string;
+  /** The participant's current word on consent, found by the platform (D-127). */
   consent_status: string | null;
   consent_at: string | null;
+  consent_source: "FORM" | "MODERATOR" | null;
+  consent_review: string | null;
+  /** True when this word lets the call and the recording go ahead. */
+  may_record: boolean;
 }
 
 export interface TaskDetail extends TaskSummary {

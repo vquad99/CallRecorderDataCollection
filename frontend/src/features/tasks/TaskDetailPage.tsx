@@ -22,7 +22,6 @@ import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import {
-  CONSENT_METHOD_LABELS,
   consentAnswer,
   labelFor,
   MODE_LABELS,
@@ -138,13 +137,14 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
 
 const RECORD_STEPS = [
   "Start the session",
-  "Note each person's consent below",
+  "Both people agree on their consent form",
   "Open the recorder and record",
   "Listen, then send it to QC",
 ];
 
-/** The moderator's way through a face-to-face session (D-091, D-092, D-119): start it, note both
- * people's consent, record, then listen and send the recording to QC or record it again. */
+/** The moderator's way through a face-to-face session (D-091, D-092, D-119, D-127): start it,
+ * wait for both people's consent on their form, record, then listen and send the recording to QC
+ * or record it again. */
 function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
   const { busy, error, run } = useAction();
   const canStart = task.status !== "RECORDED" && task.allowed_transitions.includes("IN_PROGRESS");
@@ -196,7 +196,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
           </>
         ) : recording ? (
           <>
-            {/* D-119: the recorder waits until both people's consent is noted. */}
+            {/* D-119: the recorder waits until both people have agreed on their form. */}
             {waiting ? (
               <>
                 <Button disabled aria-describedby="recorder-waits">
@@ -204,7 +204,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
                   Open the recorder
                 </Button>
                 <p id="recorder-waits" className="muted">
-                  Note both people&apos;s consent below first.
+                  Waiting for both people to agree on their consent form.
                 </p>
               </>
             ) : (
@@ -333,75 +333,69 @@ function Assignment({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   );
 }
 
-/** The moderator notes each person's consent before recording (D-091, D-119). */
-function ConsentCapture({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
-  const [method, setMethod] = useState("VERBAL_RECORDED");
-  const { busy, error, run } = useAction();
-  const note = (p: work.Party, answer: "GIVEN" | "REFUSED") =>
-    void run(
-      async () => onChange(await work.captureConsent(task.id, p.id, answer, method)),
-      `${p.id}-${answer}`,
-    );
+/** Consent comes from each participant's own consent form (D-127): nobody ticks it here. While
+ * someone has not agreed, this card says who, and people who manage participants can email them
+ * the form. Calling and recording wait until both have agreed (D-119). */
+function ConsentStatus({ task }: { task: work.TaskDetail }) {
+  const { can } = useAuth();
+  const canSend = can("participants.manage");
+  const { busy, error, message, run } = useAction();
+  const send = (p: work.Party) =>
+    void run(async () => {
+      const result = await work.bulkParticipants(task.project_id, {
+        action: "send_consent",
+        participant_ids: [p.id],
+      });
+      const failed = result.results.find((r) => !r.ok);
+      if (failed) throw new Error(failed.message);
+      return `Consent form emailed to ${p.participant_code}.`;
+    }, p.id);
+  const parties = [task.participant_a, task.participant_b];
   return (
     <section className="card consent" aria-labelledby="consent-title">
-      <div className="consent__head">
-        <div>
-          <h2 id="consent-title">Consent</h2>
-          <p className="muted">
-            Ask each person before you record, then note their answer. Recording needs both.
-          </p>
-        </div>
-        <div className="consent__method">
-          <Select
-            label="How consent was given"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            options={Object.entries(CONSENT_METHOD_LABELS).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-          />
-        </div>
-      </div>
+      <h2 id="consent-title">Waiting for consent</h2>
+      <p className="muted">
+        Consent is taken from each person&apos;s consent form. Calling and recording start only when
+        both have agreed.
+      </p>
       <ul className="consent__rows">
-        {[task.participant_a, task.participant_b].map((p, i) => (
-          <li key={p.id} className="consent__row">
-            <span className="consent__who">
-              <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
-              <span className="code-tag">{p.participant_code}</span>
-            </span>
-            <ConsentChip answer={p.consent_status} />
-            <span className="seg" role="group" aria-label={`Consent of ${p.participant_code}`}>
-              <button
-                type="button"
-                className="seg__option"
-                aria-pressed={p.consent_status === "GIVEN"}
-                disabled={busy !== null}
-                onClick={() => note(p, "GIVEN")}
-              >
-                Agreed
-              </button>
-              <button
-                type="button"
-                className="seg__option seg__option--no"
-                aria-pressed={p.consent_status === "REFUSED"}
-                disabled={busy !== null}
-                onClick={() => note(p, "REFUSED")}
-              >
-                Did not agree
-              </button>
-            </span>
-          </li>
-        ))}
+        {parties.map((p, i) =>
+          p.may_record ? null : (
+            <li key={p.id} className="consent__row">
+              <span className="consent__who">
+                <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
+                <span className="code-tag">{p.participant_code}</span>
+              </span>
+              <ConsentChip party={p} />
+              {canSend ? (
+                <Button
+                  variant="secondary"
+                  busy={busy === p.id}
+                  disabled={busy !== null}
+                  onClick={() => send(p)}
+                >
+                  Email consent form
+                </Button>
+              ) : (
+                <span className="muted">Ask your admin to send them the consent form.</span>
+              )}
+            </li>
+          ),
+        )}
       </ul>
       <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
     </section>
   );
 }
 
-/** A participant's consent for this session as a coloured chip (D-091). */
-function ConsentChip({ answer }: { answer: string | null }) {
-  const { label, tone } = consentAnswer(answer);
+/** A participant's current word on consent as a coloured chip: "Agreed" only when it lets the
+ * recording go ahead (a form answer sent back by staff does not). */
+function ConsentChip({ party }: { party: work.Party }) {
+  const sentBack = party.consent_status === "GIVEN" && !party.may_record;
+  const { label, tone } = sentBack
+    ? { label: "Sent back", tone: "danger" as const }
+    : consentAnswer(party.consent_status);
   return <StatusBadge tone={tone} label={label} />;
 }
 
@@ -559,9 +553,9 @@ export function TaskDetailPage() {
     replace(t);
     setMessage(text ?? null);
   };
-  const consentOpen =
-    task.is_moderator && (task.status === "ASSIGNED" || task.status === "IN_PROGRESS");
-  const consent = consentOpen ? <ConsentCapture task={task} onChange={onChange} /> : null;
+  const waitingConsent =
+    task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
+  const consent = waitingConsent ? <ConsentStatus task={task} /> : null;
   const onPath = FLOW.includes(task.status) ? task.status : (task.held_from ?? "DRAFT");
   return (
     <section aria-labelledby="task-title" className="stack">
@@ -603,7 +597,7 @@ export function TaskDetailPage() {
             <dt>Participant {i === 0 ? "A" : "B"}</dt>
             <dd className="party">
               <span className="code-tag">{p.participant_code}</span>
-              <ConsentChip answer={p.consent_status} />
+              <ConsentChip party={p} />
             </dd>
           </div>
         ))}

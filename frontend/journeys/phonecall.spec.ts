@@ -3,11 +3,12 @@
 // (backend/tests/fake_txcontact.py): no phone rings, everything else is real (browser, backend,
 // database, file storage). Skipped when the backend has no phone provider configured.
 // Requirements: TEL-002, TEL-004, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038, PART-016
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import {
   ADMIN_EMAIL,
   api,
+  consentBoth,
   playToEnd,
   requireSetup,
   runCode,
@@ -25,17 +26,6 @@ interface Participant {
 function phone(ending: string): string {
   const random = String(Math.floor(Math.random() * 1e9)).padStart(9, "0");
   return `+919${random.slice(0, 9 - ending.length)}${ending}`;
-}
-
-async function giveConsent(page: Page, people: Participant[]) {
-  for (const p of people) {
-    const group = page.getByRole("group", { name: `Consent of ${p.participant_code}` });
-    await group.getByRole("button", { name: "Agreed" }).click();
-    await expect(group.getByRole("button", { name: "Agreed" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  }
 }
 
 test("a moderator calls, confirms both people, closes the call and sends the recording to QC", async ({
@@ -102,15 +92,20 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   await test.step("a call the provider refuses is shown as refused, not as a call", async () => {
     await moderator.goto(`/tasks/${blocked.id}`);
     await moderator.getByRole("button", { name: "Start session" }).click();
+    // D-127: nobody is called before both have agreed on their consent form.
+    await expect(moderator.getByRole("button", { name: "Start call" })).toBeDisabled();
+    await expect(moderator.getByText(/has not agreed on the consent form yet/)).toBeVisible();
+    await consentBoth(moderator);
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("alert")).toContainText("The last call could not be placed");
     await expect(moderator.getByText("Call could not be placed").first()).toBeVisible();
     await expect(moderator.getByRole("button", { name: "Start call" })).toBeVisible();
   });
 
-  await test.step("the moderator starts the call and confirms both people", async () => {
+  await test.step("the moderator calls and follows one button at a time", async () => {
     await moderator.goto(`/tasks/${main.id}`);
     await moderator.getByRole("button", { name: "Start session" }).click();
+    await consentBoth(moderator);
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("heading", { name: "On the call" })).toBeVisible();
     // The call's history in plain words; the provider's own answer is for the Super Admin only.
@@ -118,33 +113,20 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
       moderator.getByText("The phone system is ringing participant A").first(),
     ).toBeVisible();
     await expect(moderator.getByText(/TXCONTACT answered HTTP 200/)).toHaveCount(0);
-    // The call cannot be closed before both people are confirmed on it.
-    await expect(moderator.getByRole("button", { name: "Close call" })).toBeDisabled();
-    await moderator.getByRole("checkbox", { name: /Participant A is on the call/ }).check();
-    // B is rung into the same call from here (D-111).
-    await moderator.getByRole("button", { name: "Call participant B" }).click();
+    // A answers: one click says so and rings B into the same call (D-111).
+    await moderator.getByRole("button", { name: /A answered/ }).click();
     await expect(
       moderator.getByText(/The phone system is ringing participant B/).first(),
     ).toBeVisible();
-    await moderator.getByRole("checkbox", { name: /Participant B is on the call/ }).check();
-    // D-119: no recording before both consents.
-    await expect(moderator.getByRole("button", { name: "Start recording" })).toBeDisabled();
-    await expect(moderator.getByText("Note both people's consent below first.")).toBeVisible();
-    await giveConsent(moderator, [asha, bina]);
-    // Both on the line: the moderator marks where the conversation starts (D-113).
-    await moderator.getByRole("button", { name: "Start recording" }).click();
-    await expect(moderator.getByRole("button", { name: "Stop recording" })).toBeVisible();
-    // About four seconds of conversation, then Stop: only that part is delivered.
+    // B answers: one click says so and marks where the conversation starts (D-113).
+    await moderator.getByRole("button", { name: /B answered/ }).click();
+    await expect(moderator.getByRole("button", { name: "Stop and close call" })).toBeVisible();
+    // About four seconds of conversation: only that part is delivered.
     await moderator.waitForTimeout(4_000);
-    await moderator.getByRole("button", { name: "Stop recording" }).click();
-    await expect(moderator.getByText(/Only this part is delivered/)).toBeVisible();
-    await moderator.getByRole("checkbox", { name: /I am muted and listening/ }).check();
-    await expect(moderator.getByRole("button", { name: "Close call" })).toBeEnabled();
   });
 
-  await test.step("the moderator closes the call; then the recording arrives by itself", async () => {
-    await moderator.getByLabel("Note for the record (optional)").fill("clear line");
-    await moderator.getByRole("button", { name: "Close call" }).click();
+  await test.step("the moderator stops and closes; then the recording arrives by itself", async () => {
+    await moderator.getByRole("button", { name: "Stop and close call" }).click();
     await expect(moderator.getByRole("heading", { name: "Check the call recording" })).toBeVisible({
       timeout: 90_000,
     });
@@ -191,7 +173,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     }>(admin, "GET", `/api/v1/telephony/analytics?project_id=${project.id}&days=7`);
     expect([figures.calls, figures.recorded, figures.dial_failed]).toEqual([2, 1, 1]);
     expect(figures.funnel.sent_to_qc).toBe(1);
-    expect(figures.checklist).toMatchObject({ A_JOINED: 1, B_JOINED: 1, MODERATOR_MUTED: 1 });
+    expect(figures.checklist).toMatchObject({ A_JOINED: 1, B_JOINED: 1 });
 
     const recordings = await api<{ id: string; assets: { kind: string }[] }[]>(
       admin,
@@ -206,7 +188,6 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
       call: { agent_seat: string; note: string; checklist: Record<string, string | null> };
     }>(admin, "GET", `/api/v1/recordings/${recordings[0]?.id}/metadata`);
     expect(details.call.agent_seat).toBe(`seat-${code}`);
-    expect(details.call.note).toBe("clear line");
     expect(details.call.checklist.A_JOINED).toBeTruthy();
     expect(details.call.checklist.QUALITY_OK).toBeNull();
   });

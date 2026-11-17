@@ -597,9 +597,9 @@ export function RecorderPage() {
       ) : null}
       {t.status === "IN_PROGRESS" && waitingConsent.length > 0 ? (
         <p className="notice notice--error" role="alert">
-          Consent is missing for participant {waitingConsent.join(" and ")}. Note their consent on
-          the <Link to={`/tasks/${t.id}`}>task page</Link>, or have them answer their consent form,
-          before recording.
+          Participant {waitingConsent.join(" and ")} has not agreed on the consent form yet.
+          Recording starts once both have agreed (see the{" "}
+          <Link to={`/tasks/${t.id}`}>task page</Link>).
         </p>
       ) : null}
       {canRecord &&

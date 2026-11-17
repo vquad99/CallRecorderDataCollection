@@ -12,6 +12,9 @@ const party = (id: string, code: string) => ({
   participant_code: code,
   consent_status: null,
   consent_at: null,
+  consent_source: null,
+  consent_review: null,
+  may_record: false,
 });
 const task = {
   id: "t1",
@@ -407,9 +410,9 @@ describe("tasks", () => {
     expect(screen.queryByRole("button", { name: "Download audio and metadata" })).toBeNull();
   });
 
-  it("lets the assigned moderator record consent", async () => {
+  it("shows consent from the participants' own forms and emails the form to whoever has not agreed (D-127)", async () => {
     const { calls } = fakeApi(
-      signedInAs(["tasks.view", "consent.capture"], {
+      signedInAs(["tasks.view", "participants.manage"], {
         "GET /api/v1/tasks/t1": () => [
           200,
           {
@@ -418,41 +421,40 @@ describe("tasks", () => {
             can_reassign: false,
             is_moderator: true,
             allowed_transitions: ["IN_PROGRESS"],
-          },
-        ],
-        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
-        "POST /api/v1/tasks/t1/consent": () => [
-          201,
-          {
-            ...task,
-            is_moderator: true,
+            consent_missing: ["B"],
             participant_a: {
               ...task.participant_a,
               consent_status: "GIVEN",
               consent_at: "2026-11-09T01:00:00Z",
+              consent_source: "FORM",
+              consent_review: "PENDING",
+              may_record: true,
             },
+          },
+        ],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "POST /api/v1/projects/p1/participants/bulk": () => [
+          200,
+          {
+            results: [{ participant_id: "b1", participant_code: "P000002", ok: true, message: "" }],
+            done: 1,
+            failed: 0,
           },
         ],
       }),
     );
     renderAt("/tasks/t1");
-    await screen.findByRole("heading", { name: "Consent" });
-    expect(
-      screen.queryByRole("heading", { name: /Assign moderator|Reassign moderator/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.getAllByText("No answer yet").length).toBeGreaterThan(0);
-    const group = screen.getByRole("group", { name: "Consent of P000001" });
-    await userEvent.click(within(group).getByRole("button", { name: "Agreed" }));
-    await waitFor(() =>
-      expect(within(group).getByRole("button", { name: "Agreed" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-    expect(calls.find((c) => c.path.endsWith("/consent"))?.body).toEqual({
-      participant_id: "a1",
-      status: "GIVEN",
-      method: "VERBAL_RECORDED",
+    const card = await screen.findByRole("region", { name: "Waiting for consent" });
+    // Nobody ticks consent here: it comes from the forms. Only B, who has not agreed, is listed.
+    expect(screen.queryByRole("button", { name: "Agreed" })).not.toBeInTheDocument();
+    expect(within(card).queryByText("P000001")).not.toBeInTheDocument();
+    expect(within(card).getByText("P000002")).toBeInTheDocument();
+    expect(screen.getAllByText("Agreed").length).toBeGreaterThan(0); // A's chip in the facts
+    await userEvent.click(within(card).getByRole("button", { name: "Email consent form" }));
+    expect(await screen.findByText("Consent form emailed to P000002.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path.endsWith("/bulk"))?.body).toEqual({
+      action: "send_consent",
+      participant_ids: ["b1"],
     });
   });
 
@@ -580,7 +582,7 @@ describe("task page in plain words (UI review 2026-11-17)", () => {
     expect(screen.getByText("Phone call")).toBeInTheDocument();
   });
 
-  it("keeps the recorder closed until both people's consent is noted (D-119)", async () => {
+  it("keeps the recorder closed until both people have agreed on their form (D-119)", async () => {
     fakeApi(
       signedInAs(["tasks.view", "consent.capture"], {
         "GET /api/v1/tasks/t1": () => [
@@ -602,7 +604,9 @@ describe("task page in plain words (UI review 2026-11-17)", () => {
     renderAt("/tasks/t1");
     const open = await screen.findByRole("button", { name: "Open the recorder" });
     expect(open).toBeDisabled();
-    expect(open).toHaveAccessibleDescription("Note both people's consent below first.");
+    expect(open).toHaveAccessibleDescription(
+      "Waiting for both people to agree on their consent form.",
+    );
     expect(screen.queryByRole("link", { name: "Open the recorder" })).not.toBeInTheDocument();
   });
 

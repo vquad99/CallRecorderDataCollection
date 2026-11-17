@@ -126,7 +126,9 @@ describe("RecorderPage", () => {
       }),
     );
     renderAt("/tasks/t1/record");
-    expect(await screen.findByText(/Consent is missing for participant B/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Participant B has not agreed on the consent form yet/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
   });
 });

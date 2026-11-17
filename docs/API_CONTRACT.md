@@ -257,3 +257,6 @@ history, `captured_by` is `null` for the participant's own answers.
 
 A POST, PUT, PATCH or DELETE under `/api/v1/` without the session cookie gets 401, and one without the CSRF cookie or `X-CSRF-Token` header gets 403 `CSRF_FAILED`, **before its body is read**. Only `/auth/login`, `/auth/password/forgot`, `/auth/password/reset` (also invitation accept) and `/portal/consent` work without a session. Large bodies are read at most 16 at a time per process; a request that waits more than 15 s gets 503 `BUSY`. nginx limits `/api/` to 30 requests/s per address (burst 120) and chunk uploads to 5/s (burst 30, slowed rather than refused), with a JSON 429 when exceeded. Every list's `page` is at most 10 000. `TaskDetail` carries `can_reassign`; participants carry `phone_masked` (D-125). The task status `RETURNED` no longer exists (D-118, migration 0026): sending it gives 422.
 
+## Consent on tasks (D-127)
+
+Each participant in `GET /tasks/{id}` carries `consent_status` and `consent_at` (their current word: the newer of their own consent-form answer and any consent noted for the task), `consent_source` (`FORM` or `MODERATOR`), `consent_review` (staff review of a form answer) and `may_record`. `POST /tasks/{id}/calls` answers 409 `CONSENT_MISSING` until both have agreed.

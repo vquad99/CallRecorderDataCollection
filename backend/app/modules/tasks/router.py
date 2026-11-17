@@ -55,8 +55,13 @@ class TaskSummary(BaseModel):
 class PartyOut(BaseModel):
     id: uuid.UUID
     participant_code: str
+    # The participant's current word on consent, found by the platform (D-127): the newer of
+    # their own answer on the consent form and any consent noted for this task.
     consent_status: str | None
     consent_at: datetime | None
+    consent_source: Literal["FORM", "MODERATOR"] | None = None
+    consent_review: str | None = None  # staff review of a form answer (PENDING, APPROVED, ...)
+    may_record: bool = False
 
 
 class TaskDetail(TaskSummary):
@@ -87,12 +92,15 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
 
     def party(side: consents.SideConsent) -> PartyOut:
         p = db.get_one(Participant, side.participant_id)
-        noted = side.latest_noted
+        word = side.newest
         return PartyOut(
             id=p.id,
             participant_code=p.participant_code,
-            consent_status=noted.status if noted else None,
-            consent_at=noted.created_at if noted else None,
+            consent_status=word.status if word else None,
+            consent_at=word.created_at if word else None,
+            consent_source=None if word is None else "FORM" if word.is_own_answer else "MODERATOR",
+            consent_review=word.review_status if word is not None and word.is_own_answer else None,
+            may_record=side.may_record,
         )
 
     mod_name = (

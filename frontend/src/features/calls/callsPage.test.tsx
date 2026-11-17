@@ -28,8 +28,8 @@ describe("phone calls page", () => {
     expect(within(funnel).getByText("Recording stored")).toBeInTheDocument();
     expect(within(funnel).getByText("75%")).toBeInTheDocument();
     expect(within(funnel).getAllByText("50%")).toHaveLength(2);
-    // The checklist on closed calls, and the phone tasks by status.
-    expect(screen.getByText("I am muted and listening")).toBeInTheDocument();
+    // The phone tasks by status (the old call checklist is no longer shown, D-127).
+    expect(screen.queryByText("I am muted and listening")).not.toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "Phone tasks by status" })).getByText("Approved"),
     ).toBeInTheDocument();

@@ -319,12 +319,11 @@ Downloads are available to the Super Admin and Project Admin.
 
 1. Open **Tasks** and click your task.
 2. Click **Start session** (the highlighted box near the top).
-3. In the **Consent** card, choose **How consent was given**, then click **Agreed** (or **Did not
-   agree**) on the row of Participant A and of Participant B. Each row shows **Agreed**, **Did not
-   agree** or **No answer yet**. A participant who answered **Agreed** on their own consent form
-   already counts (unless staff sent the answer back).
-   **Open the recorder stays grey, with "Note both people's consent below first.", until both
-   participants have consent.**
+3. Consent is taken automatically from each participant's own consent form: you do not tick it.
+   The task shows each person's answer (**Agreed**, **Did not agree**, **No answer yet**). While
+   someone has not agreed, a **Waiting for consent** card lists them; people who manage
+   participants can click **Email consent form** there. A moderator asks their admin.
+   **Open the recorder stays grey until both participants have agreed.**
 4. Click **Open the recorder** (in the same highlighted box). The recorder shows the steps
    **Microphone**, **Sound check**, **Record**, **Save**, **Done**; **Back to the task** is above
    them. It records at 16000 Hz (the project's rate).
@@ -356,30 +355,21 @@ Everything is done on the task page in this portal. You do not use any TxContact
 Your phone seat is set by the Super Admin (section 4); if calls do not start, ask them.
 
 1. Open **Tasks** and click your **Phone call** task.
-2. Click **Start session**. The card says **Ready to call** and lists the steps.
-3. Note both people's consent in the **Consent** card, right under the call card (as in section
-   7, step 3). **Start recording** stays grey, with "Note both people's consent below first.",
-   until both participants have consent.
-4. Click **Start call**. The phone system rings participant A. The card shows **On the call**; if
-   the call could not be placed, the card says why.
-5. When A answers, tick **Participant A is on the call**. Then click **Call participant B**: the
-   phone system rings B into the same call. If B does not answer, click **Ring B again** (3 times
-   at most in one call).
-6. When B answers, tick **Participant B is on the call** (A and B are both needed to close the
-   call), then **I am muted and listening** and **Both voices are clear**.
-7. When both are on the line, click **Start recording** as the conversation begins, and **Stop
-   recording** when they finish. The whole call is recorded; only the part between Start and Stop
-   is delivered, checked and counted. The call cannot be closed without Start; **Start again**
-   moves the start.
-8. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
+2. Click **Start session**. The card says **Ready to call**. **Start call** stays grey until
+   both participants have agreed on their consent form (see section 7, step 3).
+3. Click **Start call**. The phone system rings participant A. The card shows **On the call**,
+   with one button at a time; if the call could not be placed, the card says why.
+4. When A answers, click **A answered – call B**: the phone system rings B into the same call. If
+   B does not answer, click **Ring B again** (3 times at most in one call).
+5. When B answers, click **B answered – start recording**. The recording starts now.
+6. Stay on the call, **muted**, and listen. If the line is poor (noise, echo, breaking up), tell
    them, then click **Cancel this call** and choose the **Reason** **Poor line quality**.
-9. When they have finished, click **Close call** (add a note if useful). If someone refused
-   consent, click **Cancel this call** and choose **Consent refused**: they are not called again
-   for this task.
-10. The card shows **Fetching the recording**. The platform fetches the call's recording from the
+7. When they have finished, click **Stop and close call**. The whole call is recorded by the
+   phone system; only the part between "B answered" and "Stop" is delivered, checked and counted.
+8. The card shows **Fetching the recording**. The platform fetches the call's recording from the
     phone system, usually within a few minutes. The page updates on its own. You can still cancel
     the call while it is being fetched.
-11. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
+9. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
     QC**; if not, **Call again**.
 
 If the call did not work (no answer, wrong number, dropped), click **Cancel this call** and choose
@@ -407,8 +397,7 @@ rest. The **Figures** tab shows:
 - **Phone tasks by status**, **Calls by hour of the day**, **By moderator**, and **By project**
   when you look at all your projects.
 - **Automatic audio check** and **QC decisions** on call recordings.
-- **Why calls were cancelled**, **Problems getting the recording**, and the **Call checklist on
-  closed calls** (how often each box was ticked).
+- **Why calls were cancelled** and **Problems getting the recording**.
 - Project admins also see **TxContact: calls per hour**, TxContact's own count for the account.
 
 The **All calls** tab lists every call with a link to its task; **Show** filters it (for example

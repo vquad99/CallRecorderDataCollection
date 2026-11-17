@@ -37,7 +37,14 @@ from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
 from app.modules.telephony import fetch
 from app.modules.telephony.models import Call, CallEvent
-from tests.conftest import Api, build_settings, make_participant, make_project, make_user
+from tests.conftest import (
+    Api,
+    build_settings,
+    give_consent,
+    make_participant,
+    make_project,
+    make_user,
+)
 
 pytestmark = pytest.mark.db
 BUCKET = "ccp-telephony"
@@ -176,7 +183,7 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
             a = make_participant(pa, project.id, "Asha", phone=A_PHONE)
             b = make_participant(pa, project.id, "Bina", phone=B_PHONE)
 
-            def new_task() -> str:
+            def new_task(agreed: bool = True) -> str:
                 task = pa.post(
                     "/api/v1/tasks",
                     json={
@@ -194,6 +201,8 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
                     f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"}
                 )
                 assert moved.status_code == 200, moved.text
+                if agreed:  # D-127: nobody is rung before both have agreed
+                    give_consent(moderator, tid)
                 return tid
 
             yield {
@@ -299,7 +308,7 @@ def test_not_configured_is_reported_truthfully(db_app: Any, new_api: Any, db: An
 def test_full_call_flow(world: dict[str, Any]) -> None:
     w = world
     assert w["mod"].get("/api/v1/telephony/status").json()["configured"] is True
-    tid = w["new_task"]()
+    tid = w["new_task"](agreed=False)
 
     # Without an agent seat the moderator is told what to do; nothing is dialled.
     no_seat = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
@@ -308,6 +317,11 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert w["provider"].dials == []
 
     give_seat(w)
+    # D-127: nobody is rung before both participants have agreed.
+    early_call = w["mod"].post(f"/api/v1/tasks/{tid}/calls")
+    assert (early_call.status_code, early_call.json()["error"]["code"]) == (409, "CONSENT_MISSING")
+    assert w["provider"].dials == []
+    consent(w, tid)
     call = start(w, tid)
     assert call["state"] == "DIALLING"
     assert call["agent_id"] == SEAT
@@ -323,18 +337,10 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "CALL_OPEN"
 
-    # Closing needs both people on the call, then both consents.
+    # Closing needs both people on the call.
     early = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={})
     assert early.status_code == 409
     assert early.json()["error"]["code"] == "CHECKLIST_INCOMPLETE"
-    for item in ("A_JOINED", "B_JOINED"):
-        w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": item})
-    no_consent = w["mod"].post(f"/api/v1/calls/{call['id']}/close", json={})
-    assert no_consent.status_code == 409
-    assert no_consent.json()["error"]["code"] == "CONSENT_MISSING"
-    # D-119: the recording is not started before both consents either.
-    no_mark = w["mod"].post(f"/api/v1/calls/{call['id']}/recording/start")
-    assert no_mark.json()["error"]["code"] == "CONSENT_MISSING"
     joined(w, call["id"], tid)
     ticked = w["mod"].post(f"/api/v1/calls/{call['id']}/checklist", json={"item": "QUALITY_OK"})
     assert sorted(ticked.json()["checklist"]) == ["A_JOINED", "B_JOINED", "QUALITY_OK"]
@@ -906,7 +912,7 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
     w["provider"].listed = [session("PD1", datetime.now(UTC) + timedelta(seconds=5))]
     due_now(w, call["id"])
     sweep(w)
-    w["new_task"]()  # a second session, not called yet
+    w["new_task"](agreed=False)  # a second session, not called yet
     base = f"/api/v1/projects/{w['project_id']}/participants"
 
     got = w["pa"].get(f"{base}/{w['a']['id']}/details")

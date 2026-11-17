@@ -10,6 +10,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   api,
+  consentBoth,
   emailedLink,
   NEW_PASSWORD,
   playToEnd,
@@ -156,14 +157,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     // D-091: one button starts the session; the recorder link then appears in the same card.
     await moderator.getByRole("button", { name: "Start session" }).click();
     await expect(moderator.getByText("In progress").first()).toBeVisible();
-    for (const which of ["A", "B"]) {
-      const row = moderator.locator(".consent__row").filter({ hasText: `Participant ${which}` });
-      await row.getByRole("button", { name: "Agreed" }).click();
-      await expect(row.getByRole("button", { name: "Agreed" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    }
+    await consentBoth(moderator);
   });
 
   await test.step("the moderator records the conversation and plays it back", async () => {

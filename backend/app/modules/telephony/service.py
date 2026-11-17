@@ -218,15 +218,20 @@ def start_call(
             code="NO_AGENT_SEAT",
             status_code=409,
         )
-    refused = consent.refused(consent.for_task(db, task))
+    sides = consent.for_task(db, task)
+    refused = consent.refused(sides)
     if refused:
         # Someone whose newest word is no (noted for this session, or on their own consent form)
-        # is not rung again. A wrong tick is put right in the consent box first.
+        # is not rung again.
         raise AppError(
             f"Participant {' and '.join(refused)} refused or withdrew consent and is not called",
             code="CONSENT_REFUSED",
             status_code=409,
         )
+    # Nobody is rung before both have agreed (D-127): the call is only for recording them.
+    missing = consent.missing(sides)
+    if missing:
+        raise tasks.consent_missing_error(missing)
     a = db.get_one(Participant, task.participant_a_id)
     phone = _phone(cipher, a, "A")
     # A participant's phone is not rung over and over (refused and cancelled calls count too).

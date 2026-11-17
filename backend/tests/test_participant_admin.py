@@ -243,10 +243,18 @@ def test_recording_waits_for_consent_from_both_participants(world: dict[str, Any
     api, head = _visitor(world, _link_from_another_admin(world, a))
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
     assert missing() == ["B"]
+
+    def side_a() -> tuple[str | None, str | None, str | None, bool]:
+        p = mod.get(f"/api/v1/tasks/{tid}").json()["participant_a"]
+        return p["consent_status"], p["consent_source"], p["consent_review"], p["may_record"]
+
+    # D-127: the task page reads the answer from the form; nobody ticks it.
+    assert side_a() == ("GIVEN", "FORM", "PENDING", True)
     # Staff send the answer back: it no longer counts.
     back = pa.post(f"{base}/{a}/consent-review", json={"decision": "REJECTED", "note": "Unclear"})
     assert back.status_code == 200, back.text
     assert missing() == ["A", "B"]
+    assert side_a() == ("GIVEN", "FORM", "REJECTED", False)
     # The moderator notes both: recording may start.
     give_consent(mod, tid)
     assert missing() == []

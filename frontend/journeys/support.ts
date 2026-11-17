@@ -119,14 +119,24 @@ export interface Setup {
 /** The moderator notes consent for participant A and B on the task page: recording waits for
  * both (D-119). */
 export async function consentBoth(page: Page): Promise<void> {
-  for (const which of ["A", "B"]) {
-    const row = page.locator(".consent__row").filter({ hasText: `Participant ${which}` });
-    await row.getByRole("button", { name: "Agreed" }).click();
-    await expect(row.getByRole("button", { name: "Agreed" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+  // Nobody ticks consent on the page any more (D-127): it comes from the participants' own
+  // answers. Here the moderator's session records "agreed" for both through the API, standing in
+  // for those answers; the page then shows the task again with nothing left to wait for.
+  const taskId = new URL(page.url()).pathname.split("/").pop() ?? "";
+  const task = await api<{ participant_a: { id: string }; participant_b: { id: string } }>(
+    page,
+    "GET",
+    `/api/v1/tasks/${taskId}`,
+  );
+  for (const p of [task.participant_a, task.participant_b]) {
+    await api(page, "POST", `/api/v1/tasks/${taskId}/consent`, {
+      participant_id: p.id,
+      status: "GIVEN",
+      method: "DIGITAL",
+    });
   }
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
 }
 
 export async function setUpTask(

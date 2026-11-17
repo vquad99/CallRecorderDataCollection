@@ -1,10 +1,9 @@
-// Phone calls on a telephony task (D-101, D-103, D-111, D-113): everything happens in this portal
-// (owner: no provider screen or app). The moderator notes both people's consent, starts the call,
-// the phone system (TxContact) rings participant A and then B, the moderator marks where the
-// conversation starts and stops, and closes the call.
-// The platform then fetches the recording. Every state shown comes from the server; nothing is
-// shown as connected on its own (TEL-037). Moderators read plain words; the provider's own answers
-// are in a technical log for the Super Admin.
+// Phone calls on a telephony task (D-101, D-103, D-111, D-113, D-127): everything happens in this
+// portal (owner: no provider screen or app). Both participants have agreed on their consent form
+// first; then the moderator follows one button at a time: Start call (the phone system rings A),
+// "A answered - call B", "B answered - start recording", "Stop and close call". The platform then
+// fetches the recording. Every state shown comes from the server; nothing is shown as connected
+// on its own (TEL-037). The provider's own answers are in a technical log for the Super Admin.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import * as tel from "../../api/telephony";
@@ -13,14 +12,13 @@ import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { usePolling } from "../../hooks/usePolling";
 import { useResource } from "../../hooks/useResource";
-import { clock, time, when } from "../../lib/format";
+import { clock, when } from "../../lib/format";
 import { labelFor } from "../../lib/labels";
 import { CallBadge } from "../calls/callUi";
 import { ListenLatest } from "./Listen";
@@ -171,120 +169,19 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: () => void })
   );
 }
 
-/** What the moderator confirms while on the call; each tick is saved and kept in the history.
- * The box shows the tick at once (it is the moderator's own answer, not the provider's state) and
- * takes it back, with the reason, if the server refuses it. */
-function Checklist({ call, onChange }: { call: tel.Call; onChange: () => Promise<unknown> }) {
-  const [pending, setPending] = useState<Partial<Record<tel.ChecklistItem, boolean>>>({});
-  const { error, run } = useAction();
-  const settle = (item: tel.ChecklistItem) =>
-    setPending((p) => Object.fromEntries(Object.entries(p).filter(([k]) => k !== item)));
-  return (
-    <fieldset className="call-checklist">
-      <legend>Call checklist</legend>
-      {tel.CHECKLIST.map((c) => (
-        <label key={c.item} className="checkbox">
-          <input
-            type="checkbox"
-            checked={pending[c.item] ?? c.item in call.checklist}
-            disabled={c.item in pending}
-            onChange={(e) => {
-              const done = e.target.checked;
-              setPending((p) => ({ ...p, [c.item]: done }));
-              void run(async () => {
-                await tel.tickChecklist(call.id, c.item, done);
-                await onChange();
-              }, c.item).finally(() => settle(c.item));
-            }}
-          />
-          <span>
-            {c.label}
-            {c.required ? <span className="muted"> (needed to close the call)</span> : null}
-          </span>
-        </label>
-      ))}
-      <ErrorNotice error={error} />
-    </fieldset>
-  );
-}
-
 const B_DIALS = 3; // as the server allows in one call
-const B_WORDS: Record<string, string> = {
-  ACCEPTED: "The phone system is ringing participant B",
-  REFUSED: "The phone system did not ring participant B",
-  UNREACHABLE: "The phone system did not answer; B's phone may still ring",
-};
 
-/** Ring participant B into the call once A is on the line (D-111). */
-function CallB({
-  call,
-  task,
-  onChange,
-}: {
-  call: tel.Call;
-  task: work.TaskDetail;
-  onChange: () => Promise<unknown>;
-}) {
-  const { busy, error, run } = useAction();
-  const aOn = "A_JOINED" in call.checklist;
-  const bOn = "B_JOINED" in call.checklist;
-  const tries = call.b_dial_attempts ?? 0;
-  const left = B_DIALS - tries;
-  return (
-    <div className="call-b" role="group" aria-label="Participant B">
-      <div>
-        <strong>Participant B ({task.participant_b.participant_code})</strong>
-        <p className="muted">
-          {tries === 0
-            ? aOn
-              ? "A is on the call. Ring B now: B joins this call."
-              : "Tick that participant A is on the call first."
-            : `${B_WORDS[call.b_dial_status ?? ""] ?? "Asked to ring B"} (number ending ${
-                call.b_phone_hint ?? "?"
-              }${call.b_dialled_at ? `, at ${time(call.b_dialled_at)}` : ""}).${
-                bOn ? "" : " When B answers, tick that B is on the call."
-              }`}
-        </p>
-      </div>
-      {bOn ? null : (
-        <Button
-          variant={tries === 0 ? "primary" : "secondary"}
-          busy={busy !== null}
-          disabled={!aOn || left <= 0}
-          onClick={() =>
-            void run(async () => {
-              await tel.callParticipantB(call.id);
-              await onChange();
-            })
-          }
-        >
-          <Icon name="phone" size={16} weight="fill" />
-          {tries === 0 ? "Call participant B" : `Ring B again (${left} left)`}
-        </Button>
-      )}
-      <ErrorNotice error={error} />
-    </div>
-  );
-}
-
-/** The moderator marks the conversation once both people are on the line and have agreed to be
- * recorded (D-113, D-119). The phone system records the whole call; the delivery file keeps only
- * what lies between Start and Stop. */
-function RecordMarks({
-  call,
-  task,
-  onChange,
-}: {
-  call: tel.Call;
-  task: work.TaskDetail;
-  onChange: () => Promise<unknown>;
-}) {
+/** The call in progress, one main button at a time (D-127). Each button does what the moderator
+ * says happened and the next step together: "A answered" ticks A and rings B; "B answered" ticks
+ * B and marks where the recording starts; "Stop and close" marks the end and closes the call. */
+function CallSteps({ call, onChange }: { call: tel.Call; onChange: () => Promise<unknown> }) {
   const { busy, error, run } = useAction();
   const [now, setNow] = useState(() => Date.now());
+  const aOn = "A_JOINED" in call.checklist;
+  const bOn = "B_JOINED" in call.checklist;
   const started = call.record_started_at ?? null;
   const stopped = call.record_stopped_at ?? null;
-  const bothOn = "A_JOINED" in call.checklist && "B_JOINED" in call.checklist;
-  const consented = task.consent_missing.length === 0;
+  const bLeft = B_DIALS - (call.b_dial_attempts ?? 0);
   useEffect(() => {
     if (!started || stopped) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -293,48 +190,84 @@ function RecordMarks({
   const elapsed = started
     ? Math.max(0, Math.round(((stopped ? Date.parse(stopped) : now) - Date.parse(started)) / 1000))
     : 0;
-  const mark = (step: "start" | "stop") =>
+  const step = (key: string, ...actions: (() => Promise<unknown>)[]) =>
     void run(async () => {
-      await tel.markRecording(call.id, step);
-      await onChange();
-    }, step);
+      try {
+        for (const action of actions) await action();
+      } finally {
+        await onChange();
+      }
+    }, key);
+  const tick = (item: tel.ChecklistItem) => () => tel.tickChecklist(call.id, item, true);
+  const ringB = () => tel.callParticipantB(call.id);
+  const startRecording = () => tel.markRecording(call.id, "start");
+  const stopRecording = () => tel.markRecording(call.id, "stop");
+  const close = () => tel.closeCall(call.id, "");
+
+  let words: string;
+  let main: ReactNode;
+  let extra: ReactNode = null;
+  if (!aOn) {
+    words = `Ringing participant A (number ending ${call.phone_hint}). Click when they answer.`;
+    main = (
+      <Button busy={busy === "a"} onClick={() => step("a", tick("A_JOINED"), ringB)}>
+        <Icon name="phone" size={16} weight="fill" />A answered – call B
+      </Button>
+    );
+  } else if (!bOn && !call.b_dial_attempts) {
+    // A is on the line but B was not rung (the request for B failed): ring B from here.
+    words = "Participant A is on the line.";
+    main = (
+      <Button busy={busy === "ring"} onClick={() => step("ring", ringB)}>
+        <Icon name="phone" size={16} weight="fill" />
+        Call participant B
+      </Button>
+    );
+  } else if (!bOn) {
+    words = `Ringing participant B (number ending ${call.b_phone_hint ?? "?"}). Click when they answer.`;
+    main = (
+      <Button busy={busy === "b"} onClick={() => step("b", tick("B_JOINED"), startRecording)}>
+        <Icon name="record" size={16} />B answered – start recording
+      </Button>
+    );
+    extra =
+      bLeft > 0 ? (
+        <Button variant="secondary" busy={busy === "ring"} onClick={() => step("ring", ringB)}>
+          Ring B again ({bLeft} left)
+        </Button>
+      ) : null;
+  } else if (!started) {
+    words = "Both are on the line.";
+    main = (
+      <Button busy={busy === "rec"} onClick={() => step("rec", startRecording)}>
+        <Icon name="record" size={16} />
+        Start recording
+      </Button>
+    );
+  } else if (!stopped) {
+    words = `Recording · ${clock(elapsed)}. Stay muted and listen. Click when they have finished.`;
+    main = (
+      <Button busy={busy === "stop"} onClick={() => step("stop", stopRecording, close)}>
+        <Icon name="stop" size={16} />
+        Stop and close call
+      </Button>
+    );
+  } else {
+    words = `Recording stopped (${clock(elapsed)}).`;
+    main = (
+      <Button busy={busy === "close"} onClick={() => step("close", close)}>
+        <Icon name="check" size={16} weight="bold" />
+        Close call
+      </Button>
+    );
+  }
   return (
-    <div className="call-b record-marks" role="group" aria-label="Recording">
-      <div>
-        <strong>
-          {!started ? "Recording not started" : stopped ? "Recording stopped" : "Recording"}
-          {started ? ` · ${clock(elapsed)}` : ""}
-        </strong>
-        <p className="muted">
-          {!started
-            ? !bothOn
-              ? "Tick that A and B are on the call first."
-              : !consented
-                ? "Note both people's consent below first."
-                : "Both people are on the line and agreed. Click Start recording when the conversation begins."
-            : stopped
-              ? `Kept: ${time(started)} to ${time(stopped)}. Only this part is delivered.`
-              : `Since ${time(started)}. Click Stop recording when they have finished.`}
-        </p>
+    <div className="stack">
+      <p aria-live="polite">{words}</p>
+      <div className="actions">
+        {main}
+        {extra}
       </div>
-      <span className="actions">
-        {!started || stopped ? (
-          <Button
-            variant={started ? "secondary" : "primary"}
-            busy={busy === "start"}
-            disabled={!bothOn || !consented}
-            onClick={() => mark("start")}
-          >
-            <Icon name="record" size={16} />
-            {started ? "Start again" : "Start recording"}
-          </Button>
-        ) : (
-          <Button busy={busy === "stop"} onClick={() => mark("stop")}>
-            <Icon name="stop" size={16} />
-            Stop recording
-          </Button>
-        )}
-      </span>
       <ErrorNotice error={error} />
     </div>
   );
@@ -351,7 +284,6 @@ function CallCard({
   onChange: OnTaskChange;
 }) {
   const status = useResource(() => tel.telephonyStatus(), []);
-  const [note, setNote] = useState("");
   const refresh = () => void calls.refresh();
   const { busy, error, run } = useAction();
 
@@ -425,21 +357,21 @@ function CallCard({
       body = <p>Phone calls are not set up yet. Ask your admin to set up the phone system.</p>;
       go = null;
     } else if (!latest || ["DIAL_FAILED", "CANCELLED", "RECORDED"].includes(latest.state)) {
+      const waiting = task.consent_missing;
       title = "Ready to call";
       body = (
         <>
-          <ol className="record-card__steps record-card__steps--list">
-            <li>Note both people&apos;s consent below.</li>
-            <li className="is-now">
-              Click Start call: the phone system rings participant A (
-              {task.participant_a.participant_code}).
-            </li>
-            <li>When A answers, tick it and click Call participant B.</li>
-            <li>
-              When both are on the line, click Start recording; Stop recording when they finish,
-              then Close call.
-            </li>
-          </ol>
+          {waiting.length > 0 ? (
+            <p className="notice">
+              Participant {waiting.join(" and ")} has not agreed on the consent form yet. The call
+              can start once both have agreed.
+            </p>
+          ) : (
+            <p>
+              Click Start call: participant A&apos;s phone rings (
+              {task.participant_a.participant_code}). Then follow the button on this card.
+            </p>
+          )}
           {latest?.state === "DIAL_FAILED" ? (
             <p className="notice notice--error" role="alert">
               The last call could not be placed. {problem(latest)}
@@ -450,6 +382,7 @@ function CallCard({
       go = (
         <Button
           busy={busy === "start"}
+          disabled={waiting.length > 0}
           onClick={() => callAction("start", () => tel.startCall(task.id))}
         >
           <Icon name="phone" size={16} weight="fill" />
@@ -457,46 +390,9 @@ function CallCard({
         </Button>
       );
     } else if (latest.state === "DIALLING") {
-      const ready =
-        tel.CHECKLIST.every((c) => !c.required || c.item in latest.checklist) &&
-        Boolean(latest.record_started_at);
       title = "On the call";
-      body = (
-        <>
-          <p>
-            The phone system is ringing participant A (number ending {latest.phone_hint}). When A is
-            on the line, tick it, then call participant B. Stay on the call, muted, and listen: if
-            the line is poor, cancel the call and choose <strong>Poor line quality</strong>.
-          </p>
-          <Checklist call={latest} onChange={calls.refresh} />
-          <CallB call={latest} task={task} onChange={calls.refresh} />
-          <RecordMarks call={latest} task={task} onChange={calls.refresh} />
-          <TextField
-            label="Note for the record (optional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          {ready ? null : (
-            <p className="muted">
-              To close the call: tick that both people are on the call, note their consent below,
-              then start and stop the recording.
-            </p>
-          )}
-        </>
-      );
-      go = (
-        <>
-          <Button
-            busy={busy === "close"}
-            disabled={!ready}
-            onClick={() => callAction("close", () => tel.closeCall(latest.id, note))}
-          >
-            <Icon name="check" size={16} weight="bold" />
-            Close call
-          </Button>
-          {cancel(latest)}
-        </>
-      );
+      body = <CallSteps call={latest} onChange={calls.refresh} />;
+      go = cancel(latest);
     } else if (latest.state === "WAITING_FOR_RECORDING") {
       title = "Fetching the recording";
       body = (

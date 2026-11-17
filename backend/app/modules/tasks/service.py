@@ -605,8 +605,8 @@ def capture_consent(
 
 def consent_missing_error(missing: list[str]) -> AppError:
     return AppError(
-        f"Consent is missing for participant {' and '.join(missing)}. Note their consent on "
-        "the task page, or have them answer their consent form, before recording.",
+        f"Participant {' and '.join(missing)} has not agreed on the consent form yet. Send them "
+        "the consent form; recording waits until both have agreed.",
         code="CONSENT_MISSING",
         status_code=409,
         details=[{"missing": missing}],

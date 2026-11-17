@@ -362,7 +362,6 @@ function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
 
 function Figures({ data, allProjects }: { data: tel.CallAnalytics; allProjects: boolean }) {
   const target = data.target_minutes_per_day;
-  const closed = data.checklist.closed_calls ?? 0;
   return (
     <>
       {data.truncated ? (
@@ -493,24 +492,6 @@ function Figures({ data, allProjects }: { data: tel.CallAnalytics; allProjects: 
           labels={tel.FAILURE_LABELS}
         />
       </div>
-      <section className="card" aria-labelledby="checklist-title">
-        <h2 id="checklist-title">Call checklist on closed calls</h2>
-        <Bars
-          wide
-          max={closed}
-          rows={
-            closed > 0
-              ? tel.CHECKLIST.map((c) => ({
-                  key: c.item,
-                  label: c.label,
-                  n: data.checklist[c.item] ?? 0,
-                  note: `of ${closed}`,
-                }))
-              : []
-          }
-          empty="No closed call in this period."
-        />
-      </section>
     </>
   );
 }

@@ -33,14 +33,9 @@ export const CALL_STATE_LABELS: Record<CallState, string> = {
   RECORDED: "Recording stored",
 };
 
-/** What the moderator confirms while on the call. The first two are needed to close it. */
+/** What the moderator says happened on the call ("A answered", "B answered", D-127); both are
+ * needed to close it. Older calls may also carry the two checks that were dropped. */
 export type ChecklistItem = "A_JOINED" | "B_JOINED" | "MODERATOR_MUTED" | "QUALITY_OK";
-export const CHECKLIST: readonly { item: ChecklistItem; label: string; required: boolean }[] = [
-  { item: "A_JOINED", label: "Participant A is on the call", required: true },
-  { item: "B_JOINED", label: "Participant B is on the call", required: true },
-  { item: "MODERATOR_MUTED", label: "I am muted and listening", required: false },
-  { item: "QUALITY_OK", label: "Both voices are clear", required: false },
-];
 
 export interface Candidate {
   /** Sent back to choose this call; the provider's own names below are shown masked. */

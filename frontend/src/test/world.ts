@@ -64,8 +64,11 @@ export const PARTICIPANT_B = {
 const party = (p: typeof PARTICIPANT) => ({
   id: p.id,
   participant_code: p.participant_code,
-  consent_status: null,
-  consent_at: null,
+  consent_status: "GIVEN",
+  consent_at: "2026-11-09T00:00:00Z",
+  consent_source: "FORM",
+  consent_review: "APPROVED",
+  may_record: true,
 });
 
 export const CALL_ANALYTICS = {

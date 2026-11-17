@@ -58,7 +58,7 @@ function call(state: string, extra: Record<string, unknown> = {}) {
 }
 
 describe("phone calls on the task page", () => {
-  it("starts the call, ticks the checklist, then closes it, showing only the server's state", async () => {
+  it("follows one button at a time: start, A answered, B answered, stop and close (D-127)", async () => {
     let calls: Record<string, unknown>[] = [];
     const api = fakeApi(
       signedInAs(ALL_PERMISSIONS, {
@@ -116,55 +116,34 @@ describe("phone calls on the task page", () => {
       await screen.findByRole("button", { name: "Start call" }, { timeout: 5000 }),
     );
     expect(await screen.findByRole("heading", { name: "On the call" })).toBeInTheDocument();
-    expect(screen.getByText("The phone system is ringing participant A")).toBeInTheDocument();
+    expect(screen.getByText(/Ringing participant A \(number ending 10\)/)).toBeInTheDocument();
     // The provider's own answer is in the Super Admin's technical log.
     expect(screen.getByText("Technical log")).toBeInTheDocument();
-    // Both people must be confirmed on the call before it can be closed.
-    expect(screen.getByRole("button", { name: "Close call" })).toBeDisabled();
-    // B is rung from here once A is on the line (D-111).
-    const ringB = screen.getByRole("button", { name: "Call participant B" });
-    expect(ringB).toBeDisabled();
-    await userEvent.click(screen.getByRole("checkbox", { name: /Participant A is on the call/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Call participant B" })).toBeEnabled(),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Call participant B" }));
+    // No checklist to tick: one button says what happened and does the next step.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /A answered/ }));
     expect(
-      await screen.findByText(/The phone system is ringing participant B \(number ending 78/),
+      await screen.findByText(/Ringing participant B \(number ending 78\)/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ring B again (2 left)" })).toBeEnabled();
-    await userEvent.click(
-      await screen.findByRole("checkbox", { name: /Participant B is on the call/ }),
-    );
-    // B is on: nothing left to ring.
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /Ring B again/ })).not.toBeInTheDocument(),
-    );
-    // Both on the line: the conversation is marked (D-113); closing needs the start.
-    expect(screen.getByRole("button", { name: "Close call" })).toBeDisabled();
-    await userEvent.click(await screen.findByRole("button", { name: "Start recording" }));
-    expect(await screen.findByRole("button", { name: "Stop recording" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close call" })).toBeEnabled());
-    await userEvent.click(screen.getByRole("button", { name: "Stop recording" }));
-    expect(await screen.findByText(/Only this part is delivered/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start again" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /B answered/ }));
+    expect(await screen.findByRole("button", { name: "Stop and close call" })).toBeInTheDocument();
+    expect(screen.getByText(/^Recording · /)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Stop and close call" }));
+    expect(
+      await screen.findByRole("heading", { name: "Fetching the recording" }),
+    ).toBeInTheDocument();
     expect(
       api.calls.filter((c) => c.path === "/api/v1/calls/c1/checklist").map((c) => c.body),
     ).toEqual([
       { item: "A_JOINED", done: true },
       { item: "B_JOINED", done: true },
     ]);
-    expect(api.calls.filter((c) => c.path === "/api/v1/calls/c1/call-b")).toHaveLength(1);
-    await userEvent.type(screen.getByLabelText("Note for the record (optional)"), "clear line");
-    await userEvent.click(screen.getByRole("button", { name: "Close call" }));
     expect(
-      await screen.findByRole("heading", { name: "Fetching the recording" }),
-    ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(api.calls.find((c) => c.path === "/api/v1/calls/c1/close")?.body).toEqual({
-        note: "clear line",
-      }),
-    );
+      api.calls
+        .filter((c) => c.path.startsWith("/api/v1/calls/c1/") && c.method === "POST")
+        .map((c) => c.path.replace("/api/v1/calls/c1/", "")),
+    ).toEqual(["checklist", "call-b", "checklist", "recording/start", "recording/stop", "close"]);
     // While the recording is fetched the call can still be cancelled.
     expect(screen.getByRole("button", { name: "Cancel this call" })).toBeInTheDocument();
   });
@@ -355,27 +334,26 @@ describe("phone calls on the task page", () => {
 describe("phone calls in plain words (UI review 2026-11-17)", () => {
   const MODERATOR = { ...ME, roles: ["MODERATOR"], permissions: ALL_PERMISSIONS };
 
-  it("waits for both people's consent before the recording starts, and asks for it right under the call (D-119)", async () => {
+  it("does not call anyone before both have agreed on their consent form (D-127)", async () => {
     fakeApi({
       ...signedInAs(ALL_PERMISSIONS, {
         ...worldHandlers(),
         "GET /api/v1/tasks/t1": () => [200, { ...PHONE_TASK, consent_missing: ["B"] }],
-        "GET /api/v1/tasks/t1/calls": () => [
-          200,
-          [call("DIALLING", { checklist: { A_JOINED: "x", B_JOINED: "y" } })],
-        ],
+        "GET /api/v1/tasks/t1/calls": () => [200, []],
       }),
       "GET /api/v1/auth/me": () => [200, MODERATOR],
     });
     renderAt("/tasks/t1");
-    const start = await screen.findByRole("button", { name: "Start recording" }, { timeout: 5000 });
+    const start = await screen.findByRole("button", { name: "Start call" }, { timeout: 5000 });
     expect(start).toBeDisabled();
-    expect(screen.getByText("Note both people's consent below first.")).toBeInTheDocument();
-    // The consent card sits between the call card and the call history.
+    expect(
+      screen.getByText(/Participant B has not agreed on the consent form yet/),
+    ).toBeInTheDocument();
+    // Who is missing sits between the call card and the call history.
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     const at = (name: string) => headings.findIndex((h) => h?.includes(name));
-    expect(at("On the call")).toBeLessThan(at("Consent"));
-    expect(at("Consent")).toBeLessThan(at("Phone calls"));
+    expect(at("Ready to call")).toBeLessThan(at("Waiting for consent"));
+    expect(at("Waiting for consent")).toBeLessThan(at("Phone calls"));
   });
 
   it("tells a moderator what went wrong in plain words, without the provider's answer", async () => {
