@@ -155,7 +155,8 @@ provider's call id or file name (which may carry the number) is masked wherever 
 exported; `calls.provider_session_id`, `provider_file` and `candidates` keep the real names because
 the download needs them, and no API returns them unmasked.
 
-Migration 0020 also sets telephony audio rules from 2 channels to 1 (D-103).
+Migration 0020 also sets telephony audio rules from 2 channels to 1 (D-103); migration 0029 sets
+those still at 1 back to 2, as TxContact records calls in stereo (D-134).
 
 ## Export bundles (migration 0021, D-105)
 

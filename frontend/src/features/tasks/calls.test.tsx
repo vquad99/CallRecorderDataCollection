@@ -279,7 +279,7 @@ describe("phone calls on the task page", () => {
                   kind: "TELEPHONY_DERIVED_PCM",
                   version: 1,
                   sample_rate: 16000,
-                  channels: 1,
+                  channels: 2, // TxContact's recordings are stereo (D-134)
                   duration_ms: 36_000, // cut to the recording marks from the provider's 42 s
                 },
               ],
@@ -312,7 +312,7 @@ describe("phone calls on the task page", () => {
     );
     expect(screen.getByText("36 s")).toBeInTheDocument();
     expect(screen.queryByText("42 s")).not.toBeInTheDocument();
-    expect(screen.getByText("16000 Hz, mono")).toBeInTheDocument();
+    expect(screen.getByText("16000 Hz, stereo")).toBeInTheDocument();
     expect(screen.queryByText("No recording yet.")).not.toBeInTheDocument();
   });
 

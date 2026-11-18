@@ -1,6 +1,7 @@
 """The platform's own work on a closed phone call (D-101, D-103, D-113): find the call's recording
 among the provider's calls, download it, keep the provider's file unchanged, build the 16 kHz
-delivery file (cut to the moderator's recording marks), and move the task to Recorded.
+delivery file with every channel (cut to the moderator's recording marks; a 16 kHz file is not
+resampled, D-134), and move the task to Recorded.
 
 Whatever goes wrong, the call ends each step either waiting for its next try or shown to a person
 with the reason; it can always be cancelled. People's actions on calls are in service.py.
@@ -633,18 +634,18 @@ def _store_recording(
             ):
                 raise RuntimeError("delivery file does not match the 16 kHz 16-bit target")
             stored.append(final.storage_key)
+            tool, version, conversion = media.telephony_delivery_tool(heard.sample_rate)
             assets.store_asset(
                 db,
                 storage,
                 final,
                 derived,
                 assets.Step(
-                    "libsndfile decode + python-soxr",
-                    media.SOXR_VERSION,
+                    tool,
+                    version,
                     f"{heard.container}/{heard.codec} decoded to float32 at "
-                    f"{heard.sample_rate} Hz; {cut.description}; "
-                    f"{rec.channel_handling}; libsoxr quality=VHQ, "
-                    f"{media.TARGET_RATE} Hz, float32 -> int16 round-half-even, clip, no dither",
+                    f"{heard.sample_rate} Hz; {cut.description}; {rec.channel_handling}; "
+                    f"{conversion}; float32 -> int16 round-half-even, clip, no dither",
                     original.sha256,
                 ),
                 label="delivery",

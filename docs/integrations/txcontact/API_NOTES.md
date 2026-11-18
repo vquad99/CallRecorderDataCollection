@@ -66,8 +66,8 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 | Moderator leaving | Not described. | Whether A and B stay connected and recorded after the moderator leaves is NOT VERIFIED. |
 | Linking our call to TxContact's | The dial answer gives no call ID (NOT VERIFIED); the dialer takes no reference of ours. | The platform finds the call by agent seat, time (dial to close, ±2 min) and A's number in `sl_from`/`sl_to`. If several fit, or the number is not shown, a person picks the call. |
 | Callbacks | None in the description. | The platform asks every minute or so after the call is closed (backing off to 5 minutes), for `TELEPHONY_FETCH_MINUTES` (default 60), then asks a person. |
-| Recording format | Not described; examples mention `.wav` and `.mp4`. | Read with libsndfile (WAV incl. µ-law/A-law, MP3, FLAC, Ogg). MP4/AAC cannot be read: the call shows "Recording could not be fetched" with the reason. Sample rate and channels are recorded as found. |
-| Separate speakers | Not described. | The provider file is kept unchanged; the 16 kHz delivery file keeps every channel the provider sends, never mixed. A one-channel file holds everyone, including the moderator (no A-left/B-right file). |
+| Recording format | Not described; examples mention `.wav` and `.mp4`. TxContact stated (2026-11-18): WAV, stereo, 16 kHz; a real phone task's recording then measured 2 channels. Earlier test calls (2026-11-15) were 1 channel, 8 kHz. | Read with libsndfile (WAV incl. µ-law/A-law, MP3, FLAC, Ogg). MP4/AAC cannot be read: the call shows "Recording could not be fetched" with the reason. Sample rate and channels are recorded as found. A project's phone rule expects 16 kHz, 16-bit, stereo (D-134); a 16 kHz file is copied into the delivery file sample for sample, another rate is resampled to 16 kHz. |
+| Separate speakers | Stereo, but which voice is on which channel is NOT VERIFIED. A contact centre often records the agent on one channel and everyone else on the other; then A and B share a channel and the muted moderator's channel is nearly silent. | The provider file is kept unchanged; the 16 kHz delivery file keeps both channels, never mixed. A one-channel file fails the automatic check with "A track is missing" (MISSING_TRACK), so a change at TxContact is caught. Settle the channel layout with the first real call (left alone, right alone). |
 | Time zone | `sl_start_time` is "date-time" without a stated zone. Seen 2026-11-17: a call placed at 14:52:03 IST was listed as `2026-11-17T20:22:07+05:30`, 5 h 30 min ahead, and filed under the date of that time. | Times without a zone are read as `TXCONTACT_TIMEZONE` (default Asia/Kolkata). Every time is then moved back by `TXCONTACT_CLOCK_AHEAD_MINUTES` (`330` on the live site), and the dates searched are moved forward by it (D-131). |
 | Number format | The example dials 10 digits with no country code. | Only Indian mobile numbers (+91, 10 digits from 6-9) are dialled; others are refused before calling. |
 | Limits, cost, data location, retention | Not described. | Ask TxContact (see questions below). |
@@ -141,7 +141,8 @@ NOT VERIFIED until the first live test, and what to change if the guess is wrong
 
 1. What does `contact/add` answer on success and on failure? Does it return a call ID?
 2. Can the agent add B as a conference and leave, with A and B still connected and recorded?
-3. Recording format: codec, sample rate, channels; can A and B be on separate channels?
+3. Recording format: answered 2026-11-18, WAV, stereo, 16 kHz. Still open: who is on which
+   channel (agent, A, B), and can A and B be on separate channels?
 4. Which word goes before the token in the `Authorization` header?
 5. Time zone of `sl_start_time`; do `sl_from`/`sl_to` hold the customer's number?
 6. Can the dialer carry a reference of ours (one of `sl_ref_field1..20`)?

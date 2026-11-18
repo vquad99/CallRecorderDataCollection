@@ -140,6 +140,24 @@ def test_every_provider_rate_converts_to_16k_with_the_same_length(
     assert level.peak_dbfs == pytest.approx(-6.0, abs=0.3), "no gain added or lost"
 
 
+def test_a_16k_stereo_phone_file_is_copied_not_resampled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-134: TxContact's file is already 16 kHz stereo; the delivery file keeps both channels
+    sample for sample, as face-to-face does (D-123). The resampler is not even started."""
+    left, right = fx.tone(2.0, freq=220.0), fx.tone(2.0, freq=330.0, dbfs=-12.0)
+    raw = fx.write_raw(tmp_path / "s.f32", fx.interleave(left, right))
+    monkeypatch.setattr(media.soxr, "ResampleStream", None)
+    media.resample_keep_channels_to_pcm16(raw, 16_000, tmp_path / "d.wav", 2)
+    data, rate = soundfile.read(tmp_path / "d.wav", dtype="int16")
+    assert (rate, data.shape) == (16_000, (len(left), 2))
+    assert np.array_equal(data, np.stack([media.to_pcm16(left), media.to_pcm16(right)], axis=1))
+    tool, _, conversion = media.telephony_delivery_tool(16_000)
+    assert "soxr" not in tool
+    assert conversion == "16000 Hz as delivered, no resampling"
+    assert "soxr" in media.telephony_delivery_tool(8_000)[0]
+
+
 @pytest.mark.parametrize("channels", [1, 2, 3, 4, 6, 8])
 def test_any_channel_count_keeps_all_channels_and_delivers_channel_one(
     tmp_path: Path, channels: int

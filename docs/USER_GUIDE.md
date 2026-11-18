@@ -184,8 +184,10 @@ Project tabs:
 - **Participants**: the project's participants (section 5).
 - **Tasks**: every task of this project, with the same search, status and recording type filters
   as the Tasks page. **New task** here starts with this project already chosen.
-- **Audio rules**: the sound format and limits the automatic check uses (default 16 000 Hz,
-  16-bit, mono, at most 25 % silence).
+- **Audio rules**: the sound format and limits the automatic check uses. Defaults: face-to-face
+  16 000 Hz, 16-bit, mono; phone calls 16 000 Hz, 16-bit, stereo (TxContact records calls in
+  stereo). Both allow at most 25 % silence. A phone recording with one channel fails the check
+  with "A track is missing".
 - **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,
   Tamil, English (India)). When a project has languages, every participant must match one.
 - **Retention**: how many days to keep each kind of file. Each box shows a faded example under it

@@ -208,3 +208,54 @@ def test_the_seat_password_column_comes_and_goes(test_database_url: str) -> None
     command.upgrade(cfg, "head")
     assert "telephony_password_enc" in columns()
     engine.dispose()
+
+
+def test_telephony_rules_at_the_old_default_become_stereo(test_database_url: str) -> None:
+    """0029 (D-134): a telephony rule still at the old default of 1 channel becomes 2; one a
+    project set to 2 and every face-to-face rule are left alone; going back makes phone rules 1."""
+    from sqlalchemy.orm import Session
+
+    from app.modules.projects.models import ProjectAudioRule
+    from tests.conftest import make_project
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0028")
+    engine = create_engine(test_database_url)
+    with Session(engine) as db:
+        for code, phone_channels in (("OLD", 1), ("SET", 2)):
+            project = make_project(db, code)
+            db.add_all(
+                ProjectAudioRule(
+                    project_id=project.id,
+                    mode=mode,
+                    sample_rate=16000,
+                    bit_depth=16,
+                    channels=channels,
+                    max_silence_pct=25,
+                    min_duration_seconds=0,
+                )
+                for mode, channels in (("TELEPHONY", phone_channels), ("FACE_TO_FACE", 1))
+            )
+        db.commit()
+
+    def channels() -> dict[tuple[str, str], int]:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT p.code, r.mode, r.channels FROM project_audio_rules r "
+                    "JOIN projects p ON p.id = r.project_id"
+                )
+            )
+            return {(code, mode): n for code, mode, n in rows}
+
+    command.upgrade(cfg, "head")
+    assert channels() == {
+        ("OLD", "TELEPHONY"): 2,
+        ("OLD", "FACE_TO_FACE"): 1,
+        ("SET", "TELEPHONY"): 2,
+        ("SET", "FACE_TO_FACE"): 1,
+    }
+    command.downgrade(cfg, "0028")
+    assert set(channels().values()) == {1}
+    engine.dispose()

@@ -4,9 +4,10 @@ AUDIO-019..022: a deterministic pipeline. The original (32-bit float, every chan
 delivered, interleaved) is never changed. Face-to-face (D-123): the browser records at the
 project's rate (16 kHz) and the delivery file is the recording itself: the first channel (D-041),
 its samples stored as signed 16-bit by rounding to nearest and clipping, with no resampling, no
-dither, no gain, no filtering, no channel mixing. Telephony (D-101): the provider's file is
-resampled with libsoxr "VHQ" (the resampler FFmpeg uses for `aresample=resampler=soxr`) to 16 kHz,
-with the same rounding and clipping. Every step is recorded by the caller.
+dither, no gain, no filtering, no channel mixing. Telephony (D-101): every channel of the
+provider's file is kept, with the same rounding and clipping; a file already at 16 kHz is copied
+sample for sample (D-134), any other rate is resampled with libsoxr "VHQ" (the resampler FFmpeg
+uses for `aresample=resampler=soxr`) to 16 kHz. Every step is recorded by the caller.
 """
 
 from __future__ import annotations
@@ -127,16 +128,37 @@ def pcm16_delivery(
             dst.writeframes(to_pcm16(samples).tobytes())
 
 
+def telephony_delivery_tool(rate: int) -> tuple[str, str, str]:
+    """(tool, version, conversion) for a phone call's delivery file made from a provider file at
+    `rate`, as resample_keep_channels_to_pcm16 makes it."""
+    if rate == TARGET_RATE:
+        return (
+            f"libsndfile decode + {DELIVERY_TOOL[0]}",
+            DELIVERY_TOOL[1],
+            f"{TARGET_RATE} Hz as delivered, no resampling",
+        )
+    return (
+        "libsndfile decode + python-soxr",
+        SOXR_VERSION,
+        f"libsoxr quality=VHQ, {rate} Hz -> {TARGET_RATE} Hz",
+    )
+
+
 def resample_keep_channels_to_pcm16(
     raw: Path, rate: int, out: Path, channels: int, *, offset: int = 0, length: int | None = None
 ) -> None:
     """Telephony delivery file (D-101): every channel of the interleaved float32 input, 16 kHz,
-    signed 16-bit; channels are kept apart, never mixed. Same resampler, rounding and clipping
-    as the face-to-face file, one block at a time."""
+    signed 16-bit; channels are kept apart, never mixed. Input already at 16 kHz is copied sample
+    for sample (D-134); any other rate goes through the resampler. Same rounding and clipping as
+    the face-to-face file, one block at a time."""
     length = raw.stat().st_size - offset if length is None else length
     if channels < 1 or length % (4 * channels):
         raise ValueError("raw float32 data is not a whole number of frames")
-    stream = soxr.ResampleStream(rate, TARGET_RATE, channels, dtype="float32", quality="VHQ")
+    stream = (
+        None
+        if rate == TARGET_RATE
+        else soxr.ResampleStream(rate, TARGET_RATE, channels, dtype="float32", quality="VHQ")
+    )
     block_bytes = BLOCK * 4 * channels
     remaining = length
     with raw.open("rb") as src, wave.open(str(out), "wb") as dst:
@@ -149,8 +171,9 @@ def resample_keep_channels_to_pcm16(
             remaining -= len(part)
             last = remaining <= 0 or len(part) == 0
             frames = np.frombuffer(part, dtype="<f4").reshape(-1, channels)
-            pcm = to_pcm16(stream.resample_chunk(frames, last=last))
-            dst.writeframes(np.ascontiguousarray(pcm).tobytes())
+            if stream is not None:
+                frames = stream.resample_chunk(frames, last=last)
+            dst.writeframes(np.ascontiguousarray(to_pcm16(frames)).tobytes())
             if last:
                 break
 

@@ -8,7 +8,7 @@ real browser without ringing anyone:
                                         cmp-ref ...attach-call rings B into the call (D-111)
 - POST /txrecord/api/v1/auth/           {"status": "OK", "auth_token": ...}; wrong login: 400
 - GET  /txrecord/api/search             the calls "made" through the dialer, one page
-- GET  /txrecord/download/<file>        a short 8 kHz mono WAV (two alternating tones)
+- GET  /txrecord/download/<file>        a short 16 kHz stereo WAV (a tone on each channel in turn)
 - GET  /txrecord/api/v1/record/mostcallshour/   calls per hour of the day
 - WebSocket /txagentmanager/            the agent manager a moderator's page signs the seat in
                                         to (D-133): the events of TxContact's TxAgentManager
@@ -183,19 +183,20 @@ def dial_to_seat(agent: str) -> bool:
         return True
 
 
-def _wav(seconds: int = 12, rate: int = 8000) -> bytes:
-    """Two "voices" taking turns: 220 Hz and 330 Hz, half a second of quiet between turns."""
+def _wav(seconds: int = 12, rate: int = 16000) -> bytes:
+    """A call as TxContact records it (D-134): WAV, 16 kHz, 16-bit, stereo. Two "voices" take
+    turns, each on its own channel: 220 Hz on the left, 330 Hz a little quieter on the right, an
+    eighth of a second of quiet in each turn."""
     frames = bytearray()
     for n in range(seconds * rate):
-        turn = (n // rate) % 2
-        quiet = (n % rate) > rate // 2 and (n % rate) < rate // 2 + rate // 8
-        value = (
-            0.0 if quiet else 0.35 * math.sin(2 * math.pi * (220 if turn == 0 else 330) * n / rate)
-        )
-        frames += struct.pack("<h", int(value * 32767))
+        left_turn = (n // rate) % 2 == 0
+        quiet = rate // 2 < n % rate < rate // 2 + rate // 8
+        tone = 0.0 if quiet else math.sin(2 * math.pi * (220 if left_turn else 330) * n / rate)
+        left, right = (0.35 * tone, 0.0) if left_turn else (0.0, 0.25 * tone)
+        frames += struct.pack("<hh", int(left * 32767), int(right * 32767))
     out = io.BytesIO()
     with wave.open(out, "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(rate)
         w.writeframes(bytes(frames))

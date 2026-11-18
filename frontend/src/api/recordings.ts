@@ -129,9 +129,11 @@ export const deliveryAsset = (assets: readonly Asset[]): Asset | undefined =>
       undefined,
     );
 
-/** A file's format in plain words: "16000 Hz, mono". */
+const CHANNEL_WORDS: Record<number, string> = { 1: "mono", 2: "stereo" };
+
+/** A file's format in plain words: "16000 Hz, mono", "16000 Hz, stereo". */
 export const formatLabel = (asset: Asset): string =>
-  `${asset.sample_rate} Hz, ${asset.channels === 1 ? "mono" : `${asset.channels} channels`}`;
+  `${asset.sample_rate} Hz, ${CHANNEL_WORDS[asset.channels] ?? `${asset.channels} channels`}`;
 
 /** A recording's length for people: seconds under a minute, minutes after. */
 export const lengthLabel = (seconds: number): string =>

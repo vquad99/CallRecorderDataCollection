@@ -42,7 +42,7 @@ from app.modules.auth.security import FieldCipher
 from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import ProjectAudioRule
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
 from app.modules.telephony import fetch
 from app.modules.telephony.models import Call, CallEvent
@@ -131,15 +131,20 @@ def session(sid: str, start: datetime, from_number: str = "9876543210") -> Provi
     )
 
 
-@pytest.fixture
-def audio(tmp_path: Path) -> Path:
-    """Three seconds of an 8 kHz phone-quality tone, 16-bit mono, then one second of silence."""
-    rate = 8000
+def provider_wav(path: Path, rate: int, channels: int) -> Path:
+    """Three seconds of tones, then one second of silence, 16-bit: one tone per channel, each at
+    its own pitch and level, as two speakers on their own channels."""
     t = np.arange(3 * rate) / rate
-    samples = np.concatenate([0.4 * np.sin(2 * np.pi * 300 * t), np.zeros(rate)])
-    path = tmp_path / "provider.wav"
+    tones = [(0.4 - 0.15 * c) * np.sin(2 * np.pi * (300 + 150 * c) * t) for c in range(channels)]
+    samples = np.concatenate([np.stack(tones, axis=1), np.zeros((rate, channels))])
     soundfile.write(str(path), samples, rate, subtype="PCM_16")
     return path
+
+
+@pytest.fixture
+def audio(tmp_path: Path) -> Path:
+    """A call as TxContact records it (D-134): WAV, 16 kHz, 16-bit, stereo."""
+    return provider_wav(tmp_path / "provider.wav", 16000, 2)
 
 
 @pytest.fixture
@@ -426,28 +431,38 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert (rec.mode, rec.state, rec.native_sample_rate, rec.channel_count) == (
         "TELEPHONY",
         "READY",
-        8000,
-        1,
+        16000,
+        2,
     )
+    assert rec.channel_handling == "all 2 channels kept, not mixed"
     assets = {
         a.kind: a for a in db.scalars(select(AudioAsset).where(AudioAsset.recording_id == rec.id))
     }
     original, final = assets["PROVIDER_ORIGINAL_MIXED"], assets["TELEPHONY_DERIVED_PCM"]
-    assert (original.sample_rate, original.channels, original.file_extension) == (8000, 1, "wav")
+    assert (original.sample_rate, original.channels, original.file_extension) == (16000, 2, "wav")
     assert original.storage_key.startswith("PHONE/telephony/")
     assert "/provider-original/" in original.storage_key
     assert (final.codec, final.sample_rate, final.channels, final.bit_depth) == (
         "pcm_s16le",
         16000,
-        1,
+        2,
         16,
     )
     assert final.parent_asset_id == original.id
     assert abs(final.duration_ms - 4000) <= 5
+    # Already 16 kHz: both channels are delivered sample for sample, not resampled (D-134).
+    delivered = w["s3"].get_object(Bucket=BUCKET, Key=final.storage_key)["Body"].read()
+    samples, _ = soundfile.read(io.BytesIO(delivered), dtype="int16")
+    provided, _ = soundfile.read(str(w["provider"].audio), dtype="int16")
+    assert np.array_equal(samples, provided)
+    step = db.scalar(select(AssetProcessingStep).where(AssetProcessingStep.asset_id == final.id))
+    assert step is not None
+    assert "soxr" not in step.tool
+    assert "16000 Hz as delivered, no resampling" in step.parameters
 
     task = w["mod"].get(f"/api/v1/tasks/{tid}").json()
     assert task["status"] == "RECORDED"
-    # One channel is what the project expects of a phone call (D-103): the check does not fail.
+    # Stereo is what the project expects of a phone call (D-134): the check does not fail.
     check = db.scalar(select(AudioQcResult).where(AudioQcResult.recording_id == rec.id))
     assert check is not None
     assert check.outcome != "FAIL", check.comment
@@ -482,6 +497,43 @@ def test_full_call_flow(world: dict[str, Any]) -> None:
     assert told["checklist"]["QUALITY_OK"] is None
     assert [h["kind"] for h in told["history"]][-1] == "RECORDED"
     assert "9876543210" not in details.text
+
+
+def test_a_mono_phone_recording_fails_the_check_with_a_track_missing(
+    world: dict[str, Any], tmp_path: Path
+) -> None:
+    """D-134: should the provider send one mixed channel at 8 kHz again (as seen 2026-11-15), the
+    recording is still stored, resampled to 16 kHz, and the automatic check fails it with "A
+    track is missing": the change is caught, not delivered as stereo."""
+    w = world
+    w["provider"].audio = provider_wav(tmp_path / "mono.wav", 8000, 1)
+    _, call = started_and_closed(w)
+    w["provider"].listed = [session("MONO", datetime.now(UTC) + timedelta(seconds=5))]
+    due_now(w, call["id"])
+    sweep(w)
+    db = w["db"]
+    row = db.get(Call, call["id"])
+    assert row.state == "RECORDED", row.failure_detail
+    final = db.scalar(
+        select(AudioAsset).where(
+            AudioAsset.recording_id == row.recording_id,
+            AudioAsset.kind == "TELEPHONY_DERIVED_PCM",
+        )
+    )
+    assert final is not None
+    assert (final.sample_rate, final.channels) == (16000, 1)
+    step = db.scalar(select(AssetProcessingStep).where(AssetProcessingStep.asset_id == final.id))
+    assert step is not None
+    assert "libsoxr quality=VHQ, 8000 Hz -> 16000 Hz" in step.parameters
+    check = db.scalar(select(AudioQcResult).where(AudioQcResult.recording_id == row.recording_id))
+    assert check is not None
+    assert (check.outcome, check.reason_code) == ("FAIL", "MISSING_TRACK")
+    channels = next(c for c in check.checks if c.code == "CHANNELS")
+    assert (channels.measured, channels.expected, channels.message) == (
+        "1",
+        "2",
+        "A track is missing",
+    )
 
 
 def test_boxes_ticked_at_the_same_moment_are_all_kept(world: dict[str, Any]) -> None:

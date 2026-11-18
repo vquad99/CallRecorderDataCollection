@@ -43,7 +43,7 @@ def test_create_project_with_spec_defaults(admin: Api) -> None:
         rules["TELEPHONY"]["sample_rate"],
         rules["TELEPHONY"]["bit_depth"],
         rules["TELEPHONY"]["channels"],
-    ) == (16000, 16, 1)  # one channel: the phone provider records the call together (D-103)
+    ) == (16000, 16, 2)  # stereo: TxContact's recordings are 16 kHz stereo (D-134)
     assert rules["FACE_TO_FACE"]["channels"] == 1
     assert rules["TELEPHONY"]["max_silence_pct"] == "25.00"
     assert rules["TELEPHONY"]["max_clipping_pct"] is None

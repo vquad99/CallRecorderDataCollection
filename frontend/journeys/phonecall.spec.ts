@@ -189,8 +189,9 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByRole("heading", { name: "Check the call recording" })).toBeVisible({
       timeout: 90_000,
     });
-    // The delivered file: 16 kHz, cut to the marked part (about 4 s plus a second each side).
-    const delivered = moderator.getByRole("row").filter({ hasText: "16000 Hz, mono" });
+    // The delivered file: 16 kHz stereo as TxContact records it (D-134), cut to the marked part
+    // (about 4 s plus a second each side).
+    const delivered = moderator.getByRole("row").filter({ hasText: "16000 Hz, stereo" });
     await expect(delivered).toContainText(/[4-9] s/);
   });
 
@@ -203,7 +204,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     // marked part, about 4 s, plus one second each side (D-113).
     expect(played.duration).toBeGreaterThanOrEqual(4);
     expect(played.duration).toBeLessThan(10);
-    // One channel is what a phone call has: the automatic check does not fail it (D-103).
+    // The phone rule expects stereo: the automatic check does not fail it (D-134).
     await expect(moderator.getByRole("heading", { name: "Audio quality" })).toBeVisible();
     await expect(moderator.getByText("Failed", { exact: true })).toHaveCount(0);
     await moderator.getByRole("button", { name: "Send to QC" }).click();
