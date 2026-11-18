@@ -32,11 +32,11 @@ export function Player({ assetId, label = "Recording" }: { assetId: string; labe
   );
 }
 
-/** The delivery file of the task's newest finished recording, to listen to. */
+/** The delivery file of the task's current recording (its newest finished one), to listen to. */
 export function ListenLatest({ taskId }: { taskId: string }) {
   const { state } = useResource(() => rec.listRecordings(taskId), [taskId]);
   if (state.status !== "loaded") return null;
-  const latest = state.data.find((r) => r.state === "READY");
+  const latest = state.data.find((r) => r.current);
   const asset = latest ? rec.deliveryAsset(latest.assets) : undefined;
   return asset ? (
     <Player assetId={asset.id} />

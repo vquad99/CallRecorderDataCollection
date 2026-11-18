@@ -29,6 +29,7 @@ NATURALLY_BOUNDED = {
     "/api/v1/tasks/{task_id}/recordings": "one task's recordings",
     "/api/v1/tasks/{task_id}/calls": "one task's phone calls",
     "/api/v1/storage/usage": "one row per project and file kind",
+    "/api/v1/payments/rates": "one row per project the caller runs (D-137)",
 }
 
 

@@ -16,8 +16,8 @@ Dates and times are in India time, written the Indian way, for example 17 Nov 20
 
 | Role | What they do | Menu they see |
 |---|---|---|
-| Super Admin | Everything: users, projects, settings | Dashboard, Projects, Tasks, Phone calls, Participants, Users, Settings, Audit log, System status |
-| Project Admin | Runs projects they belong to: participants, tasks, who records, who checks, downloads | Dashboard, Projects, Tasks, Phone calls, Participants, Audit log |
+| Super Admin | Everything: users, projects, settings | Dashboard, Projects, Tasks, Phone calls, Participants, Users, Settings, Payments, Audit log, System status |
+| Project Admin | Runs projects they belong to: participants, tasks, who records, who checks, downloads, payments | Dashboard, Projects, Tasks, Phone calls, Participants, Payments, Audit log |
 | Moderator | Records conversations on tasks given to them | Dashboard, Projects, Tasks, Phone calls |
 | QC Executive | Listens to recordings and approves or rejects them | Dashboard, Projects, Tasks |
 | Client Viewer | Sees the progress of their projects | Dashboard, Projects |
@@ -101,6 +101,9 @@ the middle of a recording, or **Later**.
 | 6 | Admin review | Project Admin | Listens and gives the final word: **Approve** or **Reject** with a reason |
 | 7 | Approved | - | Done; the recording can be downloaded with its consent form |
 
+If a project has **QC pass is the final approval** ticked (project **Overview**), step 6 is
+skipped: **Pass** at step 5 makes the task **Approved** at once.
+
 A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason.
 **Approved**, **Rejected** and **Cancelled** are final. There is no "send back to record again":
 to record a rejected conversation again, create a new task.
@@ -167,6 +170,9 @@ on the row (Super Admin only). It is the page the participant sees, without the 
 - **Who may see participant phone numbers**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
+- **QC pass is the final approval (no admin review)**: leave it empty to keep the admin's final
+  approval. Tick it and a recording the QC Executive passes is **Approved** at once. Tasks already
+  waiting in **Admin review** stay there; approve them as usual.
 
 After **Create project** you return to the project list. A new project starts as **Draft**: click
 its code to open it and, on **Overview → Status**, click **Make active**. Only **Active**
@@ -344,6 +350,15 @@ On an approved task, in **Recordings**, click **Download with consent form**. Yo
 
 Downloads are available to the Super Admin and Project Admin.
 
+**Download task files** (top of **Recordings**, on an approved task): one ZIP with the task's
+audio, consent record and details file, in the same folders and with the same tables as the
+project's **Export**. Only for approved tasks.
+
+**Recorded again.** When the moderator listened and clicked **Record again** (or **Call again**),
+the older recording stays in the list, greyed, with the tag **Rejected by moderator – recorded
+again**. Only the newest recording is checked by QC, exported and counted in minutes and
+payments. QC Executives see only the newest one.
+
 ---
 
 ## 7. Moderator: recording
@@ -470,13 +485,18 @@ in the project's metadata export) carries the same history in its **call** secti
    more).
 3. Click **Listen** to hear the recording.
 4. Under **Your decision**, click:
-   - **Pass** → the task becomes **Admin review** (the admin gives final approval);
+   - **Pass** → the task becomes **Admin review** (the admin gives final approval). In a project
+     where **QC pass is the final approval**, Pass makes it **Approved** at once; the card then
+     says **Pass approves the task: this project has no admin review.**
    - **Reject** → **Rejected** (final).
 
    Reject asks for a **Reason** (a **Comment** is needed when the reason is "Other"). Passing a
    recording the automatic check failed asks **Why does it pass?**.
 
 **Check the stored file again** repeats the automatic check on the stored file.
+
+You see only the newest recording of a task. Older ones the moderator replaced with **Record
+again** are not shown to you.
 
 The automatic check never approves or rejects anything by itself; a person always decides.
 
@@ -543,6 +563,36 @@ Every conversation has two participants, and its length is **split equally** bet
 minutes shown for a participant are all their share. Payment follows **approved** audio. A re-recorded task counts once (its newest finished recording). Project Admins see the
 **Recorded min**, **Approved min** and **Payable min** columns on the project's **Participants**
 tab; the **Participant minutes** export gives the same numbers as a spreadsheet.
+
+### Payments (Super Admin and Project Admin)
+
+Menu **Payments**. It shows what each person earned on **approved** tasks.
+
+**Rates.** At the bottom of the page, each project has two rates in rupees per approved minute:
+**Moderators** and **Participants**. Click **Change**, type the rates (for example `2.50`) and
+click **Save rates**. Leave a box empty when there is no rate yet. Every change is kept in the
+**Audit log**. A new rate also changes the amounts for work approved before.
+
+**Filters.** Choose a **Project** (or **All my projects**) and the days the tasks were approved:
+**Approved from** and **Approved to** (India time).
+
+**Two tabs:**
+
+- **Moderators**: one row per moderator and project: **Approved tasks**, **Approved minutes**
+  (the full length of the tasks they recorded), **Rate** and **Amount**. **Search by name**.
+- **Participants**: one row per participant and project: **Code**, **Name**, **Approved
+  sessions**, **Payable minutes** (their half of each session), **Rate** and **Amount**.
+  **Search by code or name**.
+
+Only approved tasks count. A task recorded again counts once, with its newest recording.
+With **All my projects** a person who worked on two projects has two rows, one per project,
+because each project has its own rate. The **Total** line adds them up. A project with no rate
+shows the minutes and **No rate set** instead of an amount; the Total line says how many
+minutes have no rate.
+
+**Download CSV** saves the tab as a spreadsheet with the same rows and a **Total** line.
+
+Moderators, QC Executives and Client Viewers do not see payments.
 
 ---
 

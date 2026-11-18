@@ -86,6 +86,7 @@ class ProjectDetail(ProjectSummary):
     phone_visibility_policy: str
     consent_policy_version: str
     consent_text: str
+    qc_final_approval: bool
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -105,6 +106,7 @@ def detail(p: Project) -> ProjectDetail:
         phone_visibility_policy=p.phone_visibility_policy,
         consent_policy_version=p.consent_policy_version,
         consent_text=p.consent_text,
+        qc_final_approval=p.qc_final_approval,
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -149,6 +151,7 @@ class ProjectBody(BaseModel):
     phone_visibility_policy: Literal["ADMINS_ONLY", "ASSIGNED_MODERATOR"] = "ADMINS_ONLY"
     consent_policy_version: str = Field(default="1", min_length=1, max_length=50)
     consent_text: str = Field(default="", max_length=20_000)
+    qc_final_approval: bool = False
 
     def to_input(self) -> service.ProjectInput:
         return service.ProjectInput(**self.model_dump())

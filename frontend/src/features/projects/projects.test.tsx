@@ -49,6 +49,7 @@ const project = {
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: "",
+  qc_final_approval: false,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -96,6 +97,27 @@ describe("project detail", () => {
       status: "ACTIVE",
       reason: null,
     });
+  });
+
+  it("makes a QC pass the final approval when the box is ticked (D-138)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1");
+    const box = await screen.findByRole("checkbox", {
+      name: "QC pass is the final approval (no admin review)",
+    });
+    expect(box).not.toBeChecked();
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+        qc_final_approval: true,
+      }),
+    );
   });
 
   it("pauses a project and makes it active again, archiving only with a reason", async () => {

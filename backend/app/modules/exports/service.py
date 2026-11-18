@@ -3,36 +3,52 @@
 - "progress": one row per task (status, people, recording length, checks, decisions, dates);
 - "participants": one row per participant with recorded, approved and payable minutes (D-095).
 
-Recordings themselves are exported as a bundle made in the background: see bundle.py and jobs.py.
+Recordings themselves are exported as a bundle made in the background: see bundle.py and jobs.py;
+one task's bundle is made at once from its page (D-136).
 Access: exports.create in the project, the project visible to the caller. Every export is audited.
 """
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import IO
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
+from app.core.storage import ObjectStorage
 from app.modules.audio_qc.models import AudioQcResult
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
-from app.modules.exports import minutes
+from app.modules.auth.security import FieldCipher
+from app.modules.exports import bundle, minutes
 from app.modules.exports.bundle import table
 from app.modules.exports.models import TABLE_FORMATS
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
-from app.modules.recordings.models import DELIVERY_KINDS, AudioAsset, Recording
+from app.modules.recordings.models import (
+    DELIVERY_KINDS,
+    AudioAsset,
+    Recording,
+    current_recordings_query,
+)
+from app.modules.tasks import service as tasks
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
 from app.modules.telephony.models import Call
 
 REPORTS = ("progress", "participants")
+# A task's bundle is held in memory up to this size while it is made, then in MEDIA_WORK_DIR.
+SPOOL_BYTES = 8 * 1024 * 1024
 
 
 def _iso(value: datetime | None) -> str:
@@ -140,14 +156,11 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
             .group_by(Recording.task_id)
         )
     }
-    # The newest finished recording of each task, its delivery file and its audio QC results.
+    # The current recording of each task (D-135), its delivery file and its audio QC results.
     latest = {
         tid: rid
-        for rid, tid in db.execute(
-            select(Recording.id, Recording.task_id)
-            .where(Recording.state == "READY", Recording.task_id.in_(in_project))
-            .ext(distinct_on(Recording.task_id))
-            .order_by(Recording.task_id, Recording.started_at.desc())
+        for rid, tid, _ in db.execute(
+            current_recordings_query().where(Recording.task_id.in_(in_project))
         )
     }
     latest_ids = list(latest.values())
@@ -271,3 +284,81 @@ def participants_table(db: Session, project: Project, table_format: str = "csv")
             ]
         )
     return table(columns, rows, table_format)
+
+
+# ---------------------------------------------------------------- one task's bundle
+
+
+def task_bundle(
+    db: Session,
+    settings: Settings,
+    storage: ObjectStorage,
+    cipher: FieldCipher,
+    principal: Principal,
+    task_id: uuid.UUID,
+    ip: str | None,
+) -> tuple[str, IO[bytes], int]:
+    """One task's files as a bundle (D-136): its current recording's delivery file, details file
+    and consent record, in the folders and with the tables of a project export. Approved tasks
+    only, as the project export's own default. Made at once, while the person waits: returns the
+    file name, the ZIP (read from the start) and its size. Audited as task.exported."""
+    task = tasks.get_task(db, principal, task_id)
+    project = db.get_one(Project, task.project_id)
+    sel = bundle.Selection()  # audio and details, approved tasks, CSV tables
+    bundle.check(db, principal, project, sel)
+    if task.status != "APPROVED":
+        raise AppError(
+            "The task's files can be downloaded here once it is approved",
+            code="TASK_NOT_APPROVED",
+            status_code=409,
+        )
+    entries = bundle.select_entries(db, project, sel, settings.report_timezone, task_id=task.id)
+    if not entries:
+        raise AppError(
+            "This task has no finished recording", code="NOTHING_TO_EXPORT", status_code=409
+        )
+    name = bundle.file_name(project, sel, task_code=task.task_code)
+    export_id = str(uuid.uuid4())
+    made = bundle.Bundle(
+        db=db,
+        storage=storage,
+        cipher=cipher,
+        project=project,
+        selection=sel,
+        entries=entries,
+        export_id=export_id,
+        requested_by=principal.display_name,
+    )
+    work = Path(settings.media_work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    out = tempfile.SpooledTemporaryFile(max_size=SPOOL_BYTES, dir=str(work))  # noqa: SIM115 - handed on
+    digest = hashlib.sha256()
+    try:
+        for part in made.parts():
+            out.write(part)
+            digest.update(part)
+    except bundle.BundleError as exc:
+        out.close()
+        raise AppError(str(exc), code="EXPORT_FAILED", status_code=409) from None
+    except BaseException:
+        out.close()
+        raise
+    size = out.tell()
+    out.seek(0)
+    audit.record(
+        db,
+        action="task.exported",
+        entity_type="task",
+        entity_id=task_id,
+        project_id=project.id,
+        actor_id=principal.user_id,
+        ip=ip,
+        after={
+            "export_id": export_id,
+            "file_name": name,
+            "bytes": size,
+            "sha256": digest.hexdigest(),
+        },
+    )
+    db.commit()
+    return name, out, size

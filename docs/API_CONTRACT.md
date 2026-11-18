@@ -80,7 +80,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 |---|---|---|
 | GET | /projects | member. Newest first (D-105) |
 | POST | /projects | `projects.create` |
-| GET, PATCH | /projects/{id} | member / `projects.manage` |
+| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138) |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
@@ -113,12 +113,12 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS + `native_sample_rate` equal to the project's face-to-face rate (422 `SAMPLE_RATE_NOT_ALLOWED`, D-123; at most 48000 Hz and 2 captured channels; a recording larger than `MAX_RECORDING_BYTES`, default 3 GB, gets 422 `TOO_LARGE`, D-124) + both participants have consent (409 `CONSENT_MISSING` with `details[0].missing`, D-119) (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility |
+| POST, GET | /tasks/{id}/recordings | POST: `recordings.create` + assigned moderator + task IN_PROGRESS + `native_sample_rate` equal to the project's face-to-face rate (422 `SAMPLE_RATE_NOT_ALLOWED`, D-123; at most 48000 Hz and 2 captured channels; a recording larger than `MAX_RECORDING_BYTES`, default 3 GB, gets 422 `TOO_LARGE`, D-124) + both participants have consent (409 `CONSENT_MISSING` with `details[0].missing`, D-119) (503 NOT_CONFIGURED without storage); body `{native_sample_rate, channel_count (captured, 1-8), device_channel_count (browser-reported or null), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent}`; the response's `channel_handling` is set by the server (D-048); GET: task visibility. Each recording has `current`: the task's newest finished one, the one QC checks and an export delivers (D-135). People with `tasks.assign` in the project and the task's moderator get every recording; anyone else only the current one |
 | PUT | /recordings/{id}/chunks/{seq} | raw float32 body of whole frames (a multiple of 4 × channel_count bytes, else 422 INVALID_CHUNK), only real numbers (NaN or infinity: 422 INVALID_AUDIO), `X-Content-SHA256` header checked; same chunk again is accepted, a different one is 409 |
 | POST | /recordings/{id}/interrupted | the recording's moderator; body `{reason}` |
 | POST | /recordings/{id}/complete | the recording's moderator; body `{chunk_count}`; 409 MISSING_CHUNKS lists gaps; starts processing |
 | POST | /recordings/{id}/discard | the recording's moderator; deletes uploaded chunks |
-| GET | /recordings/{id} | task visibility; includes assets with the full validation record |
+| GET | /recordings/{id} | task visibility; includes assets with the full validation record and `current`. A replaced recording (not current) answers 404 for anyone but the project's managers and the task's moderator (D-135), as do its asset links, details file and consent record |
 | POST | /assets/{id}/url | body `{purpose: play or download}`; play needs `recordings.view`, download `recordings.download`; signed link valid SIGNED_URL_SECONDS (300) |
 | GET | /storage/usage | `dashboard.view` + `projects.manage` (D-049); files and bytes per managed project and asset kind |
 
@@ -175,9 +175,9 @@ Built 2026-11-10 (D-079). The QC Executive's queue is the task list (`mine=true`
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | /tasks/{id}/audio-qc | `tasks.view` and the task visible. Every automatic result with its checks, every decision, the assigned QC Executive and what the caller may do. |
+| GET | /tasks/{id}/audio-qc | `tasks.view` and the task visible. Every automatic result with its checks, every decision, the assigned QC Executive and what the caller may do; `pass_approves`: a pass approves the task (the project's `qc_final_approval`, D-138). |
 | POST | /tasks/{id}/assign-qc | `tasks.assign` in the project. Body `user_id`, `reason` (required when reassigning). 422 NOT_PROJECT_MEMBER, NOT_A_QC_EXECUTIVE, SAME_PERSON; 409 TASK_LOCKED. Not needed normally: a task reaching AUDIO_QC is given by the platform to the project's active QC Executive with the fewest AUDIO_QC tasks, ties to the one given a task longest ago; never the moderator or a recorder; audited `task.qc_auto_assigned` with no actor (D-116). |
-| POST | /tasks/{id}/audio-qc/decision | `audio_qc.review` and the task's assigned QC Executive (Super Admin: any). Body `outcome` PASS / FAIL (FAIL = reject; RETURN no longer accepted, D-118), `reason_code`, `comment`. 409 TASK_NOT_IN_QC, NO_AUTOMATIC_CHECK; 422 REASON_REQUIRED, COMMENT_REQUIRED. |
+| POST | /tasks/{id}/audio-qc/decision | `audio_qc.review` and the task's assigned QC Executive (Super Admin: any). Body `outcome` PASS / FAIL (FAIL = reject; RETURN no longer accepted, D-118), `reason_code`, `comment`. 409 TASK_NOT_IN_QC, NO_AUTOMATIC_CHECK; 422 REASON_REQUIRED, COMMENT_REQUIRED. PASS moves the task to ADMIN_REVIEW, or to APPROVED where the project's `qc_final_approval` is on (history comment "Approved by the QC decision: QC pass is the final approval in this project." and the QC Executive's comment, D-138). |
 | POST | /tasks/{id}/audio-qc/recheck | Manager of the project or the assigned QC Executive. Downloads the delivery file and checks its bytes. 503 STORAGE_UNAVAILABLE. |
 | GET | /recordings/{id}/metadata | `recordings.download` in the project and the task visible. The details file (JSON attachment, format `ccp.recording-metadata/1`), audited. |
 
@@ -215,6 +215,31 @@ A bundle holds `face_to_face/` and `telephony/` (each with `audio/`, `originals/
 `ccp.recording-metadata/1`), `README.txt`, `manifest.json`, `manifest.csv` and `SHA256SUMS`.
 Tables are UTF-8 with a byte-order mark; a cell that starts with `=`, `+`, `-` or `@` has an
 apostrophe put before it. No transcripts: this version makes none.
+
+One task's bundle (D-136):
+
+| Method | Path | What |
+|---|---|---|
+| GET | /tasks/{id}/export | `exports.create` in the task's project and the task visible (Super Admin, Project Admin). A ZIP attachment made at once: the same folders and tables as a bundle above, for this task's current recording only (audio + metadata, approved tasks, CSV); name `both_<project>_<task>_<YYYYMMDD_HHMM>.zip`. 409 `TASK_NOT_APPROVED` before the task is approved, `NOTHING_TO_EXPORT` without a finished recording, `EXPORT_FAILED` when a stored file no longer matches its checksum; 503 without storage. Audited as `task.exported` |
+
+## Payments (D-137)
+
+All under `/payments` and for people with `payments.manage` (Super Admin: every project; Project
+Admin: their own). Moderators, QC Executives and Client Viewers get 403; a project the caller does
+not run answers 404. Money and minutes are text with two places; rates are rupees per approved
+minute.
+
+| Method | Path | What |
+|---|---|---|
+| GET | /payments/rates | One row per project the caller runs: `{project_id, project_code, project_name, moderator_rate, participant_rate, updated_at, updated_by}` (a rate is null when not set) |
+| PUT | /payments/rates/{project_id} | Body `{moderator_rate, participant_rate}`: null or 0 to 100000 with at most two decimals (422 otherwise). Audited as `payments.rates_changed` with before and after |
+| GET | /payments/moderators | `?project_id&date_from&date_to&search`. APPROVED tasks only, by approval day in `REPORT_TIMEZONE`; one row per moderator and project: `{project_id, project_code, user_id, name, approved_tasks, approved_minutes, rate, amount}` (the full length of the tasks whose current recording they made). `search` matches the name. Answer `{timezone, date_from, date_to, totals: {count, minutes, amount, minutes_without_rate}, rows}`. 422 when the first day is after the last |
+| GET | /payments/participants | The same filters; one row per participant and project: `{project_id, project_code, participant_id, participant_code, name, approved_sessions, payable_minutes, rate, amount}` (the participant's equal share; `name` only for people who manage participants in that project). `search` matches the code or the name |
+| GET | /payments/moderators/export, /payments/participants/export | The same rows as CSV (UTF-8 with BOM, safe cells) with a Total line; `amount_inr` is `No rate set` where the project has no rate. Audited as `payments.exported` |
+
+`amount` is null when the project has no rate for that kind of person. Minutes are rounded to two
+places first; the amount is minutes x rate, rounded half up to the paisa. The current rate applies
+to all approved work, including work approved before it was changed.
 
 ## Dashboards (DASH-*)
 

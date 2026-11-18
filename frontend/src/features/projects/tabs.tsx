@@ -107,6 +107,7 @@ export function OverviewTab() {
           phone_visibility_policy: project.phone_visibility_policy,
           consent_policy_version: project.consent_policy_version,
           consent_text: project.consent_text,
+          qc_final_approval: project.qc_final_approval,
         }}
         submitLabel="Save project"
         busy={busy !== null}

@@ -176,6 +176,16 @@ export const routes: RouteObject[] = [
             ],
           },
           {
+            // The Super Admin and Project Admins (D-137).
+            element: <RequirePermission permission="payments.manage" />,
+            children: [
+              {
+                path: "payments",
+                element: page(() => import("../features/payments/PaymentsPage"), "PaymentsPage"),
+              },
+            ],
+          },
+          {
             element: <RequirePermission permission="audit.view" />,
             children: [
               {

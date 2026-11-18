@@ -25,7 +25,7 @@ from app.modules.auth.deps import Principal
 from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import Project
-from app.modules.recordings import service
+from app.modules.recordings.access import readable
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.tasks.models import Task
 
@@ -89,7 +89,7 @@ def build(
     db: Session, principal: Principal, recording_id: uuid.UUID, ip: str | None
 ) -> tuple[str, str]:
     """(file name, HTML). Needs the same rights as downloading the recording itself."""
-    rec, task = service.get_recording(db, principal, recording_id)
+    rec, task = readable(db, principal, recording_id)
     if not principal.can_in_project(Perm.RECORDINGS_DOWNLOAD, task.project_id):
         raise forbidden()
     project = db.get_one(Project, task.project_id)

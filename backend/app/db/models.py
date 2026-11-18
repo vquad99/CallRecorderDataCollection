@@ -6,6 +6,7 @@ from app.modules.auth import models as auth_models
 from app.modules.exports import models as export_models
 from app.modules.operations import models as operation_models
 from app.modules.participants import models as participant_models
+from app.modules.payments import models as payment_models
 from app.modules.projects import models as project_models
 from app.modules.recordings import models as recording_models
 from app.modules.settings import models as settings_models
@@ -19,6 +20,7 @@ __all__ = [
     "export_models",
     "operation_models",
     "participant_models",
+    "payment_models",
     "project_models",
     "recording_models",
     "settings_models",

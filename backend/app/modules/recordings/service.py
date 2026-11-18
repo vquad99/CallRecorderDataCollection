@@ -34,6 +34,7 @@ from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.projects.models import Project, ProjectAudioRule, ProjectRetentionRule
 from app.modules.recordings import assets, media
+from app.modules.recordings.access import get_recording, readable
 from app.modules.recordings.models import (
     FTF_DELIVERY_KIND,
     AudioAsset,
@@ -144,19 +145,6 @@ def required_rate(db: Session, project_id: uuid.UUID) -> int:
         )
     )
     return rate or media.TARGET_RATE
-
-
-def get_recording(
-    db: Session, principal: Principal, recording_id: uuid.UUID
-) -> tuple[Recording, Task]:
-    rec = db.get(Recording, recording_id)
-    if rec is None:
-        raise not_found("Recording")
-    try:
-        task = tasks.get_task(db, principal, rec.task_id)
-    except AppError:
-        raise not_found("Recording") from None
-    return rec, task
 
 
 def _owned_open(
@@ -617,7 +605,7 @@ def stalled_recordings(
 def assets_for(
     db: Session, principal: Principal, recording_id: uuid.UUID
 ) -> tuple[Recording, list[AudioAsset]]:
-    rec, task = get_recording(db, principal, recording_id)
+    rec, task = readable(db, principal, recording_id)
     items = db.scalars(
         select(AudioAsset)
         .where(AudioAsset.recording_id == rec.id, AudioAsset.deleted_at.is_(None))
@@ -640,10 +628,10 @@ def asset_url(
     asset = db.get(AudioAsset, asset_id)
     if asset is None or asset.deleted_at is not None:
         raise not_found("File")
-    rec = db.get_one(Recording, asset.recording_id)
     # Task visibility first: assigned people and project managers only. Client Viewers receive final
-    # files through exports (Phase 9), not through recording links.
-    get_recording(db, principal, rec.id)
+    # files through exports (Phase 9), not through recording links. A replaced recording's files
+    # only for those who see replaced recordings (D-135).
+    readable(db, principal, asset.recording_id, "File")
     needed = Perm.RECORDINGS_DOWNLOAD if purpose == "download" else Perm.RECORDINGS_VIEW
     if not principal.can_in_project(needed, asset.project_id):
         raise forbidden()

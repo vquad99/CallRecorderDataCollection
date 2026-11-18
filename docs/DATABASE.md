@@ -177,3 +177,18 @@ default 24) or when a person removes it; the row stays as the record of what was
 A row stays after the problem is gone (`active` false, `resolved_at` set): the record of when it
 was seen. No personal data: counts and fixed sentences only.
 
+
+## Payment rates (migration 0030, D-137)
+
+| Table | Key columns | Constraints / indexes | On delete |
+|---|---|---|---|
+| payment_rates | project_id, moderator_rate, participant_rate (rupees per approved minute, NUMERIC(10,2), null = no rate yet), updated_by | unique project_id; check: rates not negative | cascade with the project |
+
+Amounts are not stored: they are worked out from the approved tasks each time (exports/minutes.py).
+Every change of a rate is in the audit log (`payments.rates_changed`, before and after). The same
+migration adds the permission `payments.manage` for Super Admin and Project Admin.
+
+## QC pass as the final approval (migration 0031, D-138)
+
+`projects.qc_final_approval` (boolean, default false): when true, a QC pass approves the task and
+the admin review step is skipped.

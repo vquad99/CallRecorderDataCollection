@@ -15,7 +15,7 @@ from app.api.deps import AppSettings, Storage
 from app.core.permissions import Perm
 from app.core.storage import require_storage
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.recordings import consent_form, service
+from app.modules.recordings import access, consent_form, service
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import dispatch_processing
 from app.modules.tasks import service as tasks
@@ -66,18 +66,24 @@ class RecordingOut(BaseModel):
     failure_reason: str | None
     started_at: datetime
     ended_at: datetime | None
+    # The task's current recording: its newest finished one, the one QC checks and an export
+    # delivers. An older finished one was replaced by the moderator's Record again (D-135).
+    current: bool = False
     assets: list[AssetOut] = []
 
 
-def out(rec: Recording, assets: list[AudioAsset] | None = None) -> RecordingOut:
+def out(
+    rec: Recording, assets: list[AudioAsset] | None = None, *, current: bool = False
+) -> RecordingOut:
     base = RecordingOut.model_validate(
         {
             **{
                 k: getattr(rec, k)
                 for k in RecordingOut.model_fields
-                if k not in ("saved_seconds", "assets")
+                if k not in ("saved_seconds", "assets", "current")
             },
             "saved_seconds": round(rec.frames_received / rec.native_sample_rate, 2),
+            "current": current,
             "assets": [],
         }
     )
@@ -123,9 +129,8 @@ def task_recordings(
     task_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> list[RecordingOut]:
     task = tasks.get_task(db, principal, task_id)
-    recs = db.scalars(
-        select(Recording).where(Recording.task_id == task.id).order_by(Recording.started_at.desc())
-    ).all()
+    # Replaced recordings only for the people who run the project and the moderator (D-135).
+    recs, current = access.listed(db, principal, task)
     # Each recording comes with its files, so the task page can offer Listen and the download
     # without a request per recording. One query for all of them (the task page relied on this
     # since D-092 and showed "No finished recording yet" without it).
@@ -137,7 +142,7 @@ def task_recordings(
             .order_by(AudioAsset.kind, AudioAsset.version)
         ):
             files[asset.recording_id].append(asset)
-    return [out(r, files[r.id]) for r in recs]
+    return [out(r, files[r.id], current=r.id == current) for r in recs]
 
 
 @router.get("/recordings/{recording_id}", response_model=RecordingOut)
@@ -145,7 +150,7 @@ def get_recording(
     recording_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> RecordingOut:
     rec, assets = service.assets_for(db, principal, recording_id)
-    return out(rec, assets)
+    return out(rec, assets, current=access.current_id(db, rec.task_id) == rec.id)
 
 
 class ChunkOut(BaseModel):

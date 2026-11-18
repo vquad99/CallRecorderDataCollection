@@ -1235,6 +1235,23 @@ fieldset.field legend {
 .row--invalid td {
   color: var(--danger);
 }
+/* A recording the moderator replaced with Record again (D-135): greyed, still there. */
+.row--replaced td {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+/* A card's title with its buttons beside it; they move under it on a narrow screen. */
+.card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.card__head h2 {
+  margin: 0;
+}
 .cell-person,
 .cell-icon {
   display: inline-flex;

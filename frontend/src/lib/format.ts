@@ -66,5 +66,10 @@ export function bytes(n: number): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+const inr = new Intl.NumberFormat(LOCALE, { style: "currency", currency: "INR" });
+
+/** Rupees as people read them: "₹1,23,456.50". Amounts travel as text with two places. */
+export const rupees = (amount: string | number): string => inr.format(Number(amount));
+
 /** "1 recording", "3 recordings". */
 export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;

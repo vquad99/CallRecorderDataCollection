@@ -282,6 +282,7 @@ describe("tasks", () => {
       id: "r1",
       task_id: "t1",
       state: "READY",
+      current: true,
       saved_seconds: 120,
       assets: [{ id: "as1", kind: "FTF_DERIVED_PCM" }],
     };
@@ -373,6 +374,7 @@ describe("tasks", () => {
       id: "r1",
       task_id: "t1",
       state: "READY",
+      current: true,
       saved_seconds: 60,
       assets: [{ id: "as1", kind: "FTF_DERIVED_PCM" }],
     };

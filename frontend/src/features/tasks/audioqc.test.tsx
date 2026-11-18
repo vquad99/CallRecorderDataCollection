@@ -1,5 +1,6 @@
 // Audio quality card on the task page (D-079): the automatic checks (those that need attention
 // first), assigning a QC Executive, the player, and the decision: Pass, or Reject with a reason.
+// Where QC pass is the final approval, the card says a pass approves the task (D-138).
 // Requirements: AQC-002, AQC-003, AQC-004, AQC-008, TASK-004
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,6 +48,7 @@ const AUTO = {
 function view(over: Record<string, unknown> = {}) {
   return {
     task_status: "AUDIO_QC",
+    pass_approves: false,
     qc_user_id: null,
     qc_name: null,
     can_decide: false,
@@ -161,6 +163,34 @@ describe("audio quality card", () => {
         comment: "",
       }),
     );
+  });
+
+  it("says where a pass goes: to the admin, or straight to approved (D-138)", async () => {
+    open(view({ can_decide: true }));
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByText(
+        /Pass sends it to the project admin for final approval\./,
+        {},
+        {
+          timeout: 5000,
+        },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says a pass approves the task where the project has no admin review (D-138)", async () => {
+    open(view({ can_decide: true, pass_approves: true }));
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByText(
+        /Pass approves the task: this project has no admin review\./,
+        {},
+        {
+          timeout: 5000,
+        },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("needs a reason to reject a recording, and offers no return (D-118)", async () => {

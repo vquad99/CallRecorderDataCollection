@@ -41,6 +41,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: "/admin/users", label: "Users", permission: "users.manage", icon: "users" },
       { to: "/admin/settings", label: "Settings", permission: "settings.manage", icon: "settings" },
+      { to: "/payments", label: "Payments", permission: "payments.manage", icon: "money" },
       { to: "/admin/audit", label: "Audit log", permission: "audit.view", icon: "audit" },
     ],
   },

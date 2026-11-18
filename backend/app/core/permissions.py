@@ -46,6 +46,7 @@ class Perm(StrEnum):
     DASHBOARD_VIEW = "dashboard.view"
     NOTES_VIEW = "notes.view"
     ASSETS_DELETE = "assets.delete"
+    PAYMENTS_MANAGE = "payments.manage"
 
 
 # Mirrors docs/ARCHITECTURE.md section 5 (checked by tests/test_permissions.py). Super Admin holds
@@ -72,6 +73,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Perm]] = {
             Perm.AUDIT_VIEW,
             Perm.NOTES_VIEW,
             Perm.ASSETS_DELETE,
+            Perm.PAYMENTS_MANAGE,
         }
     ),
     Role.MODERATOR: frozenset(

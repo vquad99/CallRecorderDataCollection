@@ -95,6 +95,11 @@ export const PAGES: Record<string, PageSpec> = {
     shows: /HINDI Hindi conversations/,
     data: "GET /api/v1/projects",
   },
+  "/payments": {
+    url: "/payments",
+    shows: /Mona Moderator/,
+    data: "GET /api/v1/payments/moderators",
+  },
   "/admin/audit": {
     url: "/admin/audit",
     shows: /project\.created/,

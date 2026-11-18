@@ -37,7 +37,7 @@ from app.modules.participants import consent
 from app.modules.participants import service as participants
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
-from app.modules.recordings.models import final_length_subquery, newest_ready_subquery
+from app.modules.recordings.models import current_recordings, final_length_subquery
 from app.modules.tasks.models import Task
 
 logger = logging.getLogger("app.portal")
@@ -342,13 +342,12 @@ def view_for_admin(
 def build_view(
     db: Session, participant: Participant, project: Project, expires: datetime | None
 ) -> PortalView:
-    # A session's length is its newest finished recording's, as on the minutes (D-095).
-    newest = newest_ready_subquery()
+    # A session's length is its current recording's, as on the minutes (D-095, D-135).
+    current = current_recordings()
     length = final_length_subquery()
     final = (
-        select(newest.c.task_id, length.c.ms)
-        .join(length, length.c.recording_id == newest.c.recording_id)
-        .where(newest.c.rank == 1)
+        select(current.c.task_id, length.c.ms)
+        .join(length, length.c.recording_id == current.c.recording_id)
         .subquery()
     )
     rows = db.execute(

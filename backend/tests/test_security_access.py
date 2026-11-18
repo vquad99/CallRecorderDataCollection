@@ -688,6 +688,45 @@ CASES: list[Case] = [
         Perm.EXPORTS_CREATE,
         before=_export_ready,
     ),
+    # One approved task's bundle (D-136): people who may export the project and see the task. The
+    # task here is still at Audio QC, so they get 409 TASK_NOT_APPROVED after the access check.
+    case(
+        "GET",
+        "/api/v1/tasks/{task_id}/export",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/export",
+        {SA, PA},
+        Perm.EXPORTS_CREATE,
+    ),
+    # Payments (D-137): the Super Admin and the Project Admin of the project only.
+    case(
+        "GET",
+        "/api/v1/payments/rates",
+        lambda e, s: "/api/v1/payments/rates",
+        {SA, PA},
+        Perm.PAYMENTS_MANAGE,
+        foreign=False,
+    ),
+    case(
+        "PUT",
+        "/api/v1/payments/rates/{project_id}",
+        lambda e, s: f"/api/v1/payments/rates/{s.project}",
+        {SA, PA},
+        Perm.PAYMENTS_MANAGE,
+        lambda e, s, who: {"moderator_rate": "2.50", "participant_rate": None},
+    ),
+    *(
+        case(
+            "GET",
+            f"/api/v1/payments/{who}{suffix}",
+            lambda e, s, who=who, suffix=suffix: (
+                f"/api/v1/payments/{who}{suffix}?project_id={s.project}"
+            ),
+            {SA, PA},
+            Perm.PAYMENTS_MANAGE,
+        )
+        for who in ("moderators", "participants")
+        for suffix in ("", "/export")
+    ),
     case(
         "GET",
         P + "/participants/link-candidates",

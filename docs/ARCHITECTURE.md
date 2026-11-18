@@ -103,6 +103,7 @@ TA-ROLE-01 is generated from this table.
 | Webhook event viewer (`webhooks.view`) | F | - | - | - | - |
 | Delete assets (`assets.delete`) | F | O (request only) | - | - | - |
 | Internal staff notes (`notes.view`) | F | O | A | A | - |
+| Payments: rates and amounts per person (`payments.manage`, D-137) | F | O | - | - | - |
 
 Proposed, not stated by the sources: only Super Admin creates users and projects (D-010).
 

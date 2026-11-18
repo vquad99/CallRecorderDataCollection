@@ -48,6 +48,7 @@ const ICONS = {
   refresh: "ArrowsClockwise",
   people: "Users",
   trash: "Trash",
+  money: "CurrencyInr",
 };
 // Every icon gets "regular"; these also get the weights they are shown in.
 const FILLED = [
@@ -72,6 +73,7 @@ const FILLED = [
   "people",
   "user",
   "lock",
+  "money",
 ];
 const EXTRA = { plus: ["bold"], check: ["bold"] };
 for (const n of FILLED) EXTRA[n] = [...(EXTRA[n] ?? []), "fill"];

@@ -261,6 +261,7 @@ describe("recording at the project's rate, never converted (owner 2026-11-17)", 
       interrupted: false,
       failure_reason: null,
       saved_seconds: 7,
+      current: true,
       assets: [
         asset("a1", "BROWSER_ORIGINAL", 16000, 32),
         asset("a2", "FTF_DERIVED_PCM", 16000, 16),

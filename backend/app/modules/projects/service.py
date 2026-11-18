@@ -122,6 +122,9 @@ class ProjectInput:
     phone_visibility_policy: str
     consent_policy_version: str
     consent_text: str = ""
+    # A QC pass approves the task, with no admin review (D-138). Tasks already waiting for admin
+    # review stay there when this changes.
+    qc_final_approval: bool = False
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -150,6 +153,7 @@ def _snapshot(p: Project) -> dict[str, object]:
         "phone_visibility_policy": p.phone_visibility_policy,
         "consent_policy_version": p.consent_policy_version,
         "consent_text": p.consent_text,
+        "qc_final_approval": p.qc_final_approval,
     }
 
 

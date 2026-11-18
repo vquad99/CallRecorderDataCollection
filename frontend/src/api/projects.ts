@@ -41,6 +41,7 @@ export interface Project extends ProjectSummary {
   phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
   consent_policy_version: string;
   consent_text: string;
+  qc_final_approval: boolean;
   status_reason: string | null;
   status_changed_at: string | null;
   languages: Language[];
@@ -59,6 +60,8 @@ export interface ProjectFields {
   phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
   consent_policy_version: string;
   consent_text: string;
+  /** A QC pass approves the task, with no admin review (D-138). */
+  qc_final_approval: boolean;
 }
 
 export interface Member {

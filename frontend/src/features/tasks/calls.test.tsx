@@ -271,6 +271,7 @@ describe("phone calls on the task page", () => {
               id: "r1",
               task_id: "t1",
               state: "READY",
+              current: true,
               saved_seconds: 42,
               assets: [
                 { id: "a1", kind: "PROVIDER_ORIGINAL_MIXED", version: 1 },

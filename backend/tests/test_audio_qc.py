@@ -438,3 +438,68 @@ def test_nobody_is_assigned_when_no_qc_executive_can_take_it(world: dict[str, An
     tid = world["task"]["id"]
     assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC"
     assert world["pa"].get(f"/api/v1/tasks/{tid}/audio-qc").json()["qc_name"] is None
+
+
+def test_where_qc_pass_is_the_final_approval_a_pass_approves_the_task(
+    world: dict[str, Any],
+) -> None:
+    """D-138: with the project's option on, a QC pass approves the task with no admin review;
+    a task already waiting for the admin is not moved when the option changes."""
+    pa: Api = world["pa"]
+    pid, tid = world["project"].id, world["task"]["id"]
+    project = pa.get(f"/api/v1/projects/{pid}").json()
+    assert project["qc_final_approval"] is False
+    _record(world)
+    qc = _assign_qc(world)
+    assert qc.get(f"/api/v1/tasks/{tid}/audio-qc").json()["pass_approves"] is False
+    passed = qc.post(
+        f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS", "comment": "Clear"}
+    )
+    assert passed.json()["task_status"] == "ADMIN_REVIEW"
+
+    fields = (
+        "name",
+        "description",
+        "allows_telephony",
+        "allows_face_to_face",
+        "target_telephony_hours_per_day",
+        "target_face_to_face_hours_per_day",
+        "phone_visibility_policy",
+        "consent_policy_version",
+        "consent_text",
+    )
+    turned = pa.patch(
+        f"/api/v1/projects/{pid}",
+        json={**{k: project[k] for k in fields}, "qc_final_approval": True},
+    )
+    assert turned.json()["qc_final_approval"] is True
+    db = world["db"]
+    changed = db.scalar(select(AuditLog.after_summary).where(AuditLog.action == "project.updated"))
+    assert "qc_final_approval" in str(changed)
+    # The task already waiting for the admin stays there, and the admin still decides it.
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["status"] == "ADMIN_REVIEW"
+    assert pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"}).status_code == 200
+
+    second = _second_task(world)
+    world["mod"].post(f"/api/v1/tasks/{second}/transition", json={"to": "IN_PROGRESS"})
+    _record(world, 4, second)
+    view = qc.get(f"/api/v1/tasks/{second}/audio-qc").json()
+    assert (view["can_decide"], view["pass_approves"]) == (True, True)
+    decided = qc.post(
+        f"/api/v1/tasks/{second}/audio-qc/decision", json={"outcome": "PASS", "comment": "Clear"}
+    )
+    assert decided.json()["task_status"] == "APPROVED"
+    moves = [e for e in pa.get(f"/api/v1/tasks/{second}/timeline").json() if e["kind"] == "status"]
+    assert "ADMIN_REVIEW" not in [e["to_status"] for e in moves]
+    last = moves[-1]
+    assert (last["from_status"], last["to_status"], last["actor"]) == ("AUDIO_QC", "APPROVED", "qc")
+    assert last["comment"] == f"{audio_qc.QC_FINAL_NOTE} Clear"
+    # A reject is still a reject.
+    third = _second_task(world)
+    world["mod"].post(f"/api/v1/tasks/{third}/transition", json={"to": "IN_PROGRESS"})
+    _record(world, 5, third)
+    failed = qc.post(
+        f"/api/v1/tasks/{third}/audio-qc/decision",
+        json={"outcome": "FAIL", "reason_code": "AUDIO_QUALITY"},
+    )
+    assert failed.json()["task_status"] == "REJECTED"

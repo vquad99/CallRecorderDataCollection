@@ -18,8 +18,10 @@ from app.modules.auth.deps import csrf_protect, require
 from app.modules.auth.router import router as auth_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.exports.router import router as exports_router
+from app.modules.exports.router import task_router as task_export_router
 from app.modules.operations import service as operations
 from app.modules.participants.router import router as participants_router
+from app.modules.payments.router import router as payments_router
 from app.modules.portal.router import admin_view_router as portal_admin_view_router
 from app.modules.portal.router import public_router as portal_public_router
 from app.modules.portal.router import staff_router as portal_staff_router
@@ -114,6 +116,8 @@ api_router.include_router(recording_metadata_router)
 api_router.include_router(storage_usage_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(exports_router)
+api_router.include_router(task_export_router)
+api_router.include_router(payments_router)
 api_router.include_router(portal_public_router)
 api_router.include_router(portal_admin_view_router)
 api_router.include_router(portal_staff_router)

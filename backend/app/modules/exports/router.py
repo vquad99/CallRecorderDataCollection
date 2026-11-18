@@ -1,16 +1,18 @@
-"""/api/v1/projects/{project_id}/export (reports, D-094) and /exports (bundles, D-105)."""
+"""/api/v1/projects/{project_id}/export (reports, D-094), /exports (bundles, D-105), and one
+task's bundle, /api/v1/tasks/{task_id}/export (D-136)."""
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from datetime import date, datetime
-from typing import Annotated, Any, Literal
+from typing import IO, Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.api.deps import AppSettings, Storage
+from app.api.deps import AppSettings, Cipher, Storage
 from app.core.permissions import Perm
 from app.core.storage import require_storage
 from app.db.paging import Page, PageNumber
@@ -24,6 +26,9 @@ router = APIRouter(
     prefix="/projects/{project_id}",
     tags=["exports"],
     dependencies=[Depends(require(Perm.EXPORTS_CREATE))],
+)
+task_router = APIRouter(
+    prefix="/tasks", tags=["exports"], dependencies=[Depends(require(Perm.EXPORTS_CREATE))]
 )
 
 Report = Literal["progress", "participants"]
@@ -256,3 +261,36 @@ def remove_export(
         db, request.app.state.storage, principal, project_id, job_id, client_ip(request)
     )
     return _out(job, None)
+
+
+def _send(body: IO[bytes]) -> Iterator[bytes]:
+    try:
+        while part := body.read(1024 * 1024):
+            yield part
+    finally:
+        body.close()
+
+
+@task_router.get("/{task_id}/export")
+def task_export(
+    task_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    storage: Storage,
+    cipher: Cipher,
+) -> StreamingResponse:
+    """One approved task's bundle as a ZIP attachment: the current recording's delivery file, its
+    details file and consent record, in a project export's folders and tables. Audited."""
+    name, body, size = service.task_bundle(
+        db, settings, storage, cipher, principal, task_id, client_ip(request)
+    )
+    return StreamingResponse(
+        _send(body),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            "Content-Length": str(size),
+        },
+    )

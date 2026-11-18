@@ -51,6 +51,8 @@ class ResultOut(BaseModel):
 
 class AudioQcOut(BaseModel):
     task_status: str
+    # A pass approves the task: the project has no admin review (D-138).
+    pass_approves: bool
     qc_user_id: uuid.UUID | None
     qc_name: str | None
     can_decide: bool

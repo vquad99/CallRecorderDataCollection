@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Select,
     String,
     Subquery,
     Text,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     select,
     text,
 )
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -196,17 +198,33 @@ def final_length_subquery() -> Subquery:
     )
 
 
-def newest_ready_subquery() -> Subquery:
-    """(recording_id, task_id, rank): finished recordings, ranked newest first within each task;
-    rank 1 is the one a task delivers (re-recorded tasks count once)."""
+# A task's current recording is its newest finished one: the one QC checks, an export delivers and
+# the minutes count. An older finished recording of the task was replaced: the moderator listened
+# and chose Record again or Call again (D-092, D-135). Every place that needs it asks here.
+_NEWEST_FIRST = (Recording.started_at.desc(), Recording.id.desc())
+
+
+def current_recordings_query() -> Select[uuid.UUID, uuid.UUID, datetime]:
+    """(recording_id, task_id, started_at): each task's current recording, one row per task that
+    has a finished one. Narrow it with join() and where() before using it."""
     return (
-        select(
-            Recording.id.label("recording_id"),
-            Recording.task_id,
-            func.row_number()
-            .over(partition_by=Recording.task_id, order_by=Recording.started_at.desc())
-            .label("rank"),
-        )
+        select(Recording.id.label("recording_id"), Recording.task_id, Recording.started_at)
         .where(Recording.state == "READY")
-        .subquery()
+        .ext(distinct_on(Recording.task_id))
+        .order_by(Recording.task_id, *_NEWEST_FIRST)
+    )
+
+
+def current_recordings() -> Subquery:
+    """current_recordings_query() as a subquery, to join on task_id."""
+    return current_recordings_query().subquery()
+
+
+def current_recording_of(task_id: uuid.UUID) -> Select[Recording]:
+    """One task's current recording (none while it has no finished one)."""
+    return (
+        select(Recording)
+        .where(Recording.task_id == task_id, Recording.state == "READY")
+        .order_by(*_NEWEST_FIRST)
+        .limit(1)
     )

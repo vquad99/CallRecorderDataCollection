@@ -162,7 +162,8 @@ function AssignQc({
   );
 }
 
-/** Pass sends the recording to the project admin; Reject asks why and ends the task. */
+/** Pass sends the recording to the project admin, or approves the task where QC pass is the
+ * final approval (D-138); Reject asks why and ends the task. */
 function Decision({
   task,
   view,
@@ -203,7 +204,11 @@ function Decision({
     <section className="stack stack--tight" aria-labelledby="qc-decision-title">
       <h3 id="qc-decision-title">Your decision</h3>
       <p className="muted">
-        Listen first. Pass sends it to the project admin for final approval; Reject ends the task.
+        Listen first.{" "}
+        {view.pass_approves
+          ? "Pass approves the task: this project has no admin review."
+          : "Pass sends it to the project admin for final approval."}{" "}
+        Reject ends the task.
       </p>
       <div className="actions">
         <Button busy={busy !== null} onClick={pass}>

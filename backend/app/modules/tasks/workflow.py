@@ -34,10 +34,11 @@ _T: dict[str, dict[str, str]] = {
     "IN_PROGRESS": {"RECORDED": "system", "ON_HOLD": "assign", "CANCELLED": "assign"},
     # D-092: the moderator listens first and sends the recording on, or records it again.
     "RECORDED": {"AUDIO_QC": "moderator", "IN_PROGRESS": "moderator", "CANCELLED": "assign"},
-    # A pass at audio QC goes to the project admin for the final word (D-092); a reject is the QC
-    # Executive's decision (D-062: no manual transcription). D-118: no "return to record again"
-    # from QC or admin review, only reject; tasks returned before went back to Assigned (0026).
-    "AUDIO_QC": {"ADMIN_REVIEW": "system", "REJECTED": "system"},
+    # A pass at audio QC goes to the project admin for the final word (D-092), or approves the task
+    # where the project makes QC pass the final approval (D-138); a reject is the QC Executive's
+    # decision (D-062: no manual transcription). D-118: no "return to record again" from QC or
+    # admin review, only reject; tasks returned before went back to Assigned (0026).
+    "AUDIO_QC": {"ADMIN_REVIEW": "system", "APPROVED": "system", "REJECTED": "system"},
     "ADMIN_REVIEW": {"APPROVED": "assign", "REJECTED": "assign"},
     "ON_HOLD": {"CANCELLED": "assign"},  # resuming to the held status is handled below
 }

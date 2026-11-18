@@ -151,8 +151,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   throw error;
 }
 
-/** Fetch a file (e.g. a CSV export) with the session cookie and hand it to the browser. */
-export async function apiDownload(path: string, filename: string): Promise<void> {
+/** The file name a download's answer gives (Content-Disposition), if any. */
+function attachmentName(response: Response): string | null {
+  const header = response.headers.get("content-disposition") ?? "";
+  return /filename="([^"]+)"/.exec(header)?.[1] ?? null;
+}
+
+/** Fetch a file (e.g. a CSV export) with the session cookie and hand it to the browser, under
+ * `filename`, or else the name the server gave it. */
+export async function apiDownload(path: string, filename?: string): Promise<void> {
   let response: Response;
   try {
     response = await fetch(`${apiBase()}${path}`, { credentials: "include" });
@@ -164,7 +171,7 @@ export async function apiDownload(path: string, filename: string): Promise<void>
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.download = filename ?? attachmentName(response) ?? "download";
   link.click();
   URL.revokeObjectURL(url);
 }

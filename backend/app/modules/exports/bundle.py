@@ -29,15 +29,14 @@ import uuid
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
-from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.core.csvio import write_table
+from app.core.days import day_bounds
 from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
@@ -55,6 +54,7 @@ from app.modules.recordings.models import (
     ORIGINAL_KINDS,
     AudioAsset,
     Recording,
+    current_recordings_query,
 )
 from app.modules.tasks.models import Task, TaskAssignment
 
@@ -201,20 +201,28 @@ def _ref(asset: AudioAsset) -> FileRef:
     )
 
 
-def select_entries(db: Session, project: Project, sel: Selection, tz_name: str) -> list[Entry]:
-    """The newest finished recording of each task that fits the selection, by task code. Mode,
-    language and days narrow the tasks in the database."""
+def select_entries(
+    db: Session,
+    project: Project,
+    sel: Selection,
+    tz_name: str,
+    *,
+    task_id: uuid.UUID | None = None,
+) -> list[Entry]:
+    """The current recording of each task that fits the selection (D-135), by task code; with
+    `task_id`, of that one task only (D-136). Mode, language and days narrow the tasks in the
+    database."""
     newest_q = (
-        select(Recording.id, Recording.task_id, Recording.started_at)
+        current_recordings_query()
         .join(Task, Task.id == Recording.task_id)
-        .where(Task.project_id == project.id, Recording.state == "READY")
-        .ext(distinct_on(Recording.task_id))
-        .order_by(Recording.task_id, Recording.started_at.desc())
+        .where(Task.project_id == project.id)
     )
     if sel.scope == "approved":
         newest_q = newest_q.where(Task.status == "APPROVED")
+    if task_id is not None:
+        newest_q = newest_q.where(Task.id == task_id)
     newest = newest_q.subquery()
-    query = select(Task, newest.c.id).join(newest, newest.c.task_id == Task.id)
+    query = select(Task, newest.c.recording_id).join(newest, newest.c.task_id == Task.id)
     if sel.mode:
         query = query.where(Task.recording_mode == sel.mode)
     if sel.language:
@@ -222,12 +230,10 @@ def select_entries(db: Session, project: Project, sel: Selection, tz_name: str) 
         query = query.where(
             or_(Task.participant_a_id.in_(speakers), Task.participant_b_id.in_(speakers))
         )
-    zone = ZoneInfo(tz_name)
-    if sel.recorded_from:
-        first = datetime.combine(sel.recorded_from, time.min, zone)
+    first, after = day_bounds(sel.recorded_from, sel.recorded_to, tz_name)
+    if first is not None:
         query = query.where(newest.c.started_at >= first)
-    if sel.recorded_to:
-        after = datetime.combine(sel.recorded_to + timedelta(days=1), time.min, zone)
+    if after is not None:
         query = query.where(newest.c.started_at < after)
     found = db.execute(query.order_by(Task.task_code).limit(MAX_RECORDINGS + 1)).all()
     if len(found) > MAX_RECORDINGS:
@@ -275,9 +281,13 @@ def audio_bytes(sel: Selection, entries: list[Entry]) -> int:
     return sum((e.audio.size if e.audio else 0) + sum(o.size for o in e.originals) for e in entries)
 
 
-def file_name(project: Project, sel: Selection, now: datetime | None = None) -> str:
+def file_name(
+    project: Project, sel: Selection, now: datetime | None = None, task_code: str | None = None
+) -> str:
+    """both_PRJ0001_20261118_1200.zip; with one task, both_PRJ0001_T000123_20261118_1200.zip."""
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%d_%H%M")
-    return f"{sel.content}_{project.code}_{stamp}.zip"
+    task = f"_{task_code}" if task_code else ""
+    return f"{sel.content}_{project.code}{task}_{stamp}.zip"
 
 
 def table(columns: list[str], rows: list[list[object]], table_format: str) -> str:

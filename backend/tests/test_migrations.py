@@ -3,6 +3,8 @@
 Requirements: FND-009, FND-026, DB-002, DB-003, DB-006
 """
 
+from typing import Any
+
 import pytest
 from alembic import command
 from sqlalchemy import create_engine, inspect, select, text
@@ -58,6 +60,18 @@ def test_value_type_is_constrained(migrated_db: str) -> None:
     with pytest.raises(Exception, match="value_type_allowed"), engine.begin() as conn:
         conn.execute(text("INSERT INTO system_settings (key, value_type) VALUES ('b', 'json')"))
     engine.dispose()
+
+
+def _project_row(db: Any, code: str) -> Any:
+    """A project written as SQL: the projects table as it was at an older revision, whatever
+    columns came later."""
+    return db.execute(
+        text(
+            "INSERT INTO projects (code, name, status, allows_telephony, allows_face_to_face) "
+            "VALUES (:code, :code, 'ACTIVE', true, true) RETURNING id"
+        ),
+        {"code": code},
+    ).scalar_one()
 
 
 def test_returned_tasks_leave_the_removed_status(test_database_url: str) -> None:
@@ -133,7 +147,6 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     from sqlalchemy.orm import Session
 
     from app.modules.participants.models import ConsentRecord, Participant
-    from tests.conftest import make_project
 
     grants = (
         "SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id "
@@ -144,7 +157,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     command.upgrade(cfg, "0026")
     engine = create_engine(test_database_url)
     with Session(engine) as db:
-        project = make_project(db, "MIG")
+        project_id = _project_row(db, "MIG")
         # Written as SQL: the users table as it was at 0026, whatever columns came later.
         staff_id = db.execute(
             text(
@@ -165,7 +178,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
             db.add(
                 ConsentRecord(
                     participant_id=pid,
-                    project_id=project.id,
+                    project_id=project_id,
                     task_id=None,
                     status="GIVEN",
                     method="DIGITAL" if staff is None else "WRITTEN",
@@ -216,7 +229,6 @@ def test_telephony_rules_at_the_old_default_become_stereo(test_database_url: str
     from sqlalchemy.orm import Session
 
     from app.modules.projects.models import ProjectAudioRule
-    from tests.conftest import make_project
 
     reset_schema(test_database_url)
     cfg = alembic_config(test_database_url)
@@ -224,10 +236,10 @@ def test_telephony_rules_at_the_old_default_become_stereo(test_database_url: str
     engine = create_engine(test_database_url)
     with Session(engine) as db:
         for code, phone_channels in (("OLD", 1), ("SET", 2)):
-            project = make_project(db, code)
+            project_id = _project_row(db, code)
             db.add_all(
                 ProjectAudioRule(
-                    project_id=project.id,
+                    project_id=project_id,
                     mode=mode,
                     sample_rate=16000,
                     bit_depth=16,
@@ -258,4 +270,42 @@ def test_telephony_rules_at_the_old_default_become_stereo(test_database_url: str
     }
     command.downgrade(cfg, "0028")
     assert set(channels().values()) == {1}
+    engine.dispose()
+
+
+def test_payments_and_the_qc_final_approval_option_come_and_go(test_database_url: str) -> None:
+    """0030 (D-137): payment rates and payments.manage for the Super Admin and the Project
+    Admin; 0031 (D-138): every project starts with "QC pass is the final approval" off."""
+    from sqlalchemy.orm import Session
+
+    grants = (
+        "SELECT r.code FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id "
+        "JOIN roles r ON r.id = rp.role_id WHERE p.code = 'payments.manage' ORDER BY r.code"
+    )
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0029")
+    engine = create_engine(test_database_url)
+    with Session(engine) as db:
+        project_id = _project_row(db, "MIG")
+        db.commit()
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        assert [r for (r,) in conn.execute(text(grants))] == ["PROJECT_ADMIN", "SUPER_ADMIN"]
+        assert (
+            conn.execute(
+                text("SELECT qc_final_approval FROM projects WHERE id = :p"), {"p": project_id}
+            ).scalar_one()
+            is False
+        )
+        conn.execute(
+            text("INSERT INTO payment_rates (project_id, moderator_rate) VALUES (:p, 2.5)"),
+            {"p": project_id},
+        )
+    command.downgrade(cfg, "0029")
+    with engine.begin() as conn:
+        assert list(conn.execute(text(grants))) == []
+        assert "payment_rates" not in inspect(conn).get_table_names()
+        columns = {c["name"] for c in inspect(conn).get_columns("projects")}
+        assert "qc_final_approval" not in columns
     engine.dispose()

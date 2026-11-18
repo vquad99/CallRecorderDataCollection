@@ -32,6 +32,9 @@ export interface Recording {
   saved_seconds: number;
   interrupted: boolean;
   failure_reason: string | null;
+  /** The task's current recording: its newest finished one, the one QC checks and an export
+   * delivers. An older finished one was replaced by the moderator's Record again (D-135). */
+  current: boolean;
   assets: Asset[];
 }
 
@@ -65,6 +68,8 @@ export const completeRecording = (id: string, chunkCount: number) =>
   });
 export const discardRecording = (id: string, reason: string) =>
   apiRequest<Recording>(`/api/v1/recordings/${id}/discard`, { method: "POST", body: { reason } });
+/** One approved task's files as a ZIP, as the project export makes them (D-136). */
+export const downloadTaskFiles = (taskId: string) => apiDownload(`/api/v1/tasks/${taskId}/export`);
 export const assetUrl = (id: string, purpose: "play" | "download") =>
   apiRequest<{ url: string; expires_in: number }>(`/api/v1/assets/${id}/url`, {
     method: "POST",

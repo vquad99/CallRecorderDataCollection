@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, ME, renderAt, signedInAs, type Handler } from "../test/fakeApi";
-import { ALL_PERMISSIONS, PROJECT, TASK, USER, worldHandlers } from "../test/world";
+import { ALL_PERMISSIONS, PROJECT, RATES, TASK, USER, worldHandlers } from "../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -437,6 +437,18 @@ const FORMS: Record<string, FormSpec> = {
       ],
       "GET /api/v1/tasks/t1/calls": () => [200, [LIVE_CALL]],
     },
+  },
+  "payment rates": {
+    source: "src/features/payments/PaymentsPage.tsx",
+    url: "/payments",
+    ready: /Mona Moderator/,
+    open: [click("Change rates of HINDI")],
+    fill: [type("Moderators (₹ per approved minute)", "3")],
+    submit: "Save rates",
+    write: "PUT /api/v1/payments/rates/p1",
+    reply: [200, RATES],
+    body: { moderator_rate: "3", participant_rate: null },
+    kept: "Moderators (₹ per approved minute)",
   },
   "task comment": {
     source: "src/features/tasks/TaskDetailPage.tsx",

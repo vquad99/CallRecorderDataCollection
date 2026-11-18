@@ -36,6 +36,8 @@ export interface QcResult {
 
 export interface AudioQcView {
   task_status: string;
+  /** A pass approves the task: the project has no admin review (D-138). */
+  pass_approves: boolean;
   qc_user_id: string | null;
   qc_name: string | null;
   can_decide: boolean;

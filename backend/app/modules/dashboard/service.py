@@ -34,6 +34,7 @@ from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
+from app.core.days import start_of
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm
 from app.modules.audio_qc.models import AudioQcResult
@@ -177,8 +178,8 @@ def summary(
     else:
         last_day = today
         first_day = today - timedelta(days=days - 1)
-    range_start = datetime.combine(first_day, datetime.min.time(), tz)
-    range_end = datetime.combine(last_day + timedelta(days=1), datetime.min.time(), tz)
+    range_start = start_of(first_day, tz)
+    range_end = start_of(last_day + timedelta(days=1), tz)
 
     # What narrows the tasks themselves: project, mode, status, and who speaks.
     on_task: list[Any] = []

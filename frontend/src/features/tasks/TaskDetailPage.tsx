@@ -473,15 +473,37 @@ const HAS_RECORDINGS: readonly string[] = [
   "REJECTED",
 ];
 
-/** The task's finished recordings; a download brings the consent record with the audio. */
+/** The task's finished recordings; a download brings the consent record with the audio. A
+ * recording the moderator replaced with Record again is greyed and says so (D-135); the server
+ * lists it only for the people who run the project and the moderator. People who may export get
+ * the approved task's files as one ZIP, as the project export makes them (D-136). */
 function Recordings({ task }: { task: work.TaskDetail }) {
   const { can } = useAuth();
   const { state, reload } = useResource(() => rec.listRecordings(task.id), [task.id]);
   const { busy, error, message, run } = useAction();
   const ready = state.status === "loaded" ? state.data.filter((r) => r.state === "READY") : [];
+  const exportable = can("exports.create") && task.status === "APPROVED" && ready.length > 0;
   return (
     <section className="card" aria-labelledby="recordings-title">
-      <h2 id="recordings-title">Recordings</h2>
+      <div className="card__head">
+        <h2 id="recordings-title">Recordings</h2>
+        {exportable ? (
+          <Button
+            variant="secondary"
+            busy={busy === "task-files"}
+            disabled={busy !== null}
+            onClick={() =>
+              void run(async () => {
+                await rec.downloadTaskFiles(task.id);
+                return "Task files downloaded.";
+              }, "task-files")
+            }
+          >
+            <Icon name="download" size={15} />
+            Download task files
+          </Button>
+        ) : null}
+      </div>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && ready.length === 0 ? (
@@ -501,13 +523,16 @@ function Recordings({ task }: { task: work.TaskDetail }) {
             {ready.map((r, i) => {
               const file = rec.deliveryAsset(r.assets);
               return (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.current ? undefined : "row--replaced"}>
                   <td>
                     <span className="cell-icon">
                       <Icon name="waveform" size={15} />
                       Recording {ready.length - i}
                     </span>
                     {file ? <div className="muted">{rec.formatLabel(file)}</div> : null}
+                    {r.current ? null : (
+                      <StatusBadge tone="neutral" label="Rejected by moderator – recorded again" />
+                    )}
                   </td>
                   {/* The delivered file's length: a phone call is cut to its recording marks. */}
                   <td>{rec.lengthLabel(file ? file.duration_ms / 1000 : r.saved_seconds)}</td>

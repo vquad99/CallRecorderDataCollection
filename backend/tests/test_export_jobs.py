@@ -1,7 +1,7 @@
 """Export bundles (D-105): made in the background, every file listed with its checksum, phone and
 face-to-face recordings in their own folders, filters, a short-lived link, an end date.
 
-Requirements: EXP-001, EXP-002, EXP-003, EXP-004, EXP-005, EXP-006, EXP-008, EXP-009, EXP-010
+Requirements: EXP-001, EXP-002, EXP-003, EXP-004, EXP-005, EXP-006, EXP-008, EXP-009, EXP-010, PART-015
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from app.modules.projects.models import Project
 from app.modules.recordings.models import AudioAsset
 from app.modules.recordings.worker_dispatch import run_export_inline, sweep_exports
 from tests import test_audio_qc, test_telephony
-from tests.conftest import Api, make_user
+from tests.conftest import Api, make_user, set_status
 from tests.test_telephony import A_PHONE, BUCKET, due_now, session, started_and_closed, sweep
 
 pytestmark = pytest.mark.db
@@ -589,3 +589,52 @@ def test_reports_come_as_csv_or_tsv_that_spreadsheets_read(w: dict[str, Any]) ->
     # Recordings no longer come from this address: they are asked for as a bundle.
     assert pa.get(f"{base}/export", params={"content": "audio"}).status_code == 422
     assert pa.get(f"{base}/export", params={"format": "xlsx"}).status_code == 422
+
+
+def test_one_approved_task_downloads_as_a_bundle_from_its_page(w: dict[str, Any]) -> None:
+    """D-136: the task's current recording, details file and consent record, in a project
+    export's folders and tables; approved tasks only; for people who may export."""
+    pa: Api = w["pa"]
+    ftf = w["ftf_task"]
+    early = pa.get(f"/api/v1/tasks/{ftf}/export")
+    assert (early.status_code, early.json()["error"]["code"]) == (409, "TASK_NOT_APPROVED")
+    set_status(w["db"], ftf, "APPROVED")
+    answer = pa.get(f"/api/v1/tasks/{ftf}/export")
+    assert answer.status_code == 200, answer.text
+    assert answer.headers["content-type"] == "application/zip"
+    code = pa.get(f"/api/v1/tasks/{ftf}").json()["task_code"]
+    assert f"_{code}_" in answer.headers["content-disposition"]
+    current = next(r for r in pa.get(f"/api/v1/tasks/{ftf}/recordings").json() if r["current"])
+    stem = f"{code}_{current['id'][:8]}"
+
+    archive = zipfile.ZipFile(io.BytesIO(answer.content))
+    assert archive.testzip() is None
+    names = archive.namelist()
+    assert sorted(n for n in names if "/" in n and not n.startswith("schema/")) == [
+        f"face_to_face/audio/{stem}.wav",
+        f"face_to_face/consent/{stem}.html",
+        f"face_to_face/metadata/{stem}.json",
+    ]
+    assert sorted(n for n in names if "/" not in n) == [
+        "README.txt",
+        "SHA256SUMS",
+        "manifest.csv",
+        "manifest.json",
+        "participants.csv",
+        "recordings.csv",
+        "recordings.json",
+    ]
+    rows = rows_of(archive, "recordings.csv")
+    assert [(r["task_code"], r["recording_id"], r["task_status"]) for r in rows] == [
+        (code, current["id"], "APPROVED")
+    ]
+    for line in archive.read("SHA256SUMS").decode().splitlines():
+        digest, path = line.split("  ", 1)
+        assert hashlib.sha256(archive.read(path)).hexdigest() == digest, path
+    entry = w["db"].scalar(
+        select(AuditLog).where(AuditLog.action == "task.exported", AuditLog.entity_id == ftf)
+    )
+    assert entry is not None
+    # The moderator may not export; the phone task is not approved.
+    assert w["mod"].get(f"/api/v1/tasks/{ftf}/export").status_code == 403
+    assert pa.get(f"/api/v1/tasks/{w['phone_task']}/export").status_code == 409

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -63,6 +65,10 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     # The consent form participants read and answer on their personal page (D-067).
     consent_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # A QC pass approves the task: no admin review in this project (D-138).
+    qc_final_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

@@ -42,6 +42,7 @@ export const EMPTY_FIELDS: ProjectFields = {
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: SAMPLE_CONSENT_TEXT,
+  qc_final_approval: false,
 };
 
 export function ProjectForm({
@@ -141,6 +142,22 @@ export function ProjectForm({
             { value: "ASSIGNED_MODERATOR", label: "Project admins and the assigned moderator" },
           ]}
         />
+        <fieldset className="field">
+          <legend className="field__label">Approval</legend>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={f.qc_final_approval}
+              aria-describedby="qc-final-hint"
+              onChange={(e) => set("qc_final_approval", e.target.checked)}
+            />
+            QC pass is the final approval (no admin review)
+          </label>
+          <p id="qc-final-hint" className="field__hint">
+            When ticked, a recording the QC Executive passes is approved at once. Tasks already
+            waiting for admin review stay there.
+          </p>
+        </fieldset>
         <TextField
           label="Consent policy version"
           required

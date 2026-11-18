@@ -16,6 +16,7 @@ export const PROJECT = {
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: "",
+  qc_final_approval: false,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -147,6 +148,53 @@ export const CALL_ROW = {
   cancel_reason: null,
   failure_code: null,
   recording_id: "r1",
+};
+
+export const RATES = {
+  project_id: "p1",
+  project_code: "HINDI",
+  project_name: "Hindi conversations",
+  moderator_rate: "2.00",
+  participant_rate: null,
+  updated_at: "2026-11-10T09:00:00Z",
+  updated_by: "Ada Admin",
+};
+
+const PAY_PERIOD = { timezone: "Asia/Kolkata", date_from: null, date_to: null };
+
+export const MODERATOR_PAY = {
+  ...PAY_PERIOD,
+  totals: { count: 3, minutes: "25.50", amount: "51.00", minutes_without_rate: "0.00" },
+  rows: [
+    {
+      project_id: "p1",
+      project_code: "HINDI",
+      user_id: "m1",
+      name: "Mona Moderator",
+      approved_tasks: 3,
+      approved_minutes: "25.50",
+      rate: "2.00",
+      amount: "51.00",
+    },
+  ],
+};
+
+export const PARTICIPANT_PAY = {
+  ...PAY_PERIOD,
+  totals: { count: 2, minutes: "12.75", amount: "0.00", minutes_without_rate: "12.75" },
+  rows: [
+    {
+      project_id: "p1",
+      project_code: "HINDI",
+      participant_id: "a1",
+      participant_code: "P000001",
+      name: "Asha",
+      approved_sessions: 2,
+      payable_minutes: "12.75",
+      rate: null,
+      amount: null,
+    },
+  ],
 };
 
 export const EXPORT_JOB = {
@@ -352,6 +400,7 @@ export const ALL_PERMISSIONS = [
   "recordings.download",
   "dashboard.view",
   "notes.view",
+  "payments.manage",
 ];
 
 const page = <T>(items: T[]) => ({ items, total: items.length, page: 1, page_size: 25 });
@@ -431,6 +480,9 @@ export function worldHandlers(): Record<string, Handler> {
         },
       ]),
     ),
+    "GET /api/v1/payments/rates": ok([RATES]),
+    "GET /api/v1/payments/moderators": ok(MODERATOR_PAY),
+    "GET /api/v1/payments/participants": ok(PARTICIPANT_PAY),
     "GET /api/v1/users": ok(page([USER])),
     "GET /api/v1/users/u2": ok(USER),
     "GET /api/v1/settings": ok(SETTINGS),

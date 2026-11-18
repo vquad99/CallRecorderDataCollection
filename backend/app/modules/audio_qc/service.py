@@ -3,7 +3,9 @@
 Read-only (AQC-009): the automatic check reads the measurements taken when the delivery file was
 made, and a re-check reads a downloaded copy; neither ever changes the audio. The checks
 themselves are in rules.py. The automatic result never approves or rejects anything: the QC
-Executive assigned to the task decides (PASS or FAIL, D-118).
+Executive assigned to the task decides (PASS or FAIL, D-118). A pass goes to the project admin
+for the final approval, or approves the task itself in a project where QC pass is the final
+approval (D-138).
 """
 
 from __future__ import annotations
@@ -43,11 +45,13 @@ from app.modules.auth.models import User
 from app.modules.participants import consent
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project, ProjectAudioRule
+from app.modules.recordings import access
 from app.modules.recordings.models import (
     DELIVERY_KINDS,
     AssetProcessingStep,
     AudioAsset,
     Recording,
+    current_recording_of,
 )
 from app.modules.tasks import service as tasks
 from app.modules.tasks import workflow
@@ -59,9 +63,18 @@ logger = logging.getLogger("app.audio_qc")
 
 # Statuses in which a QC Executive may be (re)assigned: anything still open.
 QC_ASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD"})
-# A pass goes to the project admin for the final approval (D-092).
-# D-118: pass or reject only; no return to record again.
+# A pass goes to the project admin for the final approval (D-092), or approves the task where the
+# project says QC pass is the final approval (D-138). D-118: pass or reject only; no return.
 DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED"}
+QC_FINAL_STATUS = "APPROVED"
+QC_FINAL_NOTE = "Approved by the QC decision: QC pass is the final approval in this project."
+
+
+def decision_target(outcome: str, project: Project) -> str | None:
+    """The status a QC decision moves the task to; None for an unknown outcome."""
+    if outcome == "PASS" and project.qc_final_approval:
+        return QC_FINAL_STATUS
+    return DECISIONS.get(outcome)
 
 
 def find_duplicate(
@@ -185,12 +198,7 @@ def run_automatic(db: Session, recording_id: uuid.UUID) -> AudioQcResult:
 
 
 def _latest_ready_recording(db: Session, task: Task) -> Recording | None:
-    return db.scalar(
-        select(Recording)
-        .where(Recording.task_id == task.id, Recording.state == "READY")
-        .order_by(Recording.started_at.desc())
-        .limit(1)
-    )
+    return db.scalar(current_recording_of(task.id))
 
 
 def _can_manage(principal: Principal, task: Task) -> bool:
@@ -311,9 +319,9 @@ def decide(
     comment: str,
     ip: str | None,
 ) -> AudioQcResult:
-    """The QC Executive's decision (AQC-008): PASS sends the task to the project admin, FAIL
-    rejects it (D-118: no return). Stored with reason, comment, time and reviewer; the task moves
-    in the same commit."""
+    """The QC Executive's decision (AQC-008): PASS sends the task to the project admin, or
+    approves it where QC pass is the final approval (D-138); FAIL rejects it (D-118: no return).
+    Stored with reason, comment, time and reviewer; the task moves in the same commit."""
     task = tasks.get_task(db, principal, task_id)
     if not _is_qc(db, principal, task):
         raise forbidden()
@@ -325,7 +333,8 @@ def decide(
     # first and the moderator second used to let one person record and approve (D-088).
     if principal.user_id in tasks.recording_people(db, task):
         raise _same_person()
-    target = DECISIONS.get(outcome)
+    project = db.get_one(Project, task.project_id)
+    target = decision_target(outcome, project)
     if target is None:
         raise AppError("Choose PASS or FAIL", code="VALIDATION_ERROR", status_code=422)
     automatic = _latest(db, task.id, automated=True)
@@ -377,9 +386,12 @@ def decide(
         project_id=task.project_id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"outcome": outcome, "reason_code": reason_code},
+        after={"outcome": outcome, "reason_code": reason_code, "task_status": target},
     )
     db.flush()
+    note = comment or f"Audio QC: {outcome}"
+    if target == QC_FINAL_STATUS:
+        note = f"{QC_FINAL_NOTE} {comment}".strip()
     tasks.transition(
         db,
         task,
@@ -387,7 +399,7 @@ def decide(
         workflow.SYSTEM,
         actor_id=principal.user_id,
         reason_code=reason_code,
-        comment=comment or f"Audio QC: {outcome}",
+        comment=note,
     )
     return result
 
@@ -420,8 +432,10 @@ def view(db: Session, principal: Principal, task_id: uuid.UUID) -> dict[str, Any
     )
     is_qc = _is_qc(db, principal, task)
     can_manage = _can_manage(principal, task)
+    project = db.get_one(Project, task.project_id)
     return {
         "task_status": task.status,
+        "pass_approves": project.qc_final_approval,
         "qc_user_id": qc_user.id if qc_user else None,
         "qc_name": qc_user.display_name if qc_user else None,
         "can_decide": is_qc and task.status == "AUDIO_QC",
@@ -473,13 +487,7 @@ def metadata(
 ) -> tuple[str, dict[str, Any]]:
     """The details file that travels with a recording: session, device, every file with its
     measurements and processing, consent status and audio QC. Participants by code only."""
-    rec = db.get(Recording, recording_id)
-    if rec is None:
-        raise not_found("Recording")
-    try:
-        task = tasks.get_task(db, principal, rec.task_id)
-    except AppError:
-        raise not_found("Recording") from None
+    rec, task = access.readable(db, principal, recording_id)
     if not principal.can_in_project(Perm.RECORDINGS_DOWNLOAD, task.project_id):
         raise forbidden()
     project = db.get_one(Project, task.project_id)
