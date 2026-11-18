@@ -4,7 +4,9 @@
 // "A answered - call B", "B answered - start recording", "Stop and close call". The platform then
 // fetches the recording. Every state shown comes from the server; nothing is shown as connected
 // on its own (TEL-037). The provider's own answers are in a technical log for the Super Admin.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// Start call waits for the moderator's phone line to be Ready (D-133), and the line is told when
+// a call opens and when it is over, so it is made Ready again for the next one.
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import * as tel from "../../api/telephony";
 import * as work from "../../api/work";
@@ -18,9 +20,11 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { usePolling } from "../../hooks/usePolling";
 import { useResource } from "../../hooks/useResource";
-import { clock, when } from "../../lib/format";
+import { clock, time, when } from "../../lib/format";
 import { labelFor } from "../../lib/labels";
 import { CallBadge } from "../calls/callUi";
+import { usePhoneLine, type PhoneLine } from "../phoneline/PhoneLine";
+import { seatLog } from "../phoneline/seatLink";
 import { ListenLatest } from "./Listen";
 import type { OnTaskChange } from "./TaskDetailPage";
 
@@ -273,6 +277,20 @@ function CallSteps({ call, onChange }: { call: tel.Call; onChange: () => Promise
   );
 }
 
+/** Why Start call waits for the phone line (D-133); null when it need not: the line is Ready, or
+ * the seat is made Ready in TxContact's Chirp app (`seat` null). */
+function lineWait(seat: tel.SeatLogin | null | undefined, line: PhoneLine | null): string | null {
+  if (!seat) return null;
+  if (!seat.agent_id || !seat.has_password)
+    return "Ask your admin to save your phone seat password.";
+  if (!line) return "Reload this page to connect your phone line.";
+  if (line.status === "ready") return null;
+  if (line.status === "failed") {
+    return "Your phone line is not connected. Click Try again at the top of the page.";
+  }
+  return "Your phone line is not Ready yet. Start call works once the top of the page says “Phone line: Ready”.";
+}
+
 /** The moderator's card on a telephony task: start the session, call, close, then send to QC. */
 function CallCard({
   task,
@@ -286,6 +304,14 @@ function CallCard({
   const status = useResource(() => tel.telephonyStatus(), []);
   const refresh = () => void calls.refresh();
   const { busy, error, run } = useAction();
+  const line = usePhoneLine();
+  const latest = calls.state.status === "loaded" ? calls.state.data[0] : undefined;
+  // The line follows this task's call: on it while it is open, made Ready again once it is over.
+  useEffect(() => {
+    if (!line || !latest) return;
+    if (latest.state === "DIALLING") line.onCall(latest.id);
+    else if (line.call === latest.id) line.onCall(null);
+  }, [line, latest]);
 
   const canStartSession =
     task.status !== "RECORDED" && task.allowed_transitions.includes("IN_PROGRESS");
@@ -301,8 +327,18 @@ function CallCard({
       refresh();
     }, key);
   const cancel = (call: tel.Call) => <CancelButton call={call} onChange={refresh} />;
-
-  const latest = calls.state.status === "loaded" ? calls.state.data[0] : undefined;
+  const startCall = () =>
+    callAction("start", async () => {
+      line?.onCall("starting"); // TxContact moves the seat while the call is placed: leave it
+      try {
+        const call = await tel.startCall(task.id);
+        line?.onCall(call.state === "DIALLING" ? call.id : null);
+        return call;
+      } catch (failure) {
+        line?.onCall(null);
+        throw failure;
+      }
+    });
 
   let title = "Start the session";
   let body: ReactNode = (
@@ -358,6 +394,7 @@ function CallCard({
       go = null;
     } else if (!latest || ["DIAL_FAILED", "CANCELLED", "RECORDED"].includes(latest.state)) {
       const waiting = task.consent_missing;
+      const noLine = lineWait(status.state.data.seat_login, line);
       title = "Ready to call";
       body = (
         <>
@@ -366,6 +403,8 @@ function CallCard({
               Participant {waiting.join(" and ")} has not agreed on the consent form yet. The call
               can start once both have agreed.
             </p>
+          ) : noLine ? (
+            <p className="notice">{noLine}</p>
           ) : (
             <p>
               Click Start call: participant A&apos;s phone rings (
@@ -382,8 +421,8 @@ function CallCard({
       go = (
         <Button
           busy={busy === "start"}
-          disabled={waiting.length > 0}
-          onClick={() => callAction("start", () => tel.startCall(task.id))}
+          disabled={waiting.length > 0 || noLine !== null}
+          onClick={startCall}
         >
           <Icon name="phone" size={16} weight="fill" />
           Start call
@@ -476,7 +515,30 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
             </details>
           ))
         : null}
+      {superAdmin ? <PhoneLineLog /> : null}
     </section>
+  );
+}
+
+/** What this browser's phone line sent to and received from TxContact (D-133), for the Super
+ * Admin: kept in the page's memory only, never with the seat password. */
+function PhoneLineLog() {
+  const entries = useSyncExternalStore(seatLog.subscribe, seatLog.entries);
+  if (entries.length === 0) return null;
+  return (
+    <details className="tech-log">
+      <summary>Phone line log (this browser)</summary>
+      <ol className="list">
+        {entries.map((e, n) => (
+          <li key={`${e.at}-${n}`}>
+            <span className="muted">
+              {time(e.at)} · {e.kind}
+            </span>
+            <div className="mono break">{e.text}</div>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

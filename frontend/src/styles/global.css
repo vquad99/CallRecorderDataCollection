@@ -490,6 +490,47 @@ h1 > .tile,
   background: rgb(255 255 255 / 0.1);
   color: #fff;
 }
+/* The moderator's phone line (D-133): its state, with a dot, and Try again after a failure. */
+.phone-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: #fff;
+  font-size: 0.8125rem;
+}
+.phone-line__words {
+  overflow: hidden;
+  max-width: 40ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-line__words::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--k-500);
+  content: "";
+}
+.phone-line[data-status="ready"] .phone-line__words::before {
+  background: #4cc77f;
+}
+.phone-line[data-status="failed"] .phone-line__words::before {
+  background: #ff7a7a;
+}
+.phone-line__retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: inherit;
+  text-decoration: underline;
+  white-space: nowrap;
+  cursor: pointer;
+}
 .shell__main {
   flex: 1;
   min-width: 0;
@@ -531,6 +572,9 @@ h1 > .tile,
   .topbar__who,
   .crumbs::before {
     display: none;
+  }
+  .phone-line__words {
+    max-width: 18ch;
   }
   .shell__content {
     padding: 18px var(--gutter) 56px;

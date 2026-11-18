@@ -163,12 +163,16 @@ function TwoStep() {
   );
 }
 
-/** The moderator's TxContact seat, set by a Super Admin: what they sign in to the Chirp app with. */
+/** The moderator's TxContact seat, set by a Super Admin. The portal signs it in by itself
+ * (D-133); the Chirp app needs it only when that is switched off. */
 function PhoneSeat({ seat, hasPassword }: { seat: string; hasPassword: boolean }) {
   return (
     <section className="card" aria-labelledby="seat-title">
       <h2 id="seat-title">Phone seat</h2>
-      <p>Use these to sign in to the Chirp app.</p>
+      <p>
+        The portal signs your phone line in with these by itself. You need them only if your admin
+        asks you to use TxContact's Chirp app.
+      </p>
       <p>
         Seat number: <strong>{seat}</strong>
       </p>

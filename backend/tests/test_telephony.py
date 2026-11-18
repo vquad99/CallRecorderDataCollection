@@ -347,7 +347,7 @@ def test_not_configured_is_reported_truthfully(db_app: Any, new_api: Any, db: An
     api: Api = new_api()
     api.login("mod@example.org")
     status = api.get("/api/v1/telephony/status")
-    assert status.json() == {"configured": False, "provider": "TXCONTACT"}
+    assert status.json() == {"configured": False, "provider": "TXCONTACT", "seat_login": None}
     r = api.post("/api/v1/tasks/00000000-0000-0000-0000-000000000001/calls")
     assert r.status_code == 503
     assert r.json()["error"]["code"] == "NOT_CONFIGURED"
@@ -1357,6 +1357,61 @@ def test_a_seat_password_is_kept_encrypted_and_shown_only_to_a_super_admin_or_it
     db.expire_all()
     rotated = db.get(User, uuid.UUID(w["mod_id"])).telephony_password_enc
     assert FieldCipher(new_key).decrypt(rotated) == secret
+
+
+def test_the_status_tells_the_moderators_page_how_to_sign_the_seat_in(
+    world: dict[str, Any],
+) -> None:
+    """D-133: the moderator's page signs their own seat in to TxContact's agent manager. The
+    status gives the address (by default TxContact's own over WebSocket), the tenant, the caller's
+    seat and the extension it signs in on, and whether a password is saved. The page takes the
+    password itself from the own-seat request, on record as a sign-in rather than a showing."""
+    w = world
+    status = "/api/v1/telephony/status"
+    line = {
+        "url": "wss://amber.txcontact.com/txagentmanager/",
+        "tenant_id": "desicrew",
+        "agent_id": None,
+        "extension": None,
+        "has_password": False,
+    }
+    assert w["mod"].get(status).json()["seat_login"] == line
+    seat = f"/api/v1/users/{w['mod_id']}/telephony-agent"
+    assert w["sa"].put(seat, json={"agent_id": SEAT, "password": "line-pass-71"}).status_code == 200
+    line |= {"agent_id": SEAT, "extension": SEAT, "has_password": True}
+    assert w["mod"].get(status).json()["seat_login"] == line
+    # Another person's status carries their own seat, never this one.
+    assert w["pa"].get(status).json()["seat_login"]["agent_id"] is None
+
+    taken = w["mod"].get("/api/v1/auth/phone-seat/password?purpose=line")
+    assert taken.json() == {"password": "line-pass-71"}
+    db = w["db"]
+    actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_id == w["mod_id"])).all()
+    assert "user.phone_line_signed_in" in actions
+    assert "user.seat_password_shown" not in actions
+    assert w["mod"].get("/api/v1/auth/phone-seat/password?purpose=other").status_code == 422
+
+    # The settings: an extension rule with {seat}, another address and tenant, or switched off
+    # (the seat is then made Ready in the Chirp app, as before).
+    app = w["app"]
+    app.state.settings = app.state.settings.model_copy(
+        update={
+            "txcontact_extension": "9{seat}",
+            "txcontact_agent_url": "wss://agents.example.org/txagentmanager/",
+            "txcontact_tenant_id": "other",
+        }
+    )
+    assert w["mod"].get(status).json()["seat_login"] == line | {
+        "url": "wss://agents.example.org/txagentmanager/",
+        "tenant_id": "other",
+        "extension": f"9{SEAT}",
+    }
+    app.state.settings = app.state.settings.model_copy(update={"txcontact_seat_login": False})
+    assert w["mod"].get(status).json() == {
+        "configured": True,
+        "provider": "TXCONTACT",
+        "seat_login": None,
+    }
 
 
 AHEAD = pytest.mark.parametrize("world", [0, 330], ids=["on-time", "330-min-ahead"], indirect=True)

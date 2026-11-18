@@ -126,6 +126,18 @@ class Settings(BaseSettings):
     # back by this much, and the dates it files calls under are searched moved forward by it.
     txcontact_clock_ahead_minutes: int = Field(default=0, ge=-24 * 60, le=24 * 60)
     txcontact_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    # The moderator's phone seat is signed in by the portal itself (D-133), not by TxContact's
+    # Chirp app: while a moderator with a saved seat password is signed in, their browser holds
+    # the seat on TxContact's agent manager (TxAgentManager, a WebSocket) and keeps it Ready.
+    # Address: unset means the TxContact address above with ws(s):// and /txagentmanager/
+    # (wss://amber.txcontact.com/txagentmanager/; the stand-in's own when testing).
+    txcontact_agent_url: str | None = None
+    txcontact_tenant_id: str = Field(default="desicrew", min_length=1, max_length=64)
+    # The EXTENSION the seat signs in on, where "{seat}" stands for the seat number; empty: the
+    # seat number itself (NOT VERIFIED).
+    txcontact_extension: str = Field(default="", max_length=64)
+    # Off: the seat is made Ready elsewhere (the Chirp app), as before D-133.
+    txcontact_seat_login: bool = True
     # After the moderator closes a call, look for its recording for this long before asking a
     # person to pick it or try again.
     telephony_fetch_minutes: int = Field(default=60, ge=5, le=24 * 60)
@@ -169,6 +181,13 @@ class Settings(BaseSettings):
         if not value.startswith(("http://", "https://")) or value.endswith("/"):
             raise ValueError("must be scheme://host[:port] without a trailing slash")
         return value
+
+    @field_validator("txcontact_agent_url")
+    @classmethod
+    def _agent_url(cls, value: str | None) -> str | None:
+        if value and not value.startswith(("ws://", "wss://")):
+            raise ValueError("must start with ws:// or wss://")
+        return value or None
 
     @field_validator("report_timezone", "txcontact_timezone")
     @classmethod
@@ -255,7 +274,17 @@ class Settings(BaseSettings):
                 )
             if not self.txcontact_base_url.startswith("https://"):
                 raise ValueError("TXCONTACT_BASE_URL must use https in production")
+            if not self.txcontact_agent_endpoint.startswith("wss://"):
+                raise ValueError("TXCONTACT_AGENT_URL must use wss in production")
         return self
+
+    @property
+    def txcontact_agent_endpoint(self) -> str:
+        """Where the moderator's browser signs their phone seat in (D-133)."""
+        if self.txcontact_agent_url:
+            return self.txcontact_agent_url
+        scheme, _, host = self.txcontact_base_url.partition("://")
+        return f"{'wss' if scheme == 'https' else 'ws'}://{host}/txagentmanager/"
 
     @property
     def telephony_configured(self) -> bool:

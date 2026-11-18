@@ -177,7 +177,7 @@ function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.Use
         hint={
           user.telephony_has_password
             ? "Leave empty to keep the saved password."
-            : "The password TxContact gave for this seat. The moderator uses it to sign in to the Chirp app."
+            : "The password TxContact gave for this seat. The portal signs the moderator's phone line in with it."
         }
         value={password}
         maxLength={200}

@@ -12,6 +12,8 @@ VERIFIED must be settled by the first real call.
 2. **Recording service**: the published API description
    `https://amber.txcontact.com/txrecord/swagger.json` (Swagger 2.0, "TxRecord API" v1, generated
    by drf-yasg). The page `/txrecord/swagger/` is only the viewer for it.
+3. **Agent manager** (the seat's sign-in, D-133): TxContact's "TxAgentManager - API Specification
+   Document" 1.18.0-0, a PDF given on 2026-11-18. See "The moderator's seat" below.
 
 ## Tested on the account, 2026-11-13
 
@@ -81,10 +83,59 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 - A download is checked against the length TxContact announces; redirects are refused.
 - TxContact's call ids and file names are shown masked: they may carry the caller's number.
 - At most 6 calls an hour for a task; a participant who refused consent is not called again.
-- A stand-in that answers like the real service (as seen and documented above) is in
-  `backend/tests/fake_txcontact.py`; the browser journey `frontend/journeys/phonecall.spec.ts`
+- A stand-in that answers like the real service (as seen and documented above, the agent
+  manager included) is in `backend/tests/fake_txcontact.py`; the browser journey
+  `frontend/journeys/phonecall.spec.ts`
   runs the whole flow against it (locally, and in CI once the journeys job starts the stand-in;
   without a configured provider the journey is skipped).
+
+## The moderator's seat: TxContact's agent manager (D-133)
+
+Source 3: TxContact's "TxAgentManager - API Specification Document", version 1.18.0-0 (dated
+31-05-2022), given by TxContact on 2026-11-18 (a PDF; not copied here). It is how the Chirp app
+signs a seat in. The portal now does the same from the moderator's browser, so the Chirp app is
+not needed: the dialer connects participant A to the seat only while the seat is Ready.
+
+Seen on 2026-11-18 before any code was written (a connection opened, nothing sent): the address
+`wss://amber.txcontact.com/txagentmanager/` is a plain WebSocket (not Socket.IO) and says nothing
+until the client speaks. The Chirp app's log shows TxContact closing the connection every 5
+minutes and Chirp connecting again 2 seconds later with RECONNECT and the same session. Tenant:
+`desicrew`. States named in the document: `OFFLINE`, `ONBREAK`, `READY_FOR_CALL`.
+
+| Sent by the portal | When |
+|---|---|
+| `CONNECT` `{EVENT_NAME, EVENT_CLASS: "AGENT", PLUGINS: ["PHONE", "CHAT", "BROWSER"], AUTH: {AGENT_ID, TENANT_ID, PASSWORD}}` | When a moderator with a saved seat password opens the portal |
+| `LOGIN` `{EVENT_NAME, EVENT_CLASS, SESSION_ID, DATA: {EXTENSION}}` (the optional `URI` is not sent) | After the first `CONNECTED` |
+| `CHANGE_AGENT_STATE` `{..., DATA: {STATE, EXTENSION}}` | `READY_FOR_CALL` after TxContact's answer to `LOGIN` (or 2 s without one); again when a call is closed or cancelled in the portal, and after any other state while no call is open (3 asks at most); `OFFLINE` at sign-out |
+| `LOGOUT` `{..., DATA: {EXTENSION}}`, then `DISCONNECT` `{..., DATA: {}}` | At portal sign-out, also the idle sign-out |
+| `RECONNECT` `{EVENT_NAME, EVENT_CLASS, SESSION_ID, PLUGINS, AUTH}` | 2 s after TxContact closes the connection; 3 tries |
+
+| Sent by TxContact | What the portal does |
+|---|---|
+| `CONNECTED` `{SESSION_ID}` | Keeps the session; sends `LOGIN` the first time |
+| `AGENT_STATE_CHANGED` `{DATA: {AGENT_ID, TENANT_ID, STATE, STATE_DESC, STATE_CHANGE_TIME}}` | Shows the state in the top bar; `READY_FOR_CALL` ends the sign-in. Another seat's change is ignored |
+| `ALERT` `{DATA: {MESSAGE}}` | Before Ready: the sign-in failed and `MESSAGE` is the reason shown. Later: kept as the reason if the connection is then lost |
+| `DISCONNECTED` | Before Ready: the sign-in failed. Later: connect again (`RECONNECT`) |
+| `NOTIFY`, `ROSTER`, `AGENT_STATE_BROADCAST`, anything else | Kept in the Super Admin's phone line log only |
+
+Answers are read whatever the case of their keys. Every frame sent and received is kept in the
+page's memory for the Super Admin (**Phone line log (this browser)** on a phone task); the password
+is never in it, nor in browser storage.
+
+NOT VERIFIED until the first live test, and what to change if the guess is wrong:
+
+| Unknown | Assumed | If wrong |
+|---|---|---|
+| The exact key format | Upper-case keys, as the document writes them | A code change in `frontend/src/features/phoneline/seatLink.ts` |
+| The `EXTENSION` of a seat | The seat number itself | `TXCONTACT_EXTENSION`: `{seat}` stands for the seat number (for example `9{seat}`), or a fixed value |
+| Tenant | `desicrew` | `TXCONTACT_TENANT_ID` |
+| Address | `wss://amber.txcontact.com/txagentmanager/` | `TXCONTACT_AGENT_URL`, and `connect-src` in `frontend/nginx.conf` for another host |
+| A browser's connection (its Origin) accepted | Yes | The top bar says "Phone line not connected: TxContact could not be reached". Ask TxContact to allow the site's address; meanwhile `TXCONTACT_SEAT_LOGIN=false` and the Chirp app |
+| TxContact's answer to `LOGIN` | A state change, or nothing | Nothing to change: Ready is asked 2 s after `LOGIN` at the latest |
+| States during and after a call | Anything but `READY_FOR_CALL` | Nothing to change: left alone while the call is open, Ready asked once it is closed |
+| Whether `LOGOUT` drops a call still on the seat | Not tested | The portal signs out only at portal sign-out; avoid signing out during a call |
+| Whether a reload's fresh `CONNECT` is refused while the old session is alive | Not refused | The top bar shows TxContact's reason; **Try again** a little later |
+| Two tabs of one moderator (each signs the seat in) | TxContact allows it, or ends the older session | An ended session's `RECONNECT` fails 3 times, then that tab says "not connected" and does not take the seat back by itself. If tabs fight, make calls from one tab only |
 
 ## Questions sent / to send to TxContact
 
@@ -102,9 +153,11 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 `TXCONTACT_BASE_URL`, `TXCONTACT_DIALER_USERNAME`, `TXCONTACT_DIALER_PASSWORD`,
 `TXCONTACT_CAMPAIGN_REF` (default `dc-record-call`), `TXCONTACT_SOURCE` (default `webapi`),
 `TXCONTACT_RECORD_USER`, `TXCONTACT_RECORD_PASSWORD`, `TXCONTACT_AUTH_SCHEME`,
-`TXCONTACT_TIMEZONE`, `TXCONTACT_CLOCK_AHEAD_MINUTES` (D-131), `TELEPHONY_FETCH_MINUTES`. Each
-moderator's seat number and seat password (D-130) are set on their user page (**Phone calls →
-Seat number, Seat password**).
+`TXCONTACT_TIMEZONE`, `TXCONTACT_CLOCK_AHEAD_MINUTES` (D-131), `TELEPHONY_FETCH_MINUTES`; for the
+seat sign-in (D-133) `TXCONTACT_AGENT_URL` (empty: `TXCONTACT_BASE_URL` with wss:// and
+/txagentmanager/), `TXCONTACT_TENANT_ID` (`desicrew`), `TXCONTACT_EXTENSION` (empty: the seat
+number) and `TXCONTACT_SEAT_LOGIN` (on; off: the Chirp app). Each moderator's seat number and
+seat password (D-130) are set on their user page (**Phone calls → Seat number, Seat password**).
 
 The dialer password that came in the email was shared with several people in plain text. Ask
 TxContact to change it after the first test, and enter the new one only in Render.

@@ -1,6 +1,7 @@
 // Responsive application shell (FND-020): skip link, dark side navigation grouped and filtered by
 // permission, a top bar with the page context and the signed-in user, and a two-panel layout for
-// the signed-out pages. On narrow screens the side navigation folds behind a menu button.
+// the signed-out pages. On narrow screens the side navigation folds behind a menu button. A
+// moderator with a phone seat has their phone line kept Ready while signed in (D-133).
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
@@ -8,6 +9,7 @@ import { ROLE_LABELS } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
 import { IdleWarning } from "../auth/IdleWarning";
 import { BrandMark, Icon, type IconName } from "../components/Icon";
+import { PhoneLineProvider, PhoneLineStatus } from "../features/phoneline/PhoneLine";
 
 import { LoginArt } from "../components/Art";
 
@@ -145,102 +147,105 @@ export function AppShell() {
     .find((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`));
 
   return (
-    <div className="shell">
-      {skip}
-      <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
-        <div className="sidenav__brand">
-          <Brand />
-        </div>
-        <nav aria-label="Main" className="sidenav__nav">
-          {groups.map((g) => (
-            <div key={g.title} className="sidenav__group">
-              <p className="sidenav__title" aria-hidden="true">
-                {g.title}
-              </p>
-              {g.items.map((l) => (
-                <NavLink key={l.to} to={l.to} className="sidenav__link">
-                  {({ isActive }) => (
-                    <>
-                      <Icon name={l.icon} size={18} weight={isActive ? "fill" : "regular"} />
-                      {l.label}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <p className="sidenav__foot" aria-hidden="true">
-          <Icon name="lock" size={14} /> Private workspace
-        </p>
-      </aside>
-      <div className="shell__column">
-        <header className="topbar">
-          <button
-            type="button"
-            className="topbar__menu"
-            aria-expanded={menuOpen}
-            aria-controls="side-nav"
-            onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
-          >
-            <Icon name={menuOpen ? "close" : "menu"} />
-            <span className="sr-only">Menu</span>
-          </button>
-          {/* Page context, drawn by the stylesheet so it adds no duplicate text to the page. */}
-          <div
-            className="crumbs"
-            aria-hidden="true"
-            data-section={current?.group ?? "Account"}
-            data-page={current?.label ?? "My account"}
-          />
-          <div className="topbar__spacer" />
-          <div className="topbar__user">
-            <NavLink to="/account" className="topbar__account">
-              <span className="avatar" aria-hidden="true">
-                {initials(user?.display_name ?? "")}
-              </span>
-              <span className="topbar__who">
-                <span className="topbar__name">{user?.display_name}</span>
-                <span className="topbar__role" aria-hidden="true">
-                  {roles}
+    <PhoneLineProvider>
+      <div className="shell">
+        {skip}
+        <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
+          <div className="sidenav__brand">
+            <Brand />
+          </div>
+          <nav aria-label="Main" className="sidenav__nav">
+            {groups.map((g) => (
+              <div key={g.title} className="sidenav__group">
+                <p className="sidenav__title" aria-hidden="true">
+                  {g.title}
+                </p>
+                {g.items.map((l) => (
+                  <NavLink key={l.to} to={l.to} className="sidenav__link">
+                    {({ isActive }) => (
+                      <>
+                        <Icon name={l.icon} size={18} weight={isActive ? "fill" : "regular"} />
+                        {l.label}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <p className="sidenav__foot" aria-hidden="true">
+            <Icon name="lock" size={14} /> Private workspace
+          </p>
+        </aside>
+        <div className="shell__column">
+          <header className="topbar">
+            <button
+              type="button"
+              className="topbar__menu"
+              aria-expanded={menuOpen}
+              aria-controls="side-nav"
+              onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
+            >
+              <Icon name={menuOpen ? "close" : "menu"} />
+              <span className="sr-only">Menu</span>
+            </button>
+            {/* Page context, drawn by the stylesheet so it adds no duplicate text to the page. */}
+            <div
+              className="crumbs"
+              aria-hidden="true"
+              data-section={current?.group ?? "Account"}
+              data-page={current?.label ?? "My account"}
+            />
+            <div className="topbar__spacer" />
+            <PhoneLineStatus />
+            <div className="topbar__user">
+              <NavLink to="/account" className="topbar__account">
+                <span className="avatar" aria-hidden="true">
+                  {initials(user?.display_name ?? "")}
                 </span>
+                <span className="topbar__who">
+                  <span className="topbar__name">{user?.display_name}</span>
+                  <span className="topbar__role" aria-hidden="true">
+                    {roles}
+                  </span>
+                </span>
+              </NavLink>
+              <button
+                type="button"
+                className="topbar__signout"
+                onClick={() => void signOut().then(() => navigate("/login"))}
+              >
+                <Icon name="logout" size={16} />
+                Sign out
+              </button>
+            </div>
+          </header>
+          {user?.viewer ? (
+            <div className="view-as" role="status">
+              <Icon name="info" size={16} />
+              <span>
+                Viewing as <strong>{user.display_name}</strong> ({roles}). Read-only: nothing can be
+                changed.
               </span>
-            </NavLink>
-            <button
-              type="button"
-              className="topbar__signout"
-              onClick={() => void signOut().then(() => navigate("/login"))}
-            >
-              <Icon name="logout" size={16} />
-              Sign out
-            </button>
-          </div>
-        </header>
-        {user?.viewer ? (
-          <div className="view-as" role="status">
-            <Icon name="info" size={16} />
-            <span>
-              Viewing as <strong>{user.display_name}</strong> ({roles}). Read-only: nothing can be
-              changed.
-            </span>
-            <button
-              type="button"
-              className="view-as__stop"
-              onClick={() => void stopViewing().then(() => navigate("/admin/users"))}
-            >
-              Stop viewing
-            </button>
-          </div>
-        ) : null}
-        {user?.session_idle_minutes ? (
-          <IdleWarning idleMinutes={user.session_idle_minutes} />
-        ) : null}
-        <main id="main" className="shell__main" tabIndex={-1}>
-          <div className="shell__content">
-            <Outlet />
-          </div>
-        </main>
+              <button
+                type="button"
+                className="view-as__stop"
+                onClick={() => void stopViewing().then(() => navigate("/admin/users"))}
+              >
+                Stop viewing
+              </button>
+            </div>
+          ) : null}
+          {user?.session_idle_minutes ? (
+            <IdleWarning idleMinutes={user.session_idle_minutes} />
+          ) : null}
+          <main id="main" className="shell__main" tabIndex={-1}>
+            <div className="shell__content">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </PhoneLineProvider>
   );
 }

@@ -137,6 +137,16 @@ services:
       # TxContact's recording times run 5 h 30 min (330 minutes) ahead of the real time (D-131).
       - key: TXCONTACT_CLOCK_AHEAD_MINUTES
         value: "330"
+      # The portal signs the moderator's seat in at TxContact's agent manager (D-133). Empty
+      # address: wss://amber.txcontact.com/txagentmanager/. Empty extension: the seat number.
+      - key: TXCONTACT_AGENT_URL
+        value: ""
+      - key: TXCONTACT_TENANT_ID
+        value: desicrew
+      - key: TXCONTACT_EXTENSION
+        value: ""
+      - key: TXCONTACT_SEAT_LOGIN
+        value: "true"
       - key: TXCONTACT_DIALER_USERNAME
         sync: false
       - key: TXCONTACT_DIALER_PASSWORD
@@ -241,6 +251,16 @@ services:
         value: dc-attach-call
       - key: TXCONTACT_CLOCK_AHEAD_MINUTES
         value: "330"
+      # The portal signs the moderator's seat in at TxContact's agent manager (D-133). Empty
+      # address: wss://amber.txcontact.com/txagentmanager/. Empty extension: the seat number.
+      - key: TXCONTACT_AGENT_URL
+        value: ""
+      - key: TXCONTACT_TENANT_ID
+        value: desicrew
+      - key: TXCONTACT_EXTENSION
+        value: ""
+      - key: TXCONTACT_SEAT_LOGIN
+        value: "true"
       - key: TXCONTACT_DIALER_USERNAME
         fromService:
           type: pserv

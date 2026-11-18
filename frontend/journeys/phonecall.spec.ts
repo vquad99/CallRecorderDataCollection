@@ -1,7 +1,10 @@
 // Journey: a phone-call conversation from start to QC, through the interface, by the people who
 // would do it (D-101, D-103). The backend talks to a stand-in for TxContact
 // (backend/tests/fake_txcontact.py): no phone rings, everything else is real (browser, backend,
-// database, file storage). Skipped when the backend has no phone provider configured.
+// database, file storage). The moderator's phone line is signed in by the portal itself at the
+// stand-in's agent manager (D-133): Ready without a click once the seat password is right, On a
+// call during the call, Ready again after it, offline at sign-out. Skipped when the backend has
+// no phone provider configured.
 // Requirements: TEL-002, TEL-004, TEL-010, TEL-018, TEL-036, TEL-037, TEL-038, PART-016
 import { expect, test } from "@playwright/test";
 
@@ -28,6 +31,9 @@ function phone(ending: string): string {
   return `+919${random.slice(0, 9 - ending.length)}${ending}`;
 }
 
+/** The only password the stand-in's agent manager signs a seat in with (fake_txcontact.py). */
+const STAND_IN_SEAT_PASSWORD = "fake-seat-pass";
+
 test("a moderator calls, confirms both people, closes the call and sends the recording to QC", async ({
   browser,
 }, info) => {
@@ -35,8 +41,13 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   const code = runCode(info);
   const admin = await (await browser.newContext()).newPage();
   await signIn(admin, ADMIN_EMAIL, SEEDED_PASSWORD);
-  const status = await api<{ configured: boolean }>(admin, "GET", "/api/v1/telephony/status");
+  const status = await api<{ configured: boolean; seat_login: { url: string } | null }>(
+    admin,
+    "GET",
+    "/api/v1/telephony/status",
+  );
   test.skip(!status.configured, "the backend has no phone provider configured (TXCONTACT_*)");
+  expect(status.seat_login, "the portal signs the seat in (TXCONTACT_SEAT_LOGIN)").not.toBeNull();
 
   // Set-up through the API as the Super Admin: a telephony project with a consent form, people
   // with phone numbers who agreed to it (D-129), and tasks given to the seeded moderator.
@@ -89,32 +100,70 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
   const main = await task(asha);
   const blocked = await task(refused);
 
-  await test.step("the Super Admin gives the moderator a phone seat", async () => {
+  const seat = `seat-${code}`;
+  const saveSeat = async (password: string) => {
     await admin.goto(`/admin/users/${moderatorId}`);
-    await admin.getByLabel("Seat number").fill(`seat-${code}`);
+    await admin.getByLabel("Seat number").fill(seat);
+    await admin.getByLabel("Seat password").fill(password);
     await admin.getByRole("button", { name: "Save phone seat" }).click();
     await expect(admin.getByText("Phone seat saved.")).toBeVisible();
+  };
+  /** The seat as the stand-in's agent manager sees it (an address only the stand-in has). */
+  const atStandIn = async () => {
+    const base = (status.seat_login?.url ?? "").replace(/^ws/, "http");
+    const reply = await admin.request.get(`${base}agents/${seat}`);
+    expect(reply.ok()).toBe(true);
+    return (await reply.json()) as { state: string; logged_in: boolean; extension: string };
+  };
+
+  await test.step("the Super Admin gives the moderator a phone seat, first with a wrong password", async () => {
+    await saveSeat("not-the-seat-password");
   });
 
   const moderator = await (await browser.newContext()).newPage();
   await signIn(moderator, SEEDED.moderator, SEEDED_PASSWORD);
+  const line = (words: string) => moderator.getByText(words, { exact: true });
 
-  await test.step("a call the provider refuses is shown as refused, not as a call", async () => {
+  await test.step("the line says why it is not connected, and Start call waits for it", async () => {
+    await expect(line("Phone line not connected: Invalid agent credentials")).toBeVisible();
     await moderator.goto(`/tasks/${blocked.id}`);
     await moderator.getByRole("button", { name: "Start session" }).click();
     // Both agreed to the consent form before the task was made (D-129): nobody waits for it.
     await expect(moderator.getByRole("heading", { name: "Waiting for consent" })).toHaveCount(0);
+    await expect(moderator.getByRole("button", { name: "Start call" })).toBeDisabled();
+    await expect(
+      moderator.getByText("Your phone line is not connected. Click Try again at the top"),
+    ).toBeVisible();
+  });
+
+  await test.step("with the right password, Try again makes the line Ready: no Chirp app", async () => {
+    await saveSeat(STAND_IN_SEAT_PASSWORD);
+    await moderator.getByRole("button", { name: "Try again" }).click();
+    await expect(line("Phone line: Ready")).toBeVisible();
+    expect(await atStandIn()).toMatchObject({
+      state: "READY_FOR_CALL",
+      logged_in: true,
+      extension: seat,
+    });
+  });
+
+  await test.step("a call the provider refuses is shown as refused, not as a call", async () => {
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("alert")).toContainText("The last call could not be placed");
     await expect(moderator.getByText("Call could not be placed").first()).toBeVisible();
     await expect(moderator.getByRole("button", { name: "Start call" })).toBeVisible();
+    await expect(line("Phone line: Ready")).toBeVisible();
   });
 
   await test.step("the moderator calls and follows one button at a time", async () => {
+    // A new page load signs the line in again by itself.
     await moderator.goto(`/tasks/${main.id}`);
+    await expect(line("Phone line: Ready")).toBeVisible();
     await moderator.getByRole("button", { name: "Start session" }).click();
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("heading", { name: "On the call" })).toBeVisible();
+    await expect(line("Phone line: On a call")).toBeVisible();
+    expect((await atStandIn()).state).toBe("ON_CALL");
     // The call's history in plain words; the provider's own answer is for the Super Admin only.
     await expect(
       moderator.getByText("The phone system is ringing participant A").first(),
@@ -134,6 +183,9 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
 
   await test.step("the moderator stops and closes; then the recording arrives by itself", async () => {
     await moderator.getByRole("button", { name: "Stop and close call" }).click();
+    // Closed in the portal: the line is made Ready again for the next call, without a sign-in.
+    await expect(line("Phone line: Ready")).toBeVisible();
+    expect((await atStandIn()).state).toBe("READY_FOR_CALL");
     await expect(moderator.getByRole("heading", { name: "Check the call recording" })).toBeVisible({
       timeout: 90_000,
     });
@@ -230,5 +282,11 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await expect(moderator.getByRole("button", { name: "Download calls (CSV)" })).toHaveCount(0);
     const figures = await moderator.request.get("/api/v1/telephony/analytics");
     expect(figures.status()).toBe(403);
+  });
+
+  await test.step("the moderator signs out and the line goes offline", async () => {
+    await moderator.getByRole("button", { name: "Sign out" }).click();
+    await expect.poll(async () => (await atStandIn()).logged_in).toBe(false);
+    expect((await atStandIn()).state).toBe("OFFLINE");
   });
 });

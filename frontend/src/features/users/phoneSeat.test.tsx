@@ -84,11 +84,15 @@ describe("the moderator's own phone seat on My account", () => {
       "GET /api/v1/auth/me": () => [200, { ...ME, roles: ["MODERATOR"], ...me }],
     });
 
-  it("shows the seat number and, on request, the password for the Chirp app", async () => {
+  it("shows the seat number and, on request, the password the portal signs in with", async () => {
     const { calls } = as({ telephony_agent_id: "80003", telephony_has_password: true });
     renderAt("/account");
     expect(await screen.findByRole("heading", { name: "Phone seat" })).toBeInTheDocument();
-    expect(screen.getByText("Use these to sign in to the Chirp app.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The portal signs your phone line in with these by itself. You need them only if your admin asks you to use TxContact's Chirp app.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("80003")).toBeInTheDocument();
     expect(screen.queryByText(SECRET)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show" }));

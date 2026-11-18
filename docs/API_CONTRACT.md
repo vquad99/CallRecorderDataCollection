@@ -45,7 +45,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /auth/login | public, throttled |
 | POST | /auth/logout | authenticated |
 | GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106), `session_idle_minutes` (D-122, D-125), and the user's own phone seat: `telephony_agent_id`, `telephony_has_password` (D-130; never the password) |
-| GET | /auth/phone-seat/password | authenticated, own seat only. `{password}`: the saved password of the caller's phone seat, for the Chirp app; 404 when none is saved. Audited as `user.seat_password_shown` (D-130) |
+| GET | /auth/phone-seat/password | authenticated, own seat only. `{password}`: the saved password of the caller's phone seat; 404 when none is saved. Audited as `user.seat_password_shown` (D-130). `?purpose=line`: taken by the caller's page to sign the seat in to TxContact (D-133), audited as `user.phone_line_signed_in` instead |
 | POST | /auth/password/forgot | public, throttled; same response whether or not the email exists |
 | POST | /auth/password/reset | public, single-use token |
 | GET | /auth/sessions | authenticated (own) |
@@ -127,10 +127,12 @@ code in each phase; this file lists the planned surface so the traceability tabl
 The moderator is the TxContact agent: the platform asks TxContact to ring participant A and
 connect them to the moderator's seat; the moderator adds B in TxContact's own screen. There are
 no provider webhooks: after the call is closed the platform looks for its recording itself.
+The moderator's seat is signed in and kept Ready by their own page, at TxContact's agent
+manager (a WebSocket, D-133); the API gives the page the settings and the seat password.
 
 | Method | Path | Who | What |
 |---|---|---|---|
-| GET | /telephony/status | `tasks.view` | `{configured, provider}`; "Not configured" until the TxContact logins are set |
+| GET | /telephony/status | `tasks.view` | `{configured, provider, seat_login}`; "Not configured" until the TxContact logins are set. `seat_login` (D-133): how the caller's page signs their seat in, `{url, tenant_id, agent_id, extension, has_password}` with the caller's own seat (`agent_id` and `extension` null without one); null when phone calls are not configured or `TXCONTACT_SEAT_LOGIN` is off |
 | GET | /tasks/{id}/calls | sees the task | The task's newest 20 calls, each with its checklist, candidates and history |
 | POST | /tasks/{id}/calls | the assigned moderator (`calls.start`) | Rings A. Task must be telephony and In progress; the moderator needs an agent seat; nobody is called before both agreed to the consent form (409 `CONSENT_MISSING`); at most `TELEPHONY_MAX_CALLS_PER_TASK_PER_HOUR` (6) calls an hour for a task (429 `TOO_MANY_CALLS`). 201 also when TxContact refused: the call is `DIAL_FAILED` with TxContact's answer |
 | POST | /calls/{id}/checklist | `calls.end`; the task's moderator or a manager | `{item, done}`: A_JOINED, B_JOINED, MODERATOR_MUTED, QUALITY_OK |

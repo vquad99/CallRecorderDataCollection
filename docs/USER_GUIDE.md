@@ -69,7 +69,9 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
 
 **Phone seat** (moderators who make phone calls): **My account** shows your **Seat number** and
 your **Seat password**, hidden. Click **Show** to see the password, **Hide** to cover it again.
-Use these to sign in to the Chirp app. Each time you click **Show**, it is written in the audit log.
+You do not need them to make calls: the portal signs your phone line in by itself (section
+7a). You need them only if your admin asks you to use TxContact's Chirp app. Each time you
+click **Show**, it is written in the audit log.
 No seat, or no password yet? Ask your Super Admin.
 
 **Install the application.** On **My account**, **Install the application** puts Conversation
@@ -131,7 +133,8 @@ disabled.
 **Phone calls → Phone seat** (moderators only): on the moderator's user page, under **Phone
 calls**, type the seat number TxContact gave for them (for example `80003`) in **Seat number**,
 and the seat's password from TxContact in **Seat password**. Click **Save phone seat**. Their
-phone calls go through that seat; they sign in to the Chirp app with the seat number and password.
+phone calls go through that seat. While they are signed in, the portal signs their phone
+line in with the seat number and password by itself: they do not need the Chirp app.
 One seat per person; leave **Seat number** empty for moderators who do not make phone calls
 (this also removes the password). The **Users** list shows each seat in the **Phone seat** column.
 
@@ -378,12 +381,27 @@ long.
 ## 7a. Moderator: phone calls
 
 You start, follow and end every call on the task page in this portal. Your phone seat is set by
-the Super Admin (section 4); if calls do not start, ask them. Your seat number and seat password
-for the Chirp app are on **My account** (section 2).
+the Super Admin (section 4); if calls do not start, ask them.
+
+**Your phone line.** When you sign in, the portal connects your phone seat to the phone system
+and makes it ready for calls by itself. You do not click anything and you do not need the Chirp
+app. The top of every page shows:
+
+- **Phone line: Ready**: you can start a call.
+- **Phone line: Connecting…**: wait a few seconds.
+- **Phone line: On a call**: a call is open. When you close or cancel it, the line is ready again
+  for the next call.
+- **Phone line not connected:** and the reason: click **Try again**. If it fails again, ask your
+  admin to check your seat number and password.
+
+The line goes offline when you sign out, when you are signed out after 10 minutes without use,
+and when you close the tab. Opening the portal again connects it again. No seat password saved
+yet? The call card says **Ask your admin to save your phone seat password.**
 
 1. Open **Tasks** and click your **Phone call** task.
 2. Click **Start session**. The card says **Ready to call**. **Start call** stays grey until
-   both participants have agreed on their consent form (see section 7, step 3).
+   both participants have agreed on their consent form (see section 7, step 3) and the top of
+   the page says **Phone line: Ready**.
 3. Click **Start call**. The phone system rings participant A. The card shows **On the call**,
    with one button at a time; if the call could not be placed, the card says why.
 4. When A answers, click **A answered – call B**: the phone system rings B into the same call. If
@@ -600,4 +618,5 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
 | No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. For a consent form, click **Email consent form again**. |
 | "No access" | Your role does not include that page. Ask an administrator. |
+| **Phone line not connected** at the top of the page | Click **Try again**. If it fails again, ask your admin to check your phone seat number and password. |
 | The site does not open on one computer only | That computer still remembers an old address. Wait a few hours or restart the router. |

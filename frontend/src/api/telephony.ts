@@ -89,9 +89,21 @@ export interface Call {
   events: CallEvent[];
 }
 
+/** How the signed-in person's page signs their phone seat in to TxContact's agent manager
+ * (D-133): its address, the tenant, their seat and the extension it signs in on. */
+export interface SeatLogin {
+  url: string;
+  tenant_id: string;
+  agent_id: string | null;
+  extension: string | null;
+  has_password: boolean;
+}
+
 export interface TelephonyStatus {
   configured: boolean;
   provider: string;
+  /** Null (or missing): the seat is made Ready elsewhere, in TxContact's Chirp app. */
+  seat_login?: SeatLogin | null;
 }
 
 export const telephonyStatus = () => apiRequest<TelephonyStatus>("/api/v1/telephony/status");
@@ -130,9 +142,10 @@ export const setAgentSeat = (userId: string, agentId: string, password?: string)
 /** The saved seat password of a user, for a Super Admin; each showing is audited (D-130). */
 export const showSeatPassword = (userId: string) =>
   apiRequest<{ password: string }>(`/api/v1/users/${userId}/telephony-agent/password`);
-/** The signed-in user's own seat password, for the Chirp app; audited (D-130). */
-export const showOwnSeatPassword = () =>
-  apiRequest<{ password: string }>("/api/v1/auth/phone-seat/password");
+/** The signed-in user's own seat password, shown on their account page (D-130) or taken by the
+ * page to sign the seat in (`line`, D-133); each is audited. */
+export const showOwnSeatPassword = (purpose?: "line") =>
+  apiRequest<{ password: string }>(`/api/v1/auth/phone-seat/password${query({ purpose })}`);
 
 /** States in which the call still moves without anyone clicking: the page keeps refreshing. */
 export const MOVING: readonly CallState[] = ["DIALLING", "WAITING_FOR_RECORDING"];

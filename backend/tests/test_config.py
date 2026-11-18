@@ -97,6 +97,36 @@ def test_production_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ConfigError, match="REDIS_URL"):
         load_settings()
 
+    _set(
+        monkeypatch,
+        REDIS_URL="redis://127.0.0.1:1/0",
+        TXCONTACT_AGENT_URL="ws://agents.example.org/",
+    )
+    with pytest.raises(ConfigError, match="TXCONTACT_AGENT_URL must use wss"):
+        load_settings()
+
+
+def test_the_phone_seat_signs_in_at_txcontacts_own_address_unless_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-133: the agent manager is TxContact's own address over WebSocket (the stand-in's when
+    TXCONTACT_BASE_URL points at it), unless TXCONTACT_AGENT_URL names another WebSocket address."""
+    _set(monkeypatch, **VALID)
+    s = load_settings()
+    assert s.txcontact_agent_endpoint == "wss://amber.txcontact.com/txagentmanager/"
+    assert (s.txcontact_tenant_id, s.txcontact_extension, s.txcontact_seat_login) == (
+        "desicrew",
+        "",
+        True,
+    )
+    _set(monkeypatch, TXCONTACT_BASE_URL="http://127.0.0.1:8765", TXCONTACT_AGENT_URL="")
+    assert load_settings().txcontact_agent_endpoint == "ws://127.0.0.1:8765/txagentmanager/"
+    _set(monkeypatch, TXCONTACT_AGENT_URL="wss://agents.example.org/am/")
+    assert load_settings().txcontact_agent_endpoint == "wss://agents.example.org/am/"
+    _set(monkeypatch, TXCONTACT_AGENT_URL="https://agents.example.org/am/")
+    with pytest.raises(ConfigError, match="TXCONTACT_AGENT_URL"):
+        load_settings()
+
 
 def test_storage_keys_are_both_or_neither(monkeypatch: pytest.MonkeyPatch) -> None:
     """D-132: on AWS the server's IAM role reaches S3, so a bucket without keys is set up; one

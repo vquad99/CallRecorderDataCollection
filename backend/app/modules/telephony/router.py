@@ -34,15 +34,42 @@ CancelReason = Literal[
 ChecklistItem = Literal["A_JOINED", "B_JOINED", "MODERATOR_MUTED", "QUALITY_OK"]
 
 
+class SeatLogin(BaseModel):
+    """How the caller's page signs their phone seat in to TxContact's agent manager (D-133)."""
+
+    url: str
+    tenant_id: str
+    # The caller's own seat and the extension it signs in on; null without a seat.
+    agent_id: str | None
+    extension: str | None
+    # Whether the seat's password is saved: without it the seat cannot be signed in.
+    has_password: bool
+
+
 class TelephonyStatus(BaseModel):
     configured: bool
     provider: str
+    # Null: the seat is made Ready elsewhere (TxContact's Chirp app), as before D-133.
+    seat_login: SeatLogin | None = None
 
 
 @router.get("/telephony/status", response_model=TelephonyStatus)
-def status(provider: Provider) -> TelephonyStatus:
+def status(
+    provider: Provider, settings: AppSettings, principal: CurrentPrincipal
+) -> TelephonyStatus:
+    seat = principal.telephony_agent_id
     return TelephonyStatus(
-        configured=provider is not None, provider=provider.name if provider else "TXCONTACT"
+        configured=provider is not None,
+        provider=provider.name if provider else "TXCONTACT",
+        seat_login=SeatLogin(
+            url=settings.txcontact_agent_endpoint,
+            tenant_id=settings.txcontact_tenant_id,
+            agent_id=seat,
+            extension=service.seat_extension(settings, seat) if seat else None,
+            has_password=principal.telephony_has_password,
+        )
+        if provider is not None and settings.txcontact_seat_login
+        else None,
     )
 
 
@@ -358,12 +385,18 @@ def user_seat_password(
 
 @account_router.get("/phone-seat/password", response_model=SeatPasswordOut)
 def own_seat_password(
-    request: Request, principal: CurrentPrincipal, db: DbSession, cipher: Cipher
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    cipher: Cipher,
+    purpose: Literal["show", "line"] = "show",
 ) -> SeatPasswordOut:
-    """The signed-in moderator shows their own seat password, to sign in to the Chirp app
-    (D-130). Audited."""
+    """The signed-in moderator's own seat password (D-130): shown on their account page, or
+    (`purpose=line`) taken by their page to sign the seat in to TxContact (D-133). Audited."""
     return SeatPasswordOut(
-        password=service.seat_password(db, cipher, principal, principal.user_id, client_ip(request))
+        password=service.seat_password(
+            db, cipher, principal, principal.user_id, client_ip(request), purpose == "line"
+        )
     )
 
 

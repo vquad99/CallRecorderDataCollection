@@ -729,11 +729,23 @@ def set_agent_seat(
     return user
 
 
+def seat_extension(settings: Settings, agent_id: str) -> str:
+    """The EXTENSION a seat signs in on at TxContact's agent manager (D-133): TXCONTACT_EXTENSION
+    with "{seat}" standing for the seat number; empty means the seat number itself."""
+    return (settings.txcontact_extension or "{seat}").replace("{seat}", agent_id)
+
+
 def seat_password(
-    db: Session, cipher: FieldCipher, principal: Principal, user_id: uuid.UUID, ip: str | None
+    db: Session,
+    cipher: FieldCipher,
+    principal: Principal,
+    user_id: uuid.UUID,
+    ip: str | None,
+    for_line: bool = False,
 ) -> str:
     """The saved password of a user's phone seat (D-130), for a Super Admin or for the user
-    themselves; anyone else is refused. Every reveal is audited, without the password."""
+    themselves; anyone else is refused. Every reveal is audited, without the password: as shown,
+    or (`for_line`) as sent to the user's own page to sign the seat in (D-133)."""
     if not (principal.is_super_admin or principal.user_id == user_id):
         raise forbidden()
     user = db.get(User, user_id)
@@ -742,7 +754,7 @@ def seat_password(
     password = cipher.decrypt(user.telephony_password_enc)
     audit.record(
         db,
-        action="user.seat_password_shown",
+        action="user.phone_line_signed_in" if for_line else "user.seat_password_shown",
         entity_type="user",
         entity_id=user.id,
         actor_id=principal.user_id,
