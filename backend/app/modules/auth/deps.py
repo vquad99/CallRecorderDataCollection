@@ -47,6 +47,9 @@ class Principal:
     # Set while a Super Admin views the app as this user (D-100): who is really looking.
     viewer_id: uuid.UUID | None = None
     viewer_name: str | None = None
+    # The user's own phone seat and whether its password is saved, for their account page (D-130).
+    telephony_agent_id: str | None = None
+    telephony_has_password: bool = False
 
     @property
     def read_only(self) -> bool:
@@ -95,6 +98,8 @@ def load_principal(db: Session, user: User, session_id: uuid.UUID) -> Principal:
         permissions=perms,
         project_ids=projects,
         mfa_enabled=user.mfa_enabled,
+        telephony_agent_id=user.telephony_agent_id,
+        telephony_has_password=user.telephony_password_enc is not None,
     )
 
 

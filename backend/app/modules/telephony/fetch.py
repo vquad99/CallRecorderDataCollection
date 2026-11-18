@@ -311,12 +311,17 @@ def _fail_or_retry(db: Session, call: Call, now: datetime, code: str, detail: st
         db.commit()
 
 
-def _days(provider_tz: str, *moments: datetime) -> list[date]:
-    """The provider's calendar days the moments fall on (its search takes one day at a time)."""
-    tz = ZoneInfo(provider_tz)
+def provider_days(settings: Settings, call: Call) -> list[date]:
+    """The dates the provider files this call under (its search takes one date at a time): the
+    first and last day of the call's window, slack included, on the provider's clock, which runs
+    TXCONTACT_CLOCK_AHEAD_MINUTES ahead of the real time (D-131). A call just after the
+    provider's midnight is looked for under the day before as well."""
+    tz = ZoneInfo(settings.txcontact_timezone)
+    ahead = timedelta(minutes=settings.txcontact_clock_ahead_minutes)
+    closed = call.closed_at or call.dialled_at
     days: list[date] = []
-    for moment in moments:
-        day = moment.astimezone(tz).date()
+    for moment in (call.dialled_at - TIME_SLACK, closed + TIME_SLACK):
+        day = (moment + ahead).astimezone(tz).date()
         if day not in days:
             days.append(day)
     return days
@@ -331,13 +336,8 @@ def _search(
     a: Participant,
     now: datetime,
 ) -> ProviderSession | None:
-    closed = call.closed_at or call.dialled_at
     sessions: list[ProviderSession] = []
-    # The slack on both sides counts for the day too: a call just after midnight is looked for
-    # under the day before as well.
-    for day in _days(
-        settings.txcontact_timezone, call.dialled_at - TIME_SLACK, closed + TIME_SLACK
-    ):
+    for day in provider_days(settings, call):
         sessions += provider.sessions(call.agent_id, day)
     ids = sorted({s.session_id for s in sessions if s.session_id})
     taken = (
@@ -437,10 +437,7 @@ def _known_session(
     settings: Settings, provider: TelephonyProvider, call: Call
 ) -> ProviderSession | None:
     """The provider call chosen earlier, looked up again for its current file name."""
-    closed = call.closed_at or call.dialled_at
-    for day in _days(
-        settings.txcontact_timezone, call.dialled_at - TIME_SLACK, closed + TIME_SLACK
-    ):
+    for day in provider_days(settings, call):
         for s in provider.sessions(call.agent_id, day):
             if s.session_id == call.provider_session_id:
                 return s
@@ -475,8 +472,9 @@ def recording_window(
 ) -> Window:
     """Pure (D-113): the frames of the provider's file between the moderator's Start and Stop
     recording, with `margin` seconds kept on each side. The provider's file starts at
-    `session.start`. When that time is unknown or the marks fall outside the file, the whole
-    file is kept and the reason is said."""
+    `session.start` (the real time: the adapter has corrected the provider's clock, D-131). When
+    that time is unknown or the marks fall outside the file, the whole file is kept and the
+    reason is said."""
     whole = Window(0, frames, False, "whole call kept")
     started, stopped = call.record_started_at, call.record_stopped_at
     if started is None or stopped is None:

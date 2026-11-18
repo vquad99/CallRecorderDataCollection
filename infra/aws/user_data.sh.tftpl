@@ -1,0 +1,10 @@
+#!/bin/bash
+# First boot of the Conversation Collection server (infra/aws, D-132): keeps the set-up script as
+# /usr/local/sbin/ccp-bootstrap and runs it. Its output: /var/log/ccp-bootstrap.log.
+set -eu
+install -d -m 755 /etc/ccp
+printf '%s\n' '${repo_url}' > /etc/ccp/repo_url
+printf '%s\n' '${repo_branch}' > /etc/ccp/repo_branch
+printf '%s' '${bootstrap_b64}' | base64 -d > /usr/local/sbin/ccp-bootstrap
+chmod 755 /usr/local/sbin/ccp-bootstrap
+/usr/local/sbin/ccp-bootstrap >> /var/log/ccp-bootstrap.log 2>&1

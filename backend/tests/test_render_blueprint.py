@@ -202,6 +202,8 @@ def test_the_hosted_settings_pass_the_production_rules(
     assert settings.email_backend == "smtp"
     assert settings.redis_url is not None
     assert settings.storage_key_prefix == "staging/", "where every stored file already lives"
+    # The API and the worker both read TxContact's times corrected (D-131).
+    assert settings.txcontact_clock_ahead_minutes == 330
 
 
 def test_the_worker_runs_the_same_code_with_the_api_settings() -> None:

@@ -133,7 +133,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     from sqlalchemy.orm import Session
 
     from app.modules.participants.models import ConsentRecord, Participant
-    from tests.conftest import make_project, make_user
+    from tests.conftest import make_project
 
     grants = (
         "SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id "
@@ -145,7 +145,13 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     engine = create_engine(test_database_url)
     with Session(engine) as db:
         project = make_project(db, "MIG")
-        mod = make_user(db, "mig@example.org", ["MODERATOR"], projects=[project])
+        # Written as SQL: the users table as it was at 0026, whatever columns came later.
+        staff_id = db.execute(
+            text(
+                "INSERT INTO users (email, display_name) VALUES ('mig@example.org', 'mig') "
+                "RETURNING id"
+            )
+        ).scalar_one()
         people = [
             Participant(participant_code=f"P90000{i}", display_label="x", language_code="hi")
             for i in (1, 2, 3)
@@ -154,7 +160,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
         db.flush()
         ids = [p.id for p in people]
         for pid, review, staff in zip(
-            ids, ("PENDING", "REJECTED", "PENDING"), (None, None, mod.id), strict=True
+            ids, ("PENDING", "REJECTED", "PENDING"), (None, None, staff_id), strict=True
         ):
             db.add(
                 ConsentRecord(
@@ -182,4 +188,23 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     command.downgrade(cfg, "0026")
     with engine.begin() as conn:
         assert conn.execute(text(grants)).scalar_one() == 2
+    engine.dispose()
+
+
+def test_the_seat_password_column_comes_and_goes(test_database_url: str) -> None:
+    """0028 (D-130): the phone seat's password gets its own column, for the encrypted value only;
+    going back removes it."""
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(test_database_url)
+
+    def columns() -> dict[str, str]:
+        return {c["name"]: str(c["type"]) for c in inspect(engine).get_columns("users")}
+
+    assert columns()["telephony_password_enc"] == "TEXT"
+    command.downgrade(cfg, "0027")
+    assert "telephony_password_enc" not in columns()
+    command.upgrade(cfg, "head")
+    assert "telephony_password_enc" in columns()
     engine.dispose()

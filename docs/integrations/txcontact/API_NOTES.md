@@ -66,7 +66,7 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 | Callbacks | None in the description. | The platform asks every minute or so after the call is closed (backing off to 5 minutes), for `TELEPHONY_FETCH_MINUTES` (default 60), then asks a person. |
 | Recording format | Not described; examples mention `.wav` and `.mp4`. | Read with libsndfile (WAV incl. µ-law/A-law, MP3, FLAC, Ogg). MP4/AAC cannot be read: the call shows "Recording could not be fetched" with the reason. Sample rate and channels are recorded as found. |
 | Separate speakers | Not described. | The provider file is kept unchanged; the 16 kHz delivery file keeps every channel the provider sends, never mixed. A one-channel file holds everyone, including the moderator (no A-left/B-right file). |
-| Time zone | `sl_start_time` is "date-time" without a stated zone. | Times without a zone are read as `TXCONTACT_TIMEZONE` (default Asia/Kolkata): NOT VERIFIED. |
+| Time zone | `sl_start_time` is "date-time" without a stated zone. Seen 2026-11-17: a call placed at 14:52:03 IST was listed as `2026-11-17T20:22:07+05:30`, 5 h 30 min ahead, and filed under the date of that time. | Times without a zone are read as `TXCONTACT_TIMEZONE` (default Asia/Kolkata). Every time is then moved back by `TXCONTACT_CLOCK_AHEAD_MINUTES` (`330` on the live site), and the dates searched are moved forward by it (D-131). |
 | Number format | The example dials 10 digits with no country code. | Only Indian mobile numbers (+91, 10 digits from 6-9) are dialled; others are refused before calling. |
 | Limits, cost, data location, retention | Not described. | Ask TxContact (see questions below). |
 
@@ -102,8 +102,9 @@ VERIFIED, set by `TXCONTACT_AUTH_SCHEME` (default `Token`, the Django REST frame
 `TXCONTACT_BASE_URL`, `TXCONTACT_DIALER_USERNAME`, `TXCONTACT_DIALER_PASSWORD`,
 `TXCONTACT_CAMPAIGN_REF` (default `dc-record-call`), `TXCONTACT_SOURCE` (default `webapi`),
 `TXCONTACT_RECORD_USER`, `TXCONTACT_RECORD_PASSWORD`, `TXCONTACT_AUTH_SCHEME`,
-`TXCONTACT_TIMEZONE`, `TELEPHONY_FETCH_MINUTES`. Each moderator's agent seat is set on their user
-page (**Phone calls → TxContact agent seat**).
+`TXCONTACT_TIMEZONE`, `TXCONTACT_CLOCK_AHEAD_MINUTES` (D-131), `TELEPHONY_FETCH_MINUTES`. Each
+moderator's seat number and seat password (D-130) are set on their user page (**Phone calls →
+Seat number, Seat password**).
 
 The dialer password that came in the email was shared with several people in plain text. Ask
 TxContact to change it after the first test, and enter the new one only in Render.

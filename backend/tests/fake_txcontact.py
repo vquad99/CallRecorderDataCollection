@@ -14,6 +14,8 @@ real browser without ringing anyone:
 Every dialled call is listed at once with a recording, as if it had been answered and recorded.
 A number ending 0000 is listed twice (two calls that fit), one ending 9999 never gets a
 recording, and one ending 8888 is refused by the dialer: the three cases a person has to handle.
+Its clock runs TXCONTACT_CLOCK_AHEAD_MINUTES ahead of the real time, as TxContact's does (D-131):
+set the same value the platform is given, and the stand-in lists calls as TxContact would.
 Standard library only. Never imported by the application.
 """
 
@@ -23,6 +25,7 @@ import base64
 import io
 import json
 import math
+import os
 import struct
 import sys
 import uuid
@@ -36,6 +39,8 @@ DIALER_USER, DIALER_PASSWORD = "fake_dialer", "fake-dialer-pass"
 RECORD_USER, RECORD_PASSWORD = "fake_rec", "fake-rec-pass"
 TOKEN = "stand-in-token"
 IST = timezone(timedelta(hours=5, minutes=30))
+# How far the times it lists run ahead of the real time (TxContact's seen 2026-11-17: 330 min).
+CLOCK_AHEAD = timedelta(minutes=int(os.environ.get("TXCONTACT_CLOCK_AHEAD_MINUTES") or 0))
 CALLS: list[dict[str, Any]] = []
 
 
@@ -61,7 +66,10 @@ def _wav(seconds: int = 12, rate: int = 8000) -> bytes:
 AUDIO = _wav()
 
 
-def _row(call_id: str, phone: str, agent: str, start: datetime) -> dict[str, Any]:
+def row(call_id: str, phone: str, agent: str, start: datetime) -> dict[str, Any]:
+    """A call that really started at `start` (India time), as the search lists it: on the
+    stand-in's clock, filed under that clock's date."""
+    start = start + CLOCK_AHEAD
     return {
         "sl_session_id": call_id,
         "sl_trans_id": call_id,
@@ -134,9 +142,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             now = datetime.now(IST)
             if not phone.endswith("9999"):
-                CALLS.append(_row(call_id, phone, agent, now))
+                CALLS.append(row(call_id, phone, agent, now))
             if phone.endswith("0000"):
-                CALLS.append(_row(str(uuid.uuid1()), phone, agent, now + timedelta(seconds=20)))
+                CALLS.append(row(str(uuid.uuid1()), phone, agent, now + timedelta(seconds=20)))
             self._send(200, call_id.encode(), "text/html; charset=utf-8")
             return
         if url.path == "/txrecord/api/search":

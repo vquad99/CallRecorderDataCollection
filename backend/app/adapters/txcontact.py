@@ -11,7 +11,8 @@ docs/integrations/txcontact/API_NOTES.md):
   GET /txrecord/api/v1/record/mostcallshour/ for calls per hour of the day.
 
 NOT VERIFIED until tested on the account: the Authorization header word (TXCONTACT_AUTH_SCHEME),
-the time zone of reported times, what sl_from/sl_to hold, and the recording file format.
+what sl_from/sl_to hold, and the recording file format. Reported times run ahead of the real time
+(seen 2026-11-17: 5 h 30 min, D-131): every one is corrected here by TXCONTACT_CLOCK_AHEAD_MINUTES.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any, Protocol, cast
 from zoneinfo import ZoneInfo
@@ -108,6 +109,7 @@ class TxContact:
         self._open = opener or _default_open
         self._token: str | None = None
         self._tz = ZoneInfo(settings.txcontact_timezone)
+        self._ahead = timedelta(minutes=settings.txcontact_clock_ahead_minutes)
         self._searches: dict[tuple[str, date], tuple[float, list[ProviderSession]]] = {}
 
     # ------------------------------------------------------------------ helpers
@@ -224,13 +226,16 @@ class TxContact:
         raise ProviderError(f"TxContact refused the request ({what})")
 
     def _time(self, value: Any) -> datetime | None:
+        """A time TxContact reports, as the real moment: read in TXCONTACT_TIMEZONE when it
+        carries no zone, then moved back by TXCONTACT_CLOCK_AHEAD_MINUTES (D-131). The one
+        place a provider time is read."""
         if not isinstance(value, str) or not value:
             return None
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=self._tz)
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=self._tz)) - self._ahead
 
     # ------------------------------------------------------------------ interface
 

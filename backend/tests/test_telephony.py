@@ -2,6 +2,8 @@
 the call, ticks the checklist, closes it after consent, the platform finds the provider's
 recording, stores it and moves the task to Recorded; unclear matches wait for a person; every
 failure is visible, recoverable and cancellable; figures, the list and the CSV count what happened.
+The real TxContact adapter runs against tests/fake_txcontact.py where its clock matters (D-131); a
+seat's password is kept encrypted and shown only to whom it belongs (D-130).
 
 Requirements: TEL-002, TEL-010, TEL-011, TEL-015, TEL-018, TEL-027, TEL-036, TEL-037, TEL-038, GEN-004, PART-008, PART-016
 """
@@ -11,25 +13,32 @@ from __future__ import annotations
 import csv
 import io
 import json
+import threading
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import boto3
 import numpy as np
 import pytest
 import soundfile
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from moto import mock_aws
 from sqlalchemy import select, update
 
+from app import cli
 from app.adapters.telephony import DialResult, ProviderError, ProviderSession
 from app.main import create_app
 from app.modules.audio_qc.models import AudioQcResult
+from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
+from app.modules.auth.security import FieldCipher
 from app.modules.participants.models import ConsentRecord, Participant
 from app.modules.projects.models import ProjectAudioRule
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
@@ -37,7 +46,9 @@ from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
 from app.modules.telephony import fetch
 from app.modules.telephony.models import Call, CallEvent
+from tests import fake_txcontact
 from tests.conftest import (
+    TEST_FERNET_KEY,
     Api,
     agree,
     build_settings,
@@ -132,7 +143,41 @@ def audio(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, Any]]:
+def stand_in_url(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """tests/fake_txcontact.py on a free local port, listing no calls yet."""
+    monkeypatch.setattr(fake_txcontact, "CALLS", [])
+    server = ThreadingHTTPServer(("127.0.0.1", 0), fake_txcontact.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def world(
+    request: pytest.FixtureRequest, migrated_db: str, tmp_path: Path, audio: Path
+) -> Iterator[dict[str, Any]]:
+    # Parametrized (indirect) with minutes: the real TxContact adapter against the stand-in, both
+    # clocks that far ahead of the real time (D-131). Otherwise StandIn plays the provider.
+    ahead: int | None = getattr(request, "param", None)
+    txcontact: dict[str, Any] = {
+        "txcontact_dialer_username": "dsc_user",
+        "txcontact_dialer_password": "dial-pass",
+        "txcontact_record_user": "rec_user",
+        "txcontact_record_password": "rec-pass",
+    }
+    if ahead is not None:
+        request.getfixturevalue("monkeypatch").setattr(
+            fake_txcontact, "CLOCK_AHEAD", timedelta(minutes=ahead)
+        )
+        txcontact = {
+            "txcontact_base_url": request.getfixturevalue("stand_in_url"),
+            "txcontact_dialer_username": fake_txcontact.DIALER_USER,
+            "txcontact_dialer_password": fake_txcontact.DIALER_PASSWORD,
+            "txcontact_record_user": fake_txcontact.RECORD_USER,
+            "txcontact_record_password": fake_txcontact.RECORD_PASSWORD,
+            "txcontact_clock_ahead_minutes": ahead,
+        }
     with mock_aws():
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket=BUCKET)
@@ -143,14 +188,11 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
                 storage_access_key_id="test-key",
                 storage_secret_access_key="test-secret",
                 media_work_dir=str(tmp_path / "media"),
-                txcontact_dialer_username="dsc_user",
-                txcontact_dialer_password="dial-pass",
-                txcontact_record_user="rec_user",
-                txcontact_record_password="rec-pass",
+                **txcontact,
             )
         )
-        provider = StandIn(audio)
-        app.state.telephony = provider
+        if ahead is None:
+            app.state.telephony = StandIn(audio)
         clients: list[TestClient] = []
 
         def api(email: str) -> Api:
@@ -207,7 +249,7 @@ def world(migrated_db: str, tmp_path: Path, audio: Path) -> Iterator[dict[str, A
                 "app": app,
                 "db": db,
                 "s3": s3,
-                "provider": provider,
+                "provider": app.state.telephony,
                 "project_id": str(project.id),
                 "pa": pa,
                 "mod": moderator,
@@ -1229,3 +1271,179 @@ def test_participant_b_without_a_phone_number_is_named_as_b(world: dict[str, Any
     answer = w["mod"].post(f"/api/v1/calls/{call['id']}/call-b")
     assert (answer.status_code, answer.json()["error"]["code"]) == (409, "PHONE_MISSING")
     assert answer.json()["error"]["message"] == "Participant B has no phone number"
+
+
+def test_a_seat_password_is_kept_encrypted_and_shown_only_to_a_super_admin_or_its_owner(
+    world: dict[str, Any],
+) -> None:
+    """D-130: the seat's password (the moderator's Chirp sign-in) is stored encrypted and is in no
+    answer and no audit entry; a Super Admin or the moderator can show it, and each showing is
+    audited. Left out it is kept, empty it is removed, and removing the seat removes it too."""
+    w = world
+    db = w["db"]
+    seat = f"/api/v1/users/{w['mod_id']}/telephony-agent"
+    secret = "chirp-test-pass-71"
+    saved = w["sa"].put(seat, json={"agent_id": SEAT, "password": secret})
+    assert saved.status_code == 200, saved.text
+    assert saved.json() == {
+        "user_id": w["mod_id"],
+        "telephony_agent_id": SEAT,
+        "has_password": True,
+    }
+    db.expire_all()
+    stored = db.get(User, uuid.UUID(w["mod_id"])).telephony_password_enc
+    assert stored is not None
+    assert secret not in stored, "encrypted at rest"
+    assert w["app"].state.cipher.decrypt(stored) == secret
+    # The user page and the moderator's own account say that a password is saved, nothing more.
+    user_page = w["sa"].get(f"/api/v1/users/{w['mod_id']}")
+    assert user_page.json()["telephony_has_password"] is True
+    me = w["mod"].get("/api/v1/auth/me")
+    assert (me.json()["telephony_agent_id"], me.json()["telephony_has_password"]) == (SEAT, True)
+    assert all(secret not in r.text for r in (saved, user_page, me))
+
+    # Shown to a Super Admin and to the moderator, each time on record without the password.
+    assert w["sa"].get(f"{seat}/password").json() == {"password": secret}
+    assert w["mod"].get("/api/v1/auth/phone-seat/password").json() == {"password": secret}
+    shown = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.action == "user.seat_password_shown")
+        .order_by(AuditLog.created_at)
+    ).all()
+    sa_id = db.scalar(select(User.id).where(User.email == "sa@example.org"))
+    assert [(a.actor_id, a.entity_id) for a in shown] == [
+        (sa_id, w["mod_id"]),
+        (uuid.UUID(w["mod_id"]), w["mod_id"]),
+    ]
+
+    # Nobody else: not a project admin, not another moderator (whose own seat has none).
+    assert w["pa"].get(f"{seat}/password").status_code == 403
+    mod2 = w["api"]("mod2@example.org")
+    assert mod2.get(f"{seat}/password").status_code == 403
+    assert mod2.get("/api/v1/auth/phone-seat/password").status_code == 404
+
+    # Left out: kept, also when the seat number changes. Empty: removed.
+    assert w["sa"].put(seat, json={"agent_id": "70002"}).json()["has_password"] is True
+    assert w["sa"].get(f"{seat}/password").json() == {"password": secret}
+    cleared = w["sa"].put(seat, json={"agent_id": "70002", "password": ""})
+    assert cleared.json()["has_password"] is False
+    assert w["sa"].get(f"{seat}/password").status_code == 404
+    # A seat removed takes its password with it; a password needs a seat.
+    assert w["sa"].put(seat, json={"agent_id": "70002", "password": "next-pass"}).status_code == 200
+    gone = w["sa"].put(seat, json={"agent_id": ""})
+    assert gone.json() == {
+        "user_id": w["mod_id"],
+        "telephony_agent_id": None,
+        "has_password": False,
+    }
+    lonely = w["sa"].put(seat, json={"agent_id": "", "password": "next-pass"})
+    assert (lonely.status_code, lonely.json()["error"]["code"]) == (422, "VALIDATION_ERROR")
+    changes = db.scalars(select(AuditLog).where(AuditLog.action == "user.agent_seat")).all()
+    assert len(changes) == 5
+    every_entry = " ".join(
+        f"{a.before_summary} {a.after_summary}" for a in db.scalars(select(AuditLog))
+    )
+    assert secret not in every_entry
+    assert "next-pass" not in every_entry
+
+    # Rotating the encryption key (D-088) takes the seat password along.
+    w["sa"].put(seat, json={"agent_id": SEAT, "password": secret})
+    new_key = Fernet.generate_key().decode()
+    url = w["app"].state.settings.database_url.get_secret_value()
+    counts = cli.rotate_keys(
+        build_settings(database_url=url, data_encryption_key=f"{new_key},{TEST_FERNET_KEY}")
+    )
+    assert counts["phone seat password"] == 1
+    db.expire_all()
+    rotated = db.get(User, uuid.UUID(w["mod_id"])).telephony_password_enc
+    assert FieldCipher(new_key).decrypt(rotated) == secret
+
+
+AHEAD = pytest.mark.parametrize("world", [0, 330], ids=["on-time", "330-min-ahead"], indirect=True)
+
+
+@AHEAD
+def test_txcontact_times_running_ahead_are_corrected_and_the_call_cut_to_its_marks(
+    world: dict[str, Any],
+) -> None:
+    """D-131: TxContact listed a call placed at 14:52 IST as starting at 20:22 IST, 5 h 30 min
+    ahead. With TXCONTACT_CLOCK_AHEAD_MINUTES at 330 the call is still found and the delivery
+    file cut to the moderator's marks; at 0 (a provider on time) all is as before."""
+    w = world
+    ahead = timedelta(minutes=w["app"].state.settings.txcontact_clock_ahead_minutes)
+    _, call = started_and_closed(w)
+    (listed,) = fake_txcontact.CALLS
+    shown = datetime.fromisoformat(listed["sl_start_time"]).replace(tzinfo=fake_txcontact.IST)
+    real = shown - ahead  # when TxContact's file really starts
+    db = w["db"]
+    row = db.get(Call, call["id"])
+    assert abs(real - row.dialled_at) < timedelta(seconds=5)
+    # Start recording 3 s into the provider's 12 s file and stop 3 s later: with the 1 s margin
+    # the delivery file holds 2 s to 7 s.
+    row.record_started_at = real + timedelta(seconds=3)
+    row.record_stopped_at = real + timedelta(seconds=6)
+    db.commit()
+    due_now(w, call["id"])
+    sweep(w)
+    row = db.get(Call, call["id"])
+    assert (row.state, row.provider_session_id) == ("RECORDED", listed["sl_session_id"]), (
+        row.failure_detail
+    )
+    assets = {
+        a.kind: a
+        for a in db.scalars(select(AudioAsset).where(AudioAsset.recording_id == row.recording_id))
+    }
+    assert assets["PROVIDER_ORIGINAL_MIXED"].duration_ms == 12000  # kept whole
+    assert abs(assets["TELEPHONY_DERIVED_PCM"].duration_ms - 5000) <= 5
+    texts = [e.detail for e in db.scalars(select(CallEvent).where(CallEvent.call_id == row.id))]
+    assert any("cut to the moderator's recording marks: 2.0 s to 7.0 s" in t for t in texts)
+    assert db.get(Recording, row.recording_id).started_at == real + timedelta(seconds=2)
+
+
+@AHEAD
+def test_an_evening_call_is_found_under_the_date_txcontact_files_it(
+    world: dict[str, Any],
+) -> None:
+    """D-131: 5 h 30 min ahead, TxContact files a call made at 18:40 IST under the next date; the
+    platform searches the date TxContact uses (at 0, the same date, as before)."""
+    w = world
+    ahead = w["app"].state.settings.txcontact_clock_ahead_minutes
+    _, call = started_and_closed(w)
+    real = datetime(2026, 11, 17, 18, 40, tzinfo=fake_txcontact.IST)
+    fake_txcontact.CALLS[:] = [fake_txcontact.row("EVENING", "9876543210", SEAT, real)]
+    assert fake_txcontact.CALLS[0]["sl_start_date"] == ("2026-11-18" if ahead else "2026-11-17")
+    w["db"].execute(
+        update(Call)
+        .where(Call.id == call["id"])
+        .values(
+            dialled_at=real - timedelta(seconds=20),
+            record_started_at=real + timedelta(seconds=3),
+            record_stopped_at=real + timedelta(seconds=6),
+            closed_at=real + timedelta(minutes=1),
+        )
+    )
+    w["db"].commit()
+    due_now(w, call["id"])
+    sweep(w)
+    row = w["db"].get(Call, call["id"])
+    assert (row.state, row.provider_session_id) == ("RECORDED", "EVENING"), row.failure_detail
+
+
+def test_the_dates_searched_are_the_dates_txcontact_files_calls_under() -> None:
+    """D-131: TxContact files a call under the date on its own clock: 5 h 30 min ahead, a call at
+    18:40 IST is under the next date, and one across its midnight under both."""
+    ist = ZoneInfo("Asia/Kolkata")
+
+    def days(ahead: int, dialled: datetime, minutes: int) -> list[date]:
+        c = Call(dialled_at=dialled, closed_at=dialled + timedelta(minutes=minutes))
+        return fetch.provider_days(build_settings(txcontact_clock_ahead_minutes=ahead), c)
+
+    evening = datetime(2026, 11, 17, 18, 40, tzinfo=ist)
+    assert days(0, evening, 10) == [date(2026, 11, 17)]
+    assert days(330, evening, 10) == [date(2026, 11, 18)]
+    # 18:25 to 18:35 IST is 23:55 to 00:05 on TxContact's clock: both dates are searched.
+    across = datetime(2026, 11, 17, 18, 25, tzinfo=ist)
+    assert days(330, across, 10) == [date(2026, 11, 17), date(2026, 11, 18)]
+    # As before at 0: a call just after midnight is looked for under the day before as well.
+    after_midnight = datetime(2026, 11, 18, 0, 1, tzinfo=ist)
+    assert days(0, after_midnight, 5) == [date(2026, 11, 17), date(2026, 11, 18)]

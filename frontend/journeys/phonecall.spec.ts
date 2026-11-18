@@ -91,7 +91,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
 
   await test.step("the Super Admin gives the moderator a phone seat", async () => {
     await admin.goto(`/admin/users/${moderatorId}`);
-    await admin.getByLabel("Phone seat").fill(`seat-${code}`);
+    await admin.getByLabel("Seat number").fill(`seat-${code}`);
     await admin.getByRole("button", { name: "Save phone seat" }).click();
     await expect(admin.getByText("Phone seat saved.")).toBeVisible();
   });

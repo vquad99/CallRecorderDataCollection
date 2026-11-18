@@ -1,0 +1,44 @@
+# A stand-in PostgreSQL container instead of RDS (D-132): CI's aws-stack job and trial runs only.
+# deploy/aws/compose.sh adds this file when DB_HOST is empty in .env; deploy.sh refuses that on the
+# real server unless LOCAL_DB=1 is given.
+x-local-db: &local-db
+  DATABASE_URL: postgresql://ccp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/ccp
+
+x-needs-db: &needs-db
+  db: { condition: service_healthy }
+
+services:
+  db:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: ccp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ccp
+    volumes: [db_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ccp -d ccp"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  migrate:
+    environment: *local-db
+    depends_on: *needs-db
+  api:
+    environment: *local-db
+    depends_on: *needs-db
+  worker:
+    environment: *local-db
+    depends_on: *needs-db
+  pgtools:
+    environment:
+      PGHOST: db
+      PGSSLMODE: disable
+    depends_on: *needs-db
+
+volumes:
+  db_data:

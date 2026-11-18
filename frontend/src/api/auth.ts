@@ -15,6 +15,9 @@ export interface Me {
   viewer?: { id: string; display_name: string } | null;
   /** Minutes without a request after which the server ends the session (D-122). */
   session_idle_minutes: number;
+  /** The user's own phone seat and whether its password is saved (D-130). */
+  telephony_agent_id?: string | null;
+  telephony_has_password?: boolean;
 }
 
 export interface SessionInfo {

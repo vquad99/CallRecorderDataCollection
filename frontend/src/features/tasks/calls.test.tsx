@@ -315,13 +315,17 @@ describe("phone calls on the task page", () => {
         ...worldHandlers(),
         "PUT /api/v1/users/u2/telephony-agent": (body) => [
           200,
-          { user_id: "u2", telephony_agent_id: (body as { agent_id: string }).agent_id },
+          {
+            user_id: "u2",
+            telephony_agent_id: (body as { agent_id: string }).agent_id,
+            has_password: false,
+          },
         ],
       }),
     );
     renderAt("/admin/users/u2");
     await userEvent.type(
-      await screen.findByLabelText("Phone seat", {}, { timeout: 5000 }),
+      await screen.findByLabelText("Seat number", {}, { timeout: 5000 }),
       "70001",
     );
     await userEvent.click(screen.getByRole("button", { name: "Save phone seat" }));

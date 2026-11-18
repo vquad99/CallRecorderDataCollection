@@ -28,6 +28,7 @@ from app.modules.recordings.router import router as recordings_router
 from app.modules.recordings.router import usage_router as storage_usage_router
 from app.modules.settings.router import router as settings_router
 from app.modules.tasks.router import router as tasks_router
+from app.modules.telephony.router import account_router as telephony_account_router
 from app.modules.telephony.router import router as telephony_router
 from app.modules.telephony.router import users_router as telephony_users_router
 from app.modules.users.router import router as users_router
@@ -105,6 +106,7 @@ api_router.include_router(participants_router)
 api_router.include_router(tasks_router)
 api_router.include_router(telephony_router)
 api_router.include_router(telephony_users_router)
+api_router.include_router(telephony_account_router)
 api_router.include_router(audit_router)
 api_router.include_router(recordings_router)
 api_router.include_router(audio_qc_router)

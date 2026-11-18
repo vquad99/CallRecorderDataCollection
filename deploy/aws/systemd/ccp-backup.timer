@@ -1,0 +1,10 @@
+# Every day at 02:00 India time (20:30 UTC), after RDS's own backup window (D-132).
+[Unit]
+Description=Conversation Collection: daily database dump
+
+[Timer]
+OnCalendar=*-*-* 20:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

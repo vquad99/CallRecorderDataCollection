@@ -163,6 +163,7 @@ Other situations:
 | "Too many failed sign-in attempts" for one person | Wait 15 minutes. For everyone at once from one office: the limit is per address too; it clears by itself |
 | Emails do not arrive | Resend dashboard (the sending service): is the key valid, is the domain still verified? The API logs say `email` errors. Password links can be sent again from the user's page |
 | Phone calls cannot be placed | The task page shows what TxContact answered. An empty answer means the dialer login is refused: check `TXCONTACT_DIALER_USERNAME` / `PASSWORD`. See docs/integrations/txcontact/API_NOTES.md |
+| Closed calls end with "No recording was found" although TxContact has the recording | Compare the start time TxContact shows for the call with the time it was made. TxContact's times ran 5 h 30 min ahead on 2026-11-17 (D-131): `TXCONTACT_CLOCK_AHEAD_MINUTES` must be that gap in minutes (`330`) on the API and the worker. After fixing it, click **Look for the recording again** on the call |
 | The site is slow | `ccp-api` logs: lines `slow_request` and `slow_query` name the request and its time. More web processes: `WEB_CONCURRENCY` |
 
 ### 4.1 A security incident (an account misused, data seen by the wrong person)

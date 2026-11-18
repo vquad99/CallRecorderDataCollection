@@ -98,6 +98,32 @@ def test_production_rules(monkeypatch: pytest.MonkeyPatch) -> None:
         load_settings()
 
 
+def test_storage_keys_are_both_or_neither(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-132: on AWS the server's IAM role reaches S3, so a bucket without keys is set up; one
+    key without the other is a mistake."""
+    from app.core.storage import S3Storage
+
+    _set(monkeypatch, **VALID, STORAGE_BUCKET="ccp-aws", STORAGE_REGION="ap-south-1")
+    monkeypatch.delenv("STORAGE_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("STORAGE_SECRET_ACCESS_KEY", raising=False)
+    role = load_settings()
+    assert role.storage_configured is True
+    # No keys are handed to boto3: it looks for the role itself (nothing is called here).
+    client = S3Storage(role)._client
+    assert client.meta.region_name == "ap-south-1"
+
+    # Empty values, as the AWS env file leaves them, count as no keys.
+    _set(monkeypatch, STORAGE_ACCESS_KEY_ID="", STORAGE_SECRET_ACCESS_KEY="")
+    empty = load_settings()
+    assert (empty.storage_configured, empty.storage_keys) == (True, None)
+
+    monkeypatch.setenv("STORAGE_ACCESS_KEY_ID", "key-id")
+    assert load_settings().storage_configured is False
+    monkeypatch.setenv("STORAGE_SECRET_ACCESS_KEY", "secret-access-key")
+    both = load_settings()
+    assert (both.storage_configured, both.storage_keys) == (True, ("key-id", "secret-access-key"))
+
+
 def test_error_message_never_contains_secret_values(monkeypatch: pytest.MonkeyPatch) -> None:
     _set(
         monkeypatch,

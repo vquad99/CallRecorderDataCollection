@@ -1,0 +1,18 @@
+# Deploys origin/main when it has moved (D-132). Started every minute by ccp-deploy.timer; does
+# nothing until the first deploy by hand has worked. Output: journalctl -u ccp-deploy; summary
+# lines also in /var/log/ccp/operations.log (CloudWatch /ccp/operations).
+[Unit]
+Description=Conversation Collection: deploy when origin/main has moved
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ccp
+Group=ccp
+SupplementaryGroups=docker
+Environment=OPS_LOG=/var/log/ccp/operations.log
+ExecStart=/bin/bash /opt/ccp/deploy/aws/deploy.sh --if-changed
+TimeoutStartSec=60min
+Nice=5

@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (never committed) and fill in.
+
+# Where alarms are emailed (AWS sends a confirmation link first).
+alarm_email = "ops@example.com"
+
+# IAM user names that may open a shell on the server with Session Manager.
+admin_iam_users = ["your-iam-user-name"]
+
+# Only when Cloudflare is NOT in front of the site (Let's Encrypt on the server instead):
+# web_ingress_cidrs = ["0.0.0.0/0"]
+
+# Only until the app can use the server's role for S3 (docs/DEPLOYMENT_AWS.md section 9):
+# storage_user_fallback = true

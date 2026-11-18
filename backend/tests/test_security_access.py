@@ -15,7 +15,8 @@ Every API route is called by every role, plus a moderator of OWN who is not assi
 4. No response a project member receives contains an identifier of the foreign project's objects.
 5. Every state-changing route refuses a request without a valid CSRF token.
 6. A malformed identifier in any path gives 422, never 500.
-7. No response carries a password, secret, token or encrypted field.
+7. No response carries a password, secret, token or encrypted field, except the one reveal of a
+   phone seat's password, made for that (D-130).
 
 Requirements: ROLE-002, ROLE-003, ROLE-004, ROLE-005, ROLE-006, ROLE-007, ROLE-008, ROLE-010, AUTH-011, SEC-007, SEC-010, SEC-011, PART-008, PART-011, STOR-005
 """
@@ -59,6 +60,8 @@ SA, PA, MO, MO2, QC, CV = "SA", "PA", "MO", "MO2", "QC", "CV"
 CALLERS = [SA, PA, MO, MO2, QC, CV]
 EVERY_MEMBER = set(CALLERS)
 TASK_VIEWERS = {SA, PA, MO}  # QC sees only tasks assigned to them for audio QC; none here
+# The one route whose answer is a password: shown on request and audited (D-130).
+SEAT_PASSWORD = "/api/v1/users/{user_id}/telephony-agent/password"
 
 
 def _one_second_chunk() -> bytes:
@@ -1120,6 +1123,19 @@ CASES: list[Case] = [
         lambda e, s, who: {"agent_id": f"seat-{who.lower()}"},
         foreign=False,
     ),
+    # The seat's saved password (D-130): a Super Admin only; a user reads their own under /auth/.
+    case(
+        "GET",
+        SEAT_PASSWORD,
+        lambda e, s: f"/api/v1/users/{e.spare_user}/telephony-agent/password",
+        {SA},
+        Perm.USERS_MANAGE,
+        foreign=False,
+        before=lambda e: e.callers[SA].put(
+            f"/api/v1/users/{e.spare_user}/telephony-agent",
+            json={"agent_id": "seat-spare", "password": "spare-seat-pass"},
+        ),
+    ),
     # Storage usage: project administrators only (D-049).
     case(
         "GET",
@@ -1294,7 +1310,8 @@ def test_no_response_carries_credentials_or_encrypted_fields(estate: Estate) -> 
     for who in CALLERS:
         api = estate.callers[who]
         for c in CASES:
-            if c.method != "GET" or "export" in c.template:
+            # The seat password's reveal answers with that password, on request (D-130).
+            if c.method != "GET" or "export" in c.template or c.template == SEAT_PASSWORD:
                 continue
             response = _send(api, c, estate, estate.own, who)
             if response.headers.get("content-type", "").startswith("application/json"):

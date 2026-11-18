@@ -89,7 +89,7 @@ their own columns; the raw payload, where kept for audit, goes to private object
 |---|---|
 | users.email, users.display_name | access by `users.manage` or self |
 | users.password_hash, sessions.token_hash, password_reset_tokens.token_hash | never returned by any API (AUTH-015) |
-| users.mfa_secret_enc, participants.phone_e164_enc | application-level encryption, key in secret manager |
+| users.mfa_secret_enc, users.telephony_password_enc, participants.phone_e164_enc | application-level encryption, key in secret manager |
 | participants.phone_hash | keyed hash for duplicate detection; not reversible |
 | participants.display_label | project-scoped access |
 | sessions.ip, audit_logs.ip | admin and audit access only |
@@ -146,7 +146,8 @@ no webhooks).
 | call_events | call_id, kind, actor_id (null = the platform), detail | check kind; index (call_id, created_at) | restrict |
 
 `users.telephony_agent_id`: the moderator's seat at the provider (one person per seat, checked by
-the service). `audio_assets.kind` and the retention rules gain `TELEPHONY_DERIVED_PCM` (the 16 kHz
+the service). `users.telephony_password_enc` (migration 0028, D-130): that seat's password,
+encrypted; removed with the seat. `audio_assets.kind` and the retention rules gain `TELEPHONY_DERIVED_PCM` (the 16 kHz
 delivery file of a phone call); the provider's file is `PROVIDER_ORIGINAL_MIXED`.
 
 No full phone number is stored in these tables: `calls.phone_hint` holds the last two digits, and a

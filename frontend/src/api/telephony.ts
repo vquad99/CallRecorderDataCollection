@@ -114,11 +114,25 @@ export const chooseMatch = (id: string, key: string) =>
   apiRequest<Call>(`/api/v1/calls/${id}/match`, { method: "POST", body: { key } });
 export const retryCall = (id: string) =>
   apiRequest<Call>(`/api/v1/calls/${id}/retry`, { method: "POST" });
-export const setAgentSeat = (userId: string, agentId: string) =>
-  apiRequest<{ user_id: string; telephony_agent_id: string | null }>(
-    `/api/v1/users/${userId}/telephony-agent`,
-    { method: "PUT", body: { agent_id: agentId } },
-  );
+/** A moderator's phone seat and whether its password is saved; the password itself is only in
+ * a reveal (D-130). */
+export interface AgentSeat {
+  user_id: string;
+  telephony_agent_id: string | null;
+  has_password: boolean;
+}
+/** Save a user's phone seat. `password`: left out keeps the saved one (D-130). */
+export const setAgentSeat = (userId: string, agentId: string, password?: string) =>
+  apiRequest<AgentSeat>(`/api/v1/users/${userId}/telephony-agent`, {
+    method: "PUT",
+    body: { agent_id: agentId, ...(password ? { password } : {}) },
+  });
+/** The saved seat password of a user, for a Super Admin; each showing is audited (D-130). */
+export const showSeatPassword = (userId: string) =>
+  apiRequest<{ password: string }>(`/api/v1/users/${userId}/telephony-agent/password`);
+/** The signed-in user's own seat password, for the Chirp app; audited (D-130). */
+export const showOwnSeatPassword = () =>
+  apiRequest<{ password: string }>("/api/v1/auth/phone-seat/password");
 
 /** States in which the call still moves without anyone clicking: the page keeps refreshing. */
 export const MOVING: readonly CallState[] = ["DIALLING", "WAITING_FOR_RECORDING"];

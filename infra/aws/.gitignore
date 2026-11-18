@@ -1,0 +1,7 @@
+# Terraform working files and local state (the state holds the database password).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+crash.log

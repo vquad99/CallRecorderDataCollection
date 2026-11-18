@@ -1,10 +1,13 @@
-# The whole platform on one AWS EC2 server (D-096): database, Redis, API, worker, web and a TLS
-# front (Caddy). Replaces the Render blueprint (render.yaml) once the move is done.
+# Conversation Collection on one AWS EC2 server (D-132): web (nginx: the built app and /api to the
+# API), api, worker, redis, and Caddy for HTTPS in front. The database is Amazon RDS and the files
+# are in S3: neither runs here. Replaces the Render blueprint (render.yaml) once the move is done.
 #
-#   cd /opt/ccp && deploy/aws/deploy.sh          build, migrate, start (or update)
+#   deploy/aws/deploy.sh        build, migrate, start (or update); the timer runs it on every push
+#   deploy/aws/compose.sh ...   any other compose command (it adds the right files and image tag)
 #
 # Settings and secrets come from deploy/aws/.env (copy env.example; never committed). Only Caddy
-# publishes ports; everything else is on the private compose network.
+# publishes ports. Fixed addresses: web .10 (the only peer the API takes a visitor's address from),
+# caddy .20 (the only peer nginx takes it from), api .30 (nginx looks the API up once, at start).
 name: ccp
 
 x-logging: &logging
@@ -13,35 +16,20 @@ x-logging: &logging
 
 x-app: &app
   build: ../../backend
-  image: ccp-backend:latest
+  image: ccp-backend:${IMAGE_TAG:-latest}
   env_file: .env
   environment:
     APP_ENV: production
-    DATABASE_URL: postgresql+psycopg://ccp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/ccp
+    # RDS; TLS required. The app turns postgresql:// into its own driver's scheme.
+    DATABASE_URL: postgresql://${DB_USER:-ccp}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-ccp}?sslmode=require
     REDIS_URL: redis://redis:6379/0
     MEDIA_WORK_DIR: /tmp/media
-    # Only the web container (fixed address below) may tell the API the visitor's address.
     FORWARDED_ALLOW_IPS: 172.30.58.10
   restart: unless-stopped
   logging: *logging
 
 services:
-  db:
-    image: postgres:16.15-alpine
-    environment:
-      POSTGRES_USER: ccp
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ccp
-    volumes: [db_data:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ccp -d ccp"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    restart: unless-stopped
-    logging: *logging
-
-  # Work queue and shared sign-in limits; never evicts a queued job (as on Render).
+  # Work queue and shared sign-in limits; never evicts a queued job (as on Render). Not published.
   redis:
     image: redis:7.4.12-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
@@ -54,45 +42,50 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Before every start: migrations and the first Super Admin (Render's preDeployCommand).
+  # Migrations and the first Super Admin (Render's preDeployCommand). deploy.sh runs it before the
+  # new containers start, while the old ones still serve.
   migrate:
     <<: *app
+    profiles: [tools]
     command: ["python", "-m", "app.cli", "prepare-deploy"]
     restart: "no"
-    depends_on:
-      db: { condition: service_healthy }
 
-  backend:
+  api:
     <<: *app
+    stop_grace_period: 30s
+    networks:
+      default: { ipv4_address: 172.30.58.30 }
     depends_on:
-      db: { condition: service_healthy }
       redis: { condition: service_healthy }
-      migrate: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).status == 200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 20
 
+  # Processing, call recordings, exports, emails. A job cut off by a restart is sent again
+  # (acks_late); most finish within the grace period.
   worker:
     <<: *app
     command: ["sh", "-c", "exec celery -A app.worker worker --loglevel=INFO --concurrency=${WORKER_CONCURRENCY:-2}"]
+    stop_grace_period: 2m
     depends_on:
-      backend: { condition: service_healthy }
+      redis: { condition: service_healthy }
 
   web:
     build: ../../frontend
-    image: ccp-web:latest
+    image: ccp-web:${IMAGE_TAG:-latest}
     environment:
-      BACKEND_HOSTPORT: backend:8000
-      MEDIA_ORIGINS: ${MEDIA_ORIGINS:?set MEDIA_ORIGINS in .env}
-      # Caddy (fixed address below) passes the visitor's address in X-Real-IP.
+      BACKEND_HOSTPORT: api:8000
+      # Recordings play from short-lived links on the bucket itself.
+      MEDIA_ORIGINS: https://${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}.s3.${STORAGE_REGION:-ap-south-1}.amazonaws.com
+      # Caddy (fixed address) passes the visitor's address in X-Real-IP.
       REAL_IP_FROM: 172.30.58.20/32
       REAL_IP_HEADER: X-Real-IP
     networks:
       default: { ipv4_address: 172.30.58.10 }
     depends_on:
-      backend: { condition: service_healthy }
+      api: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
       interval: 10s
@@ -101,7 +94,7 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # HTTPS in front of the web container; the only service with public ports.
+  # HTTPS in front of the web container; the only service with public ports (see Caddyfile).
   caddy:
     image: caddy:2.10.2-alpine
     environment:
@@ -120,14 +113,29 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  # PostgreSQL client tools for the database copy, backups and restores (run by the scripts only).
+  pgtools:
+    image: postgres:16.15-alpine
+    profiles: [tools]
+    environment:
+      PGHOST: ${DB_HOST:-db}
+      PGPORT: ${DB_PORT:-5432}
+      PGUSER: ${DB_USER:-ccp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${DB_NAME:-ccp}
+      PGSSLMODE: require
+    restart: "no"
+    logging: *logging
+
 networks:
   default:
     ipam:
       config:
+        # Fixed addresses above sit below .128; everything else is given an address from .128 up.
         - subnet: 172.30.58.0/24
+          ip_range: 172.30.58.128/25
 
 volumes:
-  db_data:
   redis_data:
   caddy_data:
   caddy_config:

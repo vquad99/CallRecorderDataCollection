@@ -1,0 +1,48 @@
+# Container logs to CloudWatch Logs (D-132): log group AWS_LOG_GROUP (made by infra/aws, kept 30
+# days), one stream per service. deploy/aws/compose.sh adds this file when AWS_LOG_GROUP is set in
+# .env. Docker keeps a local copy, so `deploy/aws/compose.sh logs` still works. The server's role
+# allows the writes; "non-blocking": a CloudWatch hiccup never holds the app up. A different driver
+# replaces the base file's json-file settings (Compose merges logging only for the same driver).
+x-awslogs: &awslogs
+  awslogs-region: ${AWS_REGION:-ap-south-1}
+  awslogs-group: ${AWS_LOG_GROUP:?set AWS_LOG_GROUP in .env}
+  mode: non-blocking
+  max-buffer-size: 4m
+
+services:
+  api:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: api
+  worker:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: worker
+  web:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: web
+  caddy:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: caddy
+  redis:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: redis
+  migrate:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: migrate

@@ -1,0 +1,17 @@
+# The platform's own daily database dump into the S3 bucket (O9, D-132), next to RDS's automated
+# backups. Output: journalctl -u ccp-backup; summary in /var/log/ccp/operations.log.
+[Unit]
+Description=Conversation Collection: daily database dump to S3
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ccp
+Group=ccp
+SupplementaryGroups=docker
+Environment=OPS_LOG=/var/log/ccp/operations.log
+ExecStart=/bin/bash /opt/ccp/deploy/aws/backup.sh
+TimeoutStartSec=2h
+Nice=10

@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     txcontact_auth_scheme: str = Field(default="Basic", max_length=20)
     # Time zone of the times TxContact reports when they carry none (NOT VERIFIED).
     txcontact_timezone: str = "Asia/Kolkata"
+    # How many minutes TxContact's recording times run ahead of the real time (D-131): its search
+    # listed a call placed at 14:52 IST as starting at 20:22 IST. Every time it reports is moved
+    # back by this much, and the dates it files calls under are searched moved forward by it.
+    txcontact_clock_ahead_minutes: int = Field(default=0, ge=-24 * 60, le=24 * 60)
     txcontact_timeout_seconds: int = Field(default=20, ge=1, le=120)
     # After the moderator closes a call, look for its recording for this long before asking a
     # person to pick it or try again.
@@ -245,7 +249,10 @@ class Settings(BaseSettings):
             if self.cookie_secure is False:
                 raise ValueError("COOKIE_SECURE cannot be false in production")
             if not self.storage_configured:
-                raise ValueError("production needs STORAGE_BUCKET and storage keys")
+                raise ValueError(
+                    "production needs STORAGE_BUCKET, and both storage keys or neither "
+                    "(neither: the server's AWS role is used)"
+                )
             if not self.txcontact_base_url.startswith("https://"):
                 raise ValueError("TXCONTACT_BASE_URL must use https in production")
         return self
@@ -262,9 +269,20 @@ class Settings(BaseSettings):
     @property
     def storage_configured(self) -> bool:
         # The endpoint is optional: unset means Amazon S3 itself; Wasabi and SeaweedFS set it.
-        return bool(
-            self.storage_bucket and self.storage_access_key_id and self.storage_secret_access_key
-        )
+        # Keys: both, or neither on AWS, where the server's IAM role gives access (D-132).
+        given = [
+            bool(k and k.get_secret_value())
+            for k in (self.storage_access_key_id, self.storage_secret_access_key)
+        ]
+        return bool(self.storage_bucket) and given[0] == given[1]
+
+    @property
+    def storage_keys(self) -> tuple[str, str] | None:
+        """The storage key pair, or None to use the server's own AWS role (D-132)."""
+        key_id, secret = self.storage_access_key_id, self.storage_secret_access_key
+        if key_id and secret and key_id.get_secret_value() and secret.get_secret_value():
+            return key_id.get_secret_value(), secret.get_secret_value()
+        return None
 
     @property
     def cookies_secure(self) -> bool:

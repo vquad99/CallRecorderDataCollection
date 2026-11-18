@@ -194,7 +194,12 @@ def rotate_keys(settings: Settings) -> dict[str, int]:
     from app.modules.participants.models import Participant
 
     cipher = FieldCipher(settings.data_encryption_key.get_secret_value())
-    counts = {"participant phone": 0, "participant email": 0, "authenticator secret": 0}
+    counts = {
+        "participant phone": 0,
+        "participant email": 0,
+        "authenticator secret": 0,
+        "phone seat password": 0,
+    }
     engine = create_db_engine(settings)
     try:
         with make_session_factory(engine)() as db:
@@ -205,9 +210,13 @@ def rotate_keys(settings: Settings) -> dict[str, int]:
                 if p.email_enc:
                     p.email_enc = cipher.rotate(p.email_enc)
                     counts["participant email"] += 1
-            for u in db.scalars(select(User).where(User.mfa_secret_enc.is_not(None))):
-                u.mfa_secret_enc = cipher.rotate(u.mfa_secret_enc or "")
-                counts["authenticator secret"] += 1
+            for u in db.scalars(select(User)):
+                if u.mfa_secret_enc:
+                    u.mfa_secret_enc = cipher.rotate(u.mfa_secret_enc)
+                    counts["authenticator secret"] += 1
+                if u.telephony_password_enc:
+                    u.telephony_password_enc = cipher.rotate(u.telephony_password_enc)
+                    counts["phone seat password"] += 1
             db.commit()
     finally:
         engine.dispose()

@@ -1,5 +1,6 @@
 """TxContact adapter against a fake HTTP layer (test-only): the dial request, the recording
-sign-in and search, the download, and that no password or phone number leaks into what is kept.
+sign-in and search, the download, that no password or phone number leaks into what is kept,
+and that TxContact's clock running ahead is corrected (D-131).
 
 Requirements: TEL-001, TEL-002, TEL-010, TEL-011, TEL-035
 """
@@ -15,8 +16,10 @@ import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, ClassVar
+from zoneinfo import ZoneInfo
 
 import pytest
+from pydantic import ValidationError
 
 from app.adapters.telephony import ProviderError, ProviderSession
 from app.adapters.txcontact import TxContact, UnsupportedNumber, file_name, national_number
@@ -397,3 +400,20 @@ def test_attach_rings_b_through_the_attach_campaign_on_the_same_seat() -> None:
     first = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(server.requests[1].full_url).query))
     assert first["cmp-ref"] == "dc-new-call"
     assert "9812345678" not in result.response_excerpt
+
+
+def test_times_running_ahead_are_moved_back_to_the_real_time() -> None:
+    """D-131, seen 2026-11-17: a call placed at 14:52:03 IST was listed as starting at
+    2026-11-17T20:22:07+05:30. With TXCONTACT_CLOCK_AHEAD_MINUTES=330 every time TxContact reports
+    is read as the real time; unset (0), as reported. The setting is bounded to one day."""
+    server = FakeServer()
+    late = _row(sl_start_time="2026-11-17T20:22:07+05:30", sl_end_time="2026-11-17T20:27:07")
+    server.answer("/txrecord/api/search", 200, {"next": None, "results": [late]})
+    ist = ZoneInfo("Asia/Kolkata")
+    (found,) = make(server, txcontact_clock_ahead_minutes=330).sessions("70001", date(2026, 11, 17))
+    assert found.start == datetime(2026, 11, 17, 14, 52, 7, tzinfo=ist)
+    assert found.end == datetime(2026, 11, 17, 14, 57, 7, tzinfo=ist)  # a time without a zone too
+    (as_reported,) = make(server).sessions("70001", date(2026, 11, 17))
+    assert as_reported.start == datetime(2026, 11, 17, 20, 22, 7, tzinfo=ist)
+    with pytest.raises(ValidationError):
+        build_settings(txcontact_clock_ahead_minutes=24 * 60 + 1)

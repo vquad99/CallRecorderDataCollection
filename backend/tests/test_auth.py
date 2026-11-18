@@ -37,7 +37,9 @@ def test_valid_login_sets_secure_cookies_and_returns_profile(db: Any, new_api: A
     assert body["email"] == "mod@example.org"
     assert body["roles"] == ["MODERATOR"]
     assert "calls.start" in body["permissions"]
-    assert "password" not in str(body).lower()
+    # No password and no hash: only a yes/no flag such as `telephony_has_password` (D-130).
+    assert TEST_PASSWORD not in response.text
+    assert [k for k, v in body.items() if "password" in k and not isinstance(v, bool)] == []
     cookies = response.headers.get_list("set-cookie")
     session_cookie = next(c for c in cookies if c.startswith("ccp_session="))
     assert "HttpOnly" in session_cookie

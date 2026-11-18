@@ -1,0 +1,4 @@
+# Server-only files: settings and secrets, the Origin Certificate, deploy state.
+.env
+certs/
+.state/

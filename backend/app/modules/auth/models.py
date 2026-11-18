@@ -65,6 +65,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # The moderator's agent seat at the telephony provider: calls they start ring them there
     # (D-101). Empty for everyone who does not make phone calls.
     telephony_agent_id: Mapped[str | None] = mapped_column(String(40))
+    # That seat's password: the moderator's sign-in to TxContact's Chirp app (D-130). Encrypted
+    # with DATA_ENCRYPTION_KEY; shown only by the audited reveal, to a Super Admin or the user.
+    telephony_password_enc: Mapped[str | None] = mapped_column(Text)
 
     roles: Mapped[list[RoleRecord]] = relationship(secondary="user_roles", lazy="selectin")
 

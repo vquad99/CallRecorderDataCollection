@@ -47,8 +47,8 @@ starts every service, migrates, and proves data survives a database restart (D-0
 
 ### The hosted copy on Render: one copy for testing and real work (D-077, D-081)
 
-Moving to AWS (D-096): one EC2 server with Docker Compose, runbook `deploy/aws/README.md`. Until
-the move is done, the Render copy below is the live one.
+Moving to AWS (D-132): one EC2 server in the client's account in Mumbai with RDS and S3, procedure
+`docs/DEPLOYMENT_AWS.md`. Until the move is done, the Render copy below is the live one.
 
 `render.yaml` at the repository root describes the ONE hosted copy (owner 2026-11-10: "use
 one..both test n prod"), Blueprint `ccp-staging` in the dubdesk Render account (manual sync),

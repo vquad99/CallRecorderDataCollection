@@ -44,7 +44,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /auth/csrf | public; sets the CSRF cookie |
 | POST | /auth/login | public, throttled |
 | POST | /auth/logout | authenticated |
-| GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106) and `session_idle_minutes` (D-122, D-125) |
+| GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106), `session_idle_minutes` (D-122, D-125), and the user's own phone seat: `telephony_agent_id`, `telephony_has_password` (D-130; never the password) |
+| GET | /auth/phone-seat/password | authenticated, own seat only. `{password}`: the saved password of the caller's phone seat, for the Chirp app; 404 when none is saved. Audited as `user.seat_password_shown` (D-130) |
 | POST | /auth/password/forgot | public, throttled; same response whether or not the email exists |
 | POST | /auth/password/reset | public, single-use token |
 | GET | /auth/sessions | authenticated (own) |
@@ -140,7 +141,8 @@ no provider webhooks: after the call is closed the platform looks for its record
 | POST | /calls/{id}/cancel | same | `{reason, note}`: NO_ANSWER, WRONG_NUMBER, CALL_DROPPED, POOR_QUALITY, CONSENT_REFUSED, OTHER (note needed). Allowed at every stage before the recording is stored |
 | POST | /calls/{id}/match | same | `{key}`: one of the listed candidates, when the platform could not tell which TxContact call is this one |
 | POST | /calls/{id}/retry | same | Look for the recording again |
-| PUT | /users/{id}/telephony-agent | `users.manage` | `{agent_id}`; one seat per person; empty removes it |
+| PUT | /users/{id}/telephony-agent | `users.manage` | `{agent_id, password?}`; one seat per person; empty `agent_id` removes the seat and its password. `password` (D-130), stored encrypted: left out keeps the saved one, `""` removes it; a password without a seat is 422. Answers `{user_id, telephony_agent_id, has_password}`, never the password. `GET /users` and `/users/{id}` carry `telephony_has_password`. Audited as `user.agent_seat` without the password |
+| GET | /users/{id}/telephony-agent/password | `users.manage`, Super Admin only | `{password}`: the saved seat password (D-130); 404 when none is saved. Audited as `user.seat_password_shown`. A user reads their own with `GET /auth/phone-seat/password` |
 | GET | /telephony/analytics | `tasks.assign` | `?project_id&days` (1-90). Figures for the calls the caller may see: Super Admin all, Project Admin their projects. 403 for everyone else (D-104) |
 | GET | /calls | `tasks.view` | `?project_id&state&page&page_size` (max 100). `state=NEEDS_PERSON`: needs a match, failed to fetch, or left open. Super Admin all, Project Admin their projects, moderators their own calls only |
 | GET | /calls/export | `tasks.assign` | `?project_id&days`: the same calls as a CSV file (no phone numbers). Audited as `calls.exported`. 403 for everyone else (D-104) |
@@ -149,6 +151,9 @@ no provider webhooks: after the call is closed the platform looks for its record
 Call states: `DIALLING` (on the call), `DIAL_FAILED`, `CANCELLED`, `WAITING_FOR_RECORDING`,
 `NEEDS_MATCH`, `FETCH_FAILED`, `RECORDED`. A provider's call id and file name are only ever shown
 masked (a run of nine or more digits is cut to its last two): they may carry the caller's number.
+Times from TxContact (a candidate's `start`, a phone recording's start and end) are real times:
+TxContact's clock runs ahead, and every time it reports is moved back by
+`TXCONTACT_CLOCK_AHEAD_MINUTES` (D-131).
 
 `GET /tasks/{id}/recordings` returns each recording **with its files** (`assets`), so the task page
 can offer Listen and the download (D-103; the page relied on this since D-092).

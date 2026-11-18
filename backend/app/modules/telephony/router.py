@@ -25,6 +25,8 @@ from app.modules.telephony.models import Call, CallEvent
 
 router = APIRouter(tags=["telephony"], dependencies=[Depends(require(Perm.TASKS_VIEW))])
 users_router = APIRouter(tags=["telephony"], dependencies=[Depends(require(Perm.USERS_MANAGE))])
+# The signed-in user's own phone seat (D-130): any account, for itself only.
+account_router = APIRouter(prefix="/auth", tags=["telephony"])
 
 CancelReason = Literal[
     "NO_ANSWER", "WRONG_NUMBER", "CALL_DROPPED", "POOR_QUALITY", "CONSENT_REFUSED", "OTHER"
@@ -310,11 +312,19 @@ def retry(
 
 class AgentSeatBody(BaseModel):
     agent_id: str | None = Field(default=None, max_length=40, pattern=r"^[A-Za-z0-9_-]*$")
+    # The seat's password (D-130): left out keeps the saved one, "" removes it.
+    password: str | None = Field(default=None, max_length=200)
 
 
 class AgentSeatOut(BaseModel):
     user_id: uuid.UUID
     telephony_agent_id: str | None
+    # Whether a password is saved for the seat; the password itself is only in the reveal.
+    has_password: bool
+
+
+class SeatPasswordOut(BaseModel):
+    password: str
 
 
 @users_router.put("/users/{user_id}/telephony-agent", response_model=AgentSeatOut)
@@ -324,9 +334,37 @@ def set_agent_seat(
     request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
+    cipher: Cipher,
 ) -> AgentSeatOut:
-    user = service.set_agent_seat(db, principal, user_id, body.agent_id, client_ip(request))
-    return AgentSeatOut(user_id=user.id, telephony_agent_id=user.telephony_agent_id)
+    user = service.set_agent_seat(
+        db, cipher, principal, user_id, body.agent_id, body.password, client_ip(request)
+    )
+    return AgentSeatOut(
+        user_id=user.id,
+        telephony_agent_id=user.telephony_agent_id,
+        has_password=user.telephony_password_enc is not None,
+    )
+
+
+@users_router.get("/users/{user_id}/telephony-agent/password", response_model=SeatPasswordOut)
+def user_seat_password(
+    user_id: uuid.UUID, request: Request, principal: CurrentPrincipal, db: DbSession, cipher: Cipher
+) -> SeatPasswordOut:
+    """A Super Admin shows the saved seat password of a user (D-130). Audited."""
+    return SeatPasswordOut(
+        password=service.seat_password(db, cipher, principal, user_id, client_ip(request))
+    )
+
+
+@account_router.get("/phone-seat/password", response_model=SeatPasswordOut)
+def own_seat_password(
+    request: Request, principal: CurrentPrincipal, db: DbSession, cipher: Cipher
+) -> SeatPasswordOut:
+    """The signed-in moderator shows their own seat password, to sign in to the Chirp app
+    (D-130). Audited."""
+    return SeatPasswordOut(
+        password=service.seat_password(db, cipher, principal, principal.user_id, client_ip(request))
+    )
 
 
 # ------------------------------------------------------------------- analytics (D-102, D-103)

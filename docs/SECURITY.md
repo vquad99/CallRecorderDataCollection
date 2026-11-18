@@ -59,6 +59,9 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
   recording is downloaded only from `TXCONTACT_BASE_URL` by a checked file name, redirects are
   refused, and the logins are environment secrets (`TXCONTACT_*_PASSWORD`), never in the database.
   TxContact's dialer takes its password in the address: the platform never logs that address.
+  A moderator's own seat password (their Chirp sign-in, D-130) is the one TxContact password in the
+  database: encrypted like phone numbers, in no answer, log or audit entry, and shown only on
+  request to a Super Admin or that moderator, each time audited.
 
 ## 6. Web application hardening
 

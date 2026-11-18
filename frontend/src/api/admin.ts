@@ -12,6 +12,8 @@ export interface User {
   created_at: string;
   /** The moderator's phone seat at TxContact; their phone calls go through it (D-101). */
   telephony_agent_id?: string | null;
+  /** Whether that seat's password is saved (D-130); never the password itself. */
+  telephony_has_password?: boolean;
 }
 
 export interface ImportRow {

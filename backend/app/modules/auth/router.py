@@ -55,6 +55,10 @@ class MeOut(BaseModel):
     viewer: ViewerOut | None = None
     # Minutes without using the app after which the session ends (D-122), so the page can warn.
     session_idle_minutes: int
+    # The user's own phone seat and whether its password is saved (D-130); the password itself
+    # comes only from GET /auth/phone-seat/password.
+    telephony_agent_id: str | None = None
+    telephony_has_password: bool = False
 
 
 def me_from(p: Principal, settings: Settings) -> MeOut:
@@ -69,6 +73,8 @@ def me_from(p: Principal, settings: Settings) -> MeOut:
         mfa_setup_required=p.mfa_setup_required,
         viewer=ViewerOut(id=p.viewer_id, display_name=p.viewer_name or "") if p.viewer_id else None,
         session_idle_minutes=settings.session_idle_minutes,
+        telephony_agent_id=p.telephony_agent_id,
+        telephony_has_password=p.telephony_has_password,
     )
 
 

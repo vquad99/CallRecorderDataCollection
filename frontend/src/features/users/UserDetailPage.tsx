@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useParams } from "react-router";
 
 import * as admin from "../../api/admin";
-import { setAgentSeat } from "../../api/telephony";
+import { setAgentSeat, showSeatPassword } from "../../api/telephony";
 import { BackLink } from "../../components/BackLink";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
@@ -134,9 +135,13 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
   );
 }
 
-/** The phone seat a moderator's calls go through (D-101); one seat per person. */
+/** The phone seat a moderator's calls go through (D-101), one seat per person, and its password
+ * for the Chirp app (D-130). The saved password is never sent to the page unless asked for. */
 function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
   const [seat, setSeat] = useState(user.telephony_agent_id ?? "");
+  const [password, setPassword] = useState("");
+  // A new save may change the password: whatever was shown before is hidden again.
+  const [saves, setSaves] = useState(0);
   const { busy, error, message, run } = useAction();
   return (
     <form
@@ -145,20 +150,42 @@ function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.Use
       onSubmit={(e) => {
         e.preventDefault();
         void run(async () => {
-          const r = await setAgentSeat(user.id, seat.trim());
-          onSaved({ ...user, telephony_agent_id: r.telephony_agent_id });
+          const r = await setAgentSeat(user.id, seat.trim(), password);
+          onSaved({
+            ...user,
+            telephony_agent_id: r.telephony_agent_id,
+            telephony_has_password: r.has_password,
+          });
+          setPassword("");
+          setSaves((n) => n + 1);
           return r.telephony_agent_id ? "Phone seat saved." : "Phone seat removed.";
         });
       }}
     >
       <h2>Phone calls</h2>
       <TextField
-        label="Phone seat"
+        label="Seat number"
         hint="The seat number TxContact gave for this moderator (for example 80003). One seat per person."
         value={seat}
         maxLength={40}
         onChange={(e) => setSeat(e.target.value)}
       />
+      <TextField
+        label="Seat password"
+        type="password"
+        autoComplete="new-password"
+        hint={
+          user.telephony_has_password
+            ? "Leave empty to keep the saved password."
+            : "The password TxContact gave for this seat. The moderator uses it to sign in to the Chirp app."
+        }
+        value={password}
+        maxLength={200}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      {user.telephony_has_password ? (
+        <SavedPassword key={saves} label="Saved password" load={() => showSeatPassword(user.id)} />
+      ) : null}
       <Button type="submit" variant="secondary" busy={busy !== null}>
         Save phone seat
       </Button>

@@ -1,11 +1,14 @@
-# TLS front for the AWS server (D-096). Cloudflare stays in front of the site: the visitor's address
-# is taken from CF-Connecting-IP only when the request really comes from Cloudflare (ranges below,
-# https://www.cloudflare.com/ips/), then handed to nginx in X-Real-IP. A request straight to the
-# server's address cannot choose the address it is counted under.
+# HTTPS front for the AWS server (D-096, D-132). Cloudflare is in front of the site: the visitor's
+# address is taken from CF-Connecting-IP only when the request really comes from Cloudflare (ranges
+# below, https://www.cloudflare.com/ips/, read 2026-11-18; the same list is in
+# infra/aws/variables.tf), then handed to nginx in X-Real-IP. A request straight to the server's
+# address cannot choose the address it is counted under. frontend/nginx.conf is not changed.
 #
-# TLS (set in .env):
-#   TLS=internal                                   Caddy's own certificate; Cloudflare SSL mode "Full"
-#   TLS=/certs/origin.pem /certs/origin.key        Cloudflare Origin Certificate; mode "Full (strict)"
+# TLS (deploy/aws/.env):
+#   TLS=/certs/origin.pem /certs/origin.key   Cloudflare Origin Certificate (production); Cloudflare
+#                                             SSL/TLS mode "Full (strict)". Files in deploy/aws/certs/.
+#   TLS=internal                              Caddy's own certificate (CI and trial runs)
+#   TLS=<an email address>                    Let's Encrypt; only when Cloudflare is not in front
 {
 	servers {
 		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
@@ -20,4 +23,10 @@
 		# Exports are sent while they are made; pass each part on at once.
 		flush_interval -1
 	}
+}
+
+# www goes to the bare address, as on Render.
+www.{$SITE_ADDRESS} {
+	tls {$TLS}
+	redir https://{$SITE_ADDRESS}{uri} permanent
 }

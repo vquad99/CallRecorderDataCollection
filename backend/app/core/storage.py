@@ -96,17 +96,18 @@ class _PartsReader(io.RawIOBase):
 
 class S3Storage:
     def __init__(self, settings: Settings) -> None:
-        assert settings.storage_access_key_id is not None  # noqa: S101 (checked by storage_configured)
-        assert settings.storage_secret_access_key is not None  # noqa: S101
         local = (settings.storage_endpoint_url or "").startswith("http://")
         self._bucket = str(settings.storage_bucket)
         self._prefix = settings.storage_key_prefix
+        # Without keys boto3 uses the server's own AWS role (D-132); Wasabi and local storage
+        # are given keys.
+        pair = settings.storage_keys
+        keys = {"aws_access_key_id": pair[0], "aws_secret_access_key": pair[1]} if pair else {}
         self._client = boto3.client(
             "s3",
             endpoint_url=settings.storage_endpoint_url,
             region_name=settings.storage_region,
-            aws_access_key_id=settings.storage_access_key_id.get_secret_value(),
-            aws_secret_access_key=settings.storage_secret_access_key.get_secret_value(),
+            **keys,
             config=Config(
                 signature_version="s3v4",
                 s3={"addressing_style": "path" if local else "virtual"},

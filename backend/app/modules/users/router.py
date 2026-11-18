@@ -34,6 +34,8 @@ class UserOut(BaseModel):
     last_login_at: datetime | None
     created_at: datetime
     telephony_agent_id: str | None = None
+    # Whether that seat's password is saved (D-130); the password is only in the reveal.
+    telephony_has_password: bool = False
 
 
 def user_out(user: User) -> UserOut:
@@ -48,6 +50,7 @@ def user_out(user: User) -> UserOut:
         last_login_at=user.last_login_at,
         created_at=user.created_at,
         telephony_agent_id=user.telephony_agent_id,
+        telephony_has_password=user.telephony_password_enc is not None,
     )
 
 

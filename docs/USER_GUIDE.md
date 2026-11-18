@@ -67,6 +67,11 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
 **My account** also has **Change password** and **Signed-in devices**: each device is shown like
 "Edge on Windows · 127.0.0.1"; **Sign out** signs out another device.
 
+**Phone seat** (moderators who make phone calls): **My account** shows your **Seat number** and
+your **Seat password**, hidden. Click **Show** to see the password, **Hide** to cover it again.
+Use these to sign in to the Chirp app. Each time you click **Show**, it is written in the audit log.
+No seat, or no password yet? Ask your Super Admin.
+
 **Install the application.** On **My account**, **Install the application** puts Conversation
 Collection among your applications: it then opens in its own window from the desktop or the
 phone's home screen. Click **Install** when the button is there; otherwise the card says how to do
@@ -123,10 +128,17 @@ Click a name to open the user. There you can change the name, email or roles (**
 if the password is already set), and **Sign out everywhere**. Users are never deleted, only
 disabled.
 
-**Phone calls → Phone seat** (moderators only): on the moderator's user page, type the seat number
-TxContact gave for them (for example `80003`) in the **Phone seat** box and click **Save phone
-seat**. Their phone calls go through that seat. One seat per person; leave it empty for moderators
-who do not make phone calls. The **Users** list shows each seat in the **Phone seat** column.
+**Phone calls → Phone seat** (moderators only): on the moderator's user page, under **Phone
+calls**, type the seat number TxContact gave for them (for example `80003`) in **Seat number**,
+and the seat's password from TxContact in **Seat password**. Click **Save phone seat**. Their
+phone calls go through that seat; they sign in to the Chirp app with the seat number and password.
+One seat per person; leave **Seat number** empty for moderators who do not make phone calls
+(this also removes the password). The **Users** list shows each seat in the **Phone seat** column.
+
+- The password is saved in secret form. To change it, type the new one and save. Leave **Seat
+  password** empty to keep the saved password.
+- To see the saved password, click **Show** next to **Saved password**. Each time is written in
+  the audit log. The moderator can also see it on their own **My account** page.
 
 The number of active accounts is limited by **Settings → Staff accounts**.
 
@@ -365,8 +377,9 @@ long.
 
 ## 7a. Moderator: phone calls
 
-Everything is done on the task page in this portal. You do not use any TxContact app or screen.
-Your phone seat is set by the Super Admin (section 4); if calls do not start, ask them.
+You start, follow and end every call on the task page in this portal. Your phone seat is set by
+the Super Admin (section 4); if calls do not start, ask them. Your seat number and seat password
+for the Chirp app are on **My account** (section 2).
 
 1. Open **Tasks** and click your **Phone call** task.
 2. Click **Start session**. The card says **Ready to call**. **Start call** stays grey until

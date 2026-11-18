@@ -1,0 +1,12 @@
+# Looks for a new push one minute after the last look ended (D-132).
+#   Pause automatic deploys: sudo systemctl stop ccp-deploy.timer   (start: ... start ...)
+[Unit]
+Description=Conversation Collection: look for a new push every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

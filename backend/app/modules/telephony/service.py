@@ -670,14 +670,27 @@ def retry(db: Session, principal: Principal, call_id: uuid.UUID, ip: str | None)
 
 
 def set_agent_seat(
-    db: Session, principal: Principal, user_id: uuid.UUID, agent_id: str | None, ip: str | None
+    db: Session,
+    cipher: FieldCipher,
+    principal: Principal,
+    user_id: uuid.UUID,
+    agent_id: str | None,
+    password: str | None,
+    ip: str | None,
 ) -> User:
+    """A moderator's phone seat and its password (D-101, D-130). The password: None keeps the
+    saved one, "" removes it, anything else replaces it (stored encrypted). A seat removed takes
+    its password with it. The audit says whether a password is saved, never the password."""
     if not principal.can(Perm.USERS_MANAGE):
         raise forbidden()
     user = db.get(User, user_id)
     if user is None:
         raise not_found("User")
     value = (agent_id or "").strip() or None
+    if value is None and password:
+        raise AppError(
+            "Enter the seat number for this password", code="VALIDATION_ERROR", status_code=422
+        )
     if value is not None:
         taken = db.scalar(
             select(User.id).where(User.telephony_agent_id == value, User.id != user.id)
@@ -686,9 +699,22 @@ def set_agent_seat(
             raise AppError(
                 "Another user already has this agent seat", code="AGENT_SEAT_TAKEN", status_code=409
             )
-    before = user.telephony_agent_id
+    before = {
+        "telephony_agent_id": user.telephony_agent_id,
+        "has_password": user.telephony_password_enc is not None,
+    }
     user.telephony_agent_id = value
-    if before != value:
+    if value is None or password == "":
+        user.telephony_password_enc = None
+    elif password is not None:
+        user.telephony_password_enc = cipher.encrypt(password)
+    after: dict[str, Any] = {
+        "telephony_agent_id": value,
+        "has_password": user.telephony_password_enc is not None,
+    }
+    if password:
+        after["password_changed"] = True
+    if before != after:
         audit.record(
             db,
             action="user.agent_seat",
@@ -696,8 +722,32 @@ def set_agent_seat(
             entity_id=user.id,
             actor_id=principal.user_id,
             ip=ip,
-            before={"telephony_agent_id": before},
-            after={"telephony_agent_id": value},
+            before=before,
+            after=after,
         )
     db.commit()
     return user
+
+
+def seat_password(
+    db: Session, cipher: FieldCipher, principal: Principal, user_id: uuid.UUID, ip: str | None
+) -> str:
+    """The saved password of a user's phone seat (D-130), for a Super Admin or for the user
+    themselves; anyone else is refused. Every reveal is audited, without the password."""
+    if not (principal.is_super_admin or principal.user_id == user_id):
+        raise forbidden()
+    user = db.get(User, user_id)
+    if user is None or not user.telephony_password_enc:
+        raise not_found("Seat password")
+    password = cipher.decrypt(user.telephony_password_enc)
+    audit.record(
+        db,
+        action="user.seat_password_shown",
+        entity_type="user",
+        entity_id=user.id,
+        actor_id=principal.user_id,
+        ip=ip,
+        after={"telephony_agent_id": user.telephony_agent_id},
+    )
+    db.commit()
+    return password

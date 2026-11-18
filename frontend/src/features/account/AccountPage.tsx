@@ -1,7 +1,9 @@
-// The signed-in user's own account: password, devices, two-step sign-in (AUTH-008, AUTH-010).
+// The signed-in user's own account: password, devices, two-step sign-in (AUTH-008, AUTH-010),
+// and a moderator's phone seat for the Chirp app (D-130).
 import { useState } from "react";
 
 import * as authApi from "../../api/auth";
+import { showOwnSeatPassword } from "../../api/telephony";
 import { useAuth } from "../../auth/AuthContext";
 import { TwoStepEnrol } from "../../auth/TwoStepEnrol";
 import { DataTable } from "../../components/DataTable";
@@ -9,6 +11,7 @@ import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
@@ -160,6 +163,24 @@ function TwoStep() {
   );
 }
 
+/** The moderator's TxContact seat, set by a Super Admin: what they sign in to the Chirp app with. */
+function PhoneSeat({ seat, hasPassword }: { seat: string; hasPassword: boolean }) {
+  return (
+    <section className="card" aria-labelledby="seat-title">
+      <h2 id="seat-title">Phone seat</h2>
+      <p>Use these to sign in to the Chirp app.</p>
+      <p>
+        Seat number: <strong>{seat}</strong>
+      </p>
+      {hasPassword ? (
+        <SavedPassword label="Seat password" load={showOwnSeatPassword} />
+      ) : (
+        <p className="muted">No seat password is saved yet. Ask your Super Admin.</p>
+      )}
+    </section>
+  );
+}
+
 export function AccountPage() {
   const { user } = useAuth();
   return (
@@ -171,6 +192,12 @@ export function AccountPage() {
       <p>
         {user?.display_name} ({user?.email})
       </p>
+      {user?.telephony_agent_id ? (
+        <PhoneSeat
+          seat={user.telephony_agent_id}
+          hasPassword={user.telephony_has_password ?? false}
+        />
+      ) : null}
       <ChangePassword />
       <TwoStep />
       <Sessions />
