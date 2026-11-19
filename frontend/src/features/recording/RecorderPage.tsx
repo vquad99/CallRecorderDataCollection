@@ -123,6 +123,7 @@ function Recovery({ open, onDone }: { open: rec.Recording; onDone: () => void })
       </p>
       <div className="actions">
         <Button
+          icon="ok"
           busy={busy !== null}
           disabled={open.chunks_received === 0}
           onClick={() =>
@@ -135,7 +136,7 @@ function Recovery({ open, onDone }: { open: rec.Recording; onDone: () => void })
         >
           Keep the saved {clock(open.saved_seconds)}
         </Button>
-        <Button variant="secondary" disabled={busy !== null} onClick={discard}>
+        <Button variant="secondary" icon="trash" disabled={busy !== null} onClick={discard}>
           Discard it
         </Button>
       </div>
@@ -156,6 +157,7 @@ export function AfterRecording({ taskId, onAgain }: { taskId: string; onAgain: (
       <p>Listen to the recording above. If it is good, send it to QC; if not, record it again.</p>
       <div className="actions">
         <Button
+          icon="send"
           busy={busy === "AUDIO_QC"}
           disabled={busy !== null}
           onClick={() =>
@@ -171,6 +173,7 @@ export function AfterRecording({ taskId, onAgain }: { taskId: string; onAgain: (
         </Button>
         <Button
           variant="secondary"
+          icon="record"
           busy={busy === "IN_PROGRESS"}
           disabled={busy !== null}
           onClick={() =>
@@ -225,9 +228,9 @@ export function Result({ recording }: { recording: rec.Recording }) {
         <span>
           <Button
             variant="secondary"
+            icon="play"
             onClick={() => void rec.assetUrl(file.id, "play").then((r) => setSrc(r.url))}
           >
-            <Icon name="play" size={15} />
             Listen
           </Button>
         </span>
@@ -526,6 +529,7 @@ export function RecorderPage() {
   const t = task.state.data;
   const back = (
     <Link className="button button--secondary" to={`/tasks/${t.id}`}>
+      <Icon name="previous" size={16} />
       Back to the task
     </Link>
   );
@@ -559,7 +563,7 @@ export function RecorderPage() {
     <section aria-labelledby="rec-title" className="stack">
       <BackLink to={`/tasks/${t.id}`}>Back to the task</BackLink>
       <h1 id="rec-title">
-        <IconTile name="mic" tone="rose" />
+        <IconTile name="mic" />
         Record task {t.task_code}
       </h1>
       <div className="card">
@@ -607,8 +611,7 @@ export function RecorderPage() {
         <div className="card stack">
           {phase === "idle" ? (
             <span>
-              <Button onClick={() => void openMicrophone(deviceId)}>
-                <Icon name="mic" size={16} weight="fill" />
+              <Button icon="mic" onClick={() => void openMicrophone(deviceId)}>
                 Allow microphone
               </Button>
             </span>
@@ -641,11 +644,10 @@ export function RecorderPage() {
           ) : null}
           {phase === "ready" ? (
             <div className="actions">
-              <Button variant="secondary" onClick={() => void runTest()}>
+              <Button variant="secondary" icon="waveform" onClick={() => void runTest()}>
                 Test ({TEST_SECONDS} s, then play back)
               </Button>
-              <Button onClick={() => void start()}>
-                <Icon name="record" size={16} weight="fill" />
+              <Button icon="record" onClick={() => void start()}>
                 Start recording
               </Button>
             </div>
@@ -666,8 +668,7 @@ export function RecorderPage() {
           </p>
           {phase === "recording" ? (
             <span>
-              <Button onClick={() => void stop()}>
-                <Icon name="stop" size={16} weight="fill" />
+              <Button icon="stop" onClick={() => void stop()}>
                 Stop and save
               </Button>
             </span>

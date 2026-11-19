@@ -56,12 +56,13 @@ def share(ms: int | None) -> int:
     return int(ms or 0) // SPEAKERS
 
 
-def conversations() -> Select[*tuple[Any, ...]]:
-    """One row per task with a finished recording: (task_id, project_id, status,
-    participant_a_id, participant_b_id, recorded_by, ms), from the task's current recording, who
-    made it and its length."""
-    current = current_recordings()
-    length = final_length_subquery()
+def conversations(tasks: Select[uuid.UUID]) -> Select[*tuple[Any, ...]]:
+    """One row per task of `tasks` (a query of task ids) with a finished recording: (task_id,
+    project_id, status, participant_a_id, participant_b_id, recorded_by, ms), from the task's
+    current recording, who made it and its length. Only these tasks' recordings are read, so the
+    cost follows the tasks asked about, not the whole database."""
+    current = current_recordings(tasks)
+    length = final_length_subquery(tasks)
     return (
         select(
             Task.id.label("task_id"),
@@ -78,22 +79,31 @@ def conversations() -> Select[*tuple[Any, ...]]:
     )
 
 
+def _approved_tasks(project_ids: Iterable[uuid.UUID]) -> Select[uuid.UUID]:
+    return select(Task.id).where(Task.project_id.in_(list(project_ids)), Task.status == "APPROVED")
+
+
+def approval_times(project_ids: Iterable[uuid.UUID]) -> Select[uuid.UUID, datetime]:
+    """(task_id, at): when each APPROVED task of these projects was approved. A task is
+    approved once: APPROVED is final. Only these tasks' history is read."""
+    return (
+        select(TaskStatusHistory.task_id, func.max(TaskStatusHistory.created_at).label("at"))
+        .where(
+            TaskStatusHistory.to_status == "APPROVED",
+            TaskStatusHistory.task_id.in_(_approved_tasks(project_ids)),
+        )
+        .group_by(TaskStatusHistory.task_id)
+    )
+
+
 def approved_conversations(
     project_ids: Iterable[uuid.UUID], start: datetime | None, end: datetime | None
 ) -> Select[*tuple[Any, ...]]:
     """conversations() of APPROVED tasks in these projects, approved at or after `start` and
-    before `end` (either may be left open). A task is approved once: APPROVED is final."""
-    approved = (
-        select(TaskStatusHistory.task_id, func.max(TaskStatusHistory.created_at).label("at"))
-        .where(TaskStatusHistory.to_status == "APPROVED")
-        .group_by(TaskStatusHistory.task_id)
-        .subquery()
-    )
-    query = (
-        conversations()
-        .join(approved, approved.c.task_id == Task.id)
-        .where(Task.status == "APPROVED", Task.project_id.in_(list(project_ids)))
-    )
+    before `end` (either may be left open)."""
+    projects = list(project_ids)
+    approved = approval_times(projects).subquery()
+    query = conversations(_approved_tasks(projects)).join(approved, approved.c.task_id == Task.id)
     if start is not None:
         query = query.where(approved.c.at >= start)
     if end is not None:
@@ -104,15 +114,16 @@ def approved_conversations(
 def per_participant(
     db: Session, project_id: uuid.UUID, participant_ids: Iterable[uuid.UUID] | None = None
 ) -> dict[uuid.UUID, Minutes]:
-    """Totals per participant in one project, in one query whatever the number of people."""
-    query = conversations().where(Task.project_id == project_id)
+    """Totals per participant in one project, in one query whatever the number of people; only
+    the tasks of the people asked about are read."""
+    tasks = select(Task.id).where(Task.project_id == project_id)
     wanted = None if participant_ids is None else set(participant_ids)
     if wanted is not None:
         if not wanted:
             return {}
-        query = query.where(Task.participant_a_id.in_(wanted) | Task.participant_b_id.in_(wanted))
+        tasks = tasks.where(Task.participant_a_id.in_(wanted) | Task.participant_b_id.in_(wanted))
     totals: dict[uuid.UUID, Minutes] = {}
-    for row in db.execute(query):
+    for row in db.execute(conversations(tasks)):
         ms = share(row.ms)
         for pid in (row.participant_a_id, row.participant_b_id):
             if wanted is not None and pid not in wanted:

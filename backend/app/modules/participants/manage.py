@@ -1,10 +1,11 @@
 """Participant administration in bulk (D-073): add many from a CSV, assign to another project,
 remove.
 
-Every bulk action works one participant at a time through the same checked service functions as
-the single actions, so the same permissions, project limits and audit entries apply; one failing
-row never stops the others and each row gets its own result. Everyone who joins a project is
-emailed its consent form afterwards (D-129, by the router after the answer).
+Assigning and removing work one participant at a time through the same checked service functions
+as the single actions, so the same permissions, project limits and audit entries apply; one
+failing row never stops the others and each row gets its own result. Picking who gets the consent
+form again changes nothing, so it reads everyone at once. Everyone who joins a project is emailed
+its consent form afterwards (D-129, by the router after the answer).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.contact import clean_email, normalize_phone
 from app.core.csvio import read_rows
-from app.core.errors import AppError
+from app.core.errors import AppError, not_found
 from app.core.permissions import Perm
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher
@@ -32,6 +33,7 @@ from app.modules.projects.service import get_manageable
 MAX_IMPORT_ROWS = 500
 MAX_BULK = 200
 COLUMNS = ("name", "phone", "email", "language", "dialect", "district")
+ALREADY_AGREED = "Already agreed: no form sent"
 _LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 
 
@@ -155,7 +157,8 @@ def bulk(
     elif not reason.strip():
         raise AppError("Give a reason for removing", code="REASON_REQUIRED", status_code=422)
     ids = list(dict.fromkeys(participant_ids))
-    answers = consent.latest_own_answers(db, project.id, ids) if action == "send_consent" else {}
+    if action == "send_consent":
+        return target, _consent_again(db, project, ids)
     results: list[BulkResult] = []
     for pid in ids:
         code = "?"
@@ -165,10 +168,6 @@ def bulk(
             if action == "assign" and target is not None:
                 service.link_existing(db, principal, target.id, code, ip)
                 message = "Assigned"
-            elif action == "send_consent":
-                if consent.agreed(answers.get(pid)):
-                    raise AppError("Already agreed: no form sent", code="ALREADY_AGREED")
-                message = ""
             else:
                 service.delete_participant(db, principal, project.id, pid, reason, ip)
                 message = "Removed"
@@ -177,6 +176,24 @@ def bulk(
             db.rollback()
             results.append(BulkResult(pid, code, False, exc.message))
     return target, results
+
+
+def _consent_again(db: Session, project: Project, ids: list[uuid.UUID]) -> list[BulkResult]:
+    """Who gets the project's consent form again (D-139): the chosen people in the project who
+    have not agreed. Everyone is read at once and nothing is written."""
+    found = service.in_project_by_id(db, project, ids)
+    answers = consent.latest_own_answers(db, project.id, ids)
+    missing = not_found("Participant").message
+    results: list[BulkResult] = []
+    for pid in ids:
+        person = found.get(pid)
+        if person is None:
+            results.append(BulkResult(pid, "?", False, missing))
+        elif consent.agreed(answers.get(pid)):
+            results.append(BulkResult(pid, person.participant_code, False, ALREADY_AGREED))
+        else:
+            results.append(BulkResult(pid, person.participant_code, True, ""))
+    return results
 
 
 def consent_overview(

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
 import { EmptyArt } from "./Art";
+import { Button } from "./form/Button";
 
 /** A plain title for what went wrong, so every page names failures the same way. */
 export function errorTitle(error: ApiError): string {
@@ -64,9 +65,9 @@ export function ErrorState({
       <p>{message ?? error?.message ?? ""}</p>
       {reference ? <p className="state__meta">Reference: {reference}</p> : null}
       {onRetry ? (
-        <button type="button" className="button button--secondary" onClick={onRetry}>
+        <Button variant="secondary" icon="refresh" onClick={onRetry}>
           Try again
-        </button>
+        </Button>
       ) : null}
     </div>
   );

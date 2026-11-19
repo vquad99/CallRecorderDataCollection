@@ -31,6 +31,7 @@ export function SavedPassword({
         </span>
         <Button
           variant="secondary"
+          icon="eye"
           busy={busy !== null}
           onClick={() =>
             shown === null

@@ -16,16 +16,21 @@ from tests.conftest import Api, make_participant, make_project, make_user
 pytestmark = pytest.mark.db
 
 
-def _queries(api: Api, path: str, caplog: pytest.LogCaptureFixture) -> int:
-    caplog.clear()
-    response = api.get(path)
-    assert response.status_code == 200, (path, response.text[:200])
+def _logged(caplog: pytest.LogCaptureFixture, path: str) -> int:
+    """Database queries of the last request to `path`, from the request log."""
     line = [
         r
         for r in caplog.records
         if r.getMessage() == "request" and r.__dict__.get("path") == path.split("?")[0]
     ]
     return int(line[-1].__dict__["db_queries"])
+
+
+def _queries(api: Api, path: str, caplog: pytest.LogCaptureFixture) -> int:
+    caplog.clear()
+    response = api.get(path)
+    assert response.status_code == 200, (path, response.text[:200])
+    return _logged(caplog, path)
 
 
 def _estate(db: Any, new_api: Any, size: int, tag: str) -> dict[str, Any]:
@@ -101,3 +106,24 @@ def test_list_pages_cost_the_same_for_2_and_10_rows(
                 f"(limit {limit})"
             )
     assert not grows, "\n".join(grows)
+
+
+def test_emailing_the_consent_form_again_costs_the_same_for_2_and_10_people(
+    db: Any, new_api: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """D-139: everyone chosen is read at once, not one by one."""
+    caplog.set_level(logging.INFO)
+    counts = []
+    for size, tag in ((2, "s"), (10, "l")):
+        project = make_project(db, f"AGAIN{tag.upper()}")
+        make_user(db, f"pa.{tag}@example.org", ["PROJECT_ADMIN"], projects=[project])
+        pa: Api = new_api()
+        pa.login(f"pa.{tag}@example.org")
+        ids = [make_participant(pa, project.id, f"P{i} {tag}")["id"] for i in range(size)]
+        path = f"/api/v1/projects/{project.id}/participants/bulk"
+        caplog.clear()
+        answer = pa.post(path, json={"action": "send_consent", "participant_ids": ids})
+        assert answer.status_code == 200, answer.text
+        assert {r["message"] for r in answer.json()["results"]} == {"Already agreed: no form sent"}
+        counts.append(_logged(caplog, path))
+    assert counts[0] == counts[1], f"{counts[0]} queries for 2 people, {counts[1]} for 10"

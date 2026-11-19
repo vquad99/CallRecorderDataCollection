@@ -117,9 +117,9 @@ def test_signing_in_to_ones_own_account_does_not_reset_the_address_count(
 
 @pytest.mark.db
 def test_correcting_a_participants_email_ends_their_personal_link(
-    db_app: Any, db: Any, new_api: Any
+    db_app: Any, db: Any, new_api: Any, outbox: Any
 ) -> None:
-    from tests.conftest import make_participant, make_project
+    from tests.conftest import make_participant, make_project, read_outbox
 
     project = make_project(db, "LINKS")
     make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[project])
@@ -128,7 +128,9 @@ def test_correcting_a_participants_email_ends_their_personal_link(
     pa.login("pa@example.org")
     p = make_participant(pa, project.id, "Asha")
     base = f"/api/v1/projects/{project.id}/participants/{p['id']}"
-    token = pa.post(f"{base}/portal-link").json()["url"].split("#", 1)[1]
+    assert pa.post(f"{base}/portal-link/email").json()["sent"] is True
+    [mail] = read_outbox(outbox)
+    token = mail.split("/portal#", 1)[1].split()[0]
     visitor = new_api()
     assert visitor.get("/api/v1/portal/me", headers={"X-Portal-Token": token}).status_code == 200
     fixed = pa.patch(

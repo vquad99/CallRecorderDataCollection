@@ -1,24 +1,21 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
 // them; the server decides what each role receives. Adding, editing, the consent history and the
 // details open in the same windows as on the Participants page.
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useState } from "react";
 
 import { apiDownload } from "../../api/client";
 import * as work from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
-import { Icon } from "../../components/Icon";
-import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
-import { day } from "../../lib/format";
 import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
 import "../participants/participants.css";
 import { languageLabel } from "./choices";
@@ -38,12 +35,7 @@ function AddExisting({
 }) {
   const [typed, setTyped] = useState("");
   const [ticked, setTicked] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-  // Ask the server once typing pauses, not on every key.
-  useEffect(() => {
-    const id = window.setTimeout(() => setSearch(typed.trim()), 300);
-    return () => window.clearTimeout(id);
-  }, [typed]);
+  const search = useDebounced(typed.trim());
   const found = useResource(
     () => work.linkCandidates(projectId, search),
     [projectId, search, refresh],
@@ -97,6 +89,7 @@ function AddExisting({
             <span>Select all shown ({shown.length})</span>
           </label>
           <Button
+            icon="plus"
             busy={busy}
             disabled={chosen.length === 0}
             onClick={() => {
@@ -126,6 +119,7 @@ function AddExisting({
               </span>
               <Button
                 variant="secondary"
+                icon="plus"
                 busy={busy}
                 aria-label={`Add ${c.participant_code}`}
                 onClick={() => onAdd([c.participant_code])}
@@ -151,12 +145,12 @@ export function ParticipantsTab() {
   const canOpenPage = Boolean(user?.roles.includes("SUPER_ADMIN"));
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [link, setLink] = useState<{ code: string; url: string; expires_at: string } | null>(null);
   const [addingExisting, setAddingExisting] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const query = useDebounced(search.trim());
   const list = useResource(
-    () => work.listParticipants(project.id, { search, page, page_size: 25 }),
-    [project.id, search, page],
+    () => work.listParticipants(project.id, { search: query, page, page_size: 25 }),
+    [project.id, query, page],
   );
   const { busy, error, message, run, setMessage } = useAction(list.reload);
   const confirm = useConfirm(setMessage);
@@ -191,19 +185,23 @@ export function ParticipantsTab() {
     <div className="stack">
       <div className="actions">
         {canManage ? (
-          <Button onClick={() => windows.open({ kind: "add" })}>
-            <Icon name="plus" size={15} weight="bold" />
+          <Button icon="userPlus" onClick={() => windows.open({ kind: "add" })}>
             Add participant
           </Button>
         ) : null}
         {canManage ? (
-          <Button variant="secondary" onClick={() => setAddingExisting(!addingExisting)}>
+          <Button
+            variant="secondary"
+            icon={addingExisting ? "close" : "people"}
+            onClick={() => setAddingExisting(!addingExisting)}
+          >
             {addingExisting ? "Close search" : "Add existing participant"}
           </Button>
         ) : null}
         {can("participants.export") ? (
           <Button
             variant="secondary"
+            icon="fileCsv"
             busy={busy === "export"}
             onClick={() =>
               void run(async () => {
@@ -215,7 +213,6 @@ export function ParticipantsTab() {
               }, "export")
             }
           >
-            <Icon name="download" size={15} />
             Export contacts
           </Button>
         ) : null}
@@ -318,61 +315,43 @@ export function ParticipantsTab() {
                   ) : null}
                   <td className="actions">
                     {canOpenPage ? (
-                      <Link
-                        className="button button--secondary"
+                      <IconButton
+                        icon="eye"
+                        label="Their page"
                         to={`/projects/${project.id}/participants/${p.id}/page`}
-                      >
-                        Their page
-                      </Link>
+                      />
                     ) : null}
                     {p.consent_visible ? (
-                      <Button
-                        variant="secondary"
+                      <IconButton
+                        icon="history"
+                        label="Consent history"
                         onClick={() => windows.open({ kind: "history", participant: p })}
-                      >
-                        Consent history
-                      </Button>
+                      />
                     ) : null}
                     {canManage ? (
                       <>
-                        <Button
-                          variant="secondary"
-                          busy={busy === `link-${p.id}`}
-                          disabled={busy !== null}
-                          onClick={() =>
-                            void run(async () => {
-                              const made = await work.createPortalLink(project.id, p.id);
-                              setLink({ code: p.participant_code, ...made });
-                            }, `link-${p.id}`)
-                          }
-                        >
-                          Personal link
-                        </Button>
                         {p.has_email && p.consent_status !== "GIVEN" ? (
-                          <Button
-                            variant="secondary"
+                          <IconButton
+                            icon="mail"
+                            label="Email consent form again"
                             busy={busy === `email-${p.id}`}
                             disabled={busy !== null}
                             onClick={() =>
                               void run(() => work.emailConsentForm(project.id, p), `email-${p.id}`)
                             }
-                          >
-                            Email consent form again
-                          </Button>
+                          />
                         ) : null}
-                        <Button
-                          variant="secondary"
+                        <IconButton
+                          icon="pencil"
+                          label="Edit"
                           onClick={() => windows.open({ kind: "edit", participant: p })}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="secondary"
+                        />
+                        <IconButton
+                          icon="trash"
+                          label="Delete"
                           disabled={busy !== null}
                           onClick={() => remove(p)}
-                        >
-                          Delete
-                        </Button>
+                        />
                       </>
                     ) : null}
                   </td>
@@ -382,30 +361,6 @@ export function ParticipantsTab() {
           </DataTable>
           <Pagination page={page} pageSize={25} total={list.state.data.total} onPage={setPage} />
         </>
-      ) : null}
-      {link ? (
-        <Modal title={`Personal link for ${link.code}`} onClose={() => setLink(null)}>
-          <div className="stack stack--tight">
-            <p className="muted">
-              Give this link to the participant only. It opens their consent form and their own
-              sessions, works until {day(link.expires_at)}, and is shown once: making a new link
-              ends this one.
-            </p>
-            <p className="mono break">{link.url}</p>
-            <div className="dialog__actions">
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  void navigator.clipboard
-                    .writeText(link.url)
-                    .then(() => setMessage("Link copied."))
-                }
-              >
-                Copy link
-              </Button>
-            </div>
-          </div>
-        </Modal>
       ) : null}
       {windows.dialog}
       {confirm.dialog}

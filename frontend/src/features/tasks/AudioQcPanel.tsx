@@ -11,7 +11,6 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge, type Tone } from "../../components/StatusBadge";
@@ -52,13 +51,20 @@ function Checks({ result }: { result: qc.QcResult }) {
   const shown = all ? result.checks : attention;
   return (
     <div className="stack stack--tight">
-      <p>
-        {attention.length === 0
-          ? "No check needs attention."
-          : attention.length === 1
-            ? "1 check needs attention:"
-            : `${attention.length} checks need attention:`}
-      </p>
+      <div className="qc__summary">
+        <p>
+          {attention.length === 0
+            ? "No check needs attention."
+            : attention.length === 1
+              ? "1 check needs attention:"
+              : `${attention.length} checks need attention:`}
+        </p>
+        <Button variant="secondary" icon="tasks" aria-expanded={all} onClick={() => setAll(!all)}>
+          {all
+            ? "Show only checks that need attention"
+            : `Show all checks (${result.checks.length})`}
+        </Button>
+      </div>
       {shown.length > 0 ? (
         <DataTable label={all ? "All automatic checks" : "Checks that need attention"}>
           <thead>
@@ -86,13 +92,6 @@ function Checks({ result }: { result: qc.QcResult }) {
           </tbody>
         </DataTable>
       ) : null}
-      <span>
-        <Button variant="secondary" aria-expanded={all} onClick={() => setAll(!all)}>
-          {all
-            ? "Show only checks that need attention"
-            : `Show all checks (${result.checks.length})`}
-        </Button>
-      </span>
     </div>
   );
 }
@@ -153,6 +152,7 @@ function AssignQc({
       <Button
         type="submit"
         variant="secondary"
+        icon="userPlus"
         busy={busy !== null}
         disabled={!userId || (reassigning && !reason.trim())}
       >
@@ -211,11 +211,10 @@ function Decision({
         Reject ends the task.
       </p>
       <div className="actions">
-        <Button busy={busy !== null} onClick={pass}>
-          <Icon name="verified" size={16} />
+        <Button icon="verified" busy={busy !== null} onClick={pass}>
           Pass
         </Button>
-        <Button variant="danger" disabled={busy !== null} onClick={reject}>
+        <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
           Reject
         </Button>
       </div>
@@ -238,6 +237,7 @@ export function AudioQcPanel({
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const view = state.data;
   const automatic = view.results.find((r) => r.automated);
+  const listen = automatic?.asset_id && (view.can_decide || view.can_recheck) ? automatic : null;
   const decisions = view.results.filter((r) => !r.automated);
   return (
     <section className="card stack stack--tight" aria-labelledby="qc-title">
@@ -258,25 +258,25 @@ export function AudioQcPanel({
         </div>
       </dl>
       {automatic ? <Checks result={automatic} /> : null}
-      {automatic?.asset_id && (view.can_decide || view.can_recheck) ? (
-        <Player assetId={automatic.asset_id} />
-      ) : null}
-      {view.can_recheck ? (
+      {listen?.asset_id || view.can_recheck ? (
         <div className="actions">
-          <Button
-            variant="secondary"
-            busy={busy !== null}
-            onClick={() =>
-              void run(async () => {
-                const v = await qc.recheckQc(task.id);
-                replace(v);
-                if (v.task_status !== task.status) onDecided();
-              })
-            }
-          >
-            <Icon name="waveform" size={15} />
-            Check the stored file again
-          </Button>
+          {listen?.asset_id ? <Player assetId={listen.asset_id} /> : null}
+          {view.can_recheck ? (
+            <Button
+              variant="secondary"
+              icon="refresh"
+              busy={busy !== null}
+              onClick={() =>
+                void run(async () => {
+                  const v = await qc.recheckQc(task.id);
+                  replace(v);
+                  if (v.task_status !== task.status) onDecided();
+                })
+              }
+            >
+              Check the stored file again
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <ErrorNotice error={error} />

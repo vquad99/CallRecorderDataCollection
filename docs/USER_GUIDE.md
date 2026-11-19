@@ -6,7 +6,8 @@ or reject every recording.
 
 Website: **https://dubdesk.live**. Use a current Google Chrome or Microsoft Edge on a computer.
 
-Words in **bold** are the exact labels you see on screen.
+Words in **bold** are the exact labels you see on screen. In a table, a row's actions are small
+icons: point at one to see its name (for example the pencil is **Edit**).
 
 Dates and times are in India time, written the Indian way, for example 17 Nov 2026, 1:57 pm.
 
@@ -154,8 +155,9 @@ who you are viewing as. Nothing can be changed while viewing; every button that 
 something is refused. Click **Stop viewing** to return to your own view. Starting and stopping are in the
 audit log under your own name.
 
-To see a participant's own page, open the project's **Participants** tab and click **Their page**
-on the row (Super Admin only). It is the page the participant sees, without the consent buttons.
+To see a participant's own page, open the project's **Participants** tab and click the eye
+(**Their page**) on the row (Super Admin only). It is the page the participant sees, without the
+consent buttons.
 
 ### Projects
 
@@ -284,9 +286,10 @@ project:
   the moderator, the status, the recording length, and the number of phone calls. Click the task
   code to open the task.
 
-A project's **Participants** tab also has **Personal link**: a window with a link you can copy
-(**Copy link**) and give the participant yourself (it works for 30 days; making a new one ends the
-old one).
+Nobody on the staff sees a participant's personal link: it is only in the email the participant
+gets, so only they can answer the consent form. If the email is lost, use **Email consent form
+again**; it sends a new link (the old one stops working), at most once every 10 minutes for the
+same person.
 
 ### Other actions on ticked rows
 

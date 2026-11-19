@@ -9,15 +9,14 @@ import secrets
 import struct
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from urllib.parse import quote
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
-from app.core.errors import AppError
+from app.core.slots import turn
 
 # Argon2id at the OWASP minimum (19 MiB, 2 passes, 1 lane). The library default (64 MiB, 4 lanes)
 # let a burst of parallel sign-ins exhaust a 512 MB server (security review 2026-11-11, D-088).
@@ -31,14 +30,8 @@ _slots = threading.BoundedSemaphore(HASH_SLOTS)
 _DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
 
 
-@contextmanager
-def _hash_slot() -> Iterator[None]:
-    if not _slots.acquire(timeout=HASH_WAIT_SECONDS):
-        raise AppError("The service is busy. Try again in a moment.", code="BUSY", status_code=503)
-    try:
-        yield
-    finally:
-        _slots.release()
+def _hash_slot() -> AbstractContextManager[None]:
+    return turn(_slots, HASH_WAIT_SECONDS, "The service is busy. Try again in a moment.")
 
 
 TOTP_ISSUER = "Conversation Collection"

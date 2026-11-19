@@ -8,7 +8,7 @@ import { getProject, listProjects } from "../../api/projects";
 import * as work from "../../api/work";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon, IconTile } from "../../components/Icon";
@@ -17,6 +17,7 @@ import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { consentAnswer } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
@@ -68,7 +69,7 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
       </div>
       <div className="actions">
         <label className="button button--secondary">
-          <Icon name="upload" size={15} />
+          <Icon name="fileUp" size={16} />
           Choose a file
           <input
             type="file"
@@ -82,6 +83,7 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
         </label>
         <Button
           variant="secondary"
+          icon="tasks"
           busy={busy === "check"}
           disabled={!csv.trim() || busy !== null}
           onClick={() => send(false)}
@@ -89,6 +91,7 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
           Check rows
         </Button>
         <Button
+          icon="plus"
           busy={busy === "add"}
           disabled={!result || result.ready === 0 || result.created > 0 || busy !== null}
           onClick={() => send(true)}
@@ -144,12 +147,13 @@ export function ParticipantsPage() {
   const all = projects.state.status === "loaded" ? projects.state.data.items : [];
   // Nothing is chosen for the person: consent forms, links and removals belong to one project,
   // so the project is always picked by hand first.
+  const query = useDebounced(search.trim());
   const list = useResource(
     () =>
       projectId
-        ? work.listParticipants(projectId, { search, page, page_size: 25 })
+        ? work.listParticipants(projectId, { search: query, page, page_size: 25 })
         : Promise.resolve(null),
-    [projectId, search, page],
+    [projectId, query, page],
   );
   const { busy, error, message, run, setMessage } = useAction(list.reload);
   const confirm = useConfirm(setMessage);
@@ -212,16 +216,23 @@ export function ParticipantsPage() {
     <section aria-labelledby="participants-title" className="stack">
       <div className="page-header">
         <h1 id="participants-title">
-          <IconTile name="people" tone="blue" />
+          <IconTile name="people" />
           Participants
         </h1>
         <div className="actions">
-          <Button variant="secondary" disabled={!projectId} onClick={() => setBulkAdd(!bulkAdd)}>
-            <Icon name="upload" size={15} />
+          <Button
+            variant="secondary"
+            icon="fileUp"
+            disabled={!projectId}
+            onClick={() => setBulkAdd(!bulkAdd)}
+          >
             Add many
           </Button>
-          <Button disabled={!projectId} onClick={() => windows.open({ kind: "add" })}>
-            <Icon name="plus" size={15} weight="bold" />
+          <Button
+            icon="userPlus"
+            disabled={!projectId}
+            onClick={() => windows.open({ kind: "add" })}
+          >
             Add participant
           </Button>
         </div>
@@ -306,6 +317,7 @@ export function ParticipantsPage() {
           />
           <Button
             variant="secondary"
+            icon="projects"
             busy={busy === "bulk-assign"}
             disabled={!target || busy !== null}
             onClick={assignSelected}
@@ -314,17 +326,27 @@ export function ParticipantsPage() {
           </Button>
           <Button
             variant="secondary"
+            icon="mail"
             busy={busy === "bulk-consent"}
             disabled={busy !== null}
             onClick={resendSelected}
           >
             Email consent form again
           </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={removeSelected}>
-            <Icon name="trash" size={15} />
+          <Button
+            variant="secondary"
+            icon="trash"
+            disabled={busy !== null}
+            onClick={removeSelected}
+          >
             Remove
           </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => setSelected([])}>
+          <Button
+            variant="secondary"
+            icon="close"
+            disabled={busy !== null}
+            onClick={() => setSelected([])}
+          >
             Clear selection
           </Button>
         </div>
@@ -395,36 +417,32 @@ export function ParticipantsPage() {
                         <span className="muted">Removed</span>
                       ) : (
                         <>
+                          <IconButton
+                            icon="eye"
+                            label="View"
+                            onClick={() => windows.open({ kind: "details", participant: p })}
+                          />
+                          <IconButton
+                            icon="history"
+                            label="Consent history"
+                            onClick={() => windows.open({ kind: "history", participant: p })}
+                          />
                           {p.has_email && p.consent_status !== "GIVEN" ? (
-                            <Button
-                              variant="secondary"
+                            <IconButton
+                              icon="mail"
+                              label="Email consent form again"
                               busy={busy === `email-${p.id}`}
                               disabled={busy !== null}
                               onClick={() =>
                                 void run(() => work.emailConsentForm(projectId, p), `email-${p.id}`)
                               }
-                            >
-                              Email consent form again
-                            </Button>
+                            />
                           ) : null}
-                          <Button
-                            variant="secondary"
-                            onClick={() => windows.open({ kind: "details", participant: p })}
-                          >
-                            View
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => windows.open({ kind: "history", participant: p })}
-                          >
-                            Consent history
-                          </Button>
-                          <Button
-                            variant="secondary"
+                          <IconButton
+                            icon="pencil"
+                            label="Edit"
                             onClick={() => windows.open({ kind: "edit", participant: p })}
-                          >
-                            Edit
-                          </Button>
+                          />
                         </>
                       )}
                     </td>

@@ -28,11 +28,18 @@
 .checks--facts {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
+/* A participant in the task's facts: the name, then the code and the consent answer under it. */
 .party {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.party__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .code-tag {
   padding: 1px 8px;
@@ -274,4 +281,15 @@
   display: block;
   width: 100%;
   max-width: 560px;
+}
+/* The audio check's summary line with its "Show all checks" button. */
+.qc__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.qc__summary p {
+  margin: 0;
 }

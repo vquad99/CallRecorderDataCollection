@@ -216,6 +216,10 @@ def test_moderators_are_paid_on_approved_minutes_at_their_projects_rates(
     # Days the wrong way round.
     backwards = get(pay["sa"], "moderators", date_from="2026-11-11", date_to="2026-11-10")
     assert backwards.status_code == 422
+    assert (backwards.json()["error"]["code"], backwards.json()["error"]["message"]) == (
+        "VALIDATION_ERROR",
+        "The first day must not be after the last day",
+    )
 
 
 def test_participants_are_paid_on_their_share_and_a_missing_rate_shows_no_amount(

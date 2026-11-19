@@ -797,13 +797,6 @@ CASES: list[Case] = [
     ),
     case(
         "POST",
-        PP + "/portal-link",
-        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link",
-        {SA, PA},
-        Perm.PARTICIPANTS_MANAGE,
-    ),
-    case(
-        "POST",
         PP + "/portal-link/email",
         lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/portal-link/email",
         {SA, PA},

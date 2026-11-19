@@ -224,7 +224,7 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
   const answer = p.consent_status ? consentAnswer(p.consent_status) : null;
   return (
     <div className="pd-head">
-      <IconTile name="user" tone="blue" size={46} />
+      <IconTile name="user" size={46} />
       <div className="pd-head__text">
         <h3>
           {p.participant_code}
@@ -248,8 +248,7 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
       </div>
       {onDownload ? (
         <div className="actions">
-          <Button variant="secondary" onClick={onDownload}>
-            <Icon name="download" size={15} />
+          <Button variant="secondary" icon="fileText" onClick={onDownload}>
             Download consent form
           </Button>
         </div>

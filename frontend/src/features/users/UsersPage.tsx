@@ -11,6 +11,7 @@ import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { Avatar, Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -35,35 +36,36 @@ export function UsersPage() {
       await viewAs(id);
       void navigate("/");
     }, id);
+  const query = useDebounced(search.trim());
   const { state, reload } = useResource(
-    () => listUsers({ search, role, status, page, page_size: PAGE_SIZE }),
-    [search, role, status, page],
+    () => listUsers({ search: query, role, status, page, page_size: PAGE_SIZE }),
+    [query, role, status, page],
   );
 
   return (
     <section aria-labelledby="users-title" className="stack">
       <div className="page-header">
         <h1 id="users-title">
-          <IconTile name="users" tone="violet" />
+          <IconTile name="users" />
           Users
         </h1>
         <div className="actions">
           <Link className="button button--primary" to="/admin/users/new">
-            <Icon name="plus" size={18} weight="bold" />
+            <Icon name="userPlus" size={16} />
             Add user
           </Link>
           <Link className="button button--secondary" to="/admin/users/import">
-            <Icon name="upload" size={18} />
+            <Icon name="fileUp" size={16} />
             Import CSV
           </Link>
           <Button
             variant="secondary"
+            icon="fileCsv"
             busy={busy === "export"}
             onClick={() =>
               void run(() => apiDownload("/api/v1/users/export", "users.csv"), "export")
             }
           >
-            <Icon name="download" size={18} />
             Export CSV
           </Button>
         </div>
@@ -152,6 +154,7 @@ export function UsersPage() {
                       {u.status === "ACTIVE" && u.id !== me?.id ? (
                         <Button
                           variant="secondary"
+                          icon="eye"
                           aria-label={`View as ${u.display_name}`}
                           busy={busy === u.id}
                           onClick={() => startViewing(u.id)}

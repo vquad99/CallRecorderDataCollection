@@ -10,11 +10,12 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon, IconTile } from "../../components/Icon";
+import { IconTile } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { rupees, when } from "../../lib/format";
 
@@ -35,10 +36,10 @@ function Totals({ totals, columns }: { totals: pay.PayTotals; columns: number })
         <th scope="row" colSpan={columns}>
           Total
         </th>
-        <td>{totals.count}</td>
-        <td>{totals.minutes}</td>
+        <td className="num">{totals.count}</td>
+        <td className="num">{totals.minutes}</td>
         <td />
-        <td>
+        <td className="num">
           <strong>{rupees(totals.amount)}</strong>
           {Number(totals.minutes_without_rate) > 0 ? (
             <div className="muted">
@@ -58,10 +59,18 @@ function ModeratorTable({ data }: { data: pay.Payments<pay.ModeratorPay> }) {
         <tr>
           <th scope="col">Project</th>
           <th scope="col">Moderator</th>
-          <th scope="col">Approved tasks</th>
-          <th scope="col">Approved minutes</th>
-          <th scope="col">Rate</th>
-          <th scope="col">Amount</th>
+          <th scope="col" className="num">
+            Approved tasks
+          </th>
+          <th scope="col" className="num">
+            Approved minutes
+          </th>
+          <th scope="col" className="num">
+            Rate
+          </th>
+          <th scope="col" className="num">
+            Amount
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -69,10 +78,10 @@ function ModeratorTable({ data }: { data: pay.Payments<pay.ModeratorPay> }) {
           <tr key={`${r.project_id}-${r.user_id}`}>
             <td>{r.project_code}</td>
             <td>{r.name}</td>
-            <td>{r.approved_tasks}</td>
-            <td>{r.approved_minutes}</td>
-            <td>{rate(r.rate)}</td>
-            <td>{amount(r.amount)}</td>
+            <td className="num">{r.approved_tasks}</td>
+            <td className="num">{r.approved_minutes}</td>
+            <td className="num">{rate(r.rate)}</td>
+            <td className="num">{amount(r.amount)}</td>
           </tr>
         ))}
       </tbody>
@@ -89,10 +98,18 @@ function ParticipantTable({ data }: { data: pay.Payments<pay.ParticipantPay> }) 
           <th scope="col">Project</th>
           <th scope="col">Code</th>
           <th scope="col">Name</th>
-          <th scope="col">Approved sessions</th>
-          <th scope="col">Payable minutes</th>
-          <th scope="col">Rate</th>
-          <th scope="col">Amount</th>
+          <th scope="col" className="num">
+            Approved sessions
+          </th>
+          <th scope="col" className="num">
+            Payable minutes
+          </th>
+          <th scope="col" className="num">
+            Rate
+          </th>
+          <th scope="col" className="num">
+            Amount
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -103,10 +120,10 @@ function ParticipantTable({ data }: { data: pay.Payments<pay.ParticipantPay> }) 
               <span className="code-tag">{r.participant_code}</span>
             </td>
             <td>{r.name ?? "-"}</td>
-            <td>{r.approved_sessions}</td>
-            <td>{r.payable_minutes}</td>
-            <td>{rate(r.rate)}</td>
-            <td>{amount(r.amount)}</td>
+            <td className="num">{r.approved_sessions}</td>
+            <td className="num">{r.payable_minutes}</td>
+            <td className="num">{rate(r.rate)}</td>
+            <td className="num">{amount(r.amount)}</td>
           </tr>
         ))}
       </tbody>
@@ -128,7 +145,8 @@ function Earnings<Row>({
   show: (data: pay.Payments<Row>) => ReactNode;
 }) {
   const [search, setSearch] = useState("");
-  const asked = { ...filters, search: search.trim() || undefined };
+  const query = useDebounced(search.trim());
+  const asked = { ...filters, search: query || undefined };
   const { state, reload } = useResource(() => load(asked), [JSON.stringify(asked)]);
   const download = useAction();
   return (
@@ -142,10 +160,10 @@ function Earnings<Row>({
         />
         <Button
           variant="secondary"
+          icon="fileCsv"
           busy={download.busy !== null}
           onClick={() => void download.run(() => pay.downloadPay(who, asked))}
         >
-          <Icon name="download" size={15} />
           Download CSV
         </Button>
       </div>
@@ -269,6 +287,7 @@ function Rates({
                 <td>
                   <Button
                     variant="secondary"
+                    icon="pencil"
                     aria-label={`Change rates of ${p.project_code}`}
                     onClick={() => {
                       setMessage(null);
@@ -319,7 +338,7 @@ export function PaymentsPage() {
       <div className="page-header">
         <div className="page-header__text">
           <h1 id="payments-title">
-            <IconTile name="money" tone="green" />
+            <IconTile name="money" />
             Payments
           </h1>
           <p className="page-header__lead">
@@ -327,22 +346,20 @@ export function PaymentsPage() {
             per approved minute.
           </p>
         </div>
-        <div className="toolbar">
-          <Select
-            label="Project"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            options={[
-              { value: "", label: "All my projects" },
-              ...projects.map((p) => ({
-                value: p.project_id,
-                label: `${p.project_code} · ${p.project_name}`,
-              })),
-            ]}
-          />
-        </div>
       </div>
-      <div className="filters" role="group" aria-label="Approval days">
+      <div className="filters" role="group" aria-label="Project and approval days">
+        <Select
+          label="Project"
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+          options={[
+            { value: "", label: "All my projects" },
+            ...projects.map((p) => ({
+              value: p.project_id,
+              label: `${p.project_code} · ${p.project_name}`,
+            })),
+          ]}
+        />
         <TextField
           label="Approved from"
           type="date"

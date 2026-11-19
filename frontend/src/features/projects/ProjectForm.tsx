@@ -112,22 +112,24 @@ export function ProjectForm({
             Face-to-face
           </label>
         </fieldset>
-        <TextField
-          label="Phone call target (hours per day)"
-          type="number"
-          min={0}
-          step="0.5"
-          value={f.target_telephony_hours_per_day}
-          onChange={(e) => set("target_telephony_hours_per_day", e.target.value)}
-        />
-        <TextField
-          label="Face-to-face target (hours per day)"
-          type="number"
-          min={0}
-          step="0.5"
-          value={f.target_face_to_face_hours_per_day}
-          onChange={(e) => set("target_face_to_face_hours_per_day", e.target.value)}
-        />
+        <div className="form-grid">
+          <TextField
+            label="Phone call target (hours per day)"
+            type="number"
+            min={0}
+            step="0.5"
+            value={f.target_telephony_hours_per_day}
+            onChange={(e) => set("target_telephony_hours_per_day", e.target.value)}
+          />
+          <TextField
+            label="Face-to-face target (hours per day)"
+            type="number"
+            min={0}
+            step="0.5"
+            value={f.target_face_to_face_hours_per_day}
+            onChange={(e) => set("target_face_to_face_hours_per_day", e.target.value)}
+          />
+        </div>
         <Select
           label="Who may see participant phone numbers"
           value={f.phone_visibility_policy}

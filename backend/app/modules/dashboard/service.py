@@ -34,7 +34,7 @@ from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.core.days import start_of
+from app.core.days import day_bounds
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm
 from app.modules.audio_qc.models import AudioQcResult
@@ -164,22 +164,16 @@ def summary(
         # Other people's work is for those who run the project.
         raise forbidden()
 
-    tz = ZoneInfo(timezone)
-    today = datetime.now(UTC).astimezone(tz).date()
+    today = datetime.now(UTC).astimezone(ZoneInfo(timezone)).date()
     chosen_days = f.date_from is not None or f.date_to is not None
+    # Without chosen days: the last N days up to today.
+    last_day = f.date_to or today
+    first_day = f.date_from or last_day - timedelta(days=days - 1)
+    range_start, range_end = day_bounds(first_day, last_day, timezone)
     if chosen_days:
-        last_day = f.date_to or today
-        first_day = f.date_from or last_day - timedelta(days=days - 1)
-        if first_day > last_day:
-            raise _invalid("The first day must not be after the last day")
         if (last_day - first_day).days >= MAX_RANGE_DAYS:
             raise _invalid(f"Choose at most {MAX_RANGE_DAYS} days")
         days = (last_day - first_day).days + 1
-    else:
-        last_day = today
-        first_day = today - timedelta(days=days - 1)
-    range_start = start_of(first_day, tz)
-    range_end = start_of(last_day + timedelta(days=1), tz)
 
     # What narrows the tasks themselves: project, mode, status, and who speaks.
     on_task: list[Any] = []
@@ -225,7 +219,9 @@ def summary(
             query = query.where(Task.created_at >= range_start, Task.created_at < range_end)
         return query
 
-    final = final_length_subquery()
+    # Lengths of the recordings of the tasks in view only (every task's for a Super Admin's
+    # unfiltered view).
+    final = final_length_subquery(select(Task.id).where(*on_task) if on_task else None)
     approved = Task.status == "APPROVED"
     day = func.date(func.timezone(timezone, Recording.started_at)).label("day")
     base = (

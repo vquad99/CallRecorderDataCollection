@@ -615,6 +615,10 @@ def test_one_approved_task_downloads_as_a_bundle_from_its_page(w: dict[str, Any]
         f"face_to_face/consent/{stem}.html",
         f"face_to_face/metadata/{stem}.json",
     ]
+    # Audio goes in as it is (a WAV barely shrinks); everything else is deflated.
+    method = {i.filename: i.compress_type for i in archive.infolist()}
+    assert method.pop(f"face_to_face/audio/{stem}.wav") == zipfile.ZIP_STORED
+    assert set(method.values()) == {zipfile.ZIP_DEFLATED}
     assert sorted(n for n in names if "/" not in n) == [
         "README.txt",
         "SHA256SUMS",
@@ -638,3 +642,30 @@ def test_one_approved_task_downloads_as_a_bundle_from_its_page(w: dict[str, Any]
     # The moderator may not export; the phone task is not approved.
     assert w["mod"].get(f"/api/v1/tasks/{ftf}/export").status_code == 403
     assert pa.get(f"/api/v1/tasks/{w['phone_task']}/export").status_code == 409
+
+
+def test_only_a_few_task_bundles_are_made_at_once(
+    w: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each is made inside the request, on the server's disk: with every slot taken, the next
+    person is told to try again (503 BUSY) instead of waiting without end."""
+    from app.modules.exports import service
+
+    pa: Api = w["pa"]
+    ftf = w["ftf_task"]
+    set_status(w["db"], ftf, "APPROVED")
+    assert service.BUILD_SLOTS == 2
+    monkeypatch.setattr(service, "BUILD_WAIT_SECONDS", 0.05)
+    for _ in range(service.BUILD_SLOTS):
+        service._builds.acquire()  # every slot busy
+    try:
+        busy = pa.get(f"/api/v1/tasks/{ftf}/export")
+    finally:
+        for _ in range(service.BUILD_SLOTS):
+            service._builds.release()
+    assert busy.status_code == 503
+    assert busy.json()["error"]["code"] == "BUSY"
+    assert busy.json()["error"]["message"] == (
+        "Another download is being prepared. Try again in a minute."
+    )
+    assert pa.get(f"/api/v1/tasks/{ftf}/export").status_code == 200

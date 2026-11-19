@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -49,6 +50,17 @@ def get_user(db: Session, user_id: uuid.UUID) -> User:
     if user is None:
         raise not_found("User")
     return user
+
+
+def display_names(db: Session, user_ids: Iterable[uuid.UUID | None]) -> dict[uuid.UUID, str]:
+    """{id: display name} of these accounts (None is skipped), in one query."""
+    ids = {u for u in user_ids if u is not None}
+    if not ids:
+        return {}
+    return {
+        uid: name
+        for uid, name in db.execute(select(User.id, User.display_name).where(User.id.in_(ids)))
+    }
 
 
 def list_users(

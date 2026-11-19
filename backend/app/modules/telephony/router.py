@@ -12,16 +12,15 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.adapters.telephony import ProviderError
 from app.api.deps import AppSettings, Cipher, Provider
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.auth.models import User
 from app.modules.telephony import analytics, service
 from app.modules.telephony.models import Call, CallEvent
+from app.modules.users.service import display_names
 
 router = APIRouter(tags=["telephony"], dependencies=[Depends(require(Perm.TASKS_VIEW))])
 users_router = APIRouter(tags=["telephony"], dependencies=[Depends(require(Perm.USERS_MANAGE))])
@@ -130,16 +129,7 @@ def _out(db: DbSession, calls: list[Call]) -> list[CallOut]:
     people = {c.moderator_id for c in calls} | {
         e.actor_id for es in events.values() for e in es if e.actor_id
     }
-    names: dict[uuid.UUID, str] = (
-        {
-            uid: name
-            for uid, name in db.execute(
-                select(User.id, User.display_name).where(User.id.in_(people))
-            ).all()
-        }
-        if people
-        else {}
-    )
+    names = display_names(db, people)
 
     def event(e: CallEvent) -> EventOut:
         actor = names.get(e.actor_id) if e.actor_id else None

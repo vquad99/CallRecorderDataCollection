@@ -58,6 +58,7 @@ from app.modules.tasks import workflow
 from app.modules.tasks.models import Task
 from app.modules.telephony import service as telephony
 from app.modules.telephony.models import Call, CallEvent
+from app.modules.users.service import display_names
 
 logger = logging.getLogger("app.audio_qc")
 
@@ -655,18 +656,7 @@ def _call_details(db: Session, rec: Recording) -> dict[str, Any] | None:
     events = db.scalars(
         select(CallEvent).where(CallEvent.call_id == call.id).order_by(CallEvent.created_at)
     ).all()
-    actors = (
-        {
-            uid: name
-            for uid, name in db.execute(
-                select(User.id, User.display_name).where(
-                    User.id.in_({e.actor_id for e in events if e.actor_id})
-                )
-            ).all()
-        }
-        if any(e.actor_id for e in events)
-        else {}
-    )
+    actors = display_names(db, (e.actor_id for e in events))
     return {
         "id": str(call.id),
         "provider": call.provider,

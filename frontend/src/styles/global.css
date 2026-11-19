@@ -72,6 +72,22 @@
   --slate: #5a627d;
   --slate-soft: #edeef2;
 
+  /* Icon colours (D-141): mid-tone, 4.2:1 or more on white; tints are 12 % of each on white. */
+  --icon-blue: #1f72c0;
+  --icon-teal: #0e7c86;
+  --icon-violet: #6750c8;
+  --icon-amber: #b26b00;
+  --icon-rose: #c8383d;
+  --icon-green: #1e8449;
+  --icon-slate: #5f6a86;
+  --tint-blue: #e4eef7;
+  --tint-teal: #e2eff0;
+  --tint-violet: #edeaf8;
+  --tint-amber: #f6ede0;
+  --tint-rose: #f8e7e8;
+  --tint-green: #e4f0e9;
+  --tint-slate: #ecedf0;
+
   --nav-bg: #edeef2;
   --nav-text: #333847;
   --nav-muted: #5a627d;
@@ -190,6 +206,38 @@ summary:focus-visible {
 .icon {
   flex: none;
 }
+/* Each icon in its own colour (Icon.tsx); on filled buttons and the dark top bar, the text's. */
+.icon--blue {
+  color: var(--icon-blue);
+}
+.icon--teal {
+  color: var(--icon-teal);
+}
+.icon--violet {
+  color: var(--icon-violet);
+}
+.icon--amber {
+  color: var(--icon-amber);
+}
+.icon--rose {
+  color: var(--icon-rose);
+}
+.icon--green {
+  color: var(--icon-green);
+}
+.icon--slate {
+  color: var(--icon-slate);
+}
+.button--primary .icon,
+.button--danger .icon,
+.topbar .icon,
+.view-as .icon,
+.badge .icon {
+  color: inherit;
+}
+.button:disabled .icon {
+  filter: grayscale(1);
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -220,47 +268,61 @@ summary:focus-visible {
   justify-content: center;
   border-radius: var(--radius-sm);
 }
-.tile--blue,
+.tile--blue {
+  background: var(--tint-blue);
+  color: var(--icon-blue);
+}
+.tile--teal {
+  background: var(--tint-teal);
+  color: var(--icon-teal);
+}
+.tile--violet {
+  background: var(--tint-violet);
+  color: var(--icon-violet);
+}
+.tile--amber {
+  background: var(--tint-amber);
+  color: var(--icon-amber);
+}
+.tile--rose {
+  background: var(--tint-rose);
+  color: var(--icon-rose);
+}
+.tile--green {
+  background: var(--tint-green);
+  color: var(--icon-green);
+}
+.tile--slate {
+  background: var(--tint-slate);
+  color: var(--icon-slate);
+}
 .avatar--blue {
   background: var(--blue-soft);
   color: var(--blue);
 }
-.tile--teal,
 .avatar--teal {
   background: var(--teal-soft);
   color: var(--teal);
 }
-.tile--violet,
 .avatar--violet {
   background: var(--violet-soft);
   color: var(--violet);
 }
-.tile--amber,
 .avatar--amber {
   background: var(--amber-soft);
   color: var(--amber);
 }
-.tile--rose,
 .avatar--rose {
   background: var(--rose-soft);
   color: var(--rose);
 }
-.tile--green,
 .avatar--green {
   background: var(--green-soft);
   color: var(--green);
 }
-.tile--slate {
-  background: var(--slate-soft);
-  color: var(--slate);
-}
-/* Titles carry no icon tiles in this look. */
-h1 > .tile,
-.page-header .tile,
-.page-header__text .tile,
-.stat__head .tile,
-.with-icon > .tile {
-  display: none;
+/* A page title's tile is a little rounder than the rest (D-141). */
+h1 > .tile {
+  border-radius: 8px;
 }
 .avatar {
   display: inline-flex;
@@ -340,9 +402,6 @@ h1 > .tile,
     background 0.15s var(--ease),
     color 0.15s var(--ease);
 }
-.sidenav__link .icon {
-  color: var(--k-600);
-}
 .sidenav__link:hover {
   background: var(--k-300);
   color: var(--text);
@@ -363,10 +422,6 @@ h1 > .tile,
   border-radius: 0 3px 3px 0;
   background: var(--accent);
   content: "";
-}
-.sidenav__link[aria-current="page"] .icon,
-.sidenav__link.active .icon {
-  color: var(--primary);
 }
 .sidenav__foot {
   display: flex;
@@ -472,9 +527,11 @@ h1 > .tile,
 }
 .topbar__signout {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   height: 34px;
+  white-space: nowrap;
   padding: 0 12px;
   border: 1px solid rgb(255 255 255 / 0.25);
   border-radius: var(--radius-sm);
@@ -506,20 +563,23 @@ h1 > .tile,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.phone-line__words::before {
-  display: inline-block;
+.phone-line::before {
+  flex: none;
   width: 8px;
   height: 8px;
-  margin-right: 6px;
   border-radius: 50%;
   background: var(--k-500);
   content: "";
 }
-.phone-line[data-status="ready"] .phone-line__words::before {
+.phone-line[data-status="ready"]::before {
   background: #4cc77f;
 }
-.phone-line[data-status="failed"] .phone-line__words::before {
+.phone-line[data-status="failed"]::before {
   background: #ff7a7a;
+}
+.phone-line__short {
+  display: none;
+  white-space: nowrap;
 }
 .phone-line__retry {
   padding: 0;
@@ -575,6 +635,23 @@ h1 > .tile,
   }
   .phone-line__words {
     max-width: 18ch;
+  }
+  /* A phone's top bar: Sign out as its icon, the phone line as its dot and state (D-141); the
+     full words stay for screen readers. */
+  .topbar__signout {
+    padding: 0 9px;
+  }
+  .topbar__signout-words,
+  .phone-line:has(.phone-line__short) .phone-line__words {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .phone-line__short {
+    display: inline;
   }
   .shell__content {
     padding: 18px var(--gutter) 56px;
@@ -873,6 +950,10 @@ h1 > .tile,
 .stack--tight {
   gap: 10px;
 }
+/* A button in a column keeps its own width. */
+.stack > .button {
+  align-self: flex-start;
+}
 .page-header {
   display: flex;
   flex-wrap: wrap;
@@ -961,6 +1042,9 @@ fieldset.card legend,
 .break {
   overflow-wrap: anywhere;
 }
+.nowrap {
+  white-space: nowrap;
+}
 .bulkbar {
   display: flex;
   flex-wrap: wrap;
@@ -1032,12 +1116,14 @@ fieldset.card legend,
   color: var(--text);
   text-decoration: none;
 }
+/* A clear red, not a dark one (D-141): white on it is 5.4:1. */
 .button--danger {
-  background: var(--danger);
+  background: #c62f34;
   color: #fff;
+  box-shadow: 0 1px 2px rgb(198 47 52 / 0.3);
 }
 .button--danger:hover:not(:disabled) {
-  background: #7a0000;
+  background: #a5262a;
   color: #fff;
   text-decoration: none;
 }
@@ -1158,11 +1244,35 @@ input[type="radio"] {
 .filters .field {
   margin-bottom: 14px;
 }
+.card .filters {
+  padding: 0;
+  border: 0;
+}
 /* The button that takes the filters off sits on the line of the fields (D-108). */
 .filters > .button {
   align-self: end;
   justify-self: start;
   margin-bottom: 14px;
+}
+/* Forms on a wide screen (D-141): a field keeps a readable width instead of running across the
+   page, and figures and dates are short. Filter bars and windows keep their own layout. */
+.shell__content form .field {
+  max-width: 640px;
+}
+.shell__content form .field:has(> input[type="number"]),
+.shell__content form .field:has(> input[type="date"]) {
+  max-width: 280px;
+}
+/* Short fields side by side; their boxes line up even when only some have a hint. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  align-items: end;
+  gap: 0 20px;
+  max-width: 900px;
+}
+.form-grid .field {
+  max-width: none;
 }
 /* A group of choices laid out like a field (checkboxes under one label). */
 fieldset.field {
@@ -1216,6 +1326,18 @@ fieldset.field legend {
 .table tbody tr:last-child td {
   border-bottom: 0;
 }
+/* A totals line: one light band across the whole row, its figures in bold. */
+.table tfoot th,
+.table tfoot td {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.table tfoot .muted {
+  font-weight: 400;
+}
 .table tbody tr {
   transition: background 0.12s var(--ease);
 }
@@ -1257,13 +1379,16 @@ fieldset.field legend {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  vertical-align: middle;
+}
+/* Tick boxes in a table sit on the middle of their row's text. */
+.table th > input[type="checkbox"],
+.table td > input[type="checkbox"] {
+  vertical-align: middle;
 }
 .cell-icon {
   gap: 7px;
   color: var(--text-2);
-}
-.cell-icon .icon {
-  color: var(--muted);
 }
 /* Row actions in a table: compact blue text buttons. The cell stays a table cell so the row's
    line runs through it. */
@@ -1282,6 +1407,35 @@ fieldset.field legend {
 .table td.actions .button:hover:not(:disabled) {
   background: var(--primary-soft);
 }
+/* A row's actions as icons (D-141): the words show on hover and are read by screen readers. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.icon-button:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--k-200);
+  text-decoration: none;
+}
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.icon-button + .icon-button {
+  margin-left: 2px;
+}
 /* Narrow screens: a table scrolls sideways rather than wrapping words in its cells. */
 @media (max-width: 640px) {
   .table td {
@@ -1291,12 +1445,9 @@ fieldset.field legend {
 
 /* Codes: plain monospace; in a list they are blue links. */
 a.code {
-  padding: 0;
-  border-radius: 6px;
-  background: transparent;
   color: var(--primary);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 a.code:hover {
   text-decoration: underline;

@@ -220,7 +220,7 @@ One task's bundle (D-136):
 
 | Method | Path | What |
 |---|---|---|
-| GET | /tasks/{id}/export | `exports.create` in the task's project and the task visible (Super Admin, Project Admin). A ZIP attachment made at once: the same folders and tables as a bundle above, for this task's current recording only (audio + metadata, approved tasks, CSV); name `both_<project>_<task>_<YYYYMMDD_HHMM>.zip`. 409 `TASK_NOT_APPROVED` before the task is approved, `NOTHING_TO_EXPORT` without a finished recording, `EXPORT_FAILED` when a stored file no longer matches its checksum; 503 without storage. Audited as `task.exported` |
+| GET | /tasks/{id}/export | `exports.create` in the task's project and the task visible (Super Admin, Project Admin). A ZIP attachment made at once: the same folders and tables as a bundle above, for this task's current recording only (audio + metadata, approved tasks, CSV); name `both_<project>_<task>_<YYYYMMDD_HHMM>.zip`. 409 `TASK_NOT_APPROVED` before the task is approved, `NOTHING_TO_EXPORT` without a finished recording, `EXPORT_FAILED` when a stored file no longer matches its checksum; 503 without storage, and 503 `BUSY` when two are already being made in this server process (D-142). Audited as `task.exported` |
 
 ## Payments (D-137)
 
@@ -266,7 +266,6 @@ to all approved work, including work approved before it was changed.
 
 | Method | Path | Access |
 |---|---|---|
-| POST | /projects/{id}/participants/{id}/portal-link | `participants.manage` in the project. Answers `{url, expires_at}` once; ends any earlier link. |
 | DELETE | /projects/{id}/participants/{id}/portal-link | `participants.manage`. Ends the link. |
 | GET | /portal/me | Public; header `X-Portal-Token`. The participant's code, project name, consent form and answer, own sessions, accepted minutes. 404 `LINK_INVALID` for any link that does not work. |
 | POST | /portal/consent | Public; header `X-Portal-Token` and the CSRF token. Body `{decision: GIVEN / REFUSED}`; WITHDRAWN is refused (422). The answer counts at once (D-129). The same answer again changes nothing; any other answer after GIVEN gets 409 `ALREADY_AGREED`; 409 `CONSENT_FORM_MISSING`. |
@@ -275,7 +274,7 @@ Projects carry `consent_text` (up to 20 000 characters) beside `consent_policy_v
 history, `captured_by` is `null` for the participant's own answers.
 
 | GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |
-| POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`. Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
+| POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`; 409 `EMAILED_RECENTLY` within 10 minutes of the last email of this project's link (D-142; joining, import and bulk rows say "Emailed less than 10 minutes ago: not sent again."). A link whose email could not be sent is ended at once. Staff never get the link itself: the old `POST .../portal-link` that answered `{url}` is removed (405, D-142). Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
 | POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]`; answers each row's result, `ready`, `created`; an added row's message says what happened to the consent form email (D-129). Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
 | POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result (an assigned one's message says what happened to the other project's consent form email, D-129). Participants carry `consent_status` (their answer as it counts now; `NONE` = no answer yet) and `link_active` for callers who may see consent. |
 | GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer, earlier answers. |
@@ -286,6 +285,10 @@ history, `captured_by` is `null` for the participant's own answers.
 ## Request guard (D-124)
 
 A POST, PUT, PATCH or DELETE under `/api/v1/` without the session cookie gets 401, and one without the CSRF cookie or `X-CSRF-Token` header gets 403 `CSRF_FAILED`, **before its body is read**. Only `/auth/login`, `/auth/password/forgot`, `/auth/password/reset` (also invitation accept) and `/portal/consent` work without a session. Large bodies are read at most 16 at a time per process; a request that waits more than 15 s gets 503 `BUSY`. nginx limits `/api/` to 30 requests/s per address (burst 120) and chunk uploads to 5/s (burst 30, slowed rather than refused), with a JSON 429 when exceeded. Every list's `page` is at most 10 000. `TaskDetail` carries `can_reassign`; participants carry `phone_masked` (D-125). The task status `RETURNED` no longer exists (D-118, migration 0026): sending it gives 422.
+
+## The page's own requests (D-141)
+
+A request with the header `X-Background-Request: 1` (the page's own polling: a phone call or an export being prepared) is answered as usual but does not count as use: it does not move the session's idle clock (`last_seen_at`), so a session left open still ends after `session_idle_minutes` without the person's own requests (D-140). The header is optional and changes nothing else.
 
 ## Consent on tasks (D-127)
 

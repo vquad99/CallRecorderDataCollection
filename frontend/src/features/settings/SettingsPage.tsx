@@ -41,18 +41,20 @@ function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting
 
   return (
     <form onSubmit={submit} noValidate className="card">
-      {settings.map((s) => (
-        <TextField
-          key={s.key}
-          label={LABELS[s.key] ?? s.key}
-          hint={`Allowed: ${s.min_value} to ${s.max_value}`}
-          type="number"
-          min={s.min_value}
-          max={s.max_value}
-          value={values[s.key] ?? ""}
-          onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
-        />
-      ))}
+      <div className="form-grid">
+        {settings.map((s) => (
+          <TextField
+            key={s.key}
+            label={LABELS[s.key] ?? s.key}
+            hint={`Allowed: ${s.min_value} to ${s.max_value}`}
+            type="number"
+            min={s.min_value}
+            max={s.max_value}
+            value={values[s.key] ?? ""}
+            onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
+          />
+        ))}
+      </div>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       <Button type="submit" busy={busy !== null}>
@@ -67,7 +69,7 @@ export function SettingsPage() {
   return (
     <section aria-labelledby="settings-title" className="stack">
       <h1 id="settings-title">
-        <IconTile name="settings" tone="slate" />
+        <IconTile name="settings" />
         Capacity targets
       </h1>
       <p>Targets used for planning and reports. They are goals, not proof of capacity.</p>

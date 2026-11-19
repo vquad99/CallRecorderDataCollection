@@ -27,6 +27,7 @@ from app.modules.projects.models import ProjectMembership
 from app.modules.projects.service import ensure_accepts_new_work, get_manageable
 from app.modules.tasks import workflow
 from app.modules.tasks.models import Task, TaskAssignment, TaskComment, TaskStatusHistory
+from app.modules.users.service import display_names
 
 # Statuses in which the moderator may still be changed.
 REASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "ON_HOLD"})
@@ -677,9 +678,7 @@ def timeline(db: Session, principal: Principal, task_id: uuid.UUID) -> list[Time
     # Names of the people this task's history mentions, not of every account (O5).
     people = {h.actor_id for h in history} | {c.author_id for c in comments}
     people |= {a.user_id for a in assignments} | {a.assigned_by for a in assignments}
-    people.discard(None)
-    rows = db.execute(select(User.id, User.display_name).where(User.id.in_(people))).all()
-    names = {user_id: name for user_id, name in rows}
+    names = display_names(db, people)
     entries: list[TimelineEntry] = []
     for h in history:
         label = f"{h.from_status or 'created'} -> {h.to_status}"

@@ -165,7 +165,11 @@ export function AppShell() {
                   <NavLink key={l.to} to={l.to} className="sidenav__link">
                     {({ isActive }) => (
                       <>
-                        <Icon name={l.icon} size={18} weight={isActive ? "fill" : "regular"} />
+                        <Icon
+                          name={l.icon}
+                          size={18}
+                          {...(isActive ? { weight: "fill" as const } : {})}
+                        />
                         {l.label}
                       </>
                     )}
@@ -214,10 +218,11 @@ export function AppShell() {
               <button
                 type="button"
                 className="topbar__signout"
+                title="Sign out"
                 onClick={() => void signOut().then(() => navigate("/login"))}
               >
                 <Icon name="logout" size={16} />
-                Sign out
+                <span className="topbar__signout-words">Sign out</span>
               </button>
             </div>
           </header>

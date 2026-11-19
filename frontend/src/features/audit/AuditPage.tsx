@@ -8,6 +8,7 @@ import { TextField } from "../../components/form/TextField";
 import { IconTile } from "../../components/Icon";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { labelFor } from "../../lib/labels";
@@ -49,8 +50,8 @@ export function AuditPage() {
   const [action, setAction] = useState("");
   const [entityType, setEntityType] = useState("");
   const [page, setPage] = useState(1);
-  // An exact action typed in wins over the area.
-  const asked = action.trim() || area;
+  // An exact action typed in wins over the area; asked once typing pauses.
+  const asked = useDebounced(action.trim()) || area;
   const { state, reload } = useResource(
     () => listAudit({ action: asked, entity_type: entityType, page, page_size: 50 }),
     [asked, entityType, page],
@@ -58,7 +59,7 @@ export function AuditPage() {
   return (
     <section aria-labelledby="audit-title" className="stack">
       <h1 id="audit-title">
-        <IconTile name="audit" tone="slate" />
+        <IconTile name="audit" />
         Audit log
       </h1>
       <div className="filters">
@@ -116,12 +117,18 @@ export function AuditPage() {
             <tbody>
               {state.data.items.map((e) => (
                 <tr key={e.id}>
-                  <td>{when(e.created_at)}</td>
-                  <td>{e.actor_email ?? "Platform"}</td>
-                  <td className="mono">{e.action}</td>
+                  <td className="nowrap">{when(e.created_at)}</td>
+                  <td className="break">{e.actor_email ?? "Platform"}</td>
+                  <td>
+                    <code>{e.action}</code>
+                  </td>
                   <td>
                     {labelFor(RECORD_TYPES, e.entity_type)}
-                    {e.entity_id ? <div className="muted mono break">{e.entity_id}</div> : null}
+                    {e.entity_id ? (
+                      <div className="muted mono" title={e.entity_id}>
+                        {e.entity_id.slice(0, 8)}
+                      </div>
+                    ) : null}
                   </td>
                   <td>
                     {show(e.before) || show(e.after) ? (

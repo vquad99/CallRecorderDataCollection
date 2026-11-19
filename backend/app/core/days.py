@@ -7,16 +7,30 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from app.core.errors import AppError
+
 
 def start_of(day: date, zone: ZoneInfo) -> datetime:
     """Midnight at the start of `day` in `zone`."""
     return datetime.combine(day, time.min, zone)
 
 
+def check_days(first: date | None, last: date | None) -> None:
+    """422 when both days are given and the first is after the last."""
+    if first and last and first > last:
+        raise AppError(
+            "The first day must not be after the last day",
+            code="VALIDATION_ERROR",
+            status_code=422,
+        )
+
+
 def day_bounds(
     first: date | None, last: date | None, tz_name: str
 ) -> tuple[datetime | None, datetime | None]:
-    """(start, end) for times t with start <= t < end; a day not given leaves that end open."""
+    """(start, end) for times t with start <= t < end; a day not given leaves that end open.
+    The days are checked first (check_days)."""
+    check_days(first, last)
     zone = ZoneInfo(tz_name)
     return (
         start_of(first, zone) if first else None,

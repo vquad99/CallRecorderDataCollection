@@ -183,7 +183,7 @@ def get(
         ).all():
             moderators[tid] = display_name
         # Finished recordings of each session: how many, and the newest one's length and time.
-        length = final_length_subquery()
+        length = final_length_subquery(task_ids)
         for tid, started_at, ms in db.execute(
             select(Recording.task_id, Recording.started_at, length.c.ms)
             .outerjoin(length, length.c.recording_id == Recording.id)

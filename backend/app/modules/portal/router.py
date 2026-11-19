@@ -1,5 +1,6 @@
 """Participant personal page API (D-067). Public: the personal link's secret, sent in the
-X-Portal-Token header, is the only credential. Staff create and revoke links under the project."""
+X-Portal-Token header, is the only credential. Staff email and revoke links under the project;
+the link itself goes only to the participant's email, never to staff."""
 
 from __future__ import annotations
 
@@ -74,32 +75,6 @@ class ConsentBody(BaseModel):
 def answer_consent(body: ConsentBody, token: Token, request: Request, db: DbSession) -> PortalOut:
     service.answer_consent(db, token, body.decision, client_ip(request))
     return PortalOut.model_validate(service.view(db, token), from_attributes=True)
-
-
-class LinkOut(BaseModel):
-    url: str
-    expires_at: datetime
-
-
-@staff_router.post("", response_model=LinkOut, status_code=201)
-def create_link(
-    project_id: uuid.UUID,
-    participant_id: uuid.UUID,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DbSession,
-    settings: AppSettings,
-) -> LinkOut:
-    url, expires = service.create_link(
-        db,
-        settings,
-        principal,
-        project_id,
-        participant_id,
-        client_ip(request),
-        shown_to_staff=True,
-    )
-    return LinkOut(url=url, expires_at=expires)
 
 
 class EmailedOut(BaseModel):

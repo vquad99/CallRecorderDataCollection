@@ -195,11 +195,22 @@ def test_one_consent_form_can_be_viewed_and_downloaded(world: dict[str, Any]) ->
 
 def test_an_answer_on_a_link_handed_out_by_staff_says_so(world: dict[str, Any]) -> None:
     """D-088: whoever was shown a link could have answered on it; with nobody reviewing answers
-    (D-129) the consent record says how the answer came in."""
-    pa, base = world["pa"], _base(world)
+    (D-129) the consent record says how the answer came in. Staff are no longer shown links, but
+    one handed out before still works and still says so."""
+    from app.modules.auth.security import hash_token
+    from app.modules.participants.models import ParticipantPortalLink
+
+    db, pa, base = world["db"], world["pa"], _base(world)
     _with_form(world)
     c = make_participant(pa, world["project"].id, "Chitra", agreed=False)["id"]
-    api, head = _visitor(world, _token(world, c))  # shown to the admin to pass on
+    token = _token(world, c)
+    db.execute(
+        update(ParticipantPortalLink)
+        .where(ParticipantPortalLink.token_hash == hash_token(token))
+        .values(shown_to_staff=True)
+    )
+    db.commit()
+    api, head = _visitor(world, token)
     api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head)
     assert "handed out by staff" in pa.get(f"{base}/{c}/consent-form/file").text
 
@@ -361,5 +372,22 @@ def test_the_consent_form_goes_again_to_everyone_chosen_who_has_not_agreed(
     by_code = {r["participant_code"]: r for r in sent["results"]}
     assert by_code[done["participant_code"]]["message"] == "Already agreed: no form sent"
     assert all(by_code[p["participant_code"]]["message"] == CONSENT_EMAILED for p in waiting)
+    # Someone not in the project, or who does not exist, is named as not found, in its place.
+    from app.modules.participants.models import Participant
+
+    elsewhere = Participant(participant_code="P990001", display_label="Kavi", language_code="hi")
+    db.add(elsewhere)
+    db.commit()
+    nobody = str(uuid.uuid4())
+    chosen = [nobody, done["id"], str(elsewhere.id)]
+    mixed = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": chosen})
+    assert [
+        (r["participant_id"], r["participant_code"], r["ok"], r["message"])
+        for r in mixed.json()["results"]
+    ] == [
+        (nobody, "?", False, "Participant not found"),
+        (done["id"], done["participant_code"], False, "Already agreed: no form sent"),
+        (str(elsewhere.id), "?", False, "Participant not found"),
+    ]
     # Only people who manage participants may do it.
     assert world["mod"].post(f"{base}/bulk", json=body).status_code == 403

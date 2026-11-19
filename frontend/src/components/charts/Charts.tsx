@@ -4,10 +4,8 @@ import { useId, useState, type ReactNode } from "react";
 
 import { dayLabel } from "../../lib/format";
 import { DataTable } from "../DataTable";
-import { IconTile, type IconName } from "../Icon";
+import { IconTile, type IconName, type Tone } from "../Icon";
 import "./charts.css";
-
-type Tone = "blue" | "teal" | "violet" | "amber" | "rose" | "green" | "slate";
 
 function Sparkline({ values }: { values: number[] }) {
   const max = Math.max(...values, 0.0001);
@@ -45,7 +43,7 @@ function Ring({ value }: { value: number }) {
 /** A key figure: label, big value, a note, and optionally a ring (percent) or a sparkline. */
 export function Stat({
   icon,
-  tone = "blue",
+  tone,
   label,
   value,
   note,
@@ -63,7 +61,7 @@ export function Stat({
   return (
     <div className="stat">
       <div className="stat__head">
-        <IconTile name={icon} tone={tone} size={34} />
+        <IconTile name={icon} {...(tone ? { tone } : {})} size={32} />
         <span className="stat__label">{label}</span>
       </div>
       <div className="stat__body">

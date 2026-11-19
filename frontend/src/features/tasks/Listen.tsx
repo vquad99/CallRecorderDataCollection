@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import * as rec from "../../api/recordings";
 import { Button } from "../../components/form/Button";
-import { Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
@@ -21,10 +20,10 @@ export function Player({ assetId, label = "Recording" }: { assetId: string; labe
     <div>
       <Button
         variant="secondary"
+        icon="play"
         busy={busy !== null}
         onClick={() => void run(async () => setSrc((await rec.assetUrl(assetId, "play")).url))}
       >
-        <Icon name="play" size={15} />
         Listen
       </Button>
       <ErrorNotice error={error} />

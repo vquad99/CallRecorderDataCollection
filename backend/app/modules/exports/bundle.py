@@ -36,7 +36,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.csvio import write_table
-from app.core.days import day_bounds
+from app.core.days import check_days, day_bounds
 from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
@@ -178,8 +178,7 @@ def check(db: Session, principal: Principal, project: Project, sel: Selection) -
         )
         if sel.language not in known:
             raise _invalid("This project has no recordings in that language")
-    if sel.recorded_from and sel.recorded_to and sel.recorded_from > sel.recorded_to:
-        raise _invalid("The first day must not be after the last day")
+    check_days(sel.recorded_from, sel.recorded_to)
     if sel.originals:
         if sel.content == "metadata":
             raise _invalid("Original recordings go with the audio: choose audio or both")
@@ -318,9 +317,13 @@ class _Sink:
         return data
 
 
-def _zip_time() -> tuple[int, int, int, int, int, int]:
+def _zip_entry(path: str, method: int) -> zipfile.ZipInfo:
+    """A file of the bundle, dated now (UTC), written with `method`: an entry keeps its own
+    method, whatever the ZipFile's."""
     now = datetime.now(UTC)
-    return (now.year, now.month, now.day, now.hour, now.minute, now.second)
+    entry = zipfile.ZipInfo(path, (now.year, now.month, now.day, now.hour, now.minute, now.second))
+    entry.compress_type = method
+    return entry
 
 
 @dataclass
@@ -351,7 +354,9 @@ class Bundle:
         if with_audio and self.storage is None:
             raise BundleError("File storage is not configured")
         sink = _Sink()
-        zf = zipfile.ZipFile(sink, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=1)
+        # Audio goes in stored: a WAV barely shrinks and deflating it costs time. The details
+        # files and tables are deflated.
+        zf = zipfile.ZipFile(sink, mode="w")
 
         def note(path: str, size: int, digest: str, kind: str, e: Entry | None) -> None:
             self.written.append(
@@ -367,14 +372,15 @@ class Bundle:
             )
 
         def put(path: str, body: bytes, kind: str, e: Entry | None = None) -> None:
-            zf.writestr(zipfile.ZipInfo(path, _zip_time()), body)
+            zf.writestr(_zip_entry(path, zipfile.ZIP_DEFLATED), body)
             note(path, len(body), hashlib.sha256(body).hexdigest(), kind, e)
 
         def copy(path: str, ref: FileRef, kind: str, e: Entry) -> Iterator[bytes]:
             assert self.storage is not None  # noqa: S101
             digest = hashlib.sha256()
             size = 0
-            with zf.open(zipfile.ZipInfo(path, _zip_time()), "w", force_zip64=True) as dest:
+            entry = _zip_entry(path, zipfile.ZIP_STORED)
+            with zf.open(entry, "w", force_zip64=True) as dest:
                 for part in self.storage.iter_bytes(ref.key):
                     dest.write(part)
                     digest.update(part)
@@ -478,7 +484,7 @@ class Bundle:
             "table",
         )
         sums = "".join(f"{w.sha256}  {w.path}\n" for w in self.written)
-        zf.writestr(zipfile.ZipInfo("SHA256SUMS", _zip_time()), sums.encode())
+        zf.writestr(_zip_entry("SHA256SUMS", zipfile.ZIP_DEFLATED), sums.encode())
         zf.close()
         yield sink.take()
 

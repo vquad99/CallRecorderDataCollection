@@ -18,6 +18,7 @@ import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { day } from "../../lib/format";
 import { labelFor, MODE_LABELS, PRIORITY_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
@@ -49,14 +50,12 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
     );
   const [typed, setTyped] = useState(params.get("search") ?? "");
   const search = params.get("search") ?? "";
-  // Ask the server once typing pauses, not on every key (O7).
+  // The address keeps the search once typing pauses (O7).
+  const settled = useDebounced(typed.trim());
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      if (typed.trim() !== search) setFilter({ search: typed.trim() });
-    }, 300);
-    return () => window.clearTimeout(id);
+    if (settled !== search) setFilter({ search: settled });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typed]);
+  }, [settled]);
   const projects = useResource(
     () =>
       inProject
@@ -123,7 +122,7 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
       className="button button--primary"
       to={inProject ? `/tasks/new?project=${projectId}` : "/tasks/new"}
     >
-      <Icon name="plus" size={18} weight="bold" />
+      <Icon name="plus" size={16} weight="bold" />
       New task
     </Link>
   ) : null;
@@ -144,7 +143,7 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
       ) : (
         <div className="page-header">
           <h1 id="tasks-title">
-            <IconTile name="tasks" tone="teal" />
+            <IconTile name="tasks" />
             Tasks
           </h1>
           {newTask}
@@ -193,13 +192,19 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
         <div className="card bulkbar" role="group" aria-label="Actions for selected tasks">
           <strong>{selected.length} selected</strong>
           <Button
+            icon="verified"
             busy={busy === "approve"}
             disabled={waiting.length === 0 || busy !== null}
             onClick={() => void approveSelected()}
           >
             Approve selected ({waiting.length})
           </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => setSelected([])}>
+          <Button
+            variant="secondary"
+            icon="close"
+            disabled={busy !== null}
+            onClick={() => setSelected([])}
+          >
             Clear selection
           </Button>
         </div>

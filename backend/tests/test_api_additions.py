@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import update
 
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
@@ -254,6 +255,55 @@ def test_consent_forms_of_an_assignment_are_emailed_after_the_answer(
     assert len(_consent_mails(outbox)) == 1
     listed = {p["id"]: p for p in world["pa"].get(other_base).json()["items"]}
     assert listed[world["b"]["id"]]["link_active"] is True
+
+
+def test_a_participant_is_not_emailed_again_within_ten_minutes(
+    world: dict[str, Any], outbox: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each email replaces the link sent before it: within portal.EMAIL_AGAIN_AFTER a second
+    click or bulk send sends nothing and says so. Joining a project still sends at once, and an
+    email that could not be sent leaves no working link and holds nothing back."""
+    from app.core.email import EmailSendError
+    from app.modules.participants.models import ParticipantPortalLink
+
+    db, pa, base = world["db"], world["pa"], _with_form(world)
+    made = pa.post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
+    assert made.json()["consent_email"] == "Consent form emailed."
+    pid = made.json()["id"]
+    assert len(_consent_mails(outbox)) == 1
+    soon = "Emailed less than 10 minutes ago: not sent again."
+    assert soon == portal.EMAILED_RECENTLY
+    again = pa.post(f"{base}/{pid}/portal-link/email")
+    assert (again.status_code, again.json()["error"]["code"]) == (409, "EMAILED_RECENTLY")
+    assert again.json()["error"]["message"] == soon
+    bulk = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": [pid]})
+    assert [(r["ok"], r["message"]) for r in bulk.json()["results"]] == [(True, soon)]
+    assert len(_consent_mails(outbox)) == 1
+
+    def ten_minutes_pass() -> None:
+        earlier = ParticipantPortalLink.created_at - portal.EMAIL_AGAIN_AFTER
+        db.execute(update(ParticipantPortalLink).values(created_at=earlier))
+        db.commit()
+
+    ten_minutes_pass()
+    assert pa.post(f"{base}/{pid}/portal-link/email").json()["sent"] is True
+    assert len(_consent_mails(outbox)) == 2
+
+    ten_minutes_pass()
+
+    def down(_: Any) -> None:
+        raise EmailSendError("mail server down")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(world["app"].state.email_sender, "send", down)
+        assert pa.post(f"{base}/{pid}/portal-link/email").json()["sent"] is False
+    listed = {p["id"]: p for p in pa.get(base).json()["items"]}
+    assert listed[pid]["link_active"] is False, "the link in an email nobody got"
+    assert pa.post(f"{base}/{pid}/portal-link/email").json()["sent"] is True
+    assert len(_consent_mails(outbox)) == 3
 
 
 def test_a_broker_that_cannot_be_reached_is_reported_and_the_participant_kept(

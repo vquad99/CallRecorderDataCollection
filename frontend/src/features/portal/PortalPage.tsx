@@ -62,7 +62,7 @@ function Consent({
     <section className="card stack" aria-labelledby="consent-title">
       <div className="page-header">
         <h2 id="consent-title" className="with-icon">
-          <IconTile name="verified" tone="green" size={28} />
+          <IconTile name="verified" size={28} />
           Consent form
         </h2>
         {answer ? (
@@ -143,7 +143,7 @@ export function ParticipantView({
   return (
     <>
       <div className="portal__hero">
-        <IconTile name="user" tone="blue" size={48} />
+        <IconTile name="user" size={48} />
         <div>
           <h1>Your participation</h1>
           <p className="muted">

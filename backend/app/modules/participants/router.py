@@ -188,7 +188,8 @@ def email_consent_forms(
 ) -> dict[uuid.UUID, str]:
     """Everyone who joins a project is emailed their personal consent form for it, after the
     answer (by the worker when there is one), with no one asking for it (D-129). Says, per
-    participant, what happened. Nothing is sent while the project has no consent form."""
+    participant, what happened. Nothing is sent while the project has no consent form, nor to
+    someone emailed it less than portal.EMAIL_AGAIN_AFTER ago."""
     if not participant_ids:
         return {}
     if not project.consent_text.strip():
@@ -200,7 +201,8 @@ def email_consent_forms(
             )
         )
     )
-    to_email = [str(pid) for pid in participant_ids if pid in reachable]
+    waiting = portal.recently_emailed(db, project.id, reachable)
+    to_email = [str(pid) for pid in participant_ids if pid in reachable and pid not in waiting]
     queued = bool(to_email) and dispatch(
         request.app,
         portal.SEND_LINKS_TASK,
@@ -209,7 +211,15 @@ def email_consent_forms(
         background,
     )
     sent = CONSENT_EMAILED if queued else CONSENT_NOT_QUEUED
-    return {pid: sent if pid in reachable else CONSENT_NO_EMAIL for pid in participant_ids}
+    said: dict[uuid.UUID, str] = {}
+    for pid in participant_ids:
+        if pid not in reachable:
+            said[pid] = CONSENT_NO_EMAIL
+        elif pid in waiting:
+            said[pid] = portal.EMAILED_RECENTLY
+        else:
+            said[pid] = sent
+    return said
 
 
 class AddedOut(ParticipantOut):

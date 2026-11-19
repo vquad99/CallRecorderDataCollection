@@ -10,6 +10,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import type { IconName } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -30,6 +31,13 @@ function statusMove(from: api.ProjectStatus, to: api.ProjectStatus) {
     return { label: "Mark as completed", what: "The project is finished; no new work starts." };
   return { label: "Archive", what: "The project is closed and read only." };
 }
+const STATUS_ICON: Record<api.ProjectStatus, IconName> = {
+  DRAFT: "pencil",
+  ACTIVE: "resume",
+  PAUSED: "pause",
+  COMPLETED: "ok",
+  ARCHIVED: "archive",
+};
 
 /** One button for each status the project can move to; a confirmation, with a reason where the
  * server needs one (archiving, reopening). */
@@ -67,6 +75,7 @@ function ProjectStatus() {
           <Button
             key={to}
             variant={to === "ACTIVE" ? "primary" : "secondary"}
+            icon={STATUS_ICON[to]}
             onClick={() => move(to)}
           >
             {statusMove(project.status, to).label}
@@ -174,7 +183,12 @@ export function TeamTab() {
                 <td>{m.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
                 {canEdit ? (
                   <td className="actions">
-                    <Button variant="secondary" disabled={busy !== null} onClick={() => remove(m)}>
+                    <Button
+                      variant="secondary"
+                      icon="userMinus"
+                      disabled={busy !== null}
+                      onClick={() => remove(m)}
+                    >
                       Remove
                     </Button>
                   </td>
@@ -212,7 +226,7 @@ export function TeamTab() {
               onChange={(e) => setSearch(e.target.value)}
             />
           )}
-          <Button type="submit" variant="secondary" busy={busy === "search"}>
+          <Button type="submit" variant="secondary" icon="search" busy={busy === "search"}>
             Search
           </Button>
           {candidates?.length === 0 ? (
@@ -225,6 +239,7 @@ export function TeamTab() {
                   {c.display_name} ({c.email}) -{" "}
                   {c.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}{" "}
                   <Button
+                    icon="userPlus"
                     busy={busy === `add-${c.user_id}`}
                     disabled={busy !== null}
                     onClick={() =>
@@ -276,73 +291,75 @@ export function AudioRulesTab() {
       {rules.map((r, i) => (
         <fieldset key={r.mode} className="card" disabled={!canManage}>
           <legend>{labelFor(MODE_LABELS, r.mode)}</legend>
-          <TextField
-            label="Sample rate (Hz)"
-            type="number"
-            value={String(r.sample_rate)}
-            onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
-          />
-          <Select
-            label="Bit depth"
-            value={String(r.bit_depth)}
-            onChange={(e) =>
-              update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
-            }
-            options={[
-              { value: "16", label: "16-bit" },
-              { value: "24", label: "24-bit" },
-              { value: "32", label: "32-bit" },
-            ]}
-          />
-          <Select
-            label="Channels"
-            value={String(r.channels)}
-            onChange={(e) =>
-              update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
-            }
-            options={[
-              { value: "1", label: "Mono (1)" },
-              { value: "2", label: "Stereo (2)" },
-            ]}
-          />
-          <TextField
-            label="Maximum silence (%)"
-            type="number"
-            min={0}
-            max={100}
-            value={r.max_silence_pct}
-            onChange={(e) => update(i, { max_silence_pct: e.target.value })}
-          />
-          <TextField
-            label="Maximum clipping (%)"
-            hint="Leave empty for no limit."
-            type="number"
-            min={0}
-            max={100}
-            value={r.max_clipping_pct ?? ""}
-            onChange={(e) =>
-              update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
-            }
-          />
-          <TextField
-            label="Minimum duration (seconds)"
-            type="number"
-            min={0}
-            value={String(r.min_duration_seconds)}
-            onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
-          />
-          <TextField
-            label="Maximum duration (seconds)"
-            hint="Leave empty for no limit."
-            type="number"
-            min={1}
-            value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
-            onChange={(e) =>
-              update(i, {
-                max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-          />
+          <div className="form-grid">
+            <TextField
+              label="Sample rate (Hz)"
+              type="number"
+              value={String(r.sample_rate)}
+              onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
+            />
+            <Select
+              label="Bit depth"
+              value={String(r.bit_depth)}
+              onChange={(e) =>
+                update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
+              }
+              options={[
+                { value: "16", label: "16-bit" },
+                { value: "24", label: "24-bit" },
+                { value: "32", label: "32-bit" },
+              ]}
+            />
+            <Select
+              label="Channels"
+              value={String(r.channels)}
+              onChange={(e) =>
+                update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
+              }
+              options={[
+                { value: "1", label: "Mono (1)" },
+                { value: "2", label: "Stereo (2)" },
+              ]}
+            />
+            <TextField
+              label="Maximum silence (%)"
+              type="number"
+              min={0}
+              max={100}
+              value={r.max_silence_pct}
+              onChange={(e) => update(i, { max_silence_pct: e.target.value })}
+            />
+            <TextField
+              label="Maximum clipping (%)"
+              hint="Leave empty for no limit."
+              type="number"
+              min={0}
+              max={100}
+              value={r.max_clipping_pct ?? ""}
+              onChange={(e) =>
+                update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
+              }
+            />
+            <TextField
+              label="Minimum duration (seconds)"
+              type="number"
+              min={0}
+              value={String(r.min_duration_seconds)}
+              onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
+            />
+            <TextField
+              label="Maximum duration (seconds)"
+              hint="Leave empty for no limit."
+              type="number"
+              min={1}
+              value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
+              onChange={(e) =>
+                update(i, {
+                  max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+            />
+          </div>
         </fieldset>
       ))}
       {canManage ? (
@@ -393,7 +410,12 @@ export function LanguagesTab() {
             <li key={`${l.language_code}/${l.dialect}`}>
               {name(l)}
               {canManage ? (
-                <Button variant="secondary" disabled={busy !== null} onClick={() => remove(l)}>
+                <Button
+                  variant="secondary"
+                  icon="trash"
+                  disabled={busy !== null}
+                  onClick={() => remove(l)}
+                >
                   Remove
                 </Button>
               ) : null}
@@ -435,7 +457,7 @@ export function LanguagesTab() {
             value={dialect}
             onChange={(e) => setDialect(e.target.value)}
           />
-          <Button type="submit" busy={busy === "add"} disabled={!code.trim()}>
+          <Button type="submit" icon="plus" busy={busy === "add"} disabled={!code.trim()}>
             Add language
           </Button>
         </form>

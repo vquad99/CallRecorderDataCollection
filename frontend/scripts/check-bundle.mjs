@@ -7,7 +7,9 @@ import { gzipSync } from "node:zlib";
 
 // 2026-11-10: about 109 KB (React, router, shell, sign-in, Projects). Raised to 125 KB by D-063
 // for the product design (icon set of 52, icon tiles, avatars, navigation rail): about 123 KB.
-const FIRST_SCREEN_KB = 125;
+// 2026-11-19: raised to 130 KB by D-141 (owner: "proper icons, not colourless"): 60 icons drawn
+// two-tone in their own colours, file-type icons for every download: about 128.5 KB.
+const FIRST_SCREEN_KB = 130;
 const PAGE_KB = 30; // 2026-11-10: largest page (recorder) about 6 KB
 
 const dir = "dist/assets";

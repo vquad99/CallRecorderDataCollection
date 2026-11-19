@@ -89,6 +89,7 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
       <span className="actions">
         {held ? (
           <Button
+            icon="resume"
             busy={busy === "resume"}
             disabled={busy !== null}
             onClick={() =>
@@ -103,6 +104,7 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
         {can("ON_HOLD") ? (
           <Button
             variant="secondary"
+            icon="pause"
             disabled={busy !== null}
             onClick={() =>
               move("ON_HOLD", `Put task ${task.task_code} on hold?`, "Put on hold", "On hold.")
@@ -114,6 +116,7 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
         {can("CANCELLED") ? (
           <Button
             variant="secondary"
+            icon="prohibit"
             disabled={busy !== null}
             onClick={() =>
               move("CANCELLED", `Cancel task ${task.task_code}?`, "Cancel task", "Cancelled.")
@@ -123,8 +126,7 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
           </Button>
         ) : null}
         {deletable ? (
-          <Button variant="secondary" disabled={busy !== null} onClick={remove}>
-            <Icon name="trash" size={15} />
+          <Button variant="secondary" icon="trash" disabled={busy !== null} onClick={remove}>
             Delete task
           </Button>
         ) : null}
@@ -179,6 +181,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
         {review ? (
           <>
             <Button
+              icon="send"
               busy={busy === "AUDIO_QC"}
               disabled={busy !== null}
               onClick={() => move("AUDIO_QC", "Sent to QC. A QC Executive checks it next.")}
@@ -187,6 +190,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
             </Button>
             <Button
               variant="secondary"
+              icon="record"
               busy={busy === "IN_PROGRESS"}
               disabled={busy !== null}
               onClick={() => move("IN_PROGRESS", "Ready to record again.")}
@@ -216,6 +220,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
           </>
         ) : (
           <Button
+            icon="play"
             busy={busy === "IN_PROGRESS"}
             onClick={() => move("IN_PROGRESS", "Session started.")}
           >
@@ -257,6 +262,7 @@ function AdminReviewCard({ task, onChange }: { task: work.TaskDetail; onChange: 
       </div>
       <div className="record-card__go record-card__go--row">
         <Button
+          icon="verified"
           busy={busy === "APPROVED"}
           disabled={busy !== null}
           onClick={() =>
@@ -269,7 +275,7 @@ function AdminReviewCard({ task, onChange }: { task: work.TaskDetail; onChange: 
           Approve
         </Button>
         {task.allowed_transitions.includes("REJECTED") ? (
-          <Button variant="danger" disabled={busy !== null} onClick={reject}>
+          <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
             Reject
           </Button>
         ) : null}
@@ -366,6 +372,7 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
               ) : canSend ? (
                 <Button
                   variant="secondary"
+                  icon="mail"
                   busy={busy === p.id}
                   disabled={busy !== null}
                   onClick={() => send(p)}
@@ -455,7 +462,13 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
         }}
       >
         <TextField label="Add a comment" value={text} onChange={(e) => setText(e.target.value)} />
-        <Button type="submit" variant="secondary" busy={busy !== null} disabled={!text.trim()}>
+        <Button
+          type="submit"
+          variant="secondary"
+          icon="comment"
+          busy={busy !== null}
+          disabled={!text.trim()}
+        >
           Add comment
         </Button>
       </form>
@@ -490,6 +503,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
         {exportable ? (
           <Button
             variant="secondary"
+            icon="fileZip"
             busy={busy === "task-files"}
             disabled={busy !== null}
             onClick={() =>
@@ -499,7 +513,6 @@ function Recordings({ task }: { task: work.TaskDetail }) {
               }, "task-files")
             }
           >
-            <Icon name="download" size={15} />
             Download task files
           </Button>
         ) : null}
@@ -526,7 +539,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                 <tr key={r.id} className={r.current ? undefined : "row--replaced"}>
                   <td>
                     <span className="cell-icon">
-                      <Icon name="waveform" size={15} />
+                      <Icon name="waveform" size={16} />
                       Recording {ready.length - i}
                     </span>
                     {file ? <div className="muted">{rec.formatLabel(file)}</div> : null}
@@ -541,6 +554,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                     <td>
                       <Button
                         variant="secondary"
+                        icon="fileAudio"
                         busy={busy === r.id}
                         disabled={busy !== null}
                         onClick={() =>
@@ -550,7 +564,6 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                           }, r.id)
                         }
                       >
-                        <Icon name="download" size={15} />
                         Download with consent form
                       </Button>
                     </td>
@@ -590,7 +603,7 @@ export function TaskDetailPage() {
       <div className="page-header">
         <span className="page-header__title">
           <h1 id="task-title">
-            <IconTile name={task.recording_mode === "TELEPHONY" ? "phone" : "mic"} tone="teal" />
+            <IconTile name={task.recording_mode === "TELEPHONY" ? "phone" : "mic"} />
             Task {task.task_code}
           </h1>
           <StatusBadge status={task.status} label={status(task.status)} />
@@ -623,8 +636,11 @@ export function TaskDetailPage() {
           <div key={p.id} className="checks__row">
             <dt>Participant {i === 0 ? "A" : "B"}</dt>
             <dd className="party">
-              <PartyName party={p} />
-              <ConsentChip party={p} />
+              <span className="party__name">{p.display_label ?? p.participant_code}</span>
+              <span className="party__meta">
+                {p.display_label ? <span className="code-tag">{p.participant_code}</span> : null}
+                <ConsentChip party={p} />
+              </span>
             </dd>
           </div>
         ))}

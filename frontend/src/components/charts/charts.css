@@ -51,8 +51,8 @@
   gap: 10px;
 }
 .stat__label {
-  color: var(--muted);
-  font-size: 0.6875rem;
+  color: var(--text-2);
+  font-size: 0.75rem;
   font-weight: 500;
 }
 .stat__body {
@@ -132,6 +132,10 @@
 }
 .split--wide {
   grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+}
+/* A small card beside a tall one keeps its own height. */
+.card--top {
+  align-self: start;
 }
 @media (max-width: 900px) {
   .split--wide {

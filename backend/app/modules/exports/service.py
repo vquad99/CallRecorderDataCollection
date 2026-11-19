@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
+from app.core.slots import turn
 from app.core.storage import ObjectStorage
 from app.modules.audio_qc.models import AudioQcResult
 from app.modules.audit import service as audit
@@ -43,12 +45,17 @@ from app.modules.recordings.models import (
     current_recordings_query,
 )
 from app.modules.tasks import service as tasks
-from app.modules.tasks.models import Task, TaskAssignment, TaskStatusHistory
+from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.telephony.models import Call
 
 REPORTS = ("progress", "participants")
 # A task's bundle is held in memory up to this size while it is made, then in MEDIA_WORK_DIR.
 SPOOL_BYTES = 8 * 1024 * 1024
+# At most this many tasks' bundles are made at once in one process; the rest wait their turn.
+BUILD_SLOTS = 2
+BUILD_WAIT_SECONDS = 10.0
+BUILDS_BUSY = "Another download is being prepared. Try again in a minute."
+_builds = threading.BoundedSemaphore(BUILD_SLOTS)
 
 
 def _iso(value: datetime | None) -> str:
@@ -188,16 +195,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
             .order_by(AudioQcResult.created_at.desc())
         ):
             (automatic if automated else decision).setdefault(rid, outcome)
-    approved_at = dict(
-        db.execute(
-            select(TaskStatusHistory.task_id, func.max(TaskStatusHistory.created_at))
-            .where(
-                TaskStatusHistory.to_status == "APPROVED",
-                TaskStatusHistory.task_id.in_(in_project),
-            )
-            .group_by(TaskStatusHistory.task_id)
-        ).all()
-    )
+    approved_at = dict(db.execute(minutes.approval_times([project.id])).all())
     # Phone calls per task, and the state of the newest one (D-103).
     call_counts = {
         tid: int(n)
@@ -300,8 +298,9 @@ def task_bundle(
 ) -> tuple[str, IO[bytes], int]:
     """One task's files as a bundle (D-136): its current recording's delivery file, details file
     and consent record, in the folders and with the tables of a project export. Approved tasks
-    only, as the project export's own default. Made at once, while the person waits: returns the
-    file name, the ZIP (read from the start) and its size. Audited as task.exported."""
+    only, as the project export's own default. Made at once, while the person waits (BUILD_SLOTS
+    at a time, 503 BUSY after BUILD_WAIT_SECONDS): returns the file name, the ZIP (read from the
+    start) and its size. Audited as task.exported."""
     task = tasks.get_task(db, principal, task_id)
     project = db.get_one(Project, task.project_id)
     sel = bundle.Selection()  # audio and details, approved tasks, CSV tables
@@ -331,18 +330,19 @@ def task_bundle(
     )
     work = Path(settings.media_work_dir)
     work.mkdir(parents=True, exist_ok=True)
-    out = tempfile.SpooledTemporaryFile(max_size=SPOOL_BYTES, dir=str(work))  # noqa: SIM115 - handed on
-    digest = hashlib.sha256()
-    try:
-        for part in made.parts():
-            out.write(part)
-            digest.update(part)
-    except bundle.BundleError as exc:
-        out.close()
-        raise AppError(str(exc), code="EXPORT_FAILED", status_code=409) from None
-    except BaseException:
-        out.close()
-        raise
+    with turn(_builds, BUILD_WAIT_SECONDS, BUILDS_BUSY):
+        out = tempfile.SpooledTemporaryFile(max_size=SPOOL_BYTES, dir=str(work))  # noqa: SIM115 - handed on
+        digest = hashlib.sha256()
+        try:
+            for part in made.parts():
+                out.write(part)
+                digest.update(part)
+        except bundle.BundleError as exc:
+            out.close()
+            raise AppError(str(exc), code="EXPORT_FAILED", status_code=409) from None
+        except BaseException:
+            out.close()
+            raise
     size = out.tell()
     out.seek(0)
     audit.record(

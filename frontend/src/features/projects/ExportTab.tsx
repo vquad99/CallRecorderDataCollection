@@ -11,7 +11,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon } from "../../components/Icon";
+import { Icon, type IconName } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge, type Tone } from "../../components/StatusBadge";
@@ -38,19 +38,28 @@ const REPORTS: { value: api.ReportContent; label: string; detail: string }[] = [
       "conversation is split equally, so 5 minutes gives each participant 2.5.",
   },
 ];
-const CONTENTS: { value: api.BundleContent; label: string; detail: string }[] = [
+const CONTENTS: { value: api.BundleContent; label: string; detail: string; icon: IconName }[] = [
   {
     value: "both",
     label: "Audio + metadata",
     detail: "Each recording's audio, its details file and its consent record.",
+    icon: "fileZip",
   },
-  { value: "audio", label: "Audio only", detail: "Each recording's 16 kHz WAV." },
+  {
+    value: "audio",
+    label: "Audio only",
+    detail: "Each recording's 16 kHz WAV.",
+    icon: "fileAudio",
+  },
   {
     value: "metadata",
     label: "Metadata only",
     detail: "Each recording's details file (JSON) and consent record.",
+    icon: "fileText",
   },
 ];
+/** A table file's icon: CSV and TSV are both spreadsheets. */
+const TABLE_ICON: Record<api.TableFormat, IconName> = { csv: "fileCsv", tsv: "table" };
 const STATE: Record<api.ExportState, [Tone, string]> = {
   QUEUED: ["neutral", "Waiting"],
   RUNNING: ["progress", "Being prepared"],
@@ -111,7 +120,7 @@ function Reports({ projectId }: { projectId: string }) {
                   download
                   aria-label={`${r.label} as ${format.toUpperCase()}`}
                 >
-                  <Icon name="download" size={15} />
+                  <Icon name={TABLE_ICON[format]} size={16} />
                   {format.toUpperCase()}
                 </a>
               ))}
@@ -178,7 +187,10 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
               checked={choice.content === c.value}
               onChange={() => set({ content: c.value })}
             />
-            <strong>{c.label}</strong>
+            <strong className="export__choice-title">
+              <Icon name={c.icon} size={18} />
+              {c.label}
+            </strong>
             <span className="muted">{c.detail}</span>
           </label>
         ))}
@@ -295,7 +307,12 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
             </p>
           ) : null}
         </div>
-        <Button busy={busy !== null} disabled={!ready || empty || backwards} onClick={prepare}>
+        <Button
+          icon="fileZip"
+          busy={busy !== null}
+          disabled={!ready || empty || backwards}
+          onClick={prepare}
+        >
           Prepare export
         </Button>
       </div>
@@ -369,7 +386,10 @@ function ExportList({
                     <div className="muted">{job.requested_by ?? "-"}</div>
                   </td>
                   <td>
-                    <span className="mono">{job.file_name}</span>
+                    <span className="export__file">
+                      <Icon name="fileZip" size={18} />
+                      <span className="mono">{job.file_name}</span>
+                    </span>
                     <div className="muted">{chosen(job)}</div>
                     {job.state === "FAILED" && job.error ? (
                       <div className="export__error">{job.error}</div>
@@ -390,24 +410,24 @@ function ExportList({
                     {job.state === "READY" ? (
                       <Button
                         variant="secondary"
+                        icon="download"
                         busy={busy === job.id}
                         disabled={busy !== null}
                         onClick={() => download(job)}
                         aria-label={`Download ${job.file_name}`}
                       >
-                        <Icon name="download" size={15} />
                         Download
                       </Button>
                     ) : null}
                     {job.state === "READY" || job.state === "QUEUED" ? (
                       <Button
                         variant="secondary"
+                        icon="trash"
                         busy={busy === job.id}
                         disabled={busy !== null}
                         onClick={() => remove(job)}
                         aria-label={`Remove ${job.file_name}`}
                       >
-                        <Icon name="trash" size={15} />
                         Remove
                       </Button>
                     ) : null}

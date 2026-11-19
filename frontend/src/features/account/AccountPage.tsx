@@ -57,7 +57,7 @@ function ChangePassword() {
         />
         <ErrorNotice error={error} />
         <SuccessNotice message={message} />
-        <Button type="submit" busy={busy !== null}>
+        <Button type="submit" icon="key" busy={busy !== null}>
           Change password
         </Button>
       </form>
@@ -96,6 +96,7 @@ function Sessions() {
                   ) : (
                     <Button
                       variant="secondary"
+                      icon="logout"
                       busy={busy === s.id}
                       disabled={busy !== null}
                       onClick={() => void run(() => authApi.revokeSession(s.id), s.id)}
@@ -153,7 +154,7 @@ function TwoStep() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
-          <Button type="submit" variant="secondary" busy={busy !== null}>
+          <Button type="submit" variant="secondary" icon="lock" busy={busy !== null}>
             Turn off two-step sign-in
           </Button>
         </form>
@@ -190,7 +191,7 @@ export function AccountPage() {
   return (
     <section aria-labelledby="account-title" className="stack">
       <h1 id="account-title">
-        <IconTile name="user" tone="blue" />
+        <IconTile name="user" />
         My account
       </h1>
       <p>

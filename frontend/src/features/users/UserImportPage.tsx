@@ -42,6 +42,7 @@ export function UserImportPage() {
       </div>
       <span>
         <Button
+          icon="eye"
           disabled={!csv}
           busy={busy === "preview"}
           onClick={() => void run(async () => setRows((await previewImport(csv)).rows), "preview")}
@@ -80,6 +81,7 @@ export function UserImportPage() {
           </DataTable>
           <span>
             <Button
+              icon="fileUp"
               disabled={valid === 0}
               busy={busy === "import"}
               onClick={() =>

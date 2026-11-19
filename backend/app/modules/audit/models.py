@@ -16,6 +16,8 @@ class AuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_created_at", "created_at"),
         Index("ix_audit_logs_project_created", "project_id", "created_at"),  # per-project viewer
+        # The viewer's action filter: = and LIKE 'participant.%', whatever the collation.
+        Index("ix_audit_logs_action", "action", postgresql_ops={"action": "text_pattern_ops"}),
     )
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True

@@ -61,9 +61,12 @@ a.queue:hover {
   font-variant-numeric: tabular-nums;
 }
 .queue--active {
-  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
-  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--icon-amber) 45%, var(--border));
+  background: var(--tint-amber);
   color: var(--warn);
+}
+.queue--active .icon {
+  color: inherit;
 }
 .queue--active .queue__value {
   color: var(--warn);

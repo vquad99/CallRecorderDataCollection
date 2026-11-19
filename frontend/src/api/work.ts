@@ -199,10 +199,6 @@ export const getTimeline = (id: string) =>
 export const listAudit = (params: Params) =>
   apiRequest<Page<AuditEntry>>(`/api/v1/audit-logs${query(params)}`);
 
-export const createPortalLink = (projectId: string, participantId: string) =>
-  apiRequest<{ url: string; expires_at: string }>(`${pp(projectId)}/${participantId}/portal-link`, {
-    method: "POST",
-  });
 export const emailPortalLink = (projectId: string, participantId: string) =>
   apiRequest<{ sent: boolean; expires_at: string }>(
     `${pp(projectId)}/${participantId}/portal-link/email`,

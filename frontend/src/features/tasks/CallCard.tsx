@@ -14,7 +14,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { Icon } from "../../components/Icon";
+import { IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -93,6 +93,7 @@ function CancelButton({ call, onChange }: { call: tel.Call; onChange: () => void
     <>
       <Button
         variant="secondary"
+        icon="phoneX"
         onClick={() =>
           confirm.ask({
             title: "Cancel this call?",
@@ -139,6 +140,7 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: () => void })
                 <td>
                   <Button
                     variant="secondary"
+                    icon="ok"
                     busy={busy === c.key}
                     disabled={busy !== null}
                     onClick={() => void run(() => tel.chooseMatch(call.id, c.key), c.key)}
@@ -160,11 +162,11 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: () => void })
       <div className="actions">
         <Button
           variant="secondary"
+          icon="refresh"
           busy={busy === "retry"}
           disabled={busy !== null}
           onClick={() => void run(() => tel.retryCall(call.id), "retry")}
         >
-          <Icon name="refresh" size={15} />
           Look for the recording again
         </Button>
       </div>
@@ -214,53 +216,58 @@ function CallSteps({ call, onChange }: { call: tel.Call; onChange: () => Promise
   if (!aOn) {
     words = `Ringing participant A (number ending ${call.phone_hint}). Click when they answer.`;
     main = (
-      <Button busy={busy === "a"} onClick={() => step("a", tick("A_JOINED"), ringB)}>
-        <Icon name="phone" size={16} weight="fill" />A answered – call B
+      <Button icon="phone" busy={busy === "a"} onClick={() => step("a", tick("A_JOINED"), ringB)}>
+        A answered – call B
       </Button>
     );
   } else if (!bOn && !call.b_dial_attempts) {
     // A is on the line but B was not rung (the request for B failed): ring B from here.
     words = "Participant A is on the line.";
     main = (
-      <Button busy={busy === "ring"} onClick={() => step("ring", ringB)}>
-        <Icon name="phone" size={16} weight="fill" />
+      <Button icon="phone" busy={busy === "ring"} onClick={() => step("ring", ringB)}>
         Call participant B
       </Button>
     );
   } else if (!bOn) {
     words = `Ringing participant B (number ending ${call.b_phone_hint ?? "?"}). Click when they answer.`;
     main = (
-      <Button busy={busy === "b"} onClick={() => step("b", tick("B_JOINED"), startRecording)}>
-        <Icon name="record" size={16} />B answered – start recording
+      <Button
+        icon="record"
+        busy={busy === "b"}
+        onClick={() => step("b", tick("B_JOINED"), startRecording)}
+      >
+        B answered – start recording
       </Button>
     );
     extra =
       bLeft > 0 ? (
-        <Button variant="secondary" busy={busy === "ring"} onClick={() => step("ring", ringB)}>
+        <Button
+          variant="secondary"
+          icon="phone"
+          busy={busy === "ring"}
+          onClick={() => step("ring", ringB)}
+        >
           Ring B again ({bLeft} left)
         </Button>
       ) : null;
   } else if (!started) {
     words = "Both are on the line.";
     main = (
-      <Button busy={busy === "rec"} onClick={() => step("rec", startRecording)}>
-        <Icon name="record" size={16} />
+      <Button icon="record" busy={busy === "rec"} onClick={() => step("rec", startRecording)}>
         Start recording
       </Button>
     );
   } else if (!stopped) {
     words = `Recording · ${clock(elapsed)}. Stay muted and listen. Click when they have finished.`;
     main = (
-      <Button busy={busy === "stop"} onClick={() => step("stop", stopRecording, close)}>
-        <Icon name="stop" size={16} />
+      <Button icon="stop" busy={busy === "stop"} onClick={() => step("stop", stopRecording, close)}>
         Stop and close call
       </Button>
     );
   } else {
     words = `Recording stopped (${clock(elapsed)}).`;
     main = (
-      <Button busy={busy === "close"} onClick={() => step("close", close)}>
-        <Icon name="check" size={16} weight="bold" />
+      <Button icon="ok" busy={busy === "close"} onClick={() => step("close", close)}>
         Close call
       </Button>
     );
@@ -345,7 +352,11 @@ function CallCard({
     <p>Start the session, then call participant A from here. Their phone will ring.</p>
   );
   let go: ReactNode = (
-    <Button busy={busy === "IN_PROGRESS"} onClick={() => move("IN_PROGRESS", "Session started.")}>
+    <Button
+      icon="play"
+      busy={busy === "IN_PROGRESS"}
+      onClick={() => move("IN_PROGRESS", "Session started.")}
+    >
       Start session
     </Button>
   );
@@ -361,6 +372,7 @@ function CallCard({
     go = (
       <>
         <Button
+          icon="send"
           busy={busy === "AUDIO_QC"}
           disabled={busy !== null}
           onClick={() => move("AUDIO_QC", "Sent to QC. A QC Executive checks it next.")}
@@ -369,6 +381,7 @@ function CallCard({
         </Button>
         <Button
           variant="secondary"
+          icon="phone"
           busy={busy === "IN_PROGRESS"}
           disabled={busy !== null}
           onClick={() => move("IN_PROGRESS", "Ready to call again.")}
@@ -420,11 +433,11 @@ function CallCard({
       );
       go = (
         <Button
+          icon="phone"
           busy={busy === "start"}
           disabled={waiting.length > 0 || noLine !== null}
           onClick={startCall}
         >
-          <Icon name="phone" size={16} weight="fill" />
           Start call
         </Button>
       );
@@ -470,8 +483,9 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
   const refresh = () => void calls.refresh();
   return (
     <section className="card" aria-labelledby="calls-title">
-      <h2 id="calls-title">
-        <Icon name="phone" size={18} /> Phone calls
+      <h2 id="calls-title" className="with-icon">
+        <IconTile name="phone" size={28} />
+        Phone calls
       </h2>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}

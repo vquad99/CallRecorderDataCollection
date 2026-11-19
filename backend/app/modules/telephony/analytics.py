@@ -25,17 +25,18 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.csvio import write_table
+from app.core.days import start_of
 from app.core.errors import forbidden, not_found
 from app.core.permissions import Perm, Role
 from app.db.paging import paginate
 from app.modules.audio_qc.models import AudioQcResult
 from app.modules.auth.deps import Principal, in_projects
-from app.modules.auth.models import User
 from app.modules.projects.models import Project
 from app.modules.recordings.models import TELEPHONY_DELIVERY_KIND, AudioAsset, Recording
 from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.telephony.models import CHECKLIST_ITEMS, Call
 from app.modules.telephony.service import checklist_of, mask
+from app.modules.users.service import display_names
 
 MAX_DAYS = 90
 # Calls read for one analytics request; a period with more is cut at the newest (and says so).
@@ -160,10 +161,8 @@ def analytics(
     days = max(1, min(MAX_DAYS, days))
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)
-    today = now.astimezone(tz).date()
-    first_day = today - timedelta(days=days - 1)
-    since = datetime.combine(first_day, datetime.min.time(), tzinfo=tz)
-    scope = [*_call_scope(principal, project_id), Call.dialled_at >= since]
+    first_day, today = day_range(days, settings.report_timezone, now)
+    scope = [*_call_scope(principal, project_id), Call.dialled_at >= start_of(first_day, tz)]
     calls = list(
         db.scalars(select(Call).where(*scope).order_by(Call.dialled_at.desc()).limit(MAX_CALLS + 1))
     )
@@ -266,16 +265,7 @@ def analytics(
         if created is not None and c.closed_at is not None:
             fetch_minutes.append(max(0.0, (created - c.closed_at).total_seconds() / 60))
 
-    names = (
-        {
-            uid: name
-            for uid, name in db.execute(
-                select(User.id, User.display_name).where(User.id.in_(list(people)))
-            ).all()
-        }
-        if people
-        else {}
-    )
+    names = display_names(db, people)
     codes = (
         {
             pid: (code, name)
@@ -451,12 +441,7 @@ def _rows(db: Session, calls: list[Call], stale_before: datetime) -> list[CallRo
             select(Project.id, Project.code).where(Project.id.in_({c.project_id for c in calls}))
         ).all()
     }
-    names = {
-        uid: name
-        for uid, name in db.execute(
-            select(User.id, User.display_name).where(User.id.in_({c.moderator_id for c in calls}))
-        ).all()
-    }
+    names = display_names(db, (c.moderator_id for c in calls))
     recording_ids = {c.recording_id for c in calls if c.recording_id is not None}
     lengths = (
         {
@@ -555,16 +540,13 @@ def calls_csv(
     """Every call of the period as a CSV (newest first, at most MAX_CSV_ROWS) and the row count.
     Times are in the report time zone. No phone numbers: the last two digits only."""
     _check_manager(principal)
-    days = max(1, min(MAX_DAYS, days))
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)
-    since = datetime.combine(
-        now.astimezone(tz).date() - timedelta(days=days - 1), datetime.min.time(), tzinfo=tz
-    )
+    first_day, _ = day_range(days, settings.report_timezone, now)
     calls = list(
         db.scalars(
             select(Call)
-            .where(*_call_scope(principal, project_id), Call.dialled_at >= since)
+            .where(*_call_scope(principal, project_id), Call.dialled_at >= start_of(first_day, tz))
             .order_by(Call.dialled_at.desc())
             .limit(MAX_CSV_ROWS)
         )
@@ -607,7 +589,8 @@ def calls_csv(
 
 
 def day_range(days: int, tz_name: str, now: datetime | None = None) -> tuple[date, date]:
-    """First and last calendar day of the period, in the provider's time zone."""
+    """First and last calendar day of the period (the last `days` days, today included) in this
+    time zone."""
     tz = ZoneInfo(tz_name)
     last = (now or datetime.now(UTC)).astimezone(tz).date()
     return last - timedelta(days=max(1, min(MAX_DAYS, days)) - 1), last

@@ -30,6 +30,7 @@ from app.modules.exports import bundle
 from app.modules.exports.models import OPEN_STATES, ExportJob
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_visible as get_visible_project
+from app.modules.users.service import display_names
 
 logger = logging.getLogger("app.exports")
 
@@ -106,16 +107,6 @@ def create(
     return job
 
 
-def _names(db: Session, jobs: list[ExportJob]) -> dict[uuid.UUID, str]:
-    ids = {j.requested_by for j in jobs}
-    if not ids:
-        return {}
-    return {
-        uid: name
-        for uid, name in db.execute(select(User.id, User.display_name).where(User.id.in_(ids)))
-    }
-
-
 def list_jobs(
     db: Session, principal: Principal, project_id: uuid.UUID, page: int, page_size: int
 ) -> tuple[list[Listed], int]:
@@ -129,7 +120,7 @@ def list_jobs(
         page,
         page_size,
     )
-    names = _names(db, jobs)
+    names = display_names(db, (j.requested_by for j in jobs))
     return [Listed(j, names.get(j.requested_by)) for j in jobs], total
 
 
@@ -139,7 +130,7 @@ def get(db: Session, principal: Principal, project_id: uuid.UUID, job_id: uuid.U
     job = db.get(ExportJob, job_id)
     if job is None or job.project_id != project.id:
         raise not_found("Project")
-    return Listed(job, _names(db, [job]).get(job.requested_by))
+    return Listed(job, display_names(db, [job.requested_by]).get(job.requested_by))
 
 
 def download_link(

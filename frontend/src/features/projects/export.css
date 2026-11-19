@@ -33,6 +33,12 @@
 .export__choice .muted {
   font-size: 0.8125rem;
 }
+.export__choice-title,
+.export__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .export__go {
   display: flex;
   flex-wrap: wrap;
@@ -54,14 +60,19 @@
   padding: 0;
   list-style: none;
 }
+/* A report: its words on the left, its two buttons on the right on every row. */
 .export__report {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 8px 24px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+  .export__report {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .export__report:first-child {
   padding-top: 0;

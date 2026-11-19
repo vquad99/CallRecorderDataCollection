@@ -13,6 +13,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 SESSION_COOKIE = "ccp_session"
 CSRF_COOKIE = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
+# Sent by the page's own polling (D-141): such a request does not count as the person's use, so
+# the idle sign-out (D-140) still happens on a page left open.
+BACKGROUND_HEADER = "X-Background-Request"
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 _BASE_HEADERS = {

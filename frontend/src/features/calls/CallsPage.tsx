@@ -11,11 +11,12 @@ import { Bars, DayChart, Stat } from "../../components/charts/Charts";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
-import { Icon, IconTile } from "../../components/Icon";
+import { IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
+import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { duration, when } from "../../lib/format";
 import { labelFor, TASK_STATUS_LABELS } from "../../lib/labels";
@@ -23,22 +24,6 @@ import { CallBadge } from "./callUi";
 
 const minutes = (m: number | null) => duration(m === null ? null : m * 60);
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
-/** Rows a table shows before "Show all". */
-const FIRST_ROWS = 10;
-
-/** A table's first rows, and a button for the rest. */
-function useFirstRows<T>(rows: T[]) {
-  const [all, setAll] = useState(false);
-  const more =
-    rows.length > FIRST_ROWS ? (
-      <span>
-        <Button variant="secondary" aria-expanded={all} onClick={() => setAll(!all)}>
-          {all ? "Show fewer" : `Show all (${rows.length})`}
-        </Button>
-      </span>
-    ) : null;
-  return { shown: all ? rows : rows.slice(0, FIRST_ROWS), more };
-}
 
 /** Calls started in each hour of the day (one series: the title names it). */
 function CallsByHour({ hours, title }: { hours: number[]; title: string }) {
@@ -298,22 +283,32 @@ function ByModerator({ rows }: { rows: tel.ModeratorCalls[] }) {
             <thead>
               <tr>
                 <th scope="col">Moderator</th>
-                <th scope="col">Calls</th>
-                <th scope="col">Recorded</th>
-                <th scope="col">Failed or cancelled</th>
-                <th scope="col">Recorded audio</th>
-                <th scope="col">Average call</th>
+                <th scope="col" className="num">
+                  Calls
+                </th>
+                <th scope="col" className="num">
+                  Recorded
+                </th>
+                <th scope="col" className="num">
+                  Failed or cancelled
+                </th>
+                <th scope="col" className="num">
+                  Recorded audio
+                </th>
+                <th scope="col" className="num">
+                  Average call
+                </th>
               </tr>
             </thead>
             <tbody>
               {shown.map((m) => (
                 <tr key={m.moderator_id}>
                   <td>{m.name}</td>
-                  <td>{m.calls}</td>
-                  <td>{m.recorded}</td>
-                  <td>{m.failed}</td>
-                  <td>{minutes(m.recorded_minutes)}</td>
-                  <td>{minutes(m.avg_call_minutes)}</td>
+                  <td className="num">{m.calls}</td>
+                  <td className="num">{m.recorded}</td>
+                  <td className="num">{m.failed}</td>
+                  <td className="num">{minutes(m.recorded_minutes)}</td>
+                  <td className="num">{minutes(m.avg_call_minutes)}</td>
                 </tr>
               ))}
             </tbody>
@@ -334,10 +329,18 @@ function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
         <thead>
           <tr>
             <th scope="col">Project</th>
-            <th scope="col">Calls</th>
-            <th scope="col">Recorded</th>
-            <th scope="col">Failed or cancelled</th>
-            <th scope="col">Recorded audio</th>
+            <th scope="col" className="num">
+              Calls
+            </th>
+            <th scope="col" className="num">
+              Recorded
+            </th>
+            <th scope="col" className="num">
+              Failed or cancelled
+            </th>
+            <th scope="col" className="num">
+              Recorded audio
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -347,10 +350,10 @@ function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
                 <Link to={`/projects/${p.project_id}`}>{p.code}</Link>{" "}
                 <span className="muted">{p.name}</span>
               </td>
-              <td>{p.calls}</td>
-              <td>{p.recorded}</td>
-              <td>{p.failed}</td>
-              <td>{minutes(p.recorded_minutes)}</td>
+              <td className="num">{p.calls}</td>
+              <td className="num">{p.recorded}</td>
+              <td className="num">{p.failed}</td>
+              <td className="num">{minutes(p.recorded_minutes)}</td>
             </tr>
           ))}
         </tbody>
@@ -461,10 +464,8 @@ function Figures({ data, allProjects }: { data: tel.CallAnalytics; allProjects: 
           />
         </section>
       </div>
-      <div className="split">
-        <CallsByHour hours={data.by_hour} title="Calls by hour of the day" />
-        <ByModerator rows={data.by_moderator} />
-      </div>
+      <CallsByHour hours={data.by_hour} title="Calls by hour of the day" />
+      <ByModerator rows={data.by_moderator} />
       {allProjects && data.by_project.length > 1 ? <ByProject rows={data.by_project} /> : null}
       <div className="split">
         <Counts
@@ -520,7 +521,7 @@ function Header({ title, lead, children }: { title: string; lead: string; childr
     <div className="page-header">
       <div className="page-header__text">
         <h1 id="calls-title">
-          <IconTile name="phone" tone="blue" />
+          <IconTile name="phone" />
           {title}
         </h1>
         <p className="page-header__lead">{lead}</p>
@@ -586,6 +587,7 @@ function CallFigures() {
         />
         <Button
           variant="secondary"
+          icon="fileCsv"
           busy={download.busy !== null}
           onClick={() =>
             void download.run(() =>
@@ -593,7 +595,6 @@ function CallFigures() {
             )
           }
         >
-          <Icon name="download" size={15} />
           Download calls (CSV)
         </Button>
       </Header>

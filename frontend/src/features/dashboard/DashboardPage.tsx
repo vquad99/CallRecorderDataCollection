@@ -11,6 +11,7 @@ import { Bars, DayChart, Stat } from "../../components/charts/Charts";
 import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
+import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { bytes, hours } from "../../lib/format";
 import { labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
@@ -80,12 +81,54 @@ const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] 
   { key: "failed_processing", label: "Processing failed", icon: "failed" },
   { key: "interrupted", label: "Interrupted recordings", icon: "warning" },
   { key: "stale_uploads", label: "Stalled uploads", icon: "upload" },
-  { key: "on_hold", label: "Tasks on hold", icon: "stop", status: "ON_HOLD" },
+  { key: "on_hold", label: "Tasks on hold", icon: "pause", status: "ON_HOLD" },
 ];
 
 /** The task list filtered to a status (and the chosen project). */
 const tasksLink = (status: string, projectId: string | null) =>
   `/tasks?status=${status}${projectId ? `&project=${projectId}` : ""}`;
+
+/** What each moderator recorded: the first rows, and the rest on request. */
+function Team({ team }: { team: NonNullable<Dashboard["team"]> }) {
+  const { shown, more } = useFirstRows(team);
+  return (
+    <section className="card stack stack--tight" aria-labelledby="team-title">
+      <h2 id="team-title">Moderator output</h2>
+      {team.length === 0 ? (
+        <p className="muted">No finished recordings yet.</p>
+      ) : (
+        <DataTable>
+          <thead>
+            <tr>
+              <th scope="col">Moderator</th>
+              <th scope="col" className="num">
+                Recordings
+              </th>
+              <th scope="col" className="num">
+                Hours
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((t) => (
+              <tr key={t.name}>
+                <td>
+                  <span className="cell-person">
+                    <Avatar name={t.name} />
+                    {t.name}
+                  </span>
+                </td>
+                <td className="num">{t.recordings}</td>
+                <td className="num">{hours(t.recorded_hours)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
+      {more}
+    </section>
+  );
+}
 
 function Body({ data }: { data: Dashboard }) {
   const todayPct = percent(data.today_hours, data.target_hours_per_day);
@@ -101,7 +144,6 @@ function Body({ data }: { data: Dashboard }) {
       <div className="stats">
         <Stat
           icon="mic"
-          tone="blue"
           label="Recorded"
           value={hours(data.recorded_hours)}
           note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}`}
@@ -109,15 +151,13 @@ function Body({ data }: { data: Dashboard }) {
         />
         <Stat
           icon="verified"
-          tone="green"
           label="Approved"
           value={hours(data.approved_hours)}
           note={`${percent(data.approved_hours, data.recorded_hours)}% of recorded hours`}
           spark={data.daily.map((d) => d.approved_hours)}
         />
         <Stat
-          icon="target"
-          tone="amber"
+          icon="clock"
           label="Today"
           value={hours(data.today_hours)}
           note={
@@ -131,7 +171,6 @@ function Body({ data }: { data: Dashboard }) {
         />
         <Stat
           icon="tasks"
-          tone="violet"
           label="Tasks approved"
           value={`${data.tasks_approved} / ${data.tasks_total}`}
           note="tasks complete"
@@ -164,11 +203,7 @@ function Body({ data }: { data: Dashboard }) {
         {data.by_mode.map((m) => (
           <div key={m.mode} className="card mode">
             <h2 className="with-icon">
-              <IconTile
-                name={m.mode === "TELEPHONY" ? "phone" : "mic"}
-                tone={m.mode === "TELEPHONY" ? "violet" : "teal"}
-                size={28}
-              />
+              <IconTile name={m.mode === "TELEPHONY" ? "phone" : "mic"} size={28} />
               {labelFor(MODE_LABELS, m.mode)}
             </h2>
             <dl className="checks">
@@ -282,7 +317,7 @@ function Body({ data }: { data: Dashboard }) {
         data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0)) ? (
         <section className="card" aria-labelledby="calls-title">
           <h2 id="calls-title" className="with-icon">
-            <IconTile name="phone" tone="violet" size={28} />
+            <IconTile name="phone" size={28} />
             Phone calls
           </h2>
           <dl className="checks">
@@ -315,37 +350,8 @@ function Body({ data }: { data: Dashboard }) {
 
       {data.team ? (
         <div className="split split--wide">
-          <section className="card" aria-labelledby="team-title">
-            <h2 id="team-title">Moderator output</h2>
-            {data.team.length === 0 ? (
-              <p className="muted">No finished recordings yet.</p>
-            ) : (
-              <DataTable>
-                <thead>
-                  <tr>
-                    <th scope="col">Moderator</th>
-                    <th scope="col">Recordings</th>
-                    <th scope="col">Hours</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.team.map((t) => (
-                    <tr key={t.name}>
-                      <td>
-                        <span className="cell-person">
-                          <Avatar name={t.name} />
-                          {t.name}
-                        </span>
-                      </td>
-                      <td>{t.recordings}</td>
-                      <td>{hours(t.recorded_hours)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </DataTable>
-            )}
-          </section>
-          <section className="card" aria-labelledby="storage-title">
+          <Team team={data.team} />
+          <section className="card card--top" aria-labelledby="storage-title">
             <h2 id="storage-title">Storage used</h2>
             <p className="stat__value">{bytes(data.storage_bytes ?? 0)}</p>
             <p className="muted">Files kept in private storage, before retention deletes them.</p>
@@ -413,7 +419,7 @@ export function DashboardPage() {
       <div className="page-header">
         <div className="page-header__text">
           <h1 id="dash-title">
-            <IconTile name="chart" tone="blue" />
+            <IconTile name="chart" />
             {HEADINGS[view].title}
           </h1>
           <p className="page-header__lead">{HEADINGS[view].lead}</p>
@@ -531,6 +537,7 @@ export function DashboardPage() {
         {narrowed ? (
           <Button
             variant="secondary"
+            icon="filterX"
             onClick={() => {
               setFilters(NO_FILTERS);
               setPeriod("30");

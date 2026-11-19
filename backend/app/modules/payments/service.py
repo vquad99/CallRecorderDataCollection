@@ -30,16 +30,16 @@ from sqlalchemy.orm import Session
 
 from app.core.csvio import write_table
 from app.core.days import day_bounds
-from app.core.errors import AppError, forbidden
+from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal
-from app.modules.auth.models import User
 from app.modules.exports import minutes
 from app.modules.participants.models import Participant
 from app.modules.payments.models import PaymentRate
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable, visible_projects_query
+from app.modules.users.service import display_names
 
 Who = Literal["moderators", "participants"]
 PAISA = Decimal("0.01")
@@ -88,20 +88,10 @@ def _rates_of(db: Session, projects: Iterable[Project]) -> dict[uuid.UUID, Payme
     }
 
 
-def _names(db: Session, user_ids: Iterable[uuid.UUID | None]) -> dict[uuid.UUID, str]:
-    ids = {u for u in user_ids if u is not None}
-    if not ids:
-        return {}
-    return {
-        uid: name
-        for uid, name in db.execute(select(User.id, User.display_name).where(User.id.in_(ids)))
-    }
-
-
 def list_rates(db: Session, principal: Principal) -> list[Rates]:
     projects = payable_projects(db, principal)
     found = _rates_of(db, projects)
-    names = _names(db, (r.updated_by for r in found.values()))
+    names = display_names(db, (r.updated_by for r in found.values()))
     return [_rates(p, found.get(p.id), names) for p in projects]
 
 
@@ -152,7 +142,7 @@ def set_rates(
         )
         db.commit()
         db.refresh(rate)
-    return _rates(project, rate, _names(db, [rate.updated_by] if rate else []))
+    return _rates(project, rate, display_names(db, [rate.updated_by] if rate else []))
 
 
 # ---------------------------------------------------------------- earnings
@@ -222,14 +212,8 @@ def _scope(db: Session, principal: Principal, project_id: uuid.UUID | None) -> l
 def earnings(db: Session, principal: Principal, who: Who, period: Period, tz_name: str) -> Report:
     """Every moderator's or participant's approved work in the period, one row per person and
     project, by project code and name (participants: by code)."""
-    if period.date_from and period.date_to and period.date_from > period.date_to:
-        raise AppError(
-            "The first day must not be after the last day",
-            code="VALIDATION_ERROR",
-            status_code=422,
-        )
-    projects = {p.id: p for p in _scope(db, principal, period.project_id)}
     start, end = day_bounds(period.date_from, period.date_to, tz_name)
+    projects = {p.id: p for p in _scope(db, principal, period.project_id)}
     sums: dict[tuple[uuid.UUID, uuid.UUID], list[int]] = {}
 
     def add(project_id: uuid.UUID, person: uuid.UUID, ms: int) -> None:
@@ -253,7 +237,7 @@ def earnings(db: Session, principal: Principal, who: Who, period: Period, tz_nam
 
     rows: list[Row] = []
     if who == "moderators":
-        names = _names(db, (person for _, person in sums))
+        names = display_names(db, (person for _, person in sums))
         for (project_id, person), (count, ms) in sums.items():
             rows.append(Row(projects[project_id], person, names.get(person, ""), None, count, ms))
     else:

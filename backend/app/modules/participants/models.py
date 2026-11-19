@@ -153,6 +153,7 @@ class ParticipantPortalLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     # True when the link was shown to the staff member (copy and hand over), false when only
     # emailed to the participant: an answer on a shown link may have been typed by staff (D-088).
+    # Links are only emailed now; older rows may still be true.
     shown_to_staff: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )

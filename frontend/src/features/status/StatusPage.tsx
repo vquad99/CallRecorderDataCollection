@@ -8,6 +8,7 @@ import {
   type VersionInfo,
   getSystemStatus,
 } from "../../api/system";
+import { Button } from "../../components/form/Button";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { IconTile } from "../../components/Icon";
 import { when } from "../../lib/format";
@@ -52,7 +53,7 @@ export function StatusPage() {
   return (
     <section aria-labelledby="status-title">
       <h1 id="status-title">
-        <IconTile name="status" tone="green" />
+        <IconTile name="status" />
         System status
       </h1>
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}
@@ -75,9 +76,9 @@ export function StatusPage() {
           <p className="state__meta">
             Version {state.version.version} ({state.version.environment})
           </p>
-          <button type="button" className="button button--secondary" onClick={retry}>
+          <Button variant="secondary" icon="refresh" onClick={retry}>
             Check again
-          </button>
+          </Button>
         </div>
       ) : null}
       {state.kind === "loaded" && state.alerts ? (

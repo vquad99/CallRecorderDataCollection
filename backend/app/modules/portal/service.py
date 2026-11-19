@@ -1,6 +1,6 @@
-"""Participant personal page (D-067): a participant has no account; a staff member creates a
-personal link for one participant in one project, and that link opens a page with the project's
-consent form and the participant's own sessions.
+"""Participant personal page (D-067): a participant has no account; a personal link for one
+participant in one project is emailed to them (never shown to staff), and that link opens a page
+with the project's consent form and the participant's own sessions.
 
 Security: the link carries a 256-bit secret that is stored only as a hash, expires, can be replaced
 or revoked at any time, and is sent to the API in a header (never in an address, so it reaches no
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -37,7 +38,6 @@ from app.modules.participants import consent
 from app.modules.participants import service as participants
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantPortalLink
 from app.modules.projects.models import Project
-from app.modules.recordings.models import current_recordings, final_length_subquery
 from app.modules.tasks.models import Task
 
 logger = logging.getLogger("app.portal")
@@ -54,6 +54,11 @@ SESSION_STATES = {
     "APPROVED": "Accepted",
     "REJECTED": "Not used",
 }
+# Each email replaces the link sent before it: a participant is not emailed again this soon.
+EMAIL_AGAIN_AFTER = timedelta(minutes=10)
+EMAILED_RECENTLY = (
+    f"Emailed less than {EMAIL_AGAIN_AFTER // timedelta(minutes=1)} minutes ago: not sent again."
+)
 
 
 def _gone() -> AppError:
@@ -62,25 +67,6 @@ def _gone() -> AppError:
         code="LINK_INVALID",
         status_code=404,
     )
-
-
-def create_link(
-    db: Session,
-    settings: Settings,
-    principal: Principal,
-    project_id: uuid.UUID,
-    participant_id: uuid.UUID,
-    ip: str | None,
-    *,
-    shown_to_staff: bool,
-) -> tuple[str, datetime]:
-    """A new personal link; any earlier link for this participant and project stops working.
-    shown_to_staff: the caller sees the link (to hand it over), as opposed to only emailing it."""
-    project, participant = participants.get_in_project(
-        db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
-    )
-    check_linkable(participant)
-    return _issue(db, settings, project, participant, principal.user_id, ip, shown_to_staff)
 
 
 def email_of(participant: Participant) -> str:
@@ -107,8 +93,9 @@ def _issue(
     participant: Participant,
     created_by: uuid.UUID,
     ip: str | None,
-    shown_to_staff: bool,
 ) -> tuple[str, datetime]:
+    """A new personal link, to be emailed; any earlier link for this participant and project
+    stops working."""
     _revoke(db, project.id, participant.id)
     token = new_token()
     expires = datetime.now(UTC) + timedelta(days=settings.portal_link_days)
@@ -119,7 +106,6 @@ def _issue(
             token_hash=hash_token(token),
             expires_at=expires,
             created_by=created_by,
-            shown_to_staff=shown_to_staff,
         )
     )
     audit.record(
@@ -130,11 +116,31 @@ def _issue(
         project_id=project.id,
         actor_id=created_by,
         ip=ip,
-        after={"expires_at": expires.isoformat(), "shown_to_staff": shown_to_staff},
+        after={"expires_at": expires.isoformat(), "shown_to_staff": False},
     )
     db.commit()
     # The secret sits after "#": browsers never send that part to a server.
     return f"{settings.public_app_url}/portal#{token}", expires
+
+
+def recently_emailed(
+    db: Session, project_id: uuid.UUID, participant_ids: Collection[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Those of these participants emailed a link of this project less than EMAIL_AGAIN_AFTER
+    ago that still works: they are not emailed again yet."""
+    if not participant_ids:
+        return set()
+    return set(
+        db.scalars(
+            select(ParticipantPortalLink.participant_id).where(
+                ParticipantPortalLink.project_id == project_id,
+                ParticipantPortalLink.participant_id.in_(participant_ids),
+                ParticipantPortalLink.shown_to_staff.is_(False),
+                ParticipantPortalLink.revoked_at.is_(None),
+                ParticipantPortalLink.created_at > datetime.now(UTC) - EMAIL_AGAIN_AFTER,
+            )
+        )
+    )
 
 
 def email_link(
@@ -148,12 +154,15 @@ def email_link(
     ip: str | None,
 ) -> tuple[bool, datetime]:
     """Create a fresh personal link and email it to the participant (the link is not shown to
-    staff). Returns (sent, expires_at)."""
+    staff). Returns (sent, expires_at). 409 EMAILED_RECENTLY within EMAIL_AGAIN_AFTER of the
+    last email."""
     project, participant = participants.get_in_project(
         db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
     )
     email_of(participant)
     check_linkable(participant)
+    if recently_emailed(db, project.id, [participant.id]):
+        raise AppError(EMAILED_RECENTLY, code="EMAILED_RECENTLY", status_code=409)
     return _email(db, settings, cipher, sender, project, participant, principal.user_id, ip)
 
 
@@ -168,7 +177,7 @@ def _email(
     ip: str | None,
 ) -> tuple[bool, datetime]:
     address = cipher.decrypt(email_of(participant))
-    url, expires = _issue(db, settings, project, participant, actor_id, ip, shown_to_staff=False)
+    url, expires = _issue(db, settings, project, participant, actor_id, ip)
     body = (
         "Hello,\n\n"
         f'You are taking part in the project "{project.name}". Please read the consent form '
@@ -187,6 +196,9 @@ def _email(
             )
         )
     except EmailSendError:
+        # The new link reached nobody: it does not stay working, nor hold back the next try.
+        _revoke(db, project.id, participant.id)
+        db.commit()
         return False, expires
     audit.record(
         db,
@@ -342,22 +354,16 @@ def view_for_admin(
 def build_view(
     db: Session, participant: Participant, project: Project, expires: datetime | None
 ) -> PortalView:
-    # A session's length is its current recording's, as on the minutes (D-095, D-135).
-    current = current_recordings()
-    length = final_length_subquery()
-    final = (
-        select(current.c.task_id, length.c.ms)
-        .join(length, length.c.recording_id == current.c.recording_id)
-        .subquery()
+    theirs = (
+        Task.project_id == project.id,
+        or_(Task.participant_a_id == participant.id, Task.participant_b_id == participant.id),
     )
+    # A session's length is its current recording's, as on the minutes (D-095, D-135).
+    final = minute_totals.conversations(select(Task.id).where(*theirs)).subquery()
     rows = db.execute(
         select(Task.task_code, Task.recording_mode, Task.status, Task.created_at, final.c.ms)
         .outerjoin(final, final.c.task_id == Task.id)
-        .where(
-            Task.project_id == project.id,
-            or_(Task.participant_a_id == participant.id, Task.participant_b_id == participant.id),
-            Task.status.in_(tuple(SESSION_STATES)),
-        )
+        .where(*theirs, Task.status.in_(tuple(SESSION_STATES)))
         .order_by(Task.created_at.desc())
         .limit(MAX_SESSIONS)
     ).all()

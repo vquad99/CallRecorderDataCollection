@@ -1,6 +1,6 @@
 // Generates src/components/icons.generated.ts from Phosphor Icons (MIT, @phosphor-icons/react):
 // only the icons and weights the app uses, as plain path data. Phosphor ships every icon in six
-// weights inside one component (about 1-3 KB compressed each); the app needs two, so the full
+// weights inside one component (about 1-3 KB compressed each); the app needs a few, so the full
 // package would cost the first screen about 25 KB.  Run: node scripts/gen-icons.mjs
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -49,8 +49,31 @@ const ICONS = {
   people: "Users",
   trash: "Trash",
   money: "CurrencyInr",
+  // D-141: file types and actions, so every button says what it does with a picture too.
+  fileCsv: "FileCsv",
+  table: "Table",
+  fileZip: "FileZip",
+  fileAudio: "FileAudio",
+  fileText: "FileText",
+  fileUp: "FileArrowUp",
+  pencil: "PencilSimple",
+  eye: "Eye",
+  history: "ClockCounterClockwise",
+  link: "Link",
+  copy: "Copy",
+  send: "PaperPlaneTilt",
+  pause: "PauseCircle",
+  resume: "PlayCircle",
+  prohibit: "Prohibit",
+  archive: "Archive",
+  key: "Key",
+  userPlus: "UserPlus",
+  userMinus: "UserMinus",
+  filterX: "FunnelSimpleX",
+  phoneX: "PhoneX",
 };
-// Every icon gets "regular"; these also get the weights they are shown in.
+// Every icon gets "regular". These also get "fill": the side menu's current page, and the icons
+// shown in tiles (page titles, figures).
 const FILLED = [
   "chart",
   "projects",
@@ -64,12 +87,9 @@ const FILLED = [
   "phone",
   "target",
   "clock",
-  "record",
-  "ok",
   "warning",
   "failed",
-  "play",
-  "stop",
+  "waveform",
   "people",
   "user",
   "lock",
@@ -77,6 +97,8 @@ const FILLED = [
 ];
 const EXTRA = { plus: ["bold"], check: ["bold"] };
 for (const n of FILLED) EXTRA[n] = [...(EXTRA[n] ?? []), "fill"];
+// Icons drawn in one colour only (arrows, close, menu, the search lens, plus, tick): no two-tone.
+const PLAIN = new Set(["menu", "close", "next", "previous", "check", "search", "plus"]);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -87,7 +109,7 @@ function paths(element) {
   const walk = (node) => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) return node.forEach(walk);
-    if (node.type === "path" && node.props?.d) out.push(node.props.d);
+    if (node.type === "path" && node.props?.d) out.push(node.props);
     walk(node.props?.children);
   };
   walk(element);
@@ -100,9 +122,19 @@ for (const [name, component] of Object.entries(ICONS)) {
   const weights = Object.values(mod).find((v) => v instanceof Map);
   const entry = {};
   for (const w of ["regular", ...(EXTRA[name] ?? [])]) {
-    const d = paths(weights.get(w));
+    const d = paths(weights.get(w)).map((p) => p.d);
     if (d.length === 0) throw new Error(`${component}: no ${w} path`);
     entry[w] = d.join(" ");
+  }
+  if (!PLAIN.has(name)) {
+    // Two-tone: Phosphor's "duotone" is a light shape (drawn at 20 %) under the outline. Only the
+    // light shape is kept; the regular outline is drawn over it (the same in nearly every icon,
+    // and it saves the first screen about 2 KB).
+    const light = paths(weights.get("duotone"))
+      .filter((p) => p.opacity === "0.2")
+      .map((p) => p.d);
+    if (light.length === 0) throw new Error(`${component}: no duotone`);
+    entry.duo = light.join(" ");
   }
   lines.push(`  ${name}: ${JSON.stringify(entry)},`);
 }

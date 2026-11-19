@@ -9,6 +9,7 @@ import { SuccessNotice } from "../../components/Notice";
 import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { Avatar, Icon, IconTile } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -24,21 +25,22 @@ export function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const query = useDebounced(search.trim());
   const { state, reload } = useResource(
-    () => listProjects({ search, status, page, page_size: PAGE_SIZE }),
-    [search, status, page],
+    () => listProjects({ search: query, status, page, page_size: PAGE_SIZE }),
+    [query, status, page],
   );
 
   return (
     <section aria-labelledby="projects-title" className="stack">
       <div className="page-header">
         <h1 id="projects-title">
-          <IconTile name="projects" tone="blue" />
+          <IconTile name="projects" />
           Projects
         </h1>
         {can("projects.create") ? (
           <Link className="button button--primary" to="/projects/new">
-            <Icon name="plus" size={18} weight="bold" />
+            <Icon name="plus" size={16} weight="bold" />
             New project
           </Link>
         ) : null}

@@ -40,8 +40,8 @@ function quotedPrintable(text: string): string {
     .replace(/=([0-9A-F]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
 }
 
-/** The newest password link emailed to this address (invitation or reset). */
-export async function emailedLink(to: string, after: number): Promise<string> {
+/** The newest link of one kind in the emails to this address written since `after`. */
+async function newestEmailedUrl(to: string, after: number, kind: RegExp, what: string) {
   let link = "";
   await expect
     .poll(
@@ -54,7 +54,7 @@ export async function emailedLink(to: string, after: number): Promise<string> {
         for (const file of files) {
           const text = quotedPrintable(readFileSync(file, "utf8"));
           if (!new RegExp(`^To: .*${to.replace(/[.+]/g, "\\$&")}`, "mi").test(text)) continue;
-          const match = /https?:\/\/\S*?\/reset-password\?token=[A-Za-z0-9_-]+/.exec(text);
+          const match = kind.exec(text);
           if (match) {
             link = match[0];
             return true;
@@ -62,11 +62,34 @@ export async function emailedLink(to: string, after: number): Promise<string> {
         }
         return false;
       },
-      { message: `an email with a password link to ${to}`, timeout: 15_000 },
+      { message: `an email with ${what} to ${to}`, timeout: 15_000 },
     )
     .toBe(true);
+  return new URL(link);
+}
+
+/** The newest password link emailed to this address (invitation or reset). */
+export async function emailedLink(to: string, after: number): Promise<string> {
+  const link = await newestEmailedUrl(
+    to,
+    after,
+    /https?:\/\/\S*?\/reset-password\?token=[A-Za-z0-9_-]+/,
+    "a password link",
+  );
   // The link names the configured site; open it on the site under test.
-  return new URL(link).pathname + new URL(link).search;
+  return link.pathname + link.search;
+}
+
+/** The newest personal link to a project's consent form emailed to this participant (D-129);
+ * staff never see it (D-142). As a path on the site under test, with its secret after "#". */
+export async function emailedConsentLink(to: string): Promise<string> {
+  const link = await newestEmailedUrl(
+    to,
+    0,
+    /https?:\/\/\S*?\/portal#[A-Za-z0-9_-]{20,}/,
+    "a consent form link",
+  );
+  return link.pathname + link.hash;
 }
 
 /** API calls made with the signed-in browser's own session (as the page itself would). */
@@ -116,16 +139,18 @@ export interface Setup {
 }
 
 /** The participant agrees to the project's consent form the real way (D-129: tasks are made only
- * for people who agreed): the signed-in admin makes their personal link, and the answer goes in
- * through the personal page's API with the link's secret, as the page itself sends it. */
+ * for people who agreed): with the personal link emailed to them when they joined the project,
+ * the answer goes in through the personal page's API with the link's secret, as the page itself
+ * sends it. */
 export async function agree(admin: Page, projectId: string, participantId: string): Promise<void> {
-  const link = await api<{ url: string }>(
+  const person = await api<{ email: string | null }>(
     admin,
-    "POST",
-    `/api/v1/projects/${projectId}/participants/${participantId}/portal-link`,
+    "GET",
+    `/api/v1/projects/${projectId}/participants/${participantId}`,
   );
+  expect(person.email, "the participant has an email address").toBeTruthy();
   // The secret sits after "#" (D-067).
-  const token = new URL(link.url).hash.slice(1);
+  const token = (await emailedConsentLink(person.email ?? "")).split("#")[1] ?? "";
   const page = await api<{ consent_status: string }>(
     admin,
     "POST",

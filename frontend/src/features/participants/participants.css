@@ -59,9 +59,6 @@
   margin: 0;
   font-size: 1rem;
 }
-.pd-section > h3 .icon {
-  color: var(--muted);
-}
 .pd-section > h4 {
   margin: 4px 0 0;
   font-size: 0.85rem;

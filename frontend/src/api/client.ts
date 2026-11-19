@@ -67,14 +67,29 @@ export function query(params: Record<string, string | number | boolean | undefin
   return text ? `?${text}` : "";
 }
 
-// When the server last heard from this page. A session ends after some minutes without requests
-// (D-122); the sign-out warning counts from here.
+// When the server last heard from this page. A session ends after some hours without requests
+// (D-140); the sign-out warning counts from here.
 let lastActivity = Date.now();
 /** The time (ms) of the last request that reached the server. */
 export const lastApiActivity = (): number => lastActivity;
 /** Note that the server was reached just now. */
 export function markApiActivity(): void {
   lastActivity = Date.now();
+}
+
+/** Tells the server a request was made by the page itself, not by the person (D-141). */
+export const BACKGROUND_HEADER = "X-Background-Request";
+let background = 0;
+/** Runs `load` as the page's own request (polling): it does not count as the person's use, so a
+ * page left open still signs out when nobody uses it. Only requests `load` starts before its
+ * first `await` are marked; any later ones count as use, which errs on staying signed in. */
+export function inBackground<T>(load: () => Promise<T>): Promise<T> {
+  background += 1;
+  try {
+    return load();
+  } finally {
+    background -= 1;
+  }
 }
 
 function readCookie(name: string): string | null {
@@ -118,7 +133,9 @@ function errorFromBody(response: Response, body: unknown): ApiError {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
+  const quiet = background > 0;
   const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
+  if (quiet) headers[BACKGROUND_HEADER] = "1";
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET") {
     const csrf = readCookie(CSRF_COOKIE);
@@ -139,7 +156,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Cannot reach the server" });
   }
 
-  markApiActivity();
+  if (!quiet) markApiActivity();
   const body = await parseJson(response);
   if (response.ok || options.acceptStatuses?.includes(response.status)) return body as T;
   const error = errorFromBody(response, body);

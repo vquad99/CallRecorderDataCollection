@@ -19,7 +19,13 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
-from app.core.security import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, UNSAFE_METHODS
+from app.core.security import (
+    BACKGROUND_HEADER,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    UNSAFE_METHODS,
+)
 from app.db.session import get_db_session
 from app.modules.audit.service import VIEWER_KEY
 from app.modules.auth.models import User, UserSession
@@ -124,7 +130,9 @@ def current_principal(request: Request, db: DbSession) -> Principal:
         raise unauthenticated("SESSION_EXPIRED", "Your session has expired. Sign in again.")
     if user.status != "ACTIVE":
         raise unauthenticated()
-    if now - session.last_seen_at >= _LAST_SEEN_WRITE_INTERVAL:
+    # The page's own polling is not use: a session left open still ends when idle (D-141).
+    used = request.headers.get(BACKGROUND_HEADER) != "1"
+    if used and now - session.last_seen_at >= _LAST_SEEN_WRITE_INTERVAL:
         session.last_seen_at = now
         db.commit()
     setup_required = needs_mfa_setup(settings, user)

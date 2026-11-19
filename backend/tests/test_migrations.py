@@ -273,6 +273,27 @@ def test_telephony_rules_at_the_old_default_become_stereo(test_database_url: str
     engine.dispose()
 
 
+def test_the_audit_action_index_comes_and_goes(test_database_url: str) -> None:
+    """0032: the audit viewer filters on action with = and LIKE 'x.%'; the index serves both
+    (text_pattern_ops), and going back removes it."""
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(test_database_url)
+    found = text("SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_audit_logs_action'")
+    with engine.begin() as conn:
+        assert "(action text_pattern_ops)" in conn.execute(found).scalar_one()
+        conn.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = conn.execute(
+            text("EXPLAIN SELECT id FROM audit_logs WHERE action LIKE 'participant.%'")
+        )
+        assert "ix_audit_logs_action" in " ".join(line for (line,) in plan)
+    command.downgrade(cfg, "0031")
+    with engine.begin() as conn:
+        assert conn.execute(found).first() is None
+    engine.dispose()
+
+
 def test_payments_and_the_qc_final_approval_option_come_and_go(test_database_url: str) -> None:
     """0030 (D-137): payment rates and payments.manage for the Super Admin and the Project
     Admin; 0031 (D-138): every project starts with "QC pass is the final approval" off."""

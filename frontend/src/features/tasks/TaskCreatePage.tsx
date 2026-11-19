@@ -67,11 +67,11 @@ function BulkTasks({ projectId }: { projectId: string }) {
         />
       </div>
       <div className="actions">
-        <Button variant="secondary" onClick={downloadSample}>
+        <Button variant="secondary" icon="fileCsv" onClick={downloadSample}>
           Download sample CSV
         </Button>
         <label className="button button--secondary">
-          <Icon name="upload" size={15} />
+          <Icon name="fileUp" size={16} />
           Choose a file
           <input
             type="file"
@@ -83,10 +83,17 @@ function BulkTasks({ projectId }: { projectId: string }) {
             }}
           />
         </label>
-        <Button variant="secondary" busy={busy} disabled={!csv.trim()} onClick={() => send(false)}>
+        <Button
+          variant="secondary"
+          icon="tasks"
+          busy={busy}
+          disabled={!csv.trim()}
+          onClick={() => send(false)}
+        >
           Check rows
         </Button>
         <Button
+          icon="plus"
           busy={busy}
           disabled={!result || result.ready === 0 || result.created > 0}
           onClick={() => send(true)}
@@ -302,6 +309,7 @@ export function TaskCreatePage() {
                 <ErrorNotice error={projectError} />
                 <Button
                   variant="secondary"
+                  icon="refresh"
                   onClick={() => {
                     project.reload();
                     people.reload();
@@ -314,7 +322,12 @@ export function TaskCreatePage() {
           </>
         ) : null}
         <ErrorNotice error={error} />
-        <Button type="submit" busy={busy !== null} disabled={!projectId || !mode || !a || !b}>
+        <Button
+          type="submit"
+          icon="plus"
+          busy={busy !== null}
+          disabled={!projectId || !mode || !a || !b}
+        >
           Create task
         </Button>
       </form>

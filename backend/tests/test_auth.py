@@ -102,6 +102,33 @@ def test_expired_session_requires_login(db: Any, new_api: Any, field: str) -> No
     assert response.json()["error"]["code"] == "SESSION_EXPIRED"
 
 
+def test_the_pages_own_polling_does_not_keep_a_session_in_use(db: Any, new_api: Any) -> None:
+    """D-141: a request the page makes by itself is answered, but only the person's own requests
+    move the idle sign-out clock (D-140)."""
+    user = make_user(db, "poll@example.org", ["MODERATOR"])
+    api = new_api()
+    api.login(user.email)
+    earlier = datetime.now(UTC) - timedelta(minutes=30)
+    db.execute(
+        update(UserSession).where(UserSession.user_id == user.id).values(last_seen_at=earlier)
+    )
+    db.commit()
+
+    def last_seen() -> datetime:
+        db.expire_all()
+        seen: datetime | None = db.scalar(
+            select(UserSession.last_seen_at).where(UserSession.user_id == user.id)
+        )
+        assert seen is not None
+        return seen
+
+    polled = api.client.get("/api/v1/auth/me", headers={"X-Background-Request": "1"})
+    assert polled.status_code == 200
+    assert abs(last_seen() - earlier) < timedelta(seconds=1)
+    assert api.get("/api/v1/auth/me").status_code == 200
+    assert last_seen() > earlier + timedelta(minutes=29)
+
+
 def test_unsafe_request_without_csrf_token_is_rejected(db: Any, new_api: Any) -> None:
     make_user(db, "csrf@example.org", ["MODERATOR"])
     api = new_api()

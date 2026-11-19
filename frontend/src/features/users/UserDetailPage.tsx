@@ -97,6 +97,7 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
       <div className="card actions">
         <Button
           variant="secondary"
+          icon={active ? "prohibit" : "ok"}
           busy={busy === "status"}
           disabled={busy !== null}
           onClick={active ? disable : enable}
@@ -105,6 +106,7 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
         </Button>
         <Button
           variant="secondary"
+          icon="mail"
           busy={busy === "link"}
           disabled={!active || busy !== null}
           onClick={() =>
@@ -119,11 +121,16 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
         >
           Send password link
         </Button>
-        <Button variant="secondary" disabled={busy !== null} onClick={signOutEverywhere}>
+        <Button
+          variant="secondary"
+          icon="logout"
+          disabled={busy !== null}
+          onClick={signOutEverywhere}
+        >
           Sign out everywhere
         </Button>
         {user.mfa_enabled ? (
-          <Button variant="secondary" disabled={busy !== null} onClick={resetTwoStep}>
+          <Button variant="secondary" icon="key" disabled={busy !== null} onClick={resetTwoStep}>
             Reset two-step sign-in
           </Button>
         ) : null}
@@ -186,7 +193,7 @@ function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.Use
       {user.telephony_has_password ? (
         <SavedPassword key={saves} label="Saved password" load={() => showSeatPassword(user.id)} />
       ) : null}
-      <Button type="submit" variant="secondary" busy={busy !== null}>
+      <Button type="submit" variant="secondary" icon="phone" busy={busy !== null}>
         Save phone seat
       </Button>
       <ErrorNotice error={error} />

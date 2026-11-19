@@ -54,6 +54,8 @@ export function PhoneLineProvider({ children }: { children: ReactNode }) {
   return <PhoneLineContext.Provider value={line}>{children}</PhoneLineContext.Provider>;
 }
 
+const LABEL = "Phone line: ";
+
 /** The line's state in the top bar, with Try again after a failure; nothing without a line. */
 export function PhoneLineStatus() {
   const line = usePhoneLine();
@@ -63,6 +65,12 @@ export function PhoneLineStatus() {
       <span className="phone-line__words" title={line.words}>
         {line.words}
       </span>
+      {/* A phone's narrow top bar shows only the state beside the dot ("Ready"). */}
+      {line.words.startsWith(LABEL) ? (
+        <span className="phone-line__short" aria-hidden="true">
+          {line.words.slice(LABEL.length)}
+        </span>
+      ) : null}
       {line.status === "failed" ? (
         <button type="button" className="phone-line__retry" onClick={line.retry}>
           Try again

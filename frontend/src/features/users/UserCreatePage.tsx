@@ -53,7 +53,12 @@ export function UserCreatePage() {
         <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
         <RoleCheckboxes value={roles} onChange={setRoles} />
         <ErrorNotice error={error} />
-        <Button type="submit" busy={busy !== null} disabled={!email || !name || roles.length === 0}>
+        <Button
+          type="submit"
+          icon="send"
+          busy={busy !== null}
+          disabled={!email || !name || roles.length === 0}
+        >
           Add and send invitation
         </Button>
       </form>

@@ -42,11 +42,15 @@ def _setup(
 
 
 def _token(world: dict[str, Any], participant: str) -> str:
-    """A personal link made by a project admin; the secret after "#"."""
-    pid = str(world["project"].id)
-    made = world["pa"].post(f"/api/v1/projects/{pid}/participants/{participant}/portal-link")
-    assert made.status_code == 201, made.text
-    url = made.json()["url"]
+    """A personal link as the consent email carries it (made here without sending one); the
+    secret after "#"."""
+    from app.modules.participants.models import Participant
+    from app.modules.portal import service as portal
+
+    db = world["db"]
+    pa = uuid.UUID(world["pa"].get("/api/v1/auth/me").json()["id"])
+    person = db.get_one(Participant, uuid.UUID(participant))
+    url, _ = portal._issue(db, world["app"].state.settings, world["project"], person, pa, None)
     assert "/portal#" in url, "the secret sits after #, which browsers never send to a server"
     return str(url.split("#", 1)[1])
 
@@ -215,11 +219,16 @@ def test_wrong_expired_replaced_and_revoked_links_all_answer_the_same(
     assert ask(last) == never
 
 
-def test_only_people_who_manage_participants_create_links(world: dict[str, Any]) -> None:
+def test_staff_are_never_given_a_participants_link(world: dict[str, Any]) -> None:
+    """The link goes only to the participant's email: whoever holds it can answer the consent
+    form, so there is no way for staff to be shown it."""
     pid = str(world["project"].id)
     a = world["task"]["participant_a"]["id"]
-    for who in (world["mod"], world["api"]("qc@example.org")):
-        assert who.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link").status_code == 403
+    for who in (world["pa"], world["mod"]):
+        gone = who.post(f"/api/v1/projects/{pid}/participants/{a}/portal-link")
+        assert gone.status_code in (404, 405), gone.text
+        assert "portal#" not in gone.text
+    assert world["db"].scalar(select(ParticipantPortalLink.id)) is None
 
 
 def test_the_consent_record_downloads_with_the_recording(world: dict[str, Any]) -> None:

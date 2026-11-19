@@ -1,12 +1,14 @@
 // Journey: staff publish a consent form and add a participant, who is emailed the form by itself
-// (D-129); with their personal link (D-067) the participant (no account) opens their page, first
-// does not agree, then agrees - final, nothing to withdraw; staff see both answers, and a task
-// can then be made with them. Requirements: PART-006, PART-013, PART-014
+// (D-129); with the personal link in that email (D-067; staff never see it, D-142) the participant
+// (no account) opens their page, first does not agree, then agrees - final, nothing to withdraw;
+// staff see both answers, and a task can then be made with them. Requirements: PART-006,
+// PART-013, PART-014
 import { expect, test } from "@playwright/test";
 
 import {
   ADMIN_EMAIL,
   api,
+  emailedConsentLink,
   requireSetup,
   runCode,
   SEEDED,
@@ -24,6 +26,7 @@ test("a participant answers the consent form on their personal page", async ({
   await signIn(page, ADMIN_EMAIL, SEEDED_PASSWORD);
   const setup = await setUpTask(page, code, [SEEDED.moderator], SEEDED.moderator);
   const name = `Chitra ${code}`;
+  const email = `chitra.${code.toLowerCase()}@example.org`;
   const row = () => page.getByRole("row").filter({ hasText: name });
   let link = "";
 
@@ -39,19 +42,14 @@ test("a participant answers the consent form on their personal page", async ({
     await page.getByRole("button", { name: "Add participant" }).click();
     const form = page.getByRole("dialog", { name: "Add participant" });
     await form.getByLabel(/^Name or label/).fill(name);
-    await form.getByLabel(/^Email address/).fill(`chitra.${code.toLowerCase()}@example.org`);
+    await form.getByLabel(/^Email address/).fill(email);
     await form.getByLabel(/^Language/).selectOption("hi");
     await form.getByRole("button", { name: "Add participant" }).click();
     await expect(page.getByText(/^P\d{6} added\. Consent form emailed\.$/)).toBeVisible();
-  });
-
-  await test.step("and makes their personal link", async () => {
-    await row().getByRole("button", { name: "Personal link" }).click();
-    const card = page.getByRole("dialog", { name: /Personal link/ });
-    await expect(card).toBeVisible();
-    link = (await card.locator(".mono").innerText()).trim();
-    expect(link).toMatch(/\/portal#[A-Za-z0-9_-]{20,}$/);
-    await card.getByRole("button", { name: "Close" }).click();
+    // Staff cannot make or see the participant's link: it is in the participant's email only.
+    await expect(row().getByRole("button", { name: "Personal link" })).toHaveCount(0);
+    link = await emailedConsentLink(email);
+    expect(link).toMatch(/^\/portal#[A-Za-z0-9_-]{20,}$/);
   });
 
   const visitor = await (await browser.newContext()).newPage(); // no session, like a participant
@@ -59,7 +57,7 @@ test("a participant answers the consent form on their personal page", async ({
   visitor.on("request", (r) => sent.push(r.url()));
 
   await test.step("the participant opens the link: own details, no staff application", async () => {
-    await visitor.goto(new URL(link).pathname + new URL(link).hash);
+    await visitor.goto(link);
     await expect(
       visitor.getByRole("heading", { level: 1, name: "Your participation" }),
     ).toBeVisible();
@@ -69,7 +67,7 @@ test("a participant answers the consent form on their personal page", async ({
     // Their own details are shown, read-only; other people's never are (D-100).
     await expect(visitor.getByText(name)).toBeVisible();
     await expect(visitor.getByText(`Asha ${code}`)).toHaveCount(0);
-    const secret = new URL(link).hash.slice(1);
+    const secret = link.split("#")[1] ?? "";
     expect(sent.some((u) => u.includes(secret))).toBe(false); // never in any address
   });
 
@@ -120,12 +118,5 @@ test("a participant answers the consent form on their personal page", async ({
     });
     await visitor.reload();
     await expect(visitor.getByRole("cell", { name: task.task_code })).toBeVisible();
-  });
-
-  await test.step("a new link ends the old one", async () => {
-    await row().getByRole("button", { name: "Personal link" }).click();
-    await expect(page.getByRole("dialog", { name: /Personal link/ })).toBeVisible();
-    await visitor.reload();
-    await expect(visitor.getByRole("alert")).toContainText("not valid any more");
   });
 });

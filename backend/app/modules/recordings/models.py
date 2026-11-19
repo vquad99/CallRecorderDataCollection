@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import datetime
 
 from sqlalchemy import (
@@ -187,15 +188,23 @@ class AssetProcessingStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     output_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
-def final_length_subquery() -> Subquery:
-    """(recording_id, ms): each recording's length, from its final file. Lengths stay counted
-    after retention deletes the file."""
-    return (
-        select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms"))
-        .where(AudioAsset.kind.in_(FINAL_KINDS))
-        .group_by(AudioAsset.recording_id)
-        .subquery()
+# Task ids, or a query of them: what the subqueries below read. Pass only the tasks asked about:
+# the database cannot push a join into a grouping or a DISTINCT ON, so it would otherwise go
+# through the whole database.
+TaskIds = Select[uuid.UUID] | Collection[uuid.UUID]
+
+
+def final_length_subquery(tasks: TaskIds | None = None) -> Subquery:
+    """(recording_id, ms): the length of each recording of `tasks` (of every task when None),
+    from its final file. Lengths stay counted after retention deletes the file."""
+    query = select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms")).where(
+        AudioAsset.kind.in_(FINAL_KINDS)
     )
+    if tasks is not None:
+        query = query.where(
+            AudioAsset.recording_id.in_(select(Recording.id).where(Recording.task_id.in_(tasks)))
+        )
+    return query.group_by(AudioAsset.recording_id).subquery()
 
 
 # A task's current recording is its newest finished one: the one QC checks, an export delivers and
@@ -215,9 +224,10 @@ def current_recordings_query() -> Select[uuid.UUID, uuid.UUID, datetime]:
     )
 
 
-def current_recordings() -> Subquery:
-    """current_recordings_query() as a subquery, to join on task_id."""
-    return current_recordings_query().subquery()
+def current_recordings(tasks: TaskIds) -> Subquery:
+    """The current recording of each of `tasks`: current_recordings_query() as a subquery, to
+    join on task_id."""
+    return current_recordings_query().where(Recording.task_id.in_(tasks)).subquery()
 
 
 def current_recording_of(task_id: uuid.UUID) -> Select[Recording]:

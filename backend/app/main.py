@@ -25,7 +25,7 @@ from app.core.middleware import (
     RequestLimitsMiddleware,
 )
 from app.core.ratelimit import build_limiter
-from app.core.security import SecurityHeadersMiddleware
+from app.core.security import BACKGROUND_HEADER, CSRF_HEADER, SecurityHeadersMiddleware
 from app.core.storage import build_storage
 from app.db.session import create_db_engine, make_session_factory
 from app.modules.auth.security import FieldCipher
@@ -88,7 +88,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "X-CSRF-Token", "X-Portal-Token", REQUEST_ID_HEADER],
+        allow_headers=[
+            "Content-Type",
+            CSRF_HEADER,
+            "X-Portal-Token",
+            BACKGROUND_HEADER,
+            REQUEST_ID_HEADER,
+        ],
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.app_env == "production")

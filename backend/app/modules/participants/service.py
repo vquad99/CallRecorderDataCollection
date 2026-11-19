@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -200,13 +200,25 @@ def list_participants(
     return project, items, total
 
 
-def _in_project(project: Project) -> Select[Participant]:
-    """The project's participants who are not deleted."""
-    return (
+def _in_project(project: Project, *, with_deleted: bool = False) -> Select[Participant]:
+    """The project's participants who are not deleted (or all of them, with_deleted)."""
+    query = (
         select(Participant)
         .join(ParticipantProjectLink, ParticipantProjectLink.participant_id == Participant.id)
-        .where(ParticipantProjectLink.project_id == project.id, Participant.deleted_at.is_(None))
+        .where(ParticipantProjectLink.project_id == project.id)
     )
+    return query if with_deleted else query.where(Participant.deleted_at.is_(None))
+
+
+def in_project_by_id(
+    db: Session, project: Project, participant_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, Participant]:
+    """Those of these participants who are in the project, deleted or not, in one query: what
+    get_in_project finds for each, once the caller may see the project's participants."""
+    if not participant_ids:
+        return {}
+    query = _in_project(project, with_deleted=True).where(Participant.id.in_(participant_ids))
+    return {p.id: p for p in db.scalars(query)}
 
 
 @dataclass(frozen=True)
