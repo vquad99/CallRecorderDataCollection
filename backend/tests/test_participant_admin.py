@@ -87,10 +87,9 @@ def test_bulk_assign_and_remove_report_each_participant(world: dict[str, Any]) -
     db.execute(update(Participant).where(Participant.id == without["id"]).values(email_enc=None))
     db.commit()
     ids = [with_mail["id"], without["id"]]
-    assert (
-        pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids}).status_code
-        == 422
-    ), "consent forms are no longer sent by hand in bulk (D-129)"
+    # Emailing the form again in bulk (D-139) skips people who already agreed.
+    resent = pa.post(f"{base}/bulk", json={"action": "send_consent", "participant_ids": ids})
+    assert {r["message"] for r in resent.json()["results"]} == {"Already agreed: no form sent"}
 
     assert (
         pa.post(f"{base}/bulk", json={"action": "assign", "participant_ids": ids}).json()["error"][
@@ -337,3 +336,30 @@ def test_the_task_names_its_participants_for_people_who_may_see_them(
         side_a = world[who].get(f"/api/v1/tasks/{tid}").json()["participant_a"]
         assert side_a["display_label"], who
         assert side_a["has_email"] is True
+
+
+def test_the_consent_form_goes_again_to_everyone_chosen_who_has_not_agreed(
+    world: dict[str, Any],
+) -> None:
+    """D-139: tick several participants and email them this project's consent form again; people
+    who already agreed are skipped and named."""
+    from app.modules.participants.router import CONSENT_EMAILED, CONSENT_FORM_MISSING
+
+    db, pa, base = world["db"], world["pa"], _base(world)
+    waiting = [make_participant(pa, world["project"].id, n, agreed=False) for n in ("Ravi", "Uma")]
+    done = make_participant(pa, world["project"].id, "Zoya")
+    ids = [p["id"] for p in (*waiting, done)]
+
+    body = {"action": "send_consent", "participant_ids": ids}
+    no_form = pa.post(f"{base}/bulk", json=body).json()
+    assert {r["message"] for r in no_form["results"] if r["ok"]} == {CONSENT_FORM_MISSING}
+
+    db.execute(update(Project).where(Project.id == world["project"].id).values(consent_text=FORM))
+    db.commit()
+    sent = pa.post(f"{base}/bulk", json=body).json()
+    assert (sent["done"], sent["failed"]) == (2, 1)
+    by_code = {r["participant_code"]: r for r in sent["results"]}
+    assert by_code[done["participant_code"]]["message"] == "Already agreed: no form sent"
+    assert all(by_code[p["participant_code"]]["message"] == CONSENT_EMAILED for p in waiting)
+    # Only people who manage participants may do it.
+    assert world["mod"].post(f"{base}/bulk", json=body).status_code == 403

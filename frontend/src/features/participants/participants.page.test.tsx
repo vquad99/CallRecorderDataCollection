@@ -1,5 +1,5 @@
 // Participants section (D-073, D-129). Requirements: PART-006, PART-016
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -202,8 +202,9 @@ describe("participants section", () => {
     await userEvent.click(screen.getByLabelText("Select all on this page"));
     const bar = screen.getByRole("group", { name: "Actions for selected participants" });
     expect(bar).toHaveTextContent("2 selected");
-    // The consent form goes out by itself when someone joins a project (D-129).
-    expect(within(bar).queryByRole("button", { name: /consent/i })).toBeNull();
+    // The consent form goes out by itself when someone joins a project (D-129); it can be
+    // emailed again to everyone ticked (D-139).
+    expect(within(bar).getByRole("button", { name: "Email consent form again" })).toBeEnabled();
     await userEvent.selectOptions(
       within(bar).getByLabelText("Also add them to another project"),
       "p2",
@@ -226,6 +227,21 @@ describe("participants section", () => {
       participant_ids: ["a1", "b1"],
       target_project_id: "p2",
     });
+
+    // D-139: the ticked people get this project's consent form again.
+    await userEvent.click(screen.getByLabelText("Select all on this page"));
+    await userEvent.click(
+      within(screen.getByRole("group", { name: "Actions for selected participants" })).getByRole(
+        "button",
+        { name: "Email consent form again" },
+      ),
+    );
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.endsWith("/participants/bulk")).at(-1)?.body).toEqual({
+        action: "send_consent",
+        participant_ids: ["a1", "b1"],
+      }),
+    );
   });
 
   it("checks a pasted file before adding anyone", async () => {

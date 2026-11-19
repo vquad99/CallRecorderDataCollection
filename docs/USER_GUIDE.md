@@ -40,7 +40,7 @@ Then sign in at https://dubdesk.live with your email and password.
 **Forgot your password.** On the sign-in page click **Forgot your password?**, type your email,
 click **Send reset link**. The emailed link works for 30 minutes. At most 3 links per hour.
 
-**Signed out by itself.** After 10 minutes without use, and after 12 hours in any case. An open recording or phone call keeps you signed in.
+**Signed out by itself.** After 3 hours without use, and after 12 hours in any case. An open recording or phone call keeps you signed in.
 One minute before, a strip says **You will be signed out in 1 minute.** Click **Stay signed in**
 to carry on.
 
@@ -262,7 +262,8 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
    agree later.
 4. The **Consent form** column shows **No answer yet**, **Agreed** or **Did not agree**.
 5. Email lost? Click **Email consent form again** on the participant's row. It is only there
-   until they agree.
+   until they agree. For many at once: tick them, then click **Email consent form again** in the
+   bar that appears; people who already agreed are skipped and named.
 6. **Consent history** shows earlier answers, in a window.
 7. You can make a task only with people who have agreed (see section 6).
 
@@ -411,7 +412,7 @@ app. The top of every page shows:
 - **Phone line not connected:** and the reason: click **Try again**. If it fails again, ask your
   admin to check your seat number and password.
 
-The line goes offline when you sign out, when you are signed out after 10 minutes without use,
+The line goes offline when you sign out, when you are signed out after 3 hours without use,
 and when you close the tab. Opening the portal again connects it again. No seat password saved
 yet? The call card says **Ask your admin to save your phone seat password.**
 

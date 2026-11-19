@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # Phase 2: accounts and sessions
     public_app_url: str = "http://localhost:5173"
     data_encryption_key: SecretStr
-    # Signed out after this long without using the app (owner, 2026-11-17: 10 minutes, D-122).
-    session_idle_minutes: int = Field(default=10, ge=5, le=24 * 60)
+    # Signed out after this long without using the app (owner: 3 hours, D-140; was 10 min, D-122).
+    session_idle_minutes: int = Field(default=180, ge=5, le=24 * 60)
     session_absolute_hours: int = Field(default=12, ge=1, le=24 * 30)
     cookie_secure: bool | None = None
     # Super Admin and Project Admin accounts must set up two-step sign-in before they can

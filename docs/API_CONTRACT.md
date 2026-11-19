@@ -298,3 +298,7 @@ Everyone who joins a project (added, added from a file, added as an existing par
 ## Participants need an email (D-128)
 
 `POST /projects/{id}/participants` and `PATCH .../participants/{pid}` answer 422 `EMAIL_REQUIRED` without an email (a PATCH that leaves `email` out keeps the stored one; an empty one is refused). File imports need an `email` on every row. Task participants also carry `display_label` and `has_email`.
+
+## Bulk consent form again (D-139)
+
+`POST /projects/{id}/participants/bulk` also takes `action: send_consent`: everyone listed who has not agreed gets this project's consent form again (in the background); people who agreed get `ok: false` with "Already agreed: no form sent".

@@ -141,25 +141,34 @@ def bulk(
     reason: str,
     ip: str | None,
 ) -> tuple[Project | None, list[BulkResult]]:
-    """Assign to another project or remove. Returns the project assigned to (None when removing)
-    and each participant's result."""
+    """Assign to another project, remove, or pick who gets this project's consent form again
+    (D-139). Returns the project whose consent form goes out (the target when assigning, this
+    project for send_consent, None when removing) and each participant's result."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     target: Project | None = None
     if action == "assign":
         if target_project_id is None or target_project_id == project.id:
             raise AppError("Choose another project", code="TARGET_REQUIRED", status_code=422)
         target = get_manageable(db, principal, target_project_id, Perm.PARTICIPANTS_MANAGE)
+    elif action == "send_consent":
+        target = project
     elif not reason.strip():
         raise AppError("Give a reason for removing", code="REASON_REQUIRED", status_code=422)
+    ids = list(dict.fromkeys(participant_ids))
+    answers = consent.latest_own_answers(db, project.id, ids) if action == "send_consent" else {}
     results: list[BulkResult] = []
-    for pid in dict.fromkeys(participant_ids):
+    for pid in ids:
         code = "?"
         try:
             _, participant = service.get_in_project(db, principal, project.id, pid)
             code = participant.participant_code
-            if target is not None:
+            if action == "assign" and target is not None:
                 service.link_existing(db, principal, target.id, code, ip)
                 message = "Assigned"
+            elif action == "send_consent":
+                if consent.agreed(answers.get(pid)):
+                    raise AppError("Already agreed: no form sent", code="ALREADY_AGREED")
+                message = ""
             else:
                 service.delete_participant(db, principal, project.id, pid, reason, ip)
                 message = "Removed"

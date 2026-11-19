@@ -427,7 +427,7 @@ def import_participants(
 
 
 class BulkBody(BaseModel):
-    action: Literal["assign", "remove"]
+    action: Literal["assign", "remove", "send_consent"]
     participant_ids: list[uuid.UUID] = Field(min_length=1, max_length=manage.MAX_BULK)
     target_project_id: uuid.UUID | None = None
     reason: str = Field(default="", max_length=1000)
@@ -466,12 +466,13 @@ def bulk_action(
         client_ip(request),
     )
     if target is not None:
-        # Assigned to another project: they get that project's consent form (D-129).
-        added = [r.participant_id for r in results if r.ok]
-        sent = email_consent_forms(request, background, db, principal, target, added)
+        # Assigned to another project: they get that project's consent form (D-129); or the
+        # chosen people get this project's form again (D-139).
+        chosen = [r.participant_id for r in results if r.ok]
+        sent = email_consent_forms(request, background, db, principal, target, chosen)
         for r in results:
             if r.ok:
-                r.message = f"{r.message}. {sent[r.participant_id]}"
+                r.message = ". ".join(x for x in (r.message, sent[r.participant_id]) if x)
     return BulkOut(
         results=[BulkRow.model_validate(r, from_attributes=True) for r in results],
         done=sum(1 for r in results if r.ok),

@@ -129,7 +129,7 @@ def test_timeline_entries_carry_the_status_change_itself(world: dict[str, Any]) 
 
 def test_me_tells_the_page_when_an_idle_session_ends(world: dict[str, Any]) -> None:
     me = world["pa"].get("/api/v1/auth/me").json()
-    assert me["session_idle_minutes"] == world["app"].state.settings.session_idle_minutes == 10
+    assert me["session_idle_minutes"] == world["app"].state.settings.session_idle_minutes == 180
 
 
 def _with_form(world: dict[str, Any], project: Any = None) -> str:

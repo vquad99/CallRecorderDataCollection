@@ -25,7 +25,7 @@ import { useParticipantWindows } from "./ParticipantEditor";
 const SAMPLE =
   "name,phone,email,language,dialect,district\nAsha Rao,+919876543210,asha@example.org,hi,,Pune\n";
 
-type BulkAction = "assign" | "remove";
+type BulkAction = "assign" | "remove" | "send_consent";
 
 function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [csv, setCsv] = useState("");
@@ -190,6 +190,8 @@ export function ParticipantsPage() {
   };
   const assignSelected = () =>
     void run(() => bulkAction("assign", { target_project_id: target }), "bulk-assign");
+  // D-139: everyone ticked who has not agreed gets this project's consent form again.
+  const resendSelected = () => void run(() => bulkAction("send_consent"), "bulk-consent");
   const removeSelected = () =>
     confirm.ask({
       title: `Remove ${selected.length} participant(s)?`,
@@ -274,8 +276,11 @@ export function ParticipantsPage() {
             ))}
         </ul>
       ) : null}
-      {outcome?.action === "assign" && outcome.done > 0 ? (
-        <ul className="notice notice--info list" aria-label="Added to the other project">
+      {outcome && outcome.action !== "remove" && outcome.done > 0 ? (
+        <ul
+          className="notice notice--info list"
+          aria-label={outcome.action === "assign" ? "Added to the other project" : "Consent forms"}
+        >
           {outcome.results
             .filter((r) => r.ok)
             .map((r) => (
@@ -306,6 +311,14 @@ export function ParticipantsPage() {
             onClick={assignSelected}
           >
             Add to that project
+          </Button>
+          <Button
+            variant="secondary"
+            busy={busy === "bulk-consent"}
+            disabled={busy !== null}
+            onClick={resendSelected}
+          >
+            Email consent form again
           </Button>
           <Button variant="secondary" disabled={busy !== null} onClick={removeSelected}>
             <Icon name="trash" size={15} />

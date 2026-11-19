@@ -268,7 +268,7 @@ export interface BulkResult {
 export const bulkParticipants = (
   projectId: string,
   body: {
-    action: "assign" | "remove";
+    action: "assign" | "remove" | "send_consent";
     participant_ids: string[];
     target_project_id?: string;
     reason?: string;
