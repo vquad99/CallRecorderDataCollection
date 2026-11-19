@@ -114,9 +114,10 @@
   background: #fff;
   list-style: none;
 }
+/* One line per person: tick box, code, name, language, Add. */
 .pick__row {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto auto;
+  grid-template-columns: auto 96px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
   padding: 10px 12px 10px 16px;
@@ -163,7 +164,8 @@
 }
 @media (max-width: 640px) {
   .pick__row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 10px;
   }
   .pick__meta {
     display: none;
