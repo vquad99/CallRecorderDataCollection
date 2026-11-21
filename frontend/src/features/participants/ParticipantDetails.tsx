@@ -30,6 +30,7 @@ import {
   GENDER_LABELS,
   missingSpeakerDetails,
   placeText,
+  SPEAKER_FIELDS,
   speakerDetailsOf,
 } from "../../lib/speakers";
 import { languageLabel } from "../projects/choices";
@@ -38,10 +39,11 @@ import "./participants.css";
 
 const minutes = (n: number) => `${n.toFixed(1)} min`;
 
-/** A participant without every speaker detail cannot be put on a task yet (D-143). */
+/** A participant without the speaker details the project needs cannot be put on a task yet
+ * (D-143, D-145); the server says so in `speaker_details_complete`. */
 export function DetailsMissing() {
   return (
-    <span title="Some speaker details are missing: add them with Edit before making a task.">
+    <span title="Some speaker details this project needs are missing: add them with Edit before making a task.">
       <StatusBadge tone="warning" label="Details missing" />
     </span>
   );
@@ -102,9 +104,12 @@ function Work({ d }: { d: work.ParticipantDetails }) {
   );
 }
 
-function Profile({ d }: { d: work.ParticipantDetails }) {
+function Profile({ d, required }: { d: work.ParticipantDetails; required: readonly string[] }) {
   const p = d.participant;
-  const missing = missingSpeakerDetails({ ...speakerDetailsOf(p), district: p.district ?? "" });
+  const missing = missingSpeakerDetails(
+    { ...speakerDetailsOf(p), district: p.district ?? "" },
+    required,
+  );
   const education = [
     p.education ? labelFor(EDUCATION_LABELS, p.education) : null,
     p.education_medium ? `${labelFor(EDUCATION_MEDIUM_LABELS, p.education_medium)} medium` : null,
@@ -123,7 +128,9 @@ function Profile({ d }: { d: work.ParticipantDetails }) {
         <Fact label="Language">{language(p)}</Fact>
         {/* Speaker details (D-143). */}
         <Fact label="Speaker details">
-          {p.speaker_details_complete ? "Complete" : `Missing: ${missing.join(", ")}`}
+          {p.speaker_details_complete || missing.length === 0
+            ? "Complete"
+            : `Missing: ${missing.join(", ")}`}
         </Fact>
         <Fact label="Age">{p.age ?? "-"}</Fact>
         <Fact label="Gender">{p.gender ? labelFor(GENDER_LABELS, p.gender) : "-"}</Fact>
@@ -323,15 +330,20 @@ function Head({
   );
 }
 
+const EVERY_DETAIL = SPEAKER_FIELDS.map((f) => f.key);
+
 export function ParticipantDetails({
   projectId,
   participantId,
   consentMode,
+  required = EVERY_DETAIL,
 }: {
   projectId: string;
   participantId: string;
   /** The project's way of consent (D-144), for the consent badge's words. */
   consentMode?: ConsentMode | undefined;
+  /** The speaker details the project needs (D-145), for the words on what is missing. */
+  required?: readonly string[];
 }) {
   const { state, reload } = useResource(
     () => work.participantDetails(projectId, participantId),
@@ -361,7 +373,7 @@ export function ParticipantDetails({
       />
       <ErrorNotice error={error} />
       <Work d={d} />
-      <Profile d={d} />
+      <Profile d={d} required={required} />
       <PersonalLink link={d.link} />
       {form ? <ConsentForm form={form} /> : null}
       {/* D-144: the signed consent form and the address proof, as in the Documents window. */}

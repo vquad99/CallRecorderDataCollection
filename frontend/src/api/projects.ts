@@ -39,25 +39,8 @@ export interface ProjectSummary {
   created_at: string;
 }
 
-export interface Project extends ProjectSummary {
-  description: string;
-  phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
-  consent_policy_version: string;
-  consent_text: string;
-  qc_final_approval: boolean;
-  /** Task rules (D-143): null = no limit. */
-  max_conversations_per_speaker: number | null;
-  unique_pairs: boolean;
-  consent_mode: ConsentMode;
-  status_reason: string | null;
-  status_changed_at: string | null;
-  languages: Language[];
-  audio_rules: AudioRule[];
-  retention_rules: RetentionRule[];
-  accepts_new_work: boolean;
-}
-
-export interface ProjectFields {
+/** What the project's Overview form edits. */
+export interface ProjectSettings {
   name: string;
   description: string;
   allows_telephony: boolean;
@@ -67,15 +50,61 @@ export interface ProjectFields {
   phone_visibility_policy: "ADMINS_ONLY" | "ASSIGNED_MODERATOR";
   consent_policy_version: string;
   consent_text: string;
-  /** A QC pass approves the task, with no admin review (D-138). */
-  qc_final_approval: boolean;
+}
+
+/** What the project's Rules tab edits (D-145). Every client rule is the project's own setting;
+ * a new project starts with the server's defaults. */
+export interface ProjectRules {
+  /** The ages the project takes (any person is 1 to 120); 20 and 60 at the start. */
+  speaker_min_age: number;
+  speaker_max_age: number;
+  /** The speaker details a person needs before a task (names from lib/speakers SPEAKER_FIELDS);
+   * all of them at the start. */
+  required_speaker_details: string[];
   /** At most this many conversations per speaker in the project; null = no limit (D-143). */
   max_conversations_per_speaker: number | null;
   /** The same two speakers never share a second task (D-143). */
   unique_pairs: boolean;
   /** Consent online, or a scanned signed form uploaded by staff (D-144). */
   consent_mode: ConsentMode;
+  /** A QC pass approves the task, with no admin review (D-138). */
+  qc_final_approval: boolean;
 }
+
+/** Everything the project's PATCH takes: a field left out would go back to its default, so the
+ * Overview and Rules tabs each send the other's part as it is. */
+export type ProjectFields = ProjectSettings & ProjectRules;
+
+export interface Project extends ProjectSummary, ProjectFields {
+  status_reason: string | null;
+  status_changed_at: string | null;
+  languages: Language[];
+  audio_rules: AudioRule[];
+  retention_rules: RetentionRule[];
+  accepts_new_work: boolean;
+}
+
+export const projectSettings = (p: Project): ProjectSettings => ({
+  name: p.name,
+  description: p.description,
+  allows_telephony: p.allows_telephony,
+  allows_face_to_face: p.allows_face_to_face,
+  target_telephony_hours_per_day: p.target_telephony_hours_per_day,
+  target_face_to_face_hours_per_day: p.target_face_to_face_hours_per_day,
+  phone_visibility_policy: p.phone_visibility_policy,
+  consent_policy_version: p.consent_policy_version,
+  consent_text: p.consent_text,
+});
+
+export const projectRules = (p: Project): ProjectRules => ({
+  speaker_min_age: p.speaker_min_age,
+  speaker_max_age: p.speaker_max_age,
+  required_speaker_details: p.required_speaker_details,
+  max_conversations_per_speaker: p.max_conversations_per_speaker,
+  unique_pairs: p.unique_pairs,
+  consent_mode: p.consent_mode,
+  qc_final_approval: p.qc_final_approval,
+});
 
 export interface Member {
   user_id: string;
@@ -125,7 +154,8 @@ const base = (id: string) => `/api/v1/projects/${id}`;
 export const listProjects = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<ProjectSummary>>(`/api/v1/projects${query(params)}`);
 export const getProject = (id: string) => apiRequest<Project>(base(id));
-export const createProject = (body: ProjectFields & { code?: string }) =>
+/** A new project gets the server's default rules unless they are given (D-145). */
+export const createProject = (body: ProjectSettings & Partial<ProjectRules> & { code?: string }) =>
   apiRequest<Project>("/api/v1/projects", { method: "POST", body });
 export const updateProject = (id: string, body: ProjectFields) =>
   apiRequest<Project>(base(id), { method: "PATCH", body });

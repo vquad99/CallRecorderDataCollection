@@ -52,11 +52,11 @@ function BulkTasks({ projectId }: { projectId: string }) {
       <p className="muted">
         Paste rows or choose a CSV file, one task per line. First line:{" "}
         <code>participant_a,participant_b,mode,priority,due_date,moderator</code>. Write
-        participants by their code (P000001); both must have agreed to the consent form and have
-        complete speaker details, and the project&apos;s limits on conversations per speaker and
-        pairs apply, counting the rows above. Mode, priority, due date (YYYY-MM-DD) and moderator
-        (their email) may be empty; with a moderator the task is assigned at once. Check the rows
-        first; only rows without a problem are added.
+        participants by their code (P000001); both must have agreed to the consent form, have the
+        speaker details the project needs and be within its speaker ages, and the project&apos;s
+        limits on conversations per speaker and pairs apply, counting the rows above. Mode,
+        priority, due date (YYYY-MM-DD) and moderator (their email) may be empty; with a moderator
+        the task is assigned at once. Check the rows first; only rows without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-tasks-csv" className="field__label">
@@ -197,9 +197,14 @@ export function TaskCreatePage() {
   // chosen first; B's list also leaves out who already had a conversation with that A. The server
   // checks again when the task is made.
   const limit = detail?.max_conversations_per_speaker ?? null;
+  // The project's speaker ages (D-145), for people whose age this user sees.
+  const ages = detail ? { min: detail.speaker_min_age, max: detail.speaker_max_age } : null;
   const blocked = (p: Participant, chosenA = "") => {
     const used = p.pairing?.conversations ?? 0;
+    // The server judges the details against the project's list (D-145).
     if (p.speaker_details_complete === false) return "details missing";
+    if (ages && p.age != null && (p.age < ages.min || p.age > ages.max))
+      return `outside the ages ${ages.min} to ${ages.max}`;
     if (limit !== null && used >= limit)
       return `${used} ${used === 1 ? "conversation" : "conversations"} already`;
     if (detail?.unique_pairs && chosenA && p.pairing?.paired_with.includes(chosenA))
@@ -320,7 +325,8 @@ export function TaskCreatePage() {
             {someBlocked ? (
               <p className="field__hint">
                 Greyed-out people cannot be chosen now; the reason is after their name. A task needs
-                complete speaker details
+                the speaker details the project asks for
+                {ages ? `, speakers aged ${ages.min} to ${ages.max}` : ""}
                 {limit === null ? "" : `, at most ${limit} conversations per speaker`}
                 {detail?.unique_pairs ? ", and each pair of speakers only once" : ""}.
               </p>

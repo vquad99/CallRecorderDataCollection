@@ -26,8 +26,8 @@ Dates and times are in India time, written the Indian way, for example 17 Nov 20
 
 People only see projects they have been added to. The Super Admin sees every project.
 
-A project's page has tabs (Team, Participants, Tasks, Audio rules, Languages, Retention, Export) for
-the Super Admin and Project Admin only. Everyone else sees the project's **Overview**.
+A project's page has tabs (Team, Participants, Tasks, Audio rules, Rules, Languages, Retention,
+Export) for the Super Admin and Project Admin only. Everyone else sees the project's **Overview**.
 
 ---
 
@@ -102,7 +102,7 @@ the middle of a recording, or **Later**.
 | 6 | Admin review | Project Admin | Listens and gives the final word: **Approve** or **Reject** with a reason |
 | 7 | Approved | - | Done; the recording can be downloaded with its consent form |
 
-If a project has **QC pass is the final approval** ticked (project **Overview**), step 6 is
+If a project has **QC pass is the final approval** ticked (the project's **Rules** tab), step 6 is
 skipped: **Pass** at step 5 makes the task **Approved** at once.
 
 A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason.
@@ -172,24 +172,9 @@ consent buttons.
 - **Who may see participant phone numbers**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
-- **Consent**: choose one of two.
-  - **Online (participant agrees on their personal page)**: the platform emails each person the
-    consent form when they join, and they agree online (section 5, **Consent**). Every project
-    made before this option is Online.
-  - **Upload (scanned signed form)**: nothing is emailed. The person signs a paper consent form;
-    you scan it and upload it when you add them (section 5, **Signed consent forms**). The
-    uploaded form is their consent.
-  Changing it is saved in the audit log with the project. Switching back to Online keeps the
-  uploaded forms on file, but then people need to agree online.
-- **QC pass is the final approval (no admin review)**: leave it empty to keep the admin's final
-  approval. Tick it and a recording the QC Executive passes is **Approved** at once. Tasks already
-  waiting in **Admin review** stay there; approve them as usual.
-- **Pairing speakers** (checked whenever a task is made, see section 6):
-  - **Conversations per speaker (at most)**: how many tasks one person may be on in this project.
-    It starts at 3. Leave it empty for no limit. Cancelled and rejected tasks do not count.
-  - **Each pair of speakers only once**: ticked at the start. Two people who already share a task
-    cannot be put on another one together. Untick it to allow it.
-  Projects made before these options got 3 and ticked too. Tasks made before stay as they are.
+
+The project's rules (speaker ages and details, pairing, consent, approval) are not on this form:
+a new project starts with the usual ones, and you change them on its **Rules** tab (below).
 
 After **Create project** you return to the project list. A new project starts as **Draft**: click
 its code to open it and, on **Overview → Status**, click **Make active**. Only **Active**
@@ -202,6 +187,8 @@ confirm; archiving or reopening also needs a reason.
 Project tabs:
 
 - **Overview**: the project settings and its status.
+- **Rules**: what the project asks of its speakers, how consent is given and who gives the final
+  approval (below). Everyone in the project can read them; only admins change them.
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
   person the right role under Users first.
 - **Participants**: the project's participants (section 5).
@@ -215,6 +202,38 @@ Project tabs:
   Tamil, English (India)). When a project has languages, every participant must match one.
 - **Retention**: how many days to keep each kind of file. Each box shows a faded example under it
   (for example `365` for one year); leave a box empty when there is no rule yet.
+
+### Rules (project admins)
+
+Each client's rules are the project's own: open the project, click **Rules**, change what you
+need and click **Save rules**. A new project starts with the values below; projects made before
+the Rules tab have them too. Every change is saved in the audit log with the project.
+
+- **Speakers**
+  - **Youngest speaker age** and **Oldest speaker age** (20 and 60 at the start; any of 1 to
+    120, the youngest not above the oldest). Checked when someone is added to the project, when
+    their age is changed in it, and when a task is made. Someone already in the project keeps
+    their age; if it is outside, they cannot be put on a task here.
+  - **Conversations per speaker (at most)**: how many tasks one person may be on in this project.
+    It starts at 3. Leave it empty for no limit. Cancelled and rejected tasks do not count.
+  - **Each pair of speakers only once**: ticked at the start. Two people who already share a task
+    cannot be put on another one together. Untick it to allow it.
+  - **Speaker details needed before a task**: a box for each speaker detail, grouped as on the
+    participant form. All are ticked at the start. **Add participant** asks for the ticked ones
+    (marked *), and a task is made only for people who have them; the others may stay empty.
+- **Consent**: choose one of two.
+  - **Online (participant agrees on their personal page)**: the platform emails each person the
+    consent form when they join, and they agree online (section 5, **Consent**). Every project
+    made before this option is Online.
+  - **Upload (scanned signed form)**: nothing is emailed. The person signs a paper consent form;
+    you scan it and upload it when you add them (section 5, **Signed consent forms**). The
+    uploaded form is their consent.
+  Switching back to Online keeps the uploaded forms on file, but then people need to agree online.
+- **Approval**: **QC pass is the final approval (no admin review)**. Leave it empty to keep the
+  admin's final approval. Tick it and a recording the QC Executive passes is **Approved** at
+  once. Tasks already waiting in **Admin review** stay there; approve them as usual.
+
+Tasks made before a change stay as they are.
 
 ### Settings, System status, Audit log
 
@@ -244,9 +263,11 @@ Project tabs:
 - **Language** (required; choose from the list. When the project has languages, only those
   are listed).
 - **Dialect**, **Internal notes** (optional).
-- **Speaker details** (all required for someone new; the client needs them with every
-  conversation, and a task can only be made for people who have them all):
-  - **Age** (20 to 60) and **Gender** (**Male** or **Female**).
+- **Speaker details** (the ones the project needs are marked * and required for someone new;
+  a task can only be made for people who have them. Which ones, and the ages, are set on the
+  project's **Rules** tab; at the start, all of them and 20 to 60):
+  - **Age** (the project's speaker ages, shown under the box) and **Gender** (**Male** or
+    **Female**).
   - Where they live now: **Current state**, **Current district**, **Current PIN code**.
   - Where they were born: **Native state**, **Native district**, **Native PIN code**.
   - **Native language** (type it, for example Konkani).
@@ -257,8 +278,8 @@ Project tabs:
     code**.
 
   States are chosen from the list of Indian states and union territories. A PIN code has 6
-  digits and does not start with 0. **Add participant** stays grey until every detail is filled
-  in; a wrong age or PIN code is named under its box.
+  digits and does not start with 0. **Add participant** stays grey until every needed detail is
+  filled in; a wrong age or PIN code is named under its box.
 - **Documents** (PDF, JPEG or PNG, at most 10 MB each):
   - **Signed consent form (scan)**: only in a project whose **Consent** is **Upload**, and
     required there.
@@ -275,8 +296,10 @@ the same in every project they are in.
 
 To change someone's details, click **Edit** on their row. A window **Edit P000123** opens; change
 the details and click **Save changes**. Someone added before speaker details existed can be saved
-without them; the window says what is still missing (**Missing: Age, Gender, ...**). Their row
-shows **Details missing** until every detail is in.
+without them; the window says what the project still needs (**Missing: Age, Gender, ...**).
+Their row shows **Details missing** until every detail the project needs is in. An age saved
+before that is outside the project's speaker ages is kept; the window says they cannot be put on
+a task here.
 
 Who sees the speaker details: Super Admins, Project Admins and the moderator of an open task with
 the person, like the name. QC Executives and Client Viewers do not.
@@ -284,7 +307,7 @@ the person, like the name. QC Executives and Client Viewers do not.
 **Add existing participant** (on a project's **Participants** tab): adds someone who is already
 in another of your projects, instead of creating them again. Search by code or name, then click
 **Add**. They keep their code, details and consent history. Only people who speak one of the
-project's languages are listed. To add many at once, tick the boxes (or **Select all shown**)
+project's languages, and whose age is within its speaker ages, are listed. To add many at once, tick the boxes (or **Select all shown**)
 and click **Add selected**.
 
 **Native district**: the district the participant was born in (it was called **District**
@@ -301,7 +324,8 @@ or empty, but such a row says **speaker details missing**: add them with **Edit*
 task with that person. Write `gender` as `male` or `female`; `education` as `primary`,
 `secondary`, `higher_secondary`, `diploma`, `bachelors`, `masters`, `phd` or `other`;
 `education_medium` as `english` or `non_english`; states in full (for example `Goa`); PIN codes
-as 6 digits. A wrong value fails its row with the same words as the form.
+as 6 digits. A wrong value, or an age outside the project's speaker ages, fails its row with the
+same words as the form.
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent
@@ -401,11 +425,12 @@ the page says **Only people who agreed to the consent form can be chosen.** If t
 fewer than two participants, the page says so and links to **Add participants to the project**;
 add them first.
 
-The project's pairing rules (project **Overview**, section 4) also apply. Someone who cannot be
-chosen is greyed out in the list, with the reason after their name:
+The project's rules (its **Rules** tab, section 4) also apply. Someone who cannot be chosen is
+greyed out in the list, with the reason after their name:
 
-- **details missing**: their speaker details are not complete. Add them with **Edit** on the
+- **details missing**: they lack a speaker detail this project needs. Add it with **Edit** on the
   Participants page.
+- **outside the ages 20 to 60**: their age is outside the project's speaker ages.
 - **3 conversations already**: they reached **Conversations per speaker (at most)**. Cancelled and
   rejected tasks do not count.
 - **already paired with the chosen A** (in the **Participant B** list): these two already share a
@@ -423,7 +448,7 @@ participant_a,participant_b,mode,priority,due_date,moderator
 
 Write participants by their code (`P000001`); both must have agreed to the consent form, or
 the row says who has not. The pairing rules apply to each row too, counting the rows above it: a
-row says when someone has no complete speaker details, has reached the most conversations, or is
+row says when someone lacks speaker details, is outside the speaker ages, has reached the most conversations, or is
 already paired with the other person (in the project or higher up in the file). `mode` is `face_to_face` or `telephony` (a phone
 call; empty means face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means
 normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty

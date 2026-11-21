@@ -3,6 +3,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SPEAKER_FIELDS } from "../../lib/speakers";
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 import { SPEAKER_DETAILS, SPEAKER_INPUT } from "../../test/world";
 
@@ -36,6 +37,9 @@ const project = {
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: "",
+  speaker_min_age: 20,
+  speaker_max_age: 60,
+  required_speaker_details: SPEAKER_FIELDS.map((f) => f.key),
   status_reason: null,
   status_changed_at: null,
   languages: [],
@@ -82,8 +86,8 @@ describe("participants tab", () => {
     expect(await screen.findByRole("heading", { name: "No access" })).toBeInTheDocument();
     expect(screen.queryByText("P000001")).not.toBeInTheDocument();
     expect(calls.some((c) => c.path.startsWith("/api/v1/projects/p1/participants"))).toBe(false);
-    // No tab bar at all: the overview is the only part they have.
-    expect(screen.queryByRole("navigation", { name: "Project sections" })).not.toBeInTheDocument();
+    // One part only, the overview: no tabs to choose from (the Rules tab is for admins, D-145).
+    expect(screen.queryByRole("navigation", { name: "Project sections" })).toBeNull();
   });
 
   it("shows hidden fields as hidden and offers no editing without manage rights", async () => {
@@ -464,5 +468,98 @@ describe("participants tab", () => {
     expect(within(missing).getByText("Details missing")).toBeInTheDocument();
     const complete = screen.getByText("P000001").closest("tr") as HTMLElement;
     expect(within(complete).queryByText("Details missing")).toBeNull();
+  });
+});
+
+describe("participant form: the project's speaker rules (D-145)", () => {
+  // Speakers aged 18 to 40; only age and gender are needed before a task.
+  const narrow = {
+    ...project,
+    speaker_min_age: 18,
+    speaker_max_age: 40,
+    required_speaker_details: ["age", "gender"],
+  };
+  const managers = ["projects.view", "projects.manage", "participants.view", "participants.manage"];
+
+  it("asks only for the details the project needs, and for an age in its range", async () => {
+    const { calls } = fakeApi(
+      signedInAs(managers, {
+        "GET /api/v1/projects/p1": () => [200, narrow],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [], total: 0, page: 1, page_size: 25 },
+        ],
+        "POST /api/v1/projects/p1/participants": () => [
+          201,
+          { ...asha, id: "c1", participant_code: "P000003", consent_email: EMAILED },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
+    const form = within(screen.getByRole("dialog", { name: "Add participant" }));
+    const add = form.getByRole("button", { name: "Add participant" });
+    expect(labelled(form, "Age")).toBeRequired();
+    expect(labelled(form, "Gender")).toBeRequired();
+    for (const f of SPEAKER_INPUT.slice(2)) expect(labelled(form, f.label)).not.toBeRequired();
+    expect(form.getByText(/Those marked \* are needed/)).toBeInTheDocument();
+    expect(labelled(form, "Age")).toHaveAccessibleDescription("Speakers aged 18 to 40.");
+    await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.type(form.getByLabelText(/Email address/), "chitra@example.org");
+    await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    await userEvent.selectOptions(labelled(form, "Gender"), "FEMALE");
+    await userEvent.type(labelled(form, "Age"), "41");
+    expect(form.getByText("Age must be a whole number from 18 to 40.")).toBeInTheDocument();
+    expect(add).toBeDisabled();
+    await userEvent.clear(labelled(form, "Age"));
+    await userEvent.type(labelled(form, "Age"), "18");
+    expect(add).toBeEnabled(); // the other details may stay empty in this project
+    await userEvent.click(add);
+    expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      age: 18,
+      gender: "FEMALE",
+      current_state: null,
+    });
+  });
+
+  it("keeps an age saved before outside the range, and says they cannot be put on a task", async () => {
+    const older = {
+      ...asha,
+      email: "asha@example.org",
+      has_email: true,
+      age: 65,
+      gender: "FEMALE",
+      speaker_details_complete: true,
+    };
+    const { calls } = fakeApi(
+      signedInAs(managers, {
+        "GET /api/v1/projects/p1": () => [200, narrow],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [older], total: 1, page: 1, page_size: 25 },
+        ],
+        "PATCH /api/v1/projects/p1/participants/a1": () => [200, older],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const form = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    const save = form.getByRole("button", { name: "Save changes" });
+    // Nothing is missing: only age and gender are needed here.
+    expect(form.queryByRole("status")).toBeNull();
+    expect(labelled(form, "Age")).toHaveAccessibleDescription(
+      "Outside this project's speaker ages (18 to 40): they cannot be put on a task here.",
+    );
+    expect(save).toBeEnabled();
+    await userEvent.clear(labelled(form, "Age"));
+    await userEvent.type(labelled(form, "Age"), "66");
+    expect(form.getByText("Age must be a whole number from 18 to 40.")).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    await userEvent.clear(labelled(form, "Age"));
+    await userEvent.type(labelled(form, "Age"), "65");
+    await userEvent.click(save);
+    expect(await screen.findByText("P000001 saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({ age: 65 });
   });
 });

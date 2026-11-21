@@ -16,7 +16,11 @@ from app.db.paging import paginate
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
+from app.modules.participants import speakers
 from app.modules.projects.models import (
+    DEFAULT_REQUIRED_SPEAKER_DETAILS,
+    DEFAULT_SPEAKER_MAX_AGE,
+    DEFAULT_SPEAKER_MIN_AGE,
     Project,
     ProjectAudioRule,
     ProjectLanguage,
@@ -132,6 +136,29 @@ class ProjectInput:
     # ONLINE or UPLOAD (D-144): how participants give consent. Changing it changes nothing
     # already stored; an uploaded form counts only while the project is UPLOAD.
     consent_mode: str = "ONLINE"
+    # Speaker rules (D-145): the ages the project takes and the speaker details a person needs
+    # before a task (participants/speakers.py). People already in the project keep their
+    # details; the rules are checked when someone joins, is corrected or is put on a task.
+    speaker_min_age: int = DEFAULT_SPEAKER_MIN_AGE
+    speaker_max_age: int = DEFAULT_SPEAKER_MAX_AGE
+    required_speaker_details: tuple[str, ...] = DEFAULT_REQUIRED_SPEAKER_DETAILS
+
+
+def _values(data: ProjectInput) -> dict[str, object]:
+    """The project's columns from the input, checked (D-145): the youngest age is not above the
+    oldest, and the required details are known ones, each once, in the form's order."""
+    if data.speaker_min_age > data.speaker_max_age:
+        raise AppError(
+            f"The youngest speaker age ({data.speaker_min_age}) is above the oldest "
+            f"({data.speaker_max_age})",
+            code="INVALID_AGE_RANGE",
+            status_code=422,
+            details=[{"field": "speaker_min_age"}],
+        )
+    return {
+        **data.__dict__,
+        "required_speaker_details": speakers.clean_required(data.required_speaker_details),
+    }
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -164,6 +191,9 @@ def _snapshot(p: Project) -> dict[str, object]:
         "max_conversations_per_speaker": p.max_conversations_per_speaker,
         "unique_pairs": p.unique_pairs,
         "consent_mode": p.consent_mode,
+        "speaker_min_age": p.speaker_min_age,
+        "speaker_max_age": p.speaker_max_age,
+        "required_speaker_details": list(p.required_speaker_details),
     }
 
 
@@ -206,7 +236,7 @@ def create_project(
         )
     _check_modes(data)
     project = Project(
-        id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **data.__dict__
+        id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **_values(data)
     )
     project.audio_rules = []
     _ensure_default_audio_rules(project)
@@ -234,8 +264,9 @@ def update_project(
             "Reopen the project before editing it", code="PROJECT_ARCHIVED", status_code=409
         )
     _check_modes(data)
+    values = _values(data)
     before = _snapshot(project)
-    for key, value in data.__dict__.items():
+    for key, value in values.items():
         setattr(project, key, value)
     _ensure_default_audio_rules(project)
     after = _snapshot(project)

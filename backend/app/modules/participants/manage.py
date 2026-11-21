@@ -68,7 +68,8 @@ def import_csv(
     """Check every row; with confirm, create the rows that passed. Header: name,phone,email,
     language,dialect[,district and the speaker details] (phone, dialect and the speaker details
     may be empty; email may not, D-128). A speaker detail that is given is checked as on the form
-    (D-143); a row without all of them is added, and its result says they are missing."""
+    (D-143), an age against the project's speaker ages (D-145); a row without the details the
+    project needs is added, and its result says they are missing."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     rows = read_rows(
         text,
@@ -103,8 +104,10 @@ def import_csv(
             clean_email(row["email"])
             given = {field: row.get(field, "") for field in speakers.FIELDS}
             details = speakers.clean_all(given)
+            age = details.get("age")
+            speakers.check_age(project, age if isinstance(age, int) else None)
             ready, added = "Ready to add", "Added"
-            if any(value is None for value in details.values()):
+            if speakers.missing(details, project):
                 ready, added = f"{ready} ({DETAILS_MISSING})", f"{added} ({DETAILS_MISSING})"
             if not confirm:
                 results.append(RowResult(i, name, True, ready))

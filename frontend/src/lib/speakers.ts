@@ -1,6 +1,7 @@
 // Speaker details (D-143): the lists the participant form offers and the words for the codes. The
 // server checks every value (backend/app/modules/participants/speakers.py); a backend test checks
-// that the states and codes here are the ones it accepts.
+// that the states, codes and fields here are the ones it knows. What a project asks of its
+// speakers - their ages and the details needed before a task - is the project's own rule (D-145).
 import type { ParticipantFields, SpeakerDetails } from "../api/work";
 
 /** The 28 states and 8 union territories of India. */
@@ -64,27 +65,29 @@ export const EDUCATION_MEDIUM_LABELS: Record<string, string> = {
   NON_ENGLISH: "Non-English",
 };
 
-export const MIN_AGE = 20;
-export const MAX_AGE = 60;
+/** A speaker detail's name, as the server and the project's rules know it. */
+export type SpeakerKey = keyof SpeakerDetails | "district";
+
+/** Any person's age; a project narrows it to the speakers it takes (D-145). */
+export const AGE_LIMITS = { min: 1, max: 120 } as const;
 
 /** Every speaker detail with its label, in the form's order; `district` is the native district. */
-export const SPEAKER_FIELDS: readonly { key: keyof SpeakerDetails | "district"; label: string }[] =
-  [
-    { key: "age", label: "Age" },
-    { key: "gender", label: "Gender" },
-    { key: "current_state", label: "Current state" },
-    { key: "current_district", label: "Current district" },
-    { key: "current_pincode", label: "Current PIN code" },
-    { key: "native_state", label: "Native state" },
-    { key: "district", label: "Native district" },
-    { key: "native_pincode", label: "Native PIN code" },
-    { key: "native_language", label: "Native language" },
-    { key: "education", label: "Education" },
-    { key: "education_medium", label: "Medium of education" },
-    { key: "recording_state", label: "Recording state" },
-    { key: "recording_district", label: "Recording district" },
-    { key: "recording_pincode", label: "Recording PIN code" },
-  ];
+export const SPEAKER_FIELDS: readonly { key: SpeakerKey; label: string }[] = [
+  { key: "age", label: "Age" },
+  { key: "gender", label: "Gender" },
+  { key: "current_state", label: "Current state" },
+  { key: "current_district", label: "Current district" },
+  { key: "current_pincode", label: "Current PIN code" },
+  { key: "native_state", label: "Native state" },
+  { key: "district", label: "Native district" },
+  { key: "native_pincode", label: "Native PIN code" },
+  { key: "native_language", label: "Native language" },
+  { key: "education", label: "Education" },
+  { key: "education_medium", label: "Medium of education" },
+  { key: "recording_state", label: "Recording state" },
+  { key: "recording_district", label: "Recording district" },
+  { key: "recording_pincode", label: "Recording PIN code" },
+];
 
 /** A participant's speaker details as the form holds them (null where not given or not shown). */
 export const speakerDetailsOf = (p: Partial<SpeakerDetails>): SpeakerDetails => ({
@@ -105,11 +108,58 @@ export const speakerDetailsOf = (p: Partial<SpeakerDetails>): SpeakerDetails => 
 
 export const EMPTY_SPEAKER_DETAILS = speakerDetailsOf({});
 
-/** The labels of the details these fields do not have yet. */
-export function missingSpeakerDetails(f: SpeakerDetails & Pick<ParticipantFields, "district">) {
+/** The speaker details side by side as the participant form groups them (and the Rules tab). */
+export const SPEAKER_GROUPS: readonly { title: string; keys: readonly SpeakerKey[] }[] = [
+  { title: "Age and gender", keys: ["age", "gender"] },
+  { title: "Where they live now", keys: ["current_state", "current_district", "current_pincode"] },
+  { title: "Where they were born", keys: ["native_state", "district", "native_pincode"] },
+  { title: "Language", keys: ["native_language"] },
+  { title: "Education", keys: ["education", "education_medium"] },
+  {
+    title: "Where the recording takes place",
+    keys: ["recording_state", "recording_district", "recording_pincode"],
+  },
+];
+
+export const speakerLabel = (key: string) =>
+  SPEAKER_FIELDS.find((f) => f.key === key)?.label ?? key;
+
+/** What a project asks of its speakers (D-145): the ages it takes and the details needed before a
+ * task. */
+export interface SpeakerRules {
+  minAge: number;
+  maxAge: number;
+  required: readonly string[];
+}
+
+/** Without a project (none chosen yet): any person's age, nothing needed. */
+export const NO_PROJECT_RULES: SpeakerRules = {
+  minAge: AGE_LIMITS.min,
+  maxAge: AGE_LIMITS.max,
+  required: [],
+};
+
+export const speakerRulesOf = (p: {
+  speaker_min_age: number;
+  speaker_max_age: number;
+  required_speaker_details: readonly string[];
+}): SpeakerRules => ({
+  minAge: p.speaker_min_age,
+  maxAge: p.speaker_max_age,
+  required: p.required_speaker_details,
+});
+
+/** The labels of the details the project needs that these fields do not have yet. */
+export function missingSpeakerDetails(
+  f: SpeakerDetails & Pick<ParticipantFields, "district">,
+  required: readonly string[],
+) {
   return SPEAKER_FIELDS.filter(({ key }) => {
     const value = f[key];
-    return value === null || value === undefined || String(value).trim() === "";
+    return (
+      required.includes(key) &&
+      (value === null || value === undefined || String(value).trim() === "")
+    );
   }).map(({ label }) => label);
 }
 
@@ -126,8 +176,8 @@ export const pincodeProblem = (value: string | null) =>
     ? "Type the 6 digits of the PIN code; it cannot start with 0."
     : undefined;
 
-/** What is wrong with a typed age, or nothing. */
-export const ageProblem = (value: number | null) =>
-  value !== null && !(Number.isInteger(value) && value >= MIN_AGE && value <= MAX_AGE)
-    ? `Age must be a whole number from ${MIN_AGE} to ${MAX_AGE}.`
+/** What is wrong with a typed age for this project, or nothing (the server checks again). */
+export const ageProblem = (value: number | null, rules: SpeakerRules) =>
+  value !== null && !(Number.isInteger(value) && value >= rules.minAge && value <= rules.maxAge)
+    ? `Age must be a whole number from ${rules.minAge} to ${rules.maxAge}.`
     : undefined;

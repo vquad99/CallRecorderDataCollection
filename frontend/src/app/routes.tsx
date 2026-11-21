@@ -110,6 +110,11 @@ export const routes: RouteObject[] = [
                     ),
                   },
                   { path: "audio", element: page(tabs, "AudioRulesTab") },
+                  {
+                    // The project's rules (D-145): speakers, consent, approval.
+                    path: "rules",
+                    element: page(() => import("../features/projects/RulesTab"), "RulesTab"),
+                  },
                   { path: "languages", element: page(tabs, "LanguagesTab") },
                   { path: "retention", element: page(tabs, "RetentionTab") },
                   {

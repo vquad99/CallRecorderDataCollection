@@ -56,8 +56,8 @@ def test_details_are_kept_and_make_the_participant_complete(world: dict[str, Any
 @pytest.mark.parametrize(
     ("field", "value", "words"),
     [
-        ("age", 19, "Age must be a whole number from 20 to 60"),
-        ("age", 61, "Age must be a whole number from 20 to 60"),
+        ("age", 0, "Age must be a whole number from 1 to 120"),
+        ("age", 121, "Age must be a whole number from 1 to 120"),
         ("gender", "OTHER", "Gender must be one of: MALE, FEMALE"),
         ("current_state", "Goa State", "Current state must be a state or union territory"),
         ("native_state", "Ceylon", "Native state must be a state or union territory"),
@@ -256,3 +256,7 @@ def test_the_form_offers_the_same_lists_the_server_checks() -> None:
     assert labelled("GENDER_LABELS") == list(GENDER_CODES)
     assert labelled("EDUCATION_LABELS") == list(EDUCATION_CODES)
     assert labelled("EDUCATION_MEDIUM_LABELS") == list(EDUCATION_MEDIUM_CODES)
+    # The fields and their words, which the Rules tab ticks by name (D-145).
+    fields = re.findall(r'\{ key: "([a-z_]+)", label: "([^"]+)" \}', source)
+    assert dict(fields) == speakers.FIELDS
+    assert [key for key, _ in fields] == list(speakers.FIELDS)

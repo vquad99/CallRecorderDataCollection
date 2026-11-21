@@ -1,7 +1,8 @@
-// Shared fields for creating and editing a project (PROJ-001..005).
+// Shared fields for creating and editing a project (PROJ-001..005). The project's rules (speakers,
+// pairing, consent, approval) are on its Rules tab (D-145); a new project starts with the defaults.
 import { useState, type FormEvent } from "react";
 
-import type { ProjectFields } from "../../api/projects";
+import type { ProjectSettings } from "../../api/projects";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
@@ -32,7 +33,7 @@ If you have a question, ask the moderator or the project team before you agree.
 
 By clicking "I agree" you confirm that you have read this form, you are 18 years or older, and you agree to be recorded.`;
 
-export const EMPTY_FIELDS: ProjectFields = {
+export const EMPTY_FIELDS: ProjectSettings = {
   name: "",
   description: "",
   allows_telephony: true,
@@ -42,17 +43,7 @@ export const EMPTY_FIELDS: ProjectFields = {
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: SAMPLE_CONSENT_TEXT,
-  qc_final_approval: false,
-  max_conversations_per_speaker: 3,
-  unique_pairs: true,
-  consent_mode: "ONLINE",
 };
-
-/** The two ways participants give consent (D-144). */
-const CONSENT_MODES: readonly { value: ProjectFields["consent_mode"]; label: string }[] = [
-  { value: "ONLINE", label: "Online (participant agrees on their personal page)" },
-  { value: "UPLOAD", label: "Upload (scanned signed form)" },
-];
 
 export function ProjectForm({
   initial,
@@ -61,14 +52,14 @@ export function ProjectForm({
   disabled = false,
   onSubmit,
 }: {
-  initial: ProjectFields;
+  initial: ProjectSettings;
   submitLabel: string;
   busy: boolean;
   disabled?: boolean;
-  onSubmit: (fields: ProjectFields) => void;
+  onSubmit: (fields: ProjectSettings) => void;
 }) {
-  const [f, setF] = useState<ProjectFields>(initial);
-  const set = <K extends keyof ProjectFields>(key: K, value: ProjectFields[K]) =>
+  const [f, setF] = useState<ProjectSettings>(initial);
+  const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) =>
     setF({ ...f, [key]: value });
 
   function submit(event: FormEvent) {
@@ -145,7 +136,7 @@ export function ProjectForm({
           onChange={(e) =>
             set(
               "phone_visibility_policy",
-              e.target.value as ProjectFields["phone_visibility_policy"],
+              e.target.value as ProjectSettings["phone_visibility_policy"],
             )
           }
           options={[
@@ -153,74 +144,6 @@ export function ProjectForm({
             { value: "ASSIGNED_MODERATOR", label: "Project admins and the assigned moderator" },
           ]}
         />
-        <fieldset className="field">
-          <legend className="field__label">Approval</legend>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={f.qc_final_approval}
-              aria-describedby="qc-final-hint"
-              onChange={(e) => set("qc_final_approval", e.target.checked)}
-            />
-            QC pass is the final approval (no admin review)
-          </label>
-          <p id="qc-final-hint" className="field__hint">
-            When ticked, a recording the QC Executive passes is approved at once. Tasks already
-            waiting for admin review stay there.
-          </p>
-        </fieldset>
-        {/* Task rules (D-143): checked by the server whenever a task is made. */}
-        <fieldset className="field">
-          <legend className="field__label">Pairing speakers</legend>
-          <TextField
-            label="Conversations per speaker (at most)"
-            type="number"
-            min={1}
-            step={1}
-            hint="Cancelled and rejected tasks do not count. Leave empty for no limit."
-            value={f.max_conversations_per_speaker ?? ""}
-            onChange={(e) =>
-              set(
-                "max_conversations_per_speaker",
-                e.target.value ? Math.max(1, Math.trunc(Number(e.target.value))) : null,
-              )
-            }
-          />
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={f.unique_pairs}
-              aria-describedby="unique-pairs-hint"
-              onChange={(e) => set("unique_pairs", e.target.checked)}
-            />
-            Each pair of speakers only once
-          </label>
-          <p id="unique-pairs-hint" className="field__hint">
-            When ticked, two people who already share a task (not cancelled or rejected) cannot be
-            put on another one together. Tasks made before stay as they are.
-          </p>
-        </fieldset>
-        {/* D-144: the consent form answered online, or a scanned signed form uploaded by staff. */}
-        <fieldset className="field" aria-describedby="consent-mode-hint">
-          <legend className="field__label">Consent</legend>
-          {CONSENT_MODES.map((m) => (
-            <label key={m.value} className="checkbox">
-              <input
-                type="radio"
-                name="consent_mode"
-                value={m.value}
-                checked={f.consent_mode === m.value}
-                onChange={() => set("consent_mode", m.value)}
-              />
-              {m.label}
-            </label>
-          ))}
-          <p id="consent-mode-hint" className="field__hint">
-            {f.consent_mode === "UPLOAD"
-              ? "No consent form is emailed. Staff upload each person's signed consent form when they add them, and a task needs it. A person who already agreed online still counts."
-              : "Everyone who joins the project is emailed the consent form below and agrees on their personal page."}
-          </p>
-        </fieldset>
         <TextField
           label="Consent policy version"
           required

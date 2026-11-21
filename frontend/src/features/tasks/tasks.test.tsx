@@ -629,12 +629,16 @@ describe("new task: the project's pairing rules (D-143)", () => {
       languages: [],
       max_conversations_per_speaker: 3,
       unique_pairs: true,
+      speaker_min_age: 20,
+      speaker_max_age: 60,
+      required_speaker_details: ["age", "gender"],
     };
     const person = (
       code: string,
       conversations: number,
       pairedWith: string[],
       complete = true,
+      age = 30,
     ) => ({
       id: code,
       participant_code: code,
@@ -642,6 +646,7 @@ describe("new task: the project's pairing rules (D-143)", () => {
       has_phone: true,
       consent_status: "GIVEN",
       speaker_details_complete: complete,
+      age,
       pairing: { conversations, paired_with: pairedWith },
     });
     const people = [
@@ -651,6 +656,8 @@ describe("new task: the project's pairing rules (D-143)", () => {
       person("P000004", 3, ["P000007", "P000008", "P000009"]),
       person("P000005", 1, ["P000006"]),
       person("P000006", 1, ["P000005"]),
+      // Older than the project's speakers (D-145).
+      person("P000007", 0, [], true, 65),
     ];
     const { calls } = fakeApi(
       signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
@@ -687,12 +694,13 @@ describe("new task: the project's pairing rules (D-143)", () => {
       ["P000004 Name P000004 – 3 conversations already", true],
       ["P000005 Name P000005", false],
       ["P000006 Name P000006", false],
+      ["P000007 Name P000007 – outside the ages 20 to 60", true],
     ]);
     expect(
       screen.getByText(
         "Greyed-out people cannot be chosen now; the reason is after their name. A task needs " +
-          "complete speaker details, at most 3 conversations per speaker, and each pair of " +
-          "speakers only once.",
+          "the speaker details the project asks for, speakers aged 20 to 60, at most 3 " +
+          "conversations per speaker, and each pair of speakers only once.",
       ),
     ).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Participant A"), "P000001");
@@ -702,6 +710,7 @@ describe("new task: the project's pairing rules (D-143)", () => {
       ["P000004 Name P000004 – 3 conversations already", true],
       ["P000005 Name P000005", false],
       ["P000006 Name P000006", false],
+      ["P000007 Name P000007 – outside the ages 20 to 60", true],
     ]);
     await userEvent.selectOptions(screen.getByLabelText("Participant B"), "P000005");
     // Another A who may still be paired with B keeps B; one B worked with clears it (below).
@@ -729,6 +738,9 @@ describe("new task: the project's pairing rules (D-143)", () => {
       languages: [],
       max_conversations_per_speaker: null,
       unique_pairs: true,
+      speaker_min_age: 20,
+      speaker_max_age: 60,
+      required_speaker_details: ["age", "gender"],
     };
     const person = (code: string, pairedWith: string[]) => ({
       id: code,
@@ -765,7 +777,8 @@ describe("new task: the project's pairing rules (D-143)", () => {
     expect(
       screen.getByText(
         "Greyed-out people cannot be chosen now; the reason is after their name. A task needs " +
-          "complete speaker details, and each pair of speakers only once.",
+          "the speaker details the project asks for, speakers aged 20 to 60, and each pair of " +
+          "speakers only once.",
       ),
     ).toBeInTheDocument();
   });

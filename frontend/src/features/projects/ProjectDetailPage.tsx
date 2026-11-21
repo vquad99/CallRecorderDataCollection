@@ -1,6 +1,7 @@
-// One project with tabs: overview, team, audio rules, languages, retention (PROJ-*).
-// Only people who manage projects (Super Admin, Project Admin) see the tabs after Overview
-// (D-104): everyone else has the overview, and a tab's address answers "No access".
+// One project with tabs: overview, team, audio rules, rules, languages, retention (PROJ-*).
+// Only people who manage projects (Super Admin, Project Admin) see the other tabs, the Rules tab
+// (D-145) among them (D-104): everyone else has the overview, and another tab's address answers
+// "No access".
 import { NavLink, Outlet, useMatch, useOutletContext, useParams } from "react-router";
 
 import { getProject, type Project } from "../../api/projects";
@@ -26,6 +27,7 @@ const TABS: { to: string; label: string; end: boolean; perm?: string }[] = [
   { to: "participants", label: "Participants", end: false, perm: "projects.manage" },
   { to: "tasks", label: "Tasks", end: false, perm: "projects.manage" },
   { to: "audio", label: "Audio rules", end: false, perm: "projects.manage" },
+  { to: "rules", label: "Rules", end: false, perm: "projects.manage" },
   { to: "languages", label: "Languages", end: false, perm: "projects.manage" },
   { to: "retention", label: "Retention", end: false, perm: "projects.manage" },
   { to: "export", label: "Export", end: false, perm: "projects.manage" },

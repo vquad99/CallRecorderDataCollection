@@ -63,6 +63,10 @@ export const PAGES: Record<string, PageSpec> = {
     data: "GET /api/v1/tasks",
   },
   "/projects/:projectId/audio": { url: "/projects/p1/audio", shows: /^Face-to-face$/ },
+  "/projects/:projectId/rules": {
+    url: "/projects/p1/rules",
+    shows: /Speaker details needed before a task/,
+  },
   "/projects/:projectId/languages": { url: "/projects/p1/languages", shows: /^Add language$/ },
   "/projects/:projectId/retention": {
     url: "/projects/p1/retention",

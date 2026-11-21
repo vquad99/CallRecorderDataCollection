@@ -163,7 +163,7 @@ def present(
         dialect=p.dialect,
         district=p.district,
         **details,
-        speaker_details_complete=speakers.complete(p),
+        speaker_details_complete=speakers.complete(p, project),
         display_label=p.display_label if v.profile else None,
         phone=phone,
         has_phone=p.phone_e164_enc is not None,

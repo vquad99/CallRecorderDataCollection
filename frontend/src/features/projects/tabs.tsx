@@ -106,27 +106,16 @@ export function OverviewTab() {
       )}
       <ProjectForm
         key={project.status}
-        initial={{
-          name: project.name,
-          description: project.description,
-          allows_telephony: project.allows_telephony,
-          allows_face_to_face: project.allows_face_to_face,
-          target_telephony_hours_per_day: project.target_telephony_hours_per_day,
-          target_face_to_face_hours_per_day: project.target_face_to_face_hours_per_day,
-          phone_visibility_policy: project.phone_visibility_policy,
-          consent_policy_version: project.consent_policy_version,
-          consent_text: project.consent_text,
-          qc_final_approval: project.qc_final_approval,
-          max_conversations_per_speaker: project.max_conversations_per_speaker,
-          unique_pairs: project.unique_pairs,
-          consent_mode: project.consent_mode,
-        }}
+        initial={api.projectSettings(project)}
         submitLabel="Save project"
         busy={busy !== null}
         disabled={!canManage || project.status === "ARCHIVED"}
         onSubmit={(fields) =>
           void run(async () => {
-            replace(await api.updateProject(project.id, fields));
+            // The rules are kept as they are: they are changed on the Rules tab (D-145).
+            replace(
+              await api.updateProject(project.id, { ...api.projectRules(project), ...fields }),
+            );
             return "Saved.";
           })
         }

@@ -21,6 +21,7 @@ import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { consentAnswer, FORM_MISSING } from "../../lib/labels";
+import { speakerRulesOf } from "../../lib/speakers";
 import { languageLabel } from "../projects/choices";
 import { DocumentBadges } from "./Documents";
 import { DetailsMissing } from "./ParticipantDetails";
@@ -189,6 +190,10 @@ export function ParticipantsPage() {
     projectId,
     languages,
     consentMode: mode,
+    // The chosen project's speaker ages and needed details (D-145); none until it has loaded.
+    ...(detail.state.status === "loaded" && detail.state.data
+      ? { rules: speakerRulesOf(detail.state.data) }
+      : {}),
     onSaved: (text) => {
       setMessage(text);
       list.reload();

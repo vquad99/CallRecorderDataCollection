@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
+import { speakerRulesOf } from "../../lib/speakers";
 import { DocumentBadges } from "../participants/Documents";
 import { DetailsMissing } from "../participants/ParticipantDetails";
 import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
@@ -162,6 +163,7 @@ export function ParticipantsTab() {
     projectId: project.id,
     languages: project.languages,
     consentMode: project.consent_mode,
+    rules: speakerRulesOf(project), // the project's speaker ages and needed details (D-145)
     onSaved: (text) => {
       setMessage(text);
       list.reload();

@@ -39,8 +39,9 @@ CONSENT_STATUSES: tuple[str, ...] = get_args(ConsentStatus)
 CONSENT_METHODS: tuple[str, ...] = get_args(ConsentMethod)
 
 # Speaker details (D-143): the codes and limits, which speakers.py checks with clear words and the
-# database keeps as constraints.
-MIN_AGE, MAX_AGE = 20, 60
+# database keeps as constraints. The age limits fit any person; each project narrows them to the
+# speakers it takes (projects.speaker_min_age, speaker_max_age, D-145).
+MIN_AGE, MAX_AGE = 1, 120
 GENDER_CODES = ("MALE", "FEMALE")
 EDUCATION_CODES = (
     "PRIMARY",

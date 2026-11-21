@@ -1,0 +1,24 @@
+/* A project's Rules tab (D-145). Loaded with the tab, not with the first screen. */
+.rules__note {
+  margin: -6px 0 16px;
+}
+/* The speaker details a task needs: one small group per subject, side by side as on the form. */
+.rules-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+  gap: 10px 20px;
+  max-width: 900px;
+}
+.rules-details__group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.rules-details__group legend {
+  margin-bottom: 2px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}

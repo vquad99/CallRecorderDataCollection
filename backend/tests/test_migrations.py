@@ -350,7 +350,7 @@ def test_speaker_details_and_pairing_rules_come_and_go(test_database_url: str) -
     with engine.begin() as conn:
         project_id = _project_row(conn, "MIG")
         person_id = _participant_row(conn, "P900001")
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0033")  # the age check became 1 to 120 with 0035 (D-145)
     with engine.begin() as conn:
         rules = conn.execute(
             text("SELECT max_conversations_per_speaker, unique_pairs FROM projects WHERE id = :p"),
@@ -458,4 +458,68 @@ def test_consent_mode_and_participant_documents_come_and_go(test_database_url: s
     with engine.begin() as conn:
         assert "participant_documents" not in inspect(conn).get_table_names()
         assert "consent_mode" not in {c["name"] for c in inspect(conn).get_columns("projects")}
+    engine.dispose()
+
+
+def test_project_speaker_rules_come_and_go(test_database_url: str) -> None:
+    """0035 (D-145): every existing project gets the first client's rules as its own (speakers
+    aged 20 to 60, every speaker detail needed); a person's age may be 1 to 120; going back keeps
+    the ages saved meanwhile and holds new values to 20 to 60 again."""
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0034")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+        person_id = _participant_row(conn, "P900001")
+    command.upgrade(cfg, "head")
+    every = [
+        "age",
+        "gender",
+        "current_state",
+        "current_district",
+        "current_pincode",
+        "native_state",
+        "district",
+        "native_pincode",
+        "native_language",
+        "education",
+        "education_medium",
+        "recording_state",
+        "recording_district",
+        "recording_pincode",
+    ]
+    with engine.begin() as conn:
+        rules = conn.execute(
+            text(
+                "SELECT speaker_min_age, speaker_max_age, required_speaker_details FROM projects "
+                "WHERE id = :p"
+            ),
+            {"p": project_id},
+        ).one()
+        assert tuple(rules) == (20, 60, every)
+        for age in (1, 120, 70):
+            conn.execute(
+                text("UPDATE participants SET age = :a WHERE id = :p"), {"a": age, "p": person_id}
+            )
+    for sql, match in (
+        ("UPDATE participants SET age = 0", "ck_participants_age_range"),
+        ("UPDATE participants SET age = 121", "ck_participants_age_range"),
+        ("UPDATE projects SET speaker_min_age = 61", "speaker_age_range"),
+        ("UPDATE projects SET speaker_max_age = 121", "speaker_age_range"),
+        ("UPDATE projects SET speaker_min_age = 0", "speaker_age_range"),
+        ("UPDATE projects SET required_speaker_details = '{}'::jsonb", "required_speaker_details"),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(text(sql))
+    command.downgrade(cfg, "0034")
+    with engine.begin() as conn:
+        columns = {c["name"] for c in inspect(conn).get_columns("projects")}
+        assert {"speaker_min_age", "speaker_max_age", "required_speaker_details"}.isdisjoint(
+            columns
+        )
+        assert conn.execute(text("SELECT age FROM participants")).scalar_one() == 70, "kept"
+    with pytest.raises(Exception, match="ck_participants_age_range"), engine.begin() as conn:
+        conn.execute(text("UPDATE participants SET age = 75"))
+    command.upgrade(cfg, "head")
     engine.dispose()

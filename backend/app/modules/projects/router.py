@@ -14,8 +14,14 @@ from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.db.paging import Page, PageNumber, PageSize
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
+from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.projects import service
-from app.modules.projects.models import Project
+from app.modules.projects.models import (
+    DEFAULT_REQUIRED_SPEAKER_DETAILS,
+    DEFAULT_SPEAKER_MAX_AGE,
+    DEFAULT_SPEAKER_MIN_AGE,
+    Project,
+)
 from app.modules.recordings.models import ASSET_KINDS
 
 # Every project route needs projects.view; finer checks and membership live in the service.
@@ -91,6 +97,9 @@ class ProjectDetail(ProjectSummary):
     max_conversations_per_speaker: int | None
     unique_pairs: bool
     consent_mode: ConsentMode
+    speaker_min_age: int
+    speaker_max_age: int
+    required_speaker_details: list[str]
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -114,6 +123,9 @@ def detail(p: Project) -> ProjectDetail:
         max_conversations_per_speaker=p.max_conversations_per_speaker,
         unique_pairs=p.unique_pairs,
         consent_mode=p.consent_mode,
+        speaker_min_age=p.speaker_min_age,
+        speaker_max_age=p.speaker_max_age,
+        required_speaker_details=list(p.required_speaker_details),
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -165,9 +177,18 @@ class ProjectBody(BaseModel):
     # How participants give consent (D-144): ONLINE on their personal page, or UPLOAD, a scanned
     # signed form uploaded by staff.
     consent_mode: ConsentMode = "ONLINE"
+    # Speaker rules (D-145), set on the project's Rules tab: the ages it takes (any person is 1
+    # to 120) and the speaker details needed before a task (field names, participants/speakers.py).
+    speaker_min_age: int = Field(default=DEFAULT_SPEAKER_MIN_AGE, ge=MIN_AGE, le=MAX_AGE)
+    speaker_max_age: int = Field(default=DEFAULT_SPEAKER_MAX_AGE, ge=MIN_AGE, le=MAX_AGE)
+    required_speaker_details: list[Annotated[str, Field(max_length=40)]] = Field(
+        default_factory=lambda: list(DEFAULT_REQUIRED_SPEAKER_DETAILS), max_length=50
+    )
 
     def to_input(self) -> service.ProjectInput:
-        return service.ProjectInput(**self.model_dump())
+        values = self.model_dump()
+        values["required_speaker_details"] = tuple(values["required_speaker_details"])
+        return service.ProjectInput(**values)
 
 
 class CreateProjectBody(ProjectBody):

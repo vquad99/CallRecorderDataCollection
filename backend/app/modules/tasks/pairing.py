@@ -1,6 +1,7 @@
 """Who may be paired in a new task (D-143), per project:
 
-- both speakers have complete speaker details (participants/speakers.py);
+- both speakers have the speaker details the project needs (participants/speakers.py, D-145);
+- both are within the project's speaker ages (D-145);
 - each speaker has at most `projects.max_conversations_per_speaker` conversations in the project
   (empty = no limit);
 - with `projects.unique_pairs`, the same two people (either way round) never share a second task.
@@ -36,11 +37,14 @@ NOT_COUNTED = ("CANCELLED", "REJECTED")
 class Tally:
     """The project's rules and the conversations that count against them."""
 
-    limit: int | None
-    unique_pairs: bool
+    project: Project
     conversations: dict[uuid.UUID, int] = field(default_factory=dict)
     # Each pair that shares a counted task, with that task's code.
     pairs: dict[frozenset[uuid.UUID], str] = field(default_factory=dict)
+
+    @property
+    def limit(self) -> int | None:
+        return self.project.max_conversations_per_speaker
 
     def add(self, a: uuid.UUID, b: uuid.UUID, task_code: str) -> None:
         for pid in (a, b):
@@ -65,7 +69,7 @@ def tally(
     db: Session, project: Project, participant_ids: Collection[uuid.UUID] | None = None
 ) -> Tally:
     """The counted conversations of the project, of these participants only when given."""
-    result = Tally(project.max_conversations_per_speaker, project.unique_pairs)
+    result = Tally(project)
     query = select(Task.task_code, Task.participant_a_id, Task.participant_b_id).where(
         Task.project_id == project.id, Task.status.not_in(NOT_COUNTED)
     )
@@ -84,9 +88,10 @@ def _people(codes: list[str]) -> str:
 
 
 def check(t: Tally, a: Participant, b: Participant) -> None:
-    """422 SPEAKER_DETAILS_MISSING, 409 SPEAKER_LIMIT_REACHED or 409 PAIR_ALREADY_USED, in that
-    order, naming the people; nothing when A and B may be paired."""
-    incomplete = [p.participant_code for p in (a, b) if not speakers.complete(p)]
+    """422 SPEAKER_DETAILS_MISSING, 422 SPEAKER_AGE_OUT_OF_RANGE, 409 SPEAKER_LIMIT_REACHED or
+    409 PAIR_ALREADY_USED, in that order, naming the people; nothing when A and B may be
+    paired."""
+    incomplete = [p.participant_code for p in (a, b) if not speakers.complete(p, t.project)]
     if incomplete:
         raise AppError(
             f"{_people(incomplete)} {'has' if len(incomplete) == 1 else 'have'} no complete "
@@ -95,18 +100,20 @@ def check(t: Tally, a: Participant, b: Participant) -> None:
             status_code=422,
             details=[{"participants": incomplete}],
         )
-    if t.limit is not None:
-        full = [p.participant_code for p in (a, b) if t.conversations.get(p.id, 0) >= t.limit]
+    speakers.check_ages(t.project, (a, b))
+    limit = t.limit
+    if limit is not None:
+        full = [p.participant_code for p in (a, b) if t.conversations.get(p.id, 0) >= limit]
         if full:
-            each = "conversation" if t.limit == 1 else "conversations"
+            each = "conversation" if limit == 1 else "conversations"
             raise AppError(
-                f"{_people(full)} already {'has' if len(full) == 1 else 'have'} {t.limit} "
+                f"{_people(full)} already {'has' if len(full) == 1 else 'have'} {limit} "
                 f"{each} in this project, the most for one speaker.",
                 code="SPEAKER_LIMIT_REACHED",
                 status_code=409,
-                details=[{"participants": full, "limit": t.limit}],
+                details=[{"participants": full, "limit": limit}],
             )
-    used = t.pairs.get(frozenset((a.id, b.id))) if t.unique_pairs else None
+    used = t.pairs.get(frozenset((a.id, b.id))) if t.project.unique_pairs else None
     if used is not None:
         raise AppError(
             f"{a.participant_code} and {b.participant_code} already have a conversation together "

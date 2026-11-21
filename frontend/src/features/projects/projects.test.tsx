@@ -3,6 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SPEAKER_FIELDS } from "../../lib/speakers";
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -53,6 +54,9 @@ const project = {
   max_conversations_per_speaker: 3,
   unique_pairs: true,
   consent_mode: "ONLINE",
+  speaker_min_age: 20,
+  speaker_max_age: 60,
+  required_speaker_details: SPEAKER_FIELDS.map((f) => f.key),
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -102,86 +106,169 @@ describe("project detail", () => {
     });
   });
 
-  it("makes a QC pass the final approval when the box is ticked (D-138)", async () => {
+  it("keeps the rules off the Overview form and sends them back as they are (D-145)", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage"], {
-        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1": () => [200, { ...project, qc_final_approval: true }],
         "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
     renderAt("/projects/p1");
-    const box = await screen.findByRole("checkbox", {
-      name: "QC pass is the final approval (no admin review)",
-    });
-    expect(box).not.toBeChecked();
-    await userEvent.click(box);
+    const name = await screen.findByLabelText(/^Name/);
+    // The pairing, consent and approval rules moved to the Rules tab.
+    expect(screen.queryByRole("checkbox", { name: /QC pass is the final approval/ })).toBeNull();
+    expect(screen.queryByLabelText("Conversations per speaker (at most)")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Each pair of speakers only once" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /^Online/ })).toBeNull();
+    expect(screen.queryByLabelText("Youngest speaker age")).toBeNull();
+    await userEvent.type(name, " 2");
     await userEvent.click(screen.getByRole("button", { name: "Save project" }));
     await waitFor(() =>
-      expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+      expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({
+        name: "Hindi conversations 2",
+        description: "",
+        allows_telephony: true,
+        allows_face_to_face: false,
+        target_telephony_hours_per_day: "10.00",
+        target_face_to_face_hours_per_day: "0.00",
+        phone_visibility_policy: "ADMINS_ONLY",
+        consent_policy_version: "1",
+        consent_text: "",
         qc_final_approval: true,
+        max_conversations_per_speaker: 3,
+        unique_pairs: true,
+        consent_mode: "ONLINE",
+        speaker_min_age: 20,
+        speaker_max_age: 60,
+        required_speaker_details: project.required_speaker_details,
       }),
     );
   });
 
-  it("sets how many conversations a speaker may have and whether a pair may meet twice (D-143)", async () => {
+  it("loads the rules and saves every card in one request (D-145)", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
-    renderAt("/projects/p1");
-    const limit = await screen.findByRole("spinbutton", {
-      name: "Conversations per speaker (at most)",
-    });
+    renderAt("/projects/p1/rules");
+    const youngest = await screen.findByRole("spinbutton", { name: "Youngest speaker age" });
+    const oldest = screen.getByRole("spinbutton", { name: "Oldest speaker age" });
+    for (const card of ["Speakers", "Consent", "Approval"])
+      expect(screen.getByRole("region", { name: card })).toBeInTheDocument();
+    expect(youngest).toHaveValue(20);
+    expect(oldest).toHaveValue(60);
+    const details = screen.getByRole("group", { name: "Speaker details needed before a task" });
+    const boxes = within(details).getAllByRole("checkbox");
+    expect(boxes).toHaveLength(14);
+    for (const box of boxes) expect(box).toBeChecked();
+    // Grouped like the participant form.
+    expect(
+      within(within(details).getByRole("group", { name: "Where they were born" }))
+        .getAllByRole("checkbox")
+        .map((b) => b.closest("label")?.textContent),
+    ).toEqual(["Native state", "Native district", "Native PIN code"]);
+    const limit = screen.getByRole("spinbutton", { name: "Conversations per speaker (at most)" });
     const once = screen.getByRole("checkbox", { name: "Each pair of speakers only once" });
+    const consent = screen.getByRole("group", { name: "How participants give consent" });
+    const qc = screen.getByRole("checkbox", {
+      name: "QC pass is the final approval (no admin review)",
+    });
     expect(limit).toHaveValue(3);
     expect(once).toBeChecked();
+    expect(within(consent).getByRole("radio", { name: /^Online/ })).toBeChecked();
+    expect(consent).toHaveAccessibleDescription(/is emailed the consent form/);
+    expect(qc).not.toBeChecked();
+
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "18");
+    await userEvent.clear(oldest);
+    await userEvent.type(oldest, "70");
+    await userEvent.click(within(details).getByRole("checkbox", { name: "Education" }));
+    await userEvent.click(within(details).getByRole("checkbox", { name: "Medium of education" }));
     await userEvent.clear(limit);
     await userEvent.type(limit, "5");
     await userEvent.click(once);
-    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
-    await waitFor(() =>
-      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
-        max_conversations_per_speaker: 5,
-        unique_pairs: false,
-      }),
+    await userEvent.click(
+      within(consent).getByRole("radio", { name: "Upload (scanned signed form)" }),
     );
+    expect(consent).toHaveAccessibleDescription(/No consent form is emailed/);
+    await userEvent.click(qc);
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    const patches = () => calls.filter((c) => c.method === "PATCH");
+    expect(patches()).toHaveLength(1);
+    expect(patches()[0]?.body).toMatchObject({
+      name: "Hindi conversations", // the Overview's settings go back as they are
+      consent_text: "",
+      speaker_min_age: 18,
+      speaker_max_age: 70,
+      required_speaker_details: project.required_speaker_details.filter(
+        (k) => k !== "education" && k !== "education_medium",
+      ),
+      max_conversations_per_speaker: 5,
+      unique_pairs: false,
+      consent_mode: "UPLOAD",
+      qc_final_approval: true,
+    });
     // Empty means no limit.
     await userEvent.clear(limit);
-    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
-    await waitFor(() =>
-      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
-        max_conversations_per_speaker: null,
-      }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(patches()).toHaveLength(2));
+    expect(patches()[1]?.body).toMatchObject({ max_conversations_per_speaker: null });
   });
 
-  it("takes consent online or as a scanned signed form, one of two choices (D-144)", async () => {
+  it("says when the speaker ages are wrong and sends nothing (D-145)", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
-        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
-    renderAt("/projects/p1");
-    const group = await screen.findByRole("group", { name: "Consent" });
-    const online = within(group).getByRole("radio", {
-      name: "Online (participant agrees on their personal page)",
-    });
-    const upload = within(group).getByRole("radio", { name: "Upload (scanned signed form)" });
-    expect(within(group).getAllByRole("radio")).toHaveLength(2);
-    expect(online).toBeChecked();
-    expect(group).toHaveAccessibleDescription(/is emailed the consent form/);
-    await userEvent.click(upload);
-    expect(online).not.toBeChecked();
-    expect(group).toHaveAccessibleDescription(/No consent form is emailed/);
-    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
-    await waitFor(() =>
-      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
-        consent_mode: "UPLOAD",
+    renderAt("/projects/p1/rules");
+    const youngest = await screen.findByRole("spinbutton", { name: "Youngest speaker age" });
+    const oldest = screen.getByRole("spinbutton", { name: "Oldest speaker age" });
+    const save = screen.getByRole("button", { name: "Save rules" });
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "61");
+    expect(oldest).toHaveAccessibleDescription("Must be at least the youngest speaker age (61).");
+    expect(oldest).toBeInvalid();
+    expect(save).toBeDisabled();
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "0");
+    expect(youngest).toHaveAccessibleDescription("Type a whole number from 1 to 120.");
+    expect(save).toBeDisabled();
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "60");
+    expect(save).toBeEnabled(); // one age is allowed: youngest = oldest
+    await userEvent.clear(oldest);
+    expect(oldest).toHaveAccessibleDescription("Type a whole number from 1 to 120.");
+    expect(save).toBeDisabled();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("keeps the Rules tab for project administrators, like the other tabs (D-104, D-145)", async () => {
+    fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
+    renderAt("/projects/p1/rules");
+    expect(await screen.findByText("No access")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Project sections" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
+  });
+
+  it("keeps an archived project's rules read only (D-145)", async () => {
+    fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, { ...project, status: "ARCHIVED" }],
       }),
     );
+    renderAt("/projects/p1/rules");
+    expect(
+      await screen.findByText("Read only. Reopen the project to change its rules."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Each pair of speakers only once" }),
+    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
   });
 
   it("pauses a project and makes it active again, archiving only with a reason", async () => {
@@ -267,20 +354,26 @@ describe("project detail", () => {
     );
     renderAt("/projects/new");
     await userEvent.type(await screen.findByLabelText(/^Name/), "Tamil talk");
-    // A new project starts with the pairing rules on (D-143).
-    expect(screen.getByLabelText("Conversations per speaker (at most)")).toHaveValue(3);
-    expect(screen.getByRole("checkbox", { name: "Each pair of speakers only once" })).toBeChecked();
-    // Consent online unless chosen otherwise (D-144).
-    expect(screen.getByRole("radio", { name: /^Online/ })).toBeChecked();
+    // The rules are set on the Rules tab once the project exists (D-145): the server's defaults.
+    expect(screen.getByText(/Change them on the project.s/)).toHaveTextContent("Rules tab");
+    expect(screen.queryByLabelText("Conversations per speaker (at most)")).toBeNull();
+    expect(screen.queryByRole("radio", { name: /^Online/ })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /QC pass is the final approval/ })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
     expect(
       await screen.findByText(/^PRJ0009 Tamil talk created\. It starts as Draft/),
     ).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
-      max_conversations_per_speaker: 3,
-      unique_pairs: true,
-      consent_mode: "ONLINE",
-    });
+    const sent = calls.find((c) => c.method === "POST")?.body as Record<string, unknown>;
+    expect(sent).toMatchObject({ name: "Tamil talk" });
+    for (const rule of [
+      "speaker_min_age",
+      "required_speaker_details",
+      "max_conversations_per_speaker",
+      "unique_pairs",
+      "consent_mode",
+      "qc_final_approval",
+    ])
+      expect(sent).not.toHaveProperty(rule);
     expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "PRJ0009" })).toHaveAttribute(
       "href",

@@ -18,17 +18,19 @@ import { toApiError, useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { CONSENT_METHOD_LABELS, consentAnswer, labelFor } from "../../lib/labels";
 import {
+  AGE_LIMITS,
   ageProblem,
   EDUCATION_LABELS,
   EDUCATION_MEDIUM_LABELS,
   EMPTY_SPEAKER_DETAILS,
   GENDER_LABELS,
   INDIAN_STATES,
-  MAX_AGE,
-  MIN_AGE,
   missingSpeakerDetails,
+  NO_PROJECT_RULES,
   pincodeProblem,
   speakerDetailsOf,
+  type SpeakerKey,
+  type SpeakerRules,
 } from "../../lib/speakers";
 import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "../projects/choices";
 import { DOCUMENT_WORDS, DocumentsPanel, FileField, sendDocument } from "./Documents";
@@ -74,18 +76,29 @@ type Place = "current" | "native" | "recording";
 /** The speaker details typed as text or chosen from a list (all but the age). */
 type SpeakerText = Exclude<keyof work.SpeakerDetails, "age"> | "district";
 
-/** Speaker details (D-143), short fields side by side: all of them for someone new; someone saved
- * before may be saved without them, and the form says which are still missing. */
+/** The age as typed is wrong for the project: a new age only. An age kept as it was may have been
+ * saved in another project; the server does not check it again, a task does (D-145). */
+const ageError = (f: work.ParticipantFields, initialAge: number | null, rules: SpeakerRules) =>
+  f.age === initialAge ? undefined : ageProblem(f.age, rules);
+
+/** Speaker details (D-143), short fields side by side: someone new needs those the project asks
+ * for (D-145, marked *); someone saved before may be saved without them, and the form says which
+ * are still missing. */
 function SpeakerFields({
   f,
   setF,
   isNew,
+  rules,
+  initialAge,
 }: {
   f: work.ParticipantFields;
   setF: (next: work.ParticipantFields) => void;
   isNew: boolean;
+  rules: SpeakerRules;
+  initialAge: number | null;
 }) {
-  const missing = missingSpeakerDetails(f);
+  const missing = missingSpeakerDetails(f, rules.required);
+  const need = (key: SpeakerKey) => isNew && rules.required.includes(key);
   // The native district is the participant's district: a string, never null.
   const set = (key: SpeakerText, value: string) =>
     setF({ ...f, [key]: key === "district" || value ? value : null });
@@ -96,7 +109,7 @@ function SpeakerFields({
   const pick = (key: SpeakerText, label: string, options: { value: string; label: string }[]) => (
     <Select
       label={label}
-      required={isNew}
+      required={need(key)}
       value={f[key] ?? ""}
       onChange={(e) => set(key, e.target.value)}
       options={options}
@@ -105,7 +118,7 @@ function SpeakerFields({
   const type = (key: SpeakerText, label: string, max = 100, hint = "") => (
     <TextField
       label={label}
-      required={isNew}
+      required={need(key)}
       maxLength={max}
       {...(hint ? { hint } : {})}
       value={f[key] ?? ""}
@@ -126,7 +139,7 @@ function SpeakerFields({
           {type(where === "native" ? "district" : `${where}_district`, `${title} district`)}
           <TextField
             label={`${title} PIN code`}
-            required={isNew}
+            required={need(pin)}
             inputMode="numeric"
             maxLength={6}
             value={f[pin] ?? ""}
@@ -137,30 +150,36 @@ function SpeakerFields({
       </>
     );
   };
-  const agePrompt = ageProblem(f.age);
+  const agePrompt = ageError(f, initialAge, rules);
+  const ages = `${rules.minAge} to ${rules.maxAge}`;
+  const ageHint = ageProblem(f.age, rules)
+    ? `Outside this project's speaker ages (${ages}): they cannot be put on a task here.`
+    : `Speakers aged ${ages}.`;
   return (
     <fieldset className="field speaker-details">
       <legend className="field__label">Speaker details</legend>
       {isNew ? (
         <p className="field__hint">
-          All are needed: a task is made only for people whose speaker details are complete.
+          {rules.required.length > 0
+            ? "Those marked * are needed: a task is made only for people who have them."
+            : "None are needed in this project: fill in what you know."}
         </p>
       ) : missing.length > 0 ? (
         <p className="notice notice--info" role="status">
-          Missing: {missing.join(", ")}. A task is made only for people whose speaker details are
-          complete.
+          Missing: {missing.join(", ")}. A task is made only for people who have the speaker details
+          this project needs.
         </p>
       ) : null}
       <div className="form-grid">
         <TextField
           label="Age"
           type="number"
-          required={isNew}
-          min={MIN_AGE}
-          max={MAX_AGE}
+          required={need("age")}
+          min={AGE_LIMITS.min}
+          max={AGE_LIMITS.max}
           step={1}
+          {...(agePrompt ? { error: agePrompt } : { hint: ageHint })}
           value={f.age ?? ""}
-          {...(agePrompt ? { error: agePrompt } : {})}
           onChange={(e) => setF({ ...f, age: e.target.value ? Number(e.target.value) : null })}
         />
         {pick("gender", "Gender", choices(GENDER_LABELS))}
@@ -186,6 +205,7 @@ export function ParticipantForm({
   error,
   isNew = false,
   consentMode,
+  rules = NO_PROJECT_RULES,
 }: {
   initial: work.ParticipantFields;
   languages: readonly Language[]; // the project's languages; empty means any
@@ -193,10 +213,13 @@ export function ParticipantForm({
   onSubmit: (f: work.ParticipantFields, files: AddFiles) => void;
   busy: boolean;
   error: ApiError | null;
-  /** A new participant needs every speaker detail (D-143). */
+  /** A new participant needs the speaker details the project asks for (D-143, D-145). */
   isNew?: boolean;
   /** Adding someone: the project's way of consent. Upload asks for the signed form (D-144). */
   consentMode?: ConsentMode | undefined;
+  /** The project's speaker ages and needed details (D-145); without a project, any age and
+   * nothing needed. The server checks again. */
+  rules?: SpeakerRules;
 }) {
   const [f, setF] = useState(initial);
   const [files, setFiles] = useState<AddFiles>(NO_FILES);
@@ -211,11 +234,12 @@ export function ParticipantForm({
     phone.digits && phone.digits.length !== PHONE_DIGITS
       ? `Type exactly ${PHONE_DIGITS} digits (you typed ${phone.digits.length}).`
       : undefined;
-  // A wrong speaker detail stops the form; a missing one only for someone new (D-143).
+  // A wrong speaker detail stops the form; a missing one only for someone new, and only one the
+  // project needs (D-143, D-145).
   const speakerWrong =
-    Boolean(ageProblem(f.age)) ||
+    Boolean(ageError(f, initial.age, rules)) ||
     [f.current_pincode, f.native_pincode, f.recording_pincode].some((pin) => pincodeProblem(pin));
-  const speakerMissing = isNew && missingSpeakerDetails(f).length > 0;
+  const speakerMissing = isNew && missingSpeakerDetails(f, rules.required).length > 0;
   return (
     <form
       onSubmit={(e) => {
@@ -284,7 +308,7 @@ export function ParticipantForm({
         value={f.notes}
         onChange={(e) => setF({ ...f, notes: e.target.value })}
       />
-      <SpeakerFields f={f} setF={setF} isNew={isNew} />
+      <SpeakerFields f={f} setF={setF} isNew={isNew} rules={rules} initialAge={initial.age} />
       {scans ? (
         <fieldset className="field">
           <legend className="field__label">Documents</legend>
@@ -399,12 +423,15 @@ export function useParticipantWindows({
   projectId,
   languages,
   consentMode,
+  rules = NO_PROJECT_RULES,
   onSaved,
 }: {
   projectId: string;
   languages: readonly Language[];
   /** The project's way of consent (D-144): Upload asks for the signed form on Add. */
   consentMode?: ConsentMode | undefined;
+  /** The project's speaker ages and needed details (D-145). */
+  rules?: SpeakerRules;
   /** After an add, an edit or an upload, with what to tell the person ("P000003 added. Consent
    * form emailed."). */
   onSaved: (message: string) => void;
@@ -441,6 +468,7 @@ export function useParticipantWindows({
           languages={languages}
           isNew={!editing}
           consentMode={consentMode}
+          rules={rules}
           submitLabel={editing ? "Save changes" : "Add participant"}
           busy={busy !== null}
           error={error}
@@ -468,6 +496,7 @@ export function useParticipantWindows({
           projectId={projectId}
           participantId={opened.participant.id}
           consentMode={consentMode}
+          required={rules.required}
         />
       </Modal>
     );

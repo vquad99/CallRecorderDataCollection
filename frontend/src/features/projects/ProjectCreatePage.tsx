@@ -15,6 +15,12 @@ export function ProjectCreatePage() {
     <section aria-labelledby="new-project-title" className="stack">
       <BackLink to="/projects">All projects</BackLink>
       <h1 id="new-project-title">New project</h1>
+      {/* D-145: the rules have their own tab; a new project starts with the usual ones. */}
+      <p className="muted">
+        The project&apos;s rules (speaker ages and details, pairing, consent, approval) start with
+        the usual values. Change them on the project&apos;s <strong>Rules</strong> tab once it is
+        created.
+      </p>
       <ErrorNotice error={error} />
       <ProjectForm
         initial={EMPTY_FIELDS}

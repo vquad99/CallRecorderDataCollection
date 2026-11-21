@@ -196,7 +196,7 @@ the admin review step is skipped.
 ## Speaker details and pairing rules (migration 0033, D-143)
 
 `participants` gains the speaker details, all nullable (people saved before have none): `age`
-(check 20 to 60), `gender` (check MALE, FEMALE), `current_state`, `current_district`,
+(check 20 to 60; 1 to 120 since 0035, D-145), `gender` (check MALE, FEMALE), `current_state`, `current_district`,
 `current_pincode`, `native_state`, `native_pincode`, `native_language`, `education` (check
 PRIMARY ... OTHER), `education_medium` (check ENGLISH, NON_ENGLISH), `recording_state`,
 `recording_district`, `recording_pincode` (checks: each PIN code is 6 digits, not starting with 0).
@@ -224,3 +224,18 @@ unique indexes keep one current document (`replaced_at` and `removed_at` empty) 
 and project for consent forms, and per participant for address proofs; an index on
 `(participant_id, kind)` serves the history. Which documents count is decided in
 `participants/consent.py` (a consent form counts as consent only while its project is `UPLOAD`).
+
+## Project speaker rules (migration 0035, D-145)
+
+`projects.speaker_min_age` and `projects.speaker_max_age` (integers, defaults 20 and 60; a check
+keeps both from 1 to 120 and the youngest not above the oldest): the ages the project takes.
+`projects.required_speaker_details` (JSONB list of speaker detail names, default all 14; a check
+keeps it a list; the names are checked by the application against `participants/speakers.FIELDS`):
+the details a person needs before a task. Existing projects get the defaults, so nothing changes
+for them. These are the first client's numbers as defaults only: each project changes them on its
+**Rules** tab, and the application holds people to them (`participants/speakers.py`).
+
+`participants.age`: the check is now 1 to 120 (what fits any person) instead of 20 to 60; the
+project's own range is enforced by the application where a project is known. Going back to 0034
+puts the 20 to 60 check back as `NOT VALID`: ages saved meanwhile outside it are kept, new values
+are held to it.

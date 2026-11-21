@@ -305,6 +305,22 @@ const FORMS: Record<string, FormSpec> = {
     reply: [200, PROJECT],
     kept: "Sample rate (Hz)",
   },
+  "project rules": {
+    source: "src/features/projects/RulesTab.tsx",
+    url: "/projects/p1/rules",
+    ready: /Speaker details needed before a task/,
+    fill: [type("Youngest speaker age", "18"), tick("Gender")],
+    submit: "Save rules",
+    write: "PATCH /api/v1/projects/p1",
+    reply: [200, PROJECT],
+    body: {
+      name: "Hindi conversations",
+      speaker_min_age: 18,
+      speaker_max_age: 60,
+      required_speaker_details: PROJECT.required_speaker_details.filter((k) => k !== "gender"),
+    },
+    kept: "Youngest speaker age",
+  },
   languages: {
     source: "src/features/projects/tabs.tsx",
     url: "/projects/p1/languages",

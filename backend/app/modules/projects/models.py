@@ -17,9 +17,12 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.modules.participants.models import MAX_AGE, MIN_AGE
+from app.modules.participants.speakers import FIELDS as SPEAKER_FIELDS
 from app.modules.recordings.models import ASSET_KINDS
 
 PROJECT_STATUSES = ("DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED")
@@ -28,6 +31,10 @@ PHONE_POLICIES = ("ADMINS_ONLY", "ASSIGNED_MODERATOR")
 # How participants give consent (D-144): ONLINE, on their personal page (D-067, D-129), or
 # UPLOAD, a scanned signed consent form that staff upload.
 CONSENT_MODES = ("ONLINE", "UPLOAD")
+# Speaker rules (D-145): the first client's numbers are only what a new project starts with;
+# each project sets its own on its Rules tab.
+DEFAULT_SPEAKER_MIN_AGE, DEFAULT_SPEAKER_MAX_AGE = 20, 60
+DEFAULT_REQUIRED_SPEAKER_DETAILS: tuple[str, ...] = tuple(SPEAKER_FIELDS)
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -52,6 +59,15 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="max_conversations_range",
         ),
         CheckConstraint(_in("consent_mode", CONSENT_MODES), name="consent_mode_allowed"),
+        CheckConstraint(
+            f"speaker_min_age BETWEEN {MIN_AGE} AND {MAX_AGE}"
+            f" AND speaker_max_age BETWEEN {MIN_AGE} AND {MAX_AGE}"
+            " AND speaker_min_age <= speaker_max_age",
+            name="speaker_age_range",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(required_speaker_details) = 'array'", name="required_speaker_details_list"
+        ),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -84,6 +100,21 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # project (empty = no limit), and each pair of speakers only once.
     max_conversations_per_speaker: Mapped[int | None] = mapped_column(Integer, server_default="3")
     unique_pairs: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # Speaker rules (D-145, participants/speakers.py): the ages this project takes, and the speaker
+    # details a person needs before a task (keys of speakers.FIELDS, in its order).
+    speaker_min_age: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=str(DEFAULT_SPEAKER_MIN_AGE)
+    )
+    speaker_max_age: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=str(DEFAULT_SPEAKER_MAX_AGE)
+    )
+    required_speaker_details: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text(
+            "'[" + ", ".join(f'"{k}"' for k in DEFAULT_REQUIRED_SPEAKER_DETAILS) + "]'::jsonb"
+        ),
+    )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

@@ -244,11 +244,17 @@ class ParticipantInput:
     speaker: Mapping[str, object] = field(default_factory=dict)
 
 
-def _apply_speaker(p: Participant, given: Mapping[str, object]) -> list[str]:
+def _apply_speaker(p: Participant, given: Mapping[str, object], project: Project) -> list[str]:
     """Stores the given speaker details (422 INVALID_SPEAKER_DETAILS for a wrong one); returns
-    the names of the fields that changed."""
+    the names of the fields that changed. An age that changes must be within the project's
+    speaker ages (422 SPEAKER_AGE_OUT_OF_RANGE, D-145); an age kept as it was is not checked
+    again (it may have been saved in another project), a task checks it."""
+    values = speakers.clean_all(given)
+    age = values.get("age")
+    if isinstance(age, int) and age != p.age:
+        speakers.check_age(project, age)
     changed = []
-    for name, value in speakers.clean_all(given).items():
+    for name, value in values.items():
         stored = "" if name == "district" and value is None else value
         if getattr(p, name) != stored:
             setattr(p, name, stored)
@@ -352,7 +358,7 @@ def create_participant(
         notes=data.notes,
         created_by=principal.user_id,
     )
-    _apply_speaker(participant, data.speaker)
+    _apply_speaker(participant, data.speaker, project)
     code = f"P{db.scalar(text("SELECT nextval('participant_code_seq')")):06d}"
     participant.participant_code = code
     _apply_phone(participant, settings, cipher, phone)
@@ -373,7 +379,7 @@ def create_participant(
             "language_code": data.language_code,
             "has_phone": phone is not None,
             "has_email": bool(data.email),
-            "speaker_details_complete": speakers.complete(participant),
+            "speaker_details_complete": speakers.complete(participant, project),
         },
     )
     db.commit()
@@ -404,6 +410,7 @@ def link_existing(
     if _linked(db, project.id, participant.id):
         raise AppError("Already in this project", code="ALREADY_LINKED", status_code=409)
     check_language(project, participant.language_code, participant.dialect)
+    speakers.check_ages(project, [participant])  # the project's speaker ages (D-145)
     db.add(ParticipantProjectLink(participant_id=participant.id, project_id=project.id))
     audit.record(
         db,
@@ -422,8 +429,9 @@ def link_candidates(
     db: Session, principal: Principal, project_id: uuid.UUID, search: str | None, limit: int = 50
 ) -> list[Participant]:
     """People who can be added to this project as they are (D-090): not deleted, not already in
-    it, in a project where the caller manages participants (a Super Admin: any project), and
-    speaking one of this project's languages when it has a list. Search by code or name."""
+    it, in a project where the caller manages participants (a Super Admin: any project),
+    speaking one of this project's languages when it has a list, and within its speaker ages
+    (D-145). Search by code or name."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     already = select(ParticipantProjectLink.participant_id).where(
         ParticipantProjectLink.project_id == project.id
@@ -444,6 +452,13 @@ def link_candidates(
     codes = sorted({lang.language_code for lang in project.languages})
     if codes:
         query = query.where(Participant.language_code.in_(codes))
+    # Within the project's speaker ages, or no age yet (D-145): link_existing refuses the others.
+    query = query.where(
+        or_(
+            Participant.age.is_(None),
+            Participant.age.between(project.speaker_min_age, project.speaker_max_age),
+        )
+    )
     if search and search.strip():
         term = search.strip()
         query = query.where(
@@ -486,7 +501,7 @@ def correct_participant(
     participant.display_label = data.display_label.strip()
     participant.language_code = data.language_code
     participant.dialect = data.dialect
-    speaker_changed = _apply_speaker(participant, data.speaker)
+    speaker_changed = _apply_speaker(participant, data.speaker, project)
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
@@ -527,7 +542,7 @@ def correct_participant(
             "email_changed": email_changed,
             # Which speaker details changed, not their values (D-143).
             "speaker_details_changed": speaker_changed,
-            "speaker_details_complete": speakers.complete(participant),
+            "speaker_details_complete": speakers.complete(participant, project),
         },
     )
     db.commit()
@@ -578,7 +593,7 @@ def delete_participant(
     participant.notes = ""
     participant.phone_e164_enc = participant.phone_hash = participant.phone_hint = None
     participant.email_enc = None
-    _apply_speaker(participant, dict.fromkeys(speakers.FIELDS))  # personal too (D-143)
+    _apply_speaker(participant, dict.fromkeys(speakers.FIELDS), project)  # personal too (D-143)
     participant.deleted_at = datetime.now(UTC)
     participant.deleted_by = principal.user_id
     participant.deletion_reason = reason.strip()
