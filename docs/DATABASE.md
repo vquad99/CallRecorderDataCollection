@@ -27,7 +27,7 @@ Status: proposed (Phase 0). No migration exists yet. PostgreSQL + Alembic (DB-00
 | consent_status | PENDING, GIVEN, REFUSED, WITHDRAWN |
 | call_state | CREATED, CALLING_A, A_CONNECTED, ADDING_B, B_CONNECTED, MODERATOR_CONNECTED, CONSENT_PENDING, CONSENT_CONFIRMED, RECORDING, MODERATOR_LEFT, PARTICIPANTS_CONTINUING, COMPLETED, FAILED, CANCELLED |
 | asset_kind | PROVIDER_ORIGINAL_TRACK, PROVIDER_ORIGINAL_MIXED, TELEPHONY_FINAL_STEREO, CONSENT_RECORDING, BROWSER_ORIGINAL, FTF_DERIVED_PCM, TRANSCRIPT_FILE, EXPORT_PACKAGE |
-| qc_outcome | PASS, FAIL, NEEDS_REVIEW |
+| qc_outcome | PASS, FAIL, NEEDS_REVIEW, RETURN (before D-118), SEND_BACK_CONSENT (0036, D-146) |
 | job_status | QUEUED, RUNNING, SUCCEEDED, FAILED, DEAD_LETTER, CANCELLED |
 
 ## 3. Tables (DB-001: spec 8 + runbook N, E4, F1, I1)
@@ -68,6 +68,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | audio_assets | recording_id, kind, parent_asset_id, storage_key, version, container, codec, sample_format, sample_rate, bit_depth, channels, duration_ms, size_bytes, sha256, peak_dbfs, clip_count, clip_pct, silence_pct, rms_dbfs, provider_codec, provider_recording_spec | unique (storage_key, version); index sha256 | retention workflow |
 | asset_processing_steps | asset_id, seq, tool, tool_version, parameters, input_asset_id, output_sha256 | unique (asset_id, seq) | cascade |
 | audio_qc_results, audio_qc_checks | see "Audio quality check" below (built, D-079) | index recording_id, task_id, project_id | restrict; checks cascade |
+| audio_qc_drafts | see "QC checklist and the consent fix" below (D-146) | unique task_id | task cascade |
 | transcription_jobs | audio_asset_id, provider, model_name, model_version, settings, language_code, dialect, status, attempts, started_at, finished_at, raw_response_ref, last_error | index status | restrict |
 | transcripts | task_id, source (AI, HUMAN), transcription_job_id, current_version, status, locked, locked_at | unique (task_id, source) | restrict |
 | transcript_revisions | transcript_id, version, author_id, created_at, submitted (bool) | unique (transcript_id, version) | restrict |
@@ -239,3 +240,26 @@ for them. These are the first client's numbers as defaults only: each project ch
 project's own range is enforced by the application where a project is known. Going back to 0034
 puts the 20 to 60 check back as `NOT VALID`: ages saved meanwhile outside it are kept, new values
 are held to it.
+
+## QC checklist and the consent fix (migration 0036, D-146)
+
+`projects.qc_checklist` (JSONB list, a check keeps it a list): the questions the QC Executive
+answers Yes or No for each recording, each `{key, question, scope, fails_on, required}`; the
+application checks the items when they are saved (`audio_qc/checklist.py`). Every existing project
+gets the first client's 28 questions (Konkani, NLTM), so the column's default is that list too;
+each project changes it on its **Rules** tab.
+
+`audio_qc_results.checklist` (JSONB, empty for the automatic check and for decisions made before):
+a decision's answers with the questions as they read then, each participant's answers and consent
+check (with the id of the consent form on file then) and the failing answers. A result's
+`outcome` may now be `SEND_BACK_CONSENT`.
+
+`audio_qc_drafts`: task_id (unique, cascade), answers (JSONB), saved_by (empty when the platform
+wrote it after a send-back). One per task: the answers not yet sent, replaced on each save,
+removed by the decision.
+
+`tasks.status` and `tasks.held_from` may be `CONSENT_FIX` ("Consent form to fix"): QC found the
+audio fine but a signed consent form not; the moderator uploads a new one and sends the same
+recording back to Audio QC. Going back to 0035 moves such tasks back to `AUDIO_QC` (a history
+entry by the platform), drops the drafts and the answers, and puts the old outcome check back as
+`NOT VALID`: decisions that sent a task back are kept.

@@ -10,6 +10,7 @@ const TONES: Record<string, Tone> = {
   IN_PROGRESS: "progress",
   RECORDED: "progress",
   AUDIO_QC: "warning",
+  CONSENT_FIX: "warning",
   ADMIN_REVIEW: "info",
   APPROVED: "success",
   REJECTED: "danger",

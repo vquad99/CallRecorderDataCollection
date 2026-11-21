@@ -98,12 +98,17 @@ the middle of a recording, or **Later**.
 | 2 | Assigned | Project Admin | Chooses the Moderator (status changes by itself) |
 | 3 | In progress | Moderator | Starts the task |
 | 4 | Recorded | Moderator | The recording is saved and checked automatically; the Moderator listens, then clicks **Send to QC** (or **Record again**) |
-| 5 | Audio QC | QC Executive | Pass (goes to the admin) or Reject |
+| 5 | Audio QC | QC Executive | Answers the QC checklist, then Pass (goes to the admin), Reject, or Send back for consent |
 | 6 | Admin review | Project Admin | Listens and gives the final word: **Approve** or **Reject** with a reason |
 | 7 | Approved | - | Done; the recording can be downloaded with its consent form |
 
 If a project has **QC pass is the final approval** ticked (the project's **Rules** tab), step 6 is
 skipped: **Pass** at step 5 makes the task **Approved** at once.
+
+In a project whose **Consent** is **Upload**, QC also checks each person's signed consent form.
+When the recording is fine but a form is not, QC sends the task back: it shows **Consent form to
+fix** until the moderator uploads a new form and sends the same recording back to **Audio QC**
+(nothing is recorded again).
 
 A task can also be put **On hold** or **Cancelled** by the Project Admin, with a reason.
 **Approved**, **Rejected** and **Cancelled** are final. There is no "send back to record again":
@@ -232,6 +237,21 @@ the Rules tab have them too. Every change is saved in the audit log with the pro
 - **Approval**: **QC pass is the final approval (no admin review)**. Leave it empty to keep the
   admin's final approval. Tick it and a recording the QC Executive passes is **Approved** at
   once. Tasks already waiting in **Admin review** stay there; approve them as usual.
+- **QC checklist**: the questions the QC Executive answers **Yes** or **No** for every
+  recording (section 8). It starts with the client's 28 questions: 13 about the conversation
+  (for example "The conversation is between exactly two speakers"), where **No** fails the
+  recording, and 15 about each speaker (for example "Is speech intelligible?"), which are only
+  noted. Each question is a block with:
+  - **Question**: the words QC reads (at most 200 characters).
+  - **Applies to**: **The conversation (answered once)** or **Each speaker (answered for both)**.
+  - **The recording fails when the answer is**: **No**, **Yes** or **Never (observation only)**.
+  - **Required (answered before Pass)**.
+  - The arrows move it up or down; the bin removes it.
+  To add one, type its **Key** (lowercase letters, digits and _, like `speech_intelligible`; it
+  names the answer in the delivery and cannot be changed later) and the **New question**, then
+  click **Add question** (it starts as a conversation question that fails on No; change it in its
+  block). **Reset to the client's list** puts the 28 questions back. At most 60 questions. The
+  list is saved with **Save rules**; answers already given keep the questions as they read then.
 
 Tasks made before a change stay as they are.
 
@@ -527,6 +547,21 @@ payments. QC Executives see only the newest one.
 The platform checks the sound within about a minute of saving; **Send to QC** works once that
 check is done.
 
+**Consent form to fix.** In a project whose **Consent** is **Upload**, QC may find the recording
+fine but a signed consent form not (for example not signed, or someone else's form). The task
+then shows **Consent form to fix**, and its page has a **Consent form to fix** card: whose form,
+**What QC found** (QC's words, who and when) and **New form needed** beside each person.
+
+1. Get a new signed form from the person and scan it.
+2. Click **Upload a new consent form of P000123** in the card and choose the scan. The person now
+   shows **New form uploaded**.
+3. Click **Send back to QC**. It stays grey (**Upload the new form first.**) until every form QC
+   asked for is replaced. The task goes back to **Audio QC** with the same recording and the same
+   QC Executive; nothing is recorded again. The page says **Sent back to QC with the same
+   recording.**
+
+A project admin can do the same, or **Cancel task** if no form can be had.
+
 If the internet drops, recording carries on and the saved parts are sent when it comes back. If
 the tab closes by mistake, open the recorder again: it offers **Keep the saved m:ss** or **Discard
 it** (it asks you to confirm; the saved audio is then deleted). A recording can be up to 4 hours
@@ -623,19 +658,41 @@ in the project's metadata export) carries the same history in its **call** secti
    all checks (n)** shows every check (format, length, silence, clipping, loudness, duplicates and
    more).
 3. Click **Listen** to hear the recording.
-4. Under **Your decision**, click:
+4. Under **QC checklist**, click **Yes** or **No** for every question: those under **The
+   conversation** once, those under **Participant A** and **Participant B** (code and name) for
+   each person. An answer that fails the recording shows **Fails**. Questions marked
+   **(optional)** may be left. Your answers are saved as you tick (**Answers saved.**), so a
+   reload keeps them; they go with your decision.
+5. **Consent**:
+   - In a project whose **Consent** is **Upload**, **Signed consent forms** lists both people:
+     click **View** to open each form, check it is signed, by the right person, for this
+     project, and click **Yes** or **No** beside **Consent form of P000123 checked**.
+   - In an **Online** project the card shows each person's online answer and its date. The
+     platform recorded it: there is nothing to check.
+6. Under **Your decision** (a line above the buttons says what your answers allow), click:
    - **Pass** → the task becomes **Admin review** (the admin gives final approval). In a project
      where **QC pass is the final approval**, Pass makes it **Approved** at once; the card then
-     says **Pass approves the task: this project has no admin review.**
-   - **Reject** → **Rejected** (final).
+     says **Pass approves the task: this project has no admin review.** Pass works only when
+     every required question is answered, no answer fails and (Upload projects) both consent
+     forms are **Yes**.
+   - **Reject** → **Rejected** (final). Possible at any time; your answers so far are kept.
+   - **Send back for consent** (Upload projects) → **Consent form to fix**: the recording is
+     fine but a form is not. It works when every required question is answered, none fails and
+     at least one consent form is **No**. It asks **What is wrong with the form**; the moderator
+     reads it, uploads a new form and sends the same recording back to you. The task then waits
+     in **Audio QC** again with your earlier answers filled in: check the new form and decide.
 
    Reject asks for a **Reason** (a **Comment** is needed when the reason is "Other"). Passing a
    recording the automatic check failed asks **Why does it pass?**.
 
+Everyone who sees the task (the admin at **Admin review** too) finds the newest decision's
+answers under **QC checklist**: what was decided, by whom and when; **Show every answer** lists
+each question with its answer.
+
 **Check the stored file again** repeats the automatic check on the stored file.
 
-In a project whose **Consent** is **Upload**, the **Signed consent forms** card on the task lets
-you **View** both participants' signed forms. You cannot upload or replace them.
+In a project whose **Consent** is **Upload**, the **Signed consent forms** card on the task also
+lets you **View** both participants' signed forms. You cannot upload or replace them.
 
 You see only the newest recording of a task. Older ones the moderator replaced with **Record
 again** are not shown to you.
@@ -764,8 +821,9 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 everything ever recorded; with chosen days they count those days only.
 
 Managers also see **Phone calls**: placed, recorded, could not be placed, waiting for a person,
-still open. Under **Needs attention**, the **Waiting for audio QC** and **Tasks on hold** tiles open
-the **Tasks** list filtered to those tasks.
+still open. Under **Needs attention**, the **Waiting for audio QC**, **Tasks on hold** and
+**Consent forms to fix** (sent back by QC for a new signed form) tiles open the **Tasks** list
+filtered to those tasks.
 
 ---
 

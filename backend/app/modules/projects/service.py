@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Select, or_, select, text
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
 from app.db.paging import paginate
+from app.modules.audio_qc import checklist
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
@@ -142,11 +144,15 @@ class ProjectInput:
     speaker_min_age: int = DEFAULT_SPEAKER_MIN_AGE
     speaker_max_age: int = DEFAULT_SPEAKER_MAX_AGE
     required_speaker_details: tuple[str, ...] = DEFAULT_REQUIRED_SPEAKER_DETAILS
+    # The QC checklist (D-146): None keeps the project's own (a new project gets the first
+    # client's list). Decisions already made keep the questions as they read then.
+    qc_checklist: tuple[dict[str, Any], ...] | None = None
 
 
 def _values(data: ProjectInput) -> dict[str, object]:
     """The project's columns from the input, checked (D-145): the youngest age is not above the
-    oldest, and the required details are known ones, each once, in the form's order."""
+    oldest, and the required details are known ones, each once, in the form's order; the QC
+    checklist's items are well formed (D-146). A checklist left out is not among them."""
     if data.speaker_min_age > data.speaker_max_age:
         raise AppError(
             f"The youngest speaker age ({data.speaker_min_age}) is above the oldest "
@@ -155,10 +161,15 @@ def _values(data: ProjectInput) -> dict[str, object]:
             status_code=422,
             details=[{"field": "speaker_min_age"}],
         )
-    return {
+    values: dict[str, object] = {
         **data.__dict__,
         "required_speaker_details": speakers.clean_required(data.required_speaker_details),
     }
+    if data.qc_checklist is None:
+        del values["qc_checklist"]
+    else:
+        values["qc_checklist"] = checklist.clean(data.qc_checklist)
+    return values
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -194,6 +205,7 @@ def _snapshot(p: Project) -> dict[str, object]:
         "speaker_min_age": p.speaker_min_age,
         "speaker_max_age": p.speaker_max_age,
         "required_speaker_details": list(p.required_speaker_details),
+        "qc_checklist": list(p.qc_checklist),
     }
 
 
@@ -235,8 +247,9 @@ def create_project(
             "A project with this code already exists", code="PROJECT_CODE_TAKEN", status_code=409
         )
     _check_modes(data)
+    values = {"qc_checklist": checklist.default_checklist(), **_values(data)}
     project = Project(
-        id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **_values(data)
+        id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **values
     )
     project.audio_rules = []
     _ensure_default_audio_rules(project)
@@ -270,6 +283,9 @@ def update_project(
         setattr(project, key, value)
     _ensure_default_audio_rules(project)
     after = _snapshot(project)
+    if after["qc_checklist"] == before["qc_checklist"]:
+        # The checklist is long: the entry carries it only when it changed (D-146).
+        del after["qc_checklist"], before["qc_checklist"]
     if after != before:
         audit.record(
             db,

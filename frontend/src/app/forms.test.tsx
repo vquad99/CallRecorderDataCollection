@@ -14,7 +14,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeApi, ME, renderAt, signedInAs, type Handler } from "../test/fakeApi";
 import {
   ALL_PERMISSIONS,
+  DOCUMENT,
   PROJECT,
+  QC_CHECKLIST,
   RATES,
   SPEAKER_DETAILS,
   SPEAKER_INPUT,
@@ -109,6 +111,14 @@ const QC_VIEW = {
   reasons: { FAIL: ["AUDIO_QUALITY", "OTHER"] },
   results: [],
 };
+/** Presses Yes or No for every question with this name (a speaker question is asked twice). */
+const answer =
+  (question: string, said: "Yes" | "No"): Step =>
+  async () => {
+    for (const group of await screen.findAllByRole("group", { name: question }))
+      await userEvent.click(within(group).getByRole("button", { name: said }));
+  };
+
 const QC_PAGE: Record<string, Handler> = {
   "GET /api/v1/tasks/t1": () => [200, { ...TASK, status: "AUDIO_QC", can_reassign: false }],
   "GET /api/v1/tasks/t1/recordings": () => [200, []],
@@ -443,6 +453,45 @@ const FORMS: Record<string, FormSpec> = {
     body: { outcome: "FAIL", reason_code: "AUDIO_QUALITY", comment: "Traffic" },
     kept: "Comment",
     handlers: QC_PAGE,
+  },
+  "send back for consent": {
+    source: "src/components/ConfirmDialog.tsx",
+    url: "/tasks/t1",
+    ready: /Signed consent forms/,
+    open: [
+      answer("The conversation is between exactly two speakers", "Yes"),
+      answer("Is echo present?", "No"),
+      answer("Consent form of P000001 checked", "No"),
+      answer("Consent form of P000002 checked", "Yes"),
+      click("Send back for consent"),
+    ],
+    fill: [type("What is wrong with the form", "Not signed")],
+    submit: "Send back",
+    write: "POST /api/v1/tasks/t1/audio-qc/decision",
+    reply: [200, QC_VIEW],
+    body: {
+      outcome: "SEND_BACK_CONSENT",
+      comment: "Not signed",
+      answers: { consent: { A: "no", B: "yes" } },
+    },
+    kept: "What is wrong with the form",
+    handlers: {
+      ...QC_PAGE,
+      "GET /api/v1/tasks/t1": () => [
+        200,
+        {
+          ...TASK,
+          status: "AUDIO_QC",
+          can_reassign: false,
+          consent_mode: "UPLOAD",
+          participant_a: { ...TASK.participant_a, consent_form: DOCUMENT },
+        },
+      ],
+      "GET /api/v1/tasks/t1/audio-qc/checklist": () => [
+        200,
+        { ...QC_CHECKLIST, consent_check: true },
+      ],
+    },
   },
   "phone seat": {
     source: "src/features/users/UserDetailPage.tsx",

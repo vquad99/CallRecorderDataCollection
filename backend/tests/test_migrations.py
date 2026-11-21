@@ -523,3 +523,108 @@ def test_project_speaker_rules_come_and_go(test_database_url: str) -> None:
         conn.execute(text("UPDATE participants SET age = 75"))
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_the_qc_checklist_and_the_consent_fix_come_and_go(test_database_url: str) -> None:
+    """0036 (D-146): every existing project gets the first client's QC checklist as its own; a
+    decision may keep its answers and send a task back for its consent form (CONSENT_FIX); one
+    draft per task; going back moves such tasks back to Audio QC and keeps the decisions."""
+    from sqlalchemy.orm import Session
+
+    from app.modules.audio_qc.checklist import DEFAULT_QC_CHECKLIST
+    from app.modules.recordings.models import Recording
+    from app.modules.tasks.models import Task
+    from tests.conftest import make_user
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0035")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+        a = _participant_row(conn, "P900001")
+        b = _participant_row(conn, "P900002")
+    command.upgrade(cfg, "head")
+    with Session(engine) as db:
+        mod = make_user(db, "mig@example.org", ["MODERATOR"])
+        task = Task(
+            task_code="T900001",
+            project_id=project_id,
+            recording_mode="FACE_TO_FACE",
+            status="AUDIO_QC",
+            priority="NORMAL",
+            participant_a_id=a,
+            participant_b_id=b,
+        )
+        db.add(task)
+        db.flush()
+        recording = Recording(
+            task_id=task.id,
+            mode="FACE_TO_FACE",
+            state="READY",
+            created_by=mod.id,
+            native_sample_rate=16000,
+            channel_count=1,
+            channel_handling="mono",
+            started_at=datetime.now(UTC),
+        )
+        db.add(recording)
+        db.commit()
+        task_id, recording_id = task.id, recording.id
+    command.upgrade(cfg, "head")
+    decision = text(
+        "INSERT INTO audio_qc_results (recording_id, task_id, project_id, automated, outcome, "
+        "checklist) VALUES (:r, :t, :p, false, :o, CAST(:c AS jsonb))"
+    )
+    with engine.begin() as conn:
+        saved = conn.execute(
+            text("SELECT qc_checklist FROM projects WHERE id = :p"), {"p": project_id}
+        ).scalar_one()
+        assert saved == list(DEFAULT_QC_CHECKLIST)
+        assert saved[20]["question"] == "Is the speaker's volume low?"
+        conn.execute(
+            decision,
+            {"r": recording_id, "t": task_id, "p": project_id, "o": "SEND_BACK_CONSENT", "c": "{}"},
+        )
+        conn.execute(text("UPDATE tasks SET status = 'CONSENT_FIX' WHERE id = :t"), {"t": task_id})
+        conn.execute(
+            text("INSERT INTO audio_qc_drafts (task_id, answers) VALUES (:t, '{}'::jsonb)"),
+            {"t": task_id},
+        )
+    for sql, match in (
+        ("UPDATE projects SET qc_checklist = '{}'::jsonb", "qc_checklist_list"),
+        ("UPDATE tasks SET status = 'CONSENT_LOST'", "ck_tasks_status_allowed"),
+        (
+            "INSERT INTO audio_qc_drafts (task_id, answers) SELECT id, '{}'::jsonb FROM tasks",
+            "uq_audio_qc_drafts_task_id",
+        ),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(text(sql))
+    with pytest.raises(Exception, match="outcome_allowed"), engine.begin() as conn:
+        conn.execute(
+            decision, {"r": recording_id, "t": task_id, "p": project_id, "o": "MAYBE", "c": None}
+        )
+    command.downgrade(cfg, "0035")
+    with engine.begin() as conn:
+        assert "audio_qc_drafts" not in inspect(conn).get_table_names()
+        assert "qc_checklist" not in {c["name"] for c in inspect(conn).get_columns("projects")}
+        status = text("SELECT status FROM tasks WHERE id = :t")
+        assert conn.execute(status, {"t": task_id}).scalar_one() == "AUDIO_QC"
+        moved = conn.execute(
+            text("SELECT from_status, to_status FROM task_status_history WHERE task_id = :t"),
+            {"t": task_id},
+        ).one()
+        assert tuple(moved) == ("CONSENT_FIX", "AUDIO_QC")
+        outcome = text("SELECT outcome FROM audio_qc_results")
+        assert conn.execute(outcome).scalar_one() == "SEND_BACK_CONSENT", "kept"
+    with pytest.raises(Exception, match="outcome_allowed"), engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO audio_qc_results (recording_id, task_id, project_id, automated, "
+                "outcome) VALUES (:r, :t, :p, false, 'SEND_BACK_CONSENT')"
+            ),
+            {"r": recording_id, "t": task_id, "p": project_id},
+        )
+    command.upgrade(cfg, "head")
+    engine.dispose()

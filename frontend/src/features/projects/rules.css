@@ -22,3 +22,42 @@
   font-size: 0.8125rem;
   font-weight: 600;
 }
+/* The QC checklist (D-146): one bordered block per question, numbered, its tools at the right. */
+.qc-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 900px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.qc-rule {
+  position: relative;
+  min-width: 0;
+  max-width: 900px;
+  margin: 0;
+  padding: 6px 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.qc-rule__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.qc-rule__number {
+  color: var(--muted);
+}
+.qc-rule__tools {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+}
+.qc-rule .checkbox {
+  margin-top: 4px;
+}

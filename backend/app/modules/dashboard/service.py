@@ -369,6 +369,8 @@ def summary(
         "interrupted": int(interrupted),
         "stale_uploads": int(stale),
         "on_hold": statuses.get("ON_HOLD", 0),
+        # Sent back by QC for a new signed consent form (D-146).
+        "consent_forms_to_fix": statuses.get("CONSENT_FIX", 0),
     }
     team_q = in_scope(
         select(User.display_name, func.count().label("n"), func.sum(final.c.ms).label("ms"))

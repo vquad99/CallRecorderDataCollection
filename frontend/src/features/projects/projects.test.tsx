@@ -1,10 +1,12 @@
-// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006
+// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006, AQC-008
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SPEAKER_FIELDS } from "../../lib/speakers";
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { PROJECT } from "../../test/world";
+import { CLIENT_QC_CHECKLIST } from "./qcChecklist";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -57,6 +59,7 @@ const project = {
   speaker_min_age: 20,
   speaker_max_age: 60,
   required_speaker_details: SPEAKER_FIELDS.map((f) => f.key),
+  qc_checklist: PROJECT.qc_checklist,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -141,6 +144,7 @@ describe("project detail", () => {
         speaker_min_age: 20,
         speaker_max_age: 60,
         required_speaker_details: project.required_speaker_details,
+        qc_checklist: project.qc_checklist, // D-146: the checklist goes back as it is too
       }),
     );
   });
@@ -247,6 +251,101 @@ describe("project detail", () => {
     expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
   });
 
+  it("edits the QC checklist and saves it with the rules (D-146)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1/rules");
+    const card = await screen.findByRole("region", { name: "QC checklist" });
+    const first = within(card).getByRole("group", { name: "1. two_speakers" });
+    const second = within(card).getByRole("group", { name: "2. echo_in_audio" });
+    expect(within(first).getByLabelText("Question")).toHaveValue(
+      "The conversation is between exactly two speakers",
+    );
+    expect(within(first).getByLabelText("Applies to")).toHaveValue("conversation");
+    expect(within(first).getByLabelText("The recording fails when the answer is")).toHaveValue(
+      "no",
+    );
+    expect(within(second).getByLabelText("The recording fails when the answer is")).toHaveValue("");
+    expect(within(first).getByRole("button", { name: "Move two_speakers up" })).toBeDisabled();
+    expect(within(second).getByRole("button", { name: "Move echo_in_audio down" })).toBeDisabled();
+
+    // Change the words, when it fails, what it applies to and whether it is required.
+    const words = within(first).getByLabelText("Question");
+    await userEvent.clear(words);
+    expect(screen.getByRole("button", { name: "Save rules" })).toBeDisabled();
+    expect(words).toHaveAccessibleDescription("Write the question.");
+    await userEvent.type(words, "Only two people talk");
+    await userEvent.click(within(first).getByRole("checkbox", { name: /Required/ }));
+    await userEvent.selectOptions(
+      within(second).getByLabelText("The recording fails when the answer is"),
+      "yes",
+    );
+    await userEvent.selectOptions(within(second).getByLabelText("Applies to"), "conversation");
+    await userEvent.click(within(second).getByRole("button", { name: "Move echo_in_audio up" }));
+    expect(within(card).getByRole("group", { name: "1. echo_in_audio" })).toBeInTheDocument();
+
+    // A new question needs a key in the client's form, used once.
+    const key = within(card).getByLabelText("Key");
+    await userEvent.type(key, "Two Speakers");
+    await userEvent.type(within(card).getByLabelText("New question"), "Is music playing?");
+    await userEvent.click(within(card).getByRole("button", { name: "Add question" }));
+    expect(key).toHaveAccessibleDescription(/Lowercase letters, digits and _ only/);
+    await userEvent.clear(key);
+    await userEvent.type(key, "echo_in_audio");
+    await userEvent.click(within(card).getByRole("button", { name: "Add question" }));
+    expect(key).toHaveAccessibleDescription(/already in the list/);
+    await userEvent.clear(key);
+    await userEvent.type(key, "music{Enter}");
+    expect(within(card).getByRole("group", { name: "3. music" })).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    const patches = () => calls.filter((c) => c.method === "PATCH");
+    expect(patches()[0]?.body).toMatchObject({
+      name: "Hindi conversations",
+      speaker_min_age: 20,
+      qc_checklist: [
+        {
+          key: "echo_in_audio",
+          question: "Is echo present?",
+          scope: "conversation",
+          fails_on: "yes",
+          required: true,
+        },
+        {
+          key: "two_speakers",
+          question: "Only two people talk",
+          scope: "conversation",
+          fails_on: "no",
+          required: false,
+        },
+        {
+          key: "music",
+          question: "Is music playing?",
+          scope: "conversation",
+          fails_on: "no",
+          required: true,
+        },
+      ],
+    });
+
+    // Remove one; then put the client's list back.
+    await userEvent.click(within(card).getByRole("button", { name: "Remove music" }));
+    expect(within(card).queryByRole("group", { name: "3. music" })).toBeNull();
+    await userEvent.click(within(card).getByRole("button", { name: "Reset to the client's list" }));
+    expect(within(card).getByText("28 questions (at most 60).")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(patches()).toHaveLength(2));
+    expect((patches()[1]?.body as { qc_checklist: unknown }).qc_checklist).toEqual(
+      CLIENT_QC_CHECKLIST,
+    );
+  });
+
   it("keeps the Rules tab for project administrators, like the other tabs (D-104, D-145)", async () => {
     fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
     renderAt("/projects/p1/rules");
@@ -269,6 +368,11 @@ describe("project detail", () => {
       screen.getByRole("checkbox", { name: "Each pair of speakers only once" }),
     ).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
+    // The QC checklist too (D-146).
+    const card = screen.getByRole("region", { name: "QC checklist" });
+    expect(within(card).getAllByLabelText("Question")[0]).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Remove two_speakers" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Add question" })).toBeDisabled();
   });
 
   it("pauses a project and makes it active again, archiving only with a reason", async () => {

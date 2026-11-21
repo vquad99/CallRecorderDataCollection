@@ -1,19 +1,28 @@
-// A project's rules (D-145): what it asks of its speakers, how consent is given and who gives the
-// final approval. Every rule a client sets is a project setting; the first client's numbers are
+// A project's rules (D-145): what it asks of its speakers, how consent is given, who gives the
+// final approval and what QC checks (D-146). Every rule a client sets is a project setting; the first client's numbers are
 // only what a new project starts with. One card per kind of rule (SECTIONS), all saved together
 // through the project's PATCH with "Save rules": a later kind of rule is one more card with its
 // fields in the draft. Everyone who sees the project may read them; project admins change them.
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
+import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { IconTile, type IconName } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import { AGE_LIMITS, SPEAKER_FIELDS, SPEAKER_GROUPS, speakerLabel } from "../../lib/speakers";
 import { useProject } from "./ProjectDetailPage";
+import {
+  CLIENT_QC_CHECKLIST,
+  keyProblem,
+  MAX_ITEMS,
+  MAX_KEY,
+  MAX_QUESTION,
+  questionProblem,
+} from "./qcChecklist";
 import "./rules.css";
 
 /** The rules as the form holds them: the ages as typed. */
@@ -236,11 +245,216 @@ function ApprovalRules({ draft, change }: SectionProps) {
   );
 }
 
+/** The checklist's problems, by question number (the server checks again). */
+function checklistErrors(draft: RulesDraft): Record<number, string> {
+  const errors: Record<number, string> = {};
+  draft.qc_checklist.forEach((item, i) => {
+    const problem = questionProblem(item.question);
+    if (problem) errors[i] = problem;
+  });
+  return errors;
+}
+
+const SCOPES: readonly { value: api.ChecklistItem["scope"]; label: string }[] = [
+  { value: "conversation", label: "The conversation (answered once)" },
+  { value: "speaker", label: "Each speaker (answered for both)" },
+];
+const FAILS: readonly { value: string; label: string }[] = [
+  { value: "no", label: "No" },
+  { value: "yes", label: "Yes" },
+  { value: "", label: "Never (observation only)" },
+];
+
+/** One question of the checklist: its words, what it applies to, when it fails, required. */
+function ChecklistRow({
+  item,
+  index,
+  count,
+  error,
+  onChange,
+  onMove,
+  onRemove,
+}: {
+  item: api.ChecklistItem;
+  index: number;
+  count: number;
+  error: string | undefined;
+  onChange: (item: api.ChecklistItem) => void;
+  onMove: (by: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <li>
+      <fieldset className="qc-rule">
+        <legend className="qc-rule__head">
+          <span className="qc-rule__number">{index + 1}.</span>{" "}
+          <span className="code-tag">{item.key}</span>
+        </legend>
+        <span className="qc-rule__tools">
+          <IconButton
+            icon="up"
+            label={`Move ${item.key} up`}
+            disabled={index === 0}
+            onClick={() => onMove(-1)}
+          />
+          <IconButton
+            icon="down"
+            label={`Move ${item.key} down`}
+            disabled={index === count - 1}
+            onClick={() => onMove(1)}
+          />
+          <IconButton icon="trash" label={`Remove ${item.key}`} onClick={onRemove} />
+        </span>
+        <TextField
+          label="Question"
+          value={item.question}
+          maxLength={MAX_QUESTION}
+          {...(error ? { error } : {})}
+          onChange={(e) => onChange({ ...item, question: e.target.value })}
+        />
+        <div className="form-grid">
+          <Select
+            label="Applies to"
+            value={item.scope}
+            options={SCOPES}
+            onChange={(e) =>
+              onChange({ ...item, scope: e.target.value as api.ChecklistItem["scope"] })
+            }
+          />
+          <Select
+            label="The recording fails when the answer is"
+            value={item.fails_on ?? ""}
+            options={FAILS}
+            onChange={(e) =>
+              onChange({
+                ...item,
+                fails_on: (e.target.value || null) as api.ChecklistItem["fails_on"],
+              })
+            }
+          />
+        </div>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={item.required}
+            onChange={(e) => onChange({ ...item, required: e.target.checked })}
+          />
+          Required (answered before Pass)
+        </label>
+      </fieldset>
+    </li>
+  );
+}
+
+/** The questions the QC Executive answers Yes or No for each recording (D-146). */
+function QcChecklistRules({ draft, change }: SectionProps) {
+  const items = draft.qc_checklist;
+  const errors = checklistErrors(draft);
+  const [key, setKey] = useState("");
+  const [question, setQuestion] = useState("");
+  const [tried, setTried] = useState(false);
+  const keyError = keyProblem(key, items);
+  const newError = questionProblem(question);
+  const full = items.length >= MAX_ITEMS;
+  const set = (next: api.ChecklistItem[]) => change({ qc_checklist: next });
+  const add = () => {
+    setTried(true);
+    if (keyError || newError || full) return;
+    set([
+      ...items,
+      { key, question: question.trim(), scope: "conversation", fails_on: "no", required: true },
+    ]);
+    setKey("");
+    setQuestion("");
+    setTried(false);
+  };
+  const move = (i: number, by: -1 | 1) => {
+    const next = [...items];
+    const [item] = next.splice(i, 1);
+    if (item) next.splice(i + by, 0, item);
+    set(next);
+  };
+  // Enter in the new question's boxes adds it, instead of saving the rules.
+  const onEnter = (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add();
+    }
+  };
+  return (
+    <RulesCard icon="tasks" title="QC checklist">
+      <p className="field__hint rules__note">
+        The QC Executive answers Yes or No to each question for every recording: questions about the
+        conversation once, questions about the speakers for each person. A recording passes only
+        when every required question is answered and no answer fails it. Answers already given keep
+        the questions as they read then.
+      </p>
+      <p className="muted">
+        {items.length === 1 ? "1 question" : `${items.length} questions`} (at most {MAX_ITEMS}).
+      </p>
+      {items.length > 0 ? (
+        <ol className="qc-rules">
+          {items.map((item, i) => (
+            <ChecklistRow
+              key={item.key}
+              item={item}
+              index={i}
+              count={items.length}
+              error={errors[i]}
+              onChange={(next) => set(items.map((x, j) => (j === i ? next : x)))}
+              onMove={(by) => move(i, by)}
+              onRemove={() => set(items.filter((_, j) => j !== i))}
+            />
+          ))}
+        </ol>
+      ) : (
+        <p className="muted">No questions: QC checks only the consent forms.</p>
+      )}
+      <fieldset className="qc-rule qc-rule--new">
+        <legend className="qc-rule__head">Add a question</legend>
+        <div className="form-grid">
+          <TextField
+            label="Key"
+            hint="Lowercase letters, digits and _, like speech_intelligible. It names the answer in the delivery."
+            value={key}
+            maxLength={MAX_KEY}
+            {...(tried && keyError ? { error: keyError } : {})}
+            onChange={(e) => setKey(e.target.value.trim())}
+            onKeyDown={onEnter}
+          />
+          <TextField
+            label="New question"
+            value={question}
+            maxLength={MAX_QUESTION}
+            {...(tried && newError ? { error: newError } : {})}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={onEnter}
+          />
+        </div>
+        <div className="actions">
+          <Button variant="secondary" icon="plus" disabled={full} onClick={add}>
+            Add question
+          </Button>
+          <Button
+            variant="secondary"
+            icon="history"
+            onClick={() => set(CLIENT_QC_CHECKLIST.map((i) => ({ ...i })))}
+          >
+            Reset to the client&apos;s list
+          </Button>
+        </div>
+        {full ? <p className="muted">The list is full ({MAX_ITEMS} questions).</p> : null}
+      </fieldset>
+    </RulesCard>
+  );
+}
+
 /** The cards, in order: a later kind of rule is one more entry. */
 const SECTIONS: readonly { key: string; Section: (props: SectionProps) => ReactNode }[] = [
   { key: "speakers", Section: SpeakerRules },
   { key: "consent", Section: ConsentRules },
   { key: "approval", Section: ApprovalRules },
+  { key: "qc-checklist", Section: QcChecklistRules },
 ];
 
 export function RulesTab() {
@@ -251,7 +465,8 @@ export function RulesTab() {
   const [draft, setDraft] = useState(() => draftOf(api.projectRules(project)));
   const { busy, error, message, run } = useAction();
   const change = (patch: Partial<RulesDraft>) => setDraft({ ...draft, ...patch });
-  const wrong = Object.keys(ageErrors(draft)).length > 0;
+  const wrong =
+    Object.keys(ageErrors(draft)).length > 0 || Object.keys(checklistErrors(draft)).length > 0;
 
   return (
     <form

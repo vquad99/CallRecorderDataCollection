@@ -1,5 +1,6 @@
 // One task: participants and consent, moderator, the next step as one card with its buttons,
-// audio quality, recordings and the history (TASK-*).
+// audio quality, recordings and the history (TASK-*). A consent form QC sent back has its own
+// card (D-146).
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 
@@ -47,6 +48,9 @@ const FLOW: readonly work.TaskStatus[] = [
   "APPROVED",
 ];
 const status = (s: string) => labelFor(TASK_STATUS_LABELS, s);
+/** Statuses beside the path, shown on the stepper at the step they wait at: a consent form to fix
+ * waits at Audio QC (D-146); a task on hold at the step it was held from. */
+const WAITS_AT: Partial<Record<work.TaskStatus, work.TaskStatus>> = { CONSENT_FIX: "AUDIO_QC" };
 
 /** A changed task, with what to tell the person ("Sent to QC."). */
 export type OnTaskChange = (task: work.TaskDetail, message?: string) => void;
@@ -341,6 +345,90 @@ function Assignment({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   );
 }
 
+/** QC found the audio fine but a signed consent form not (D-146): whose form and what is wrong
+ * with it; the moderator (or an admin) uploads a new scan, then sends the same recording back to
+ * QC. Nothing is recorded again. */
+function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
+  const { busy, error, message, run, upload } = useSignedForms(task, onChange);
+  const fix = task.consent_fix;
+  if (task.status !== "CONSENT_FIX" || !fix) return null;
+  const party = (side: "A" | "B") => (side === "A" ? task.participant_a : task.participant_b);
+  const codes = fix.participants.map((p) => p.participant_code).join(" and ");
+  return (
+    <section className="card record-card" aria-labelledby="consent-fix-title">
+      <div className="record-card__text">
+        <h2 id="consent-fix-title">Consent form to fix</h2>
+        <p>
+          QC found the recording fine but a problem with the signed consent form of {codes}. Upload
+          a new scan, then send the same recording back to QC. Nothing is recorded again.
+        </p>
+        <p className="notice notice--warning">
+          <strong>What QC found:</strong> {fix.comment}
+          <span className="muted">
+            {" "}
+            · {fix.by ?? "QC"}, {when(fix.at)}
+          </span>
+        </p>
+        <ul className="consent__rows">
+          {fix.participants.map((p) => {
+            const who = party(p.side);
+            return (
+              <li key={p.side} className="consent__row">
+                <span className="consent__who">
+                  <span className="consent__side">Participant {p.side}</span>
+                  <PartyName party={who} />
+                </span>
+                {p.replaced ? (
+                  <StatusBadge tone="success" label="New form uploaded" />
+                ) : (
+                  <StatusBadge tone="warning" label="New form needed" />
+                )}
+                {who.can_upload_consent_form ? (
+                  <UploadButton
+                    label={`Upload a new consent form of ${p.participant_code}`}
+                    busy={busy === `upload-${who.id}`}
+                    disabled={busy !== null}
+                    onFile={upload(who)}
+                  />
+                ) : (
+                  <span className="muted">Ask the moderator or your admin to upload it.</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      {fix.can_send_back ? (
+        <div className="record-card__go">
+          <Button
+            icon="send"
+            busy={busy === "send"}
+            disabled={busy !== null || !fix.forms_replaced}
+            aria-describedby={fix.forms_replaced ? undefined : "consent-fix-waits"}
+            onClick={() =>
+              void run(async () => {
+                onChange(
+                  await work.sendBackToQc(task.id),
+                  "Sent back to QC with the same recording.",
+                );
+              }, "send")
+            }
+          >
+            Send back to QC
+          </Button>
+          {fix.forms_replaced ? null : (
+            <p id="consent-fix-waits" className="muted">
+              Upload the new form first.
+            </p>
+          )}
+        </div>
+      ) : null}
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </section>
+  );
+}
+
 /** Uploading a participant's signed consent form from the task page, and opening one (D-144):
  * the task is loaded again after an upload, so its consent and buttons follow at once. */
 function useSignedForms(task: work.TaskDetail, onChange: OnTaskChange) {
@@ -578,6 +666,7 @@ function Timeline({ taskId, version }: { taskId: string; version: string }) {
 const HAS_RECORDINGS: readonly string[] = [
   "RECORDED",
   "AUDIO_QC",
+  "CONSENT_FIX",
   "ADMIN_REVIEW",
   "APPROVED",
   "REJECTED",
@@ -693,7 +782,9 @@ export function TaskDetailPage() {
   const waitingConsent =
     task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
   const consent = waitingConsent ? <ConsentStatus task={task} onChange={onChange} /> : null;
-  const onPath = FLOW.includes(task.status) ? task.status : (task.held_from ?? "DRAFT");
+  const onPath = FLOW.includes(task.status)
+    ? task.status
+    : (WAITS_AT[task.status] ?? task.held_from ?? "DRAFT");
   return (
     <section aria-labelledby="task-title" className="stack">
       <BackLink to="/tasks">All tasks</BackLink>
@@ -764,6 +855,7 @@ export function TaskDetailPage() {
           {consent}
         </>
       )}
+      <ConsentFixCard task={task} onChange={onChange} />
       <AdminReviewCard task={task} onChange={onChange} />
       {HAS_RECORDINGS.includes(task.status) ? (
         <AudioQcPanel task={task} onDecided={reload} />

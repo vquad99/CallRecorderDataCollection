@@ -87,6 +87,11 @@ describe("dashboard filters", () => {
       "href",
       "/tasks?status=ON_HOLD",
     );
+    // Sent back by QC for a new signed consent form (D-146).
+    expect(screen.getByRole("link", { name: /Consent forms to fix/ })).toHaveAttribute(
+      "href",
+      "/tasks?status=CONSENT_FIX",
+    );
     // Recording problems are not task statuses: no link that would show the wrong list.
     expect(screen.queryByRole("link", { name: /Processing failed/ })).toBeNull();
     await userEvent.click(qc);

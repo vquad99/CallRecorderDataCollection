@@ -30,6 +30,9 @@ const ICONS = {
   failed: "XCircle",
   next: "CaretRight",
   previous: "CaretLeft",
+  // D-146: moving a QC checklist question up or down on the Rules tab.
+  up: "CaretUp",
+  down: "CaretDown",
   waveform: "Waveform",
   upload: "UploadSimple",
   download: "DownloadSimple",
@@ -98,7 +101,17 @@ const FILLED = [
 const EXTRA = { plus: ["bold"], check: ["bold"] };
 for (const n of FILLED) EXTRA[n] = [...(EXTRA[n] ?? []), "fill"];
 // Icons drawn in one colour only (arrows, close, menu, the search lens, plus, tick): no two-tone.
-const PLAIN = new Set(["menu", "close", "next", "previous", "check", "search", "plus"]);
+const PLAIN = new Set([
+  "menu",
+  "close",
+  "next",
+  "previous",
+  "up",
+  "down",
+  "check",
+  "search",
+  "plus",
+]);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);

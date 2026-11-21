@@ -41,6 +41,7 @@ Status = Literal[
     "REJECTED",
     "CANCELLED",
     "ON_HOLD",
+    "CONSENT_FIX",
 ]
 Mode = Literal["TELEPHONY", "FACE_TO_FACE"]
 Priority = Literal["LOW", "NORMAL", "HIGH", "URGENT"]
@@ -75,6 +76,27 @@ class PartyOut(BaseModel):
     can_upload_consent_form: bool = False
 
 
+class ConsentFixParty(BaseModel):
+    side: Literal["A", "B"]
+    participant_id: uuid.UUID
+    participant_code: str
+    # A new signed form is on file since QC sent the task back.
+    replaced: bool
+
+
+class ConsentFixOut(BaseModel):
+    """A task at CONSENT_FIX (D-146): what QC found wrong with which consent form."""
+
+    comment: str
+    by: str | None
+    at: datetime
+    participants: list[ConsentFixParty]
+    # Every form QC found not right was replaced: the task may go back to QC.
+    forms_replaced: bool
+    # The caller may send it back (the task's moderator, or someone who assigns tasks).
+    can_send_back: bool
+
+
 class TaskDetail(TaskSummary):
     held_from: str | None
     reason_code: str | None
@@ -92,6 +114,8 @@ class TaskDetail(TaskSummary):
     consent_missing: list[str]
     # How participants give consent in the project: ONLINE or UPLOAD (D-144).
     consent_mode: Literal["ONLINE", "UPLOAD"] = "ONLINE"
+    # At CONSENT_FIX only (D-146): QC's comment, whose form, and who may send it back to QC.
+    consent_fix: ConsentFixOut | None = None
 
 
 def summary(t: Task) -> TaskSummary:
@@ -146,6 +170,7 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         is_moderator=actor.is_moderator,
         consent_missing=consents.missing(sides),
         consent_mode=project.consent_mode,
+        consent_fix=audio_qc.consent_fix_view(db, principal, t),
     )
 
 
@@ -299,6 +324,10 @@ def transition(
     db: DbSession,
 ) -> TaskDetail:
     task = service.get_task(db, principal, task_id)
+    if task.status == "CONSENT_FIX" and body.to == "AUDIO_QC":
+        # Back to QC only once the consent forms QC found wrong were replaced (D-146).
+        task = audio_qc.send_back_to_qc(db, principal, task.id, body.comment, client_ip(request))
+        return detail(db, principal, task)
     actor = service.actor_for(db, principal, task)
     if task.status == "RECORDED" and body.to == "AUDIO_QC":
         # Who may do it first, then whether the recording's automatic check is there: the
@@ -322,6 +351,24 @@ def transition(
         comment=body.comment,
         ip=client_ip(request),
     )
+    return detail(db, principal, task)
+
+
+class SendBackBody(BaseModel):
+    comment: str = Field(default="", max_length=2000)
+
+
+@router.post("/{task_id}/consent-fix/send-to-qc", response_model=TaskDetail)
+def send_back_to_qc(
+    task_id: uuid.UUID,
+    body: SendBackBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+) -> TaskDetail:
+    """The task's moderator (or someone who assigns tasks) sends the same recording back to QC
+    once the consent forms QC found wrong were replaced (D-146)."""
+    task = audio_qc.send_back_to_qc(db, principal, task_id, body.comment, client_ip(request))
     return detail(db, principal, task)
 
 

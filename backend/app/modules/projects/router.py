@@ -13,6 +13,7 @@ from pydantic import AfterValidator, BaseModel, Field
 from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.db.paging import Page, PageNumber, PageSize
+from app.modules.audio_qc import checklist
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.projects import service
@@ -76,6 +77,18 @@ class RetentionIO(BaseModel):
     retain_days: int = Field(ge=1, le=36500)
 
 
+class ChecklistItemIO(BaseModel):
+    """One question of the QC checklist (D-146, audio_qc/checklist.py); the key's format and that
+    each key is used once are checked by the service (422 INVALID_QC_CHECKLIST)."""
+
+    key: str = Field(min_length=1, max_length=checklist.MAX_KEY)
+    question: str = Field(min_length=1, max_length=checklist.MAX_QUESTION)
+    scope: Literal["conversation", "speaker"]
+    # The answer that fails the recording; null = an observation, recorded, never failing.
+    fails_on: Literal["yes", "no"] | None
+    required: bool = True
+
+
 class ProjectSummary(BaseModel):
     id: uuid.UUID
     code: str
@@ -100,6 +113,7 @@ class ProjectDetail(ProjectSummary):
     speaker_min_age: int
     speaker_max_age: int
     required_speaker_details: list[str]
+    qc_checklist: list[ChecklistItemIO]
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -126,6 +140,7 @@ def detail(p: Project) -> ProjectDetail:
         speaker_min_age=p.speaker_min_age,
         speaker_max_age=p.speaker_max_age,
         required_speaker_details=list(p.required_speaker_details),
+        qc_checklist=[ChecklistItemIO.model_validate(i) for i in p.qc_checklist],
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -184,10 +199,15 @@ class ProjectBody(BaseModel):
     required_speaker_details: list[Annotated[str, Field(max_length=40)]] = Field(
         default_factory=lambda: list(DEFAULT_REQUIRED_SPEAKER_DETAILS), max_length=50
     )
+    # The QC checklist (D-146), set on the Rules tab. Left out: a new project gets the first
+    # client's list, and a change keeps the project's own.
+    qc_checklist: list[ChecklistItemIO] | None = Field(default=None, max_length=checklist.MAX_ITEMS)
 
     def to_input(self) -> service.ProjectInput:
         values = self.model_dump()
         values["required_speaker_details"] = tuple(values["required_speaker_details"])
+        if values["qc_checklist"] is not None:
+            values["qc_checklist"] = tuple(values["qc_checklist"])
         return service.ProjectInput(**values)
 
 

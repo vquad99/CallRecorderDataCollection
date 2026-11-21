@@ -1,6 +1,7 @@
 // Audio quality card on the task page (D-079): what the automatic check found, who checks the
-// recording, a player, and the QC Executive's decision: Pass or Reject (D-118). The server decides
-// who may do what; this only shows the controls it allows.
+// recording, a player, the QC checklist (D-146) and the QC Executive's decision: Pass, Reject
+// (D-118) or, where the project takes signed forms, Send back for consent. The server decides who
+// may do what; this only shows the controls it allows.
 import { useState } from "react";
 
 import * as qc from "../../api/audioQc";
@@ -19,11 +20,20 @@ import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { labelFor, REASON_LABELS, reasonChoices } from "../../lib/labels";
 import { Player } from "./Listen";
+import {
+  ChecklistForm,
+  type Judgement,
+  judge,
+  noAnswers,
+  RecordedChecklist,
+  useDraftSaver,
+} from "./QcChecklist";
 
 const OUTCOME_TONE: Record<qc.QcOutcome, Tone> = {
   PASS: "success",
   NEEDS_REVIEW: "warning",
   FAIL: "danger",
+  SEND_BACK_CONSENT: "warning",
 };
 const CHECK_TONE: Record<qc.CheckState, Tone> = {
   PASS: "success",
@@ -162,23 +172,54 @@ function AssignQc({
   );
 }
 
+/** What the answers say about the decision, in one line. */
+function hint(j: Judgement, consentCheck: boolean): string {
+  if (j.failing.length > 0)
+    return `The recording fails the checklist (${j.failing[0]}): reject it.`;
+  if (j.missing > 0)
+    return j.missing === 1
+      ? "1 question still to answer."
+      : `${j.missing} questions still to answer.`;
+  if (consentCheck && j.consentWrong.length > 0)
+    return `The consent form of ${j.consentWrong.join(" and ")} is not right: send the task back for its consent form.`;
+  if (consentCheck && j.consentUnchecked.length > 0)
+    return `Check the signed consent form of ${j.consentUnchecked.join(" and ")}.`;
+  return "Every answer lets the recording pass.";
+}
+
 /** Pass sends the recording to the project admin, or approves the task where QC pass is the
- * final approval (D-138); Reject asks why and ends the task. */
+ * final approval (D-138); Reject asks why and ends the task; Send back for consent (projects that
+ * take signed forms) returns it to the moderator for a new form (D-146). The checklist's answers
+ * go with each; Pass and Send back wait until they allow it. */
 function Decision({
   task,
   view,
+  checklist,
   automatic,
   onDecided,
 }: {
   task: work.TaskDetail;
   view: qc.AudioQcView;
+  checklist: qc.ChecklistView;
   automatic: qc.QcResult | undefined;
   onDecided: () => void;
 }) {
   const confirm = useConfirm();
   const { busy, error, run } = useAction(onDecided);
+  const [answers, setAnswers] = useState<qc.Answers>(() => checklist.draft?.answers ?? noAnswers());
+  const draft = useDraftSaver(task.id);
+  const consentCheck = checklist.consent_check;
+  const j = judge(task, checklist.items, answers, consentCheck);
+  const clean = j.missing === 0 && j.failing.length === 0;
+  const canPass =
+    clean && (!consentCheck || (j.consentUnchecked.length === 0 && j.consentWrong.length === 0));
+  const canSendBack = consentCheck && clean && j.consentWrong.length > 0;
+  const change = (next: qc.Answers) => {
+    setAnswers(next);
+    draft.save(next);
+  };
   const decided = async (outcome: qc.Decision, reason: string, comment: string) => {
-    await qc.decideQc(task.id, outcome, reason, comment);
+    await qc.decideQc(task.id, outcome, reason, comment, answers);
     onDecided();
   };
   const pass = () =>
@@ -190,38 +231,115 @@ function Decision({
           confirmLabel: "Pass",
           action: ({ comment }) => decided("PASS", "", comment),
         })
-      : void run(() => qc.decideQc(task.id, "PASS", "", ""), "PASS");
+      : void run(() => qc.decideQc(task.id, "PASS", "", "", answers), "PASS");
   const reject = () =>
     confirm.ask({
       title: `Reject the recording of task ${task.task_code}?`,
-      message: "The task ends as rejected.",
+      message: "The task ends as rejected. Your checklist answers are kept with it.",
       confirmLabel: "Reject",
       danger: true,
       reasons: reasonChoices(view.reasons.FAIL),
       action: ({ reason, comment }) => decided("FAIL", reason, comment),
     });
+  const sendBack = () =>
+    confirm.ask({
+      title: `Send task ${task.task_code} back for its consent form?`,
+      message: `The recording stays as it is. The moderator uploads a new signed form for ${j.consentWrong.join(" and ")} and sends the same recording back to you.`,
+      askReason: "What is wrong with the form",
+      confirmLabel: "Send back",
+      action: ({ comment }) => decided("SEND_BACK_CONSENT", "", comment),
+    });
   return (
-    <section className="stack stack--tight" aria-labelledby="qc-decision-title">
-      <h3 id="qc-decision-title">Your decision</h3>
-      <p className="muted">
-        Listen first.{" "}
-        {view.pass_approves
-          ? "Pass approves the task: this project has no admin review."
-          : "Pass sends it to the project admin for final approval."}{" "}
-        Reject ends the task.
-      </p>
-      <div className="actions">
-        <Button icon="verified" busy={busy !== null} onClick={pass}>
-          Pass
-        </Button>
-        <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
-          Reject
-        </Button>
-      </div>
-      <ErrorNotice error={error} />
-      {confirm.dialog}
-    </section>
+    <>
+      <section className="stack stack--tight" aria-labelledby="qc-checklist-title">
+        <h3 id="qc-checklist-title">QC checklist</h3>
+        <p className="muted">
+          Listen, then tick Yes or No for every question. Your answers are kept as you tick and go
+          with your decision.
+        </p>
+        <ChecklistForm task={task} view={checklist} answers={answers} onChange={change} />
+        <p className="muted" role="status">
+          {draft.state === "saving"
+            ? "Saving your answers…"
+            : draft.state === "saved"
+              ? "Answers saved."
+              : ""}
+        </p>
+        {draft.state === "failed" ? (
+          <p className="notice notice--warning">
+            Your answers could not be saved just now ({draft.error?.message}). They still go with
+            your decision.
+          </p>
+        ) : null}
+      </section>
+      <section className="stack stack--tight" aria-labelledby="qc-decision-title">
+        <h3 id="qc-decision-title">Your decision</h3>
+        <p className="muted">
+          {view.pass_approves
+            ? "Pass approves the task: this project has no admin review."
+            : "Pass sends it to the project admin for final approval."}{" "}
+          Reject ends the task.
+          {consentCheck
+            ? " Send back for consent returns it to the moderator for a new signed form; the recording stays."
+            : ""}
+        </p>
+        <p className="qc__hint">{hint(j, consentCheck)}</p>
+        <div className="actions">
+          <Button icon="verified" busy={busy !== null} disabled={!canPass} onClick={pass}>
+            Pass
+          </Button>
+          {consentCheck ? (
+            <Button
+              variant="secondary"
+              icon="fileText"
+              disabled={busy !== null || !canSendBack}
+              onClick={sendBack}
+            >
+              Send back for consent
+            </Button>
+          ) : null}
+          <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
+            Reject
+          </Button>
+        </div>
+        <ErrorNotice error={error} />
+        {confirm.dialog}
+      </section>
+    </>
   );
+}
+
+/** The QC checklist's part of the card: the answers to tick for the person who decides, or the
+ * newest decision's answers for everyone else (D-146). */
+function Checklist({
+  task,
+  view,
+  automatic,
+  onDecided,
+}: {
+  task: work.TaskDetail;
+  view: qc.AudioQcView;
+  automatic: qc.QcResult | undefined;
+  onDecided: () => void;
+}) {
+  const { state, reload } = useResource(
+    () => qc.getChecklist(task.id),
+    [task.id, task.status, view.can_decide],
+  );
+  if (state.status === "loading") return <LoadingState label="Loading the QC checklist" />;
+  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
+  const checklist = state.data;
+  if (view.can_decide && checklist.can_answer)
+    return (
+      <Decision
+        task={task}
+        view={view}
+        checklist={checklist}
+        automatic={automatic}
+        onDecided={onDecided}
+      />
+    );
+  return checklist.latest ? <RecordedChecklist latest={checklist.latest} /> : null;
 }
 
 export function AudioQcPanel({
@@ -281,8 +399,8 @@ export function AudioQcPanel({
       ) : null}
       <ErrorNotice error={error} />
       {view.can_assign ? <AssignQc task={task} view={view} onChange={replace} /> : null}
-      {view.can_decide ? (
-        <Decision task={task} view={view} automatic={automatic} onDecided={onDecided} />
+      {decisions.length > 0 || view.can_decide ? (
+        <Checklist task={task} view={view} automatic={automatic} onDecided={onDecided} />
       ) : null}
       {decisions.length > 0 ? (
         <div>

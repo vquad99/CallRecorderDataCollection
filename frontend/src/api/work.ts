@@ -129,6 +129,23 @@ export interface Party {
   can_upload_consent_form?: boolean;
 }
 
+/** A task at CONSENT_FIX (D-146): QC found a signed consent form not right. */
+export interface ConsentFix {
+  comment: string;
+  by: string | null;
+  at: string;
+  /** The people whose form QC found not right; `replaced`: a new one is on file since. */
+  participants: {
+    side: "A" | "B";
+    participant_id: string;
+    participant_code: string;
+    replaced: boolean;
+  }[];
+  forms_replaced: boolean;
+  /** The caller may send the task back to QC (its moderator, or someone who assigns tasks). */
+  can_send_back: boolean;
+}
+
 export interface TaskDetail extends TaskSummary {
   held_from: TaskStatus | null;
   reason_code: string | null;
@@ -146,6 +163,8 @@ export interface TaskDetail extends TaskSummary {
   consent_missing: string[];
   /** How participants give consent in the project (D-144). */
   consent_mode?: ConsentMode;
+  /** At CONSENT_FIX only (D-146). */
+  consent_fix?: ConsentFix | null;
 }
 
 export interface TimelineEntry {
@@ -228,6 +247,13 @@ export const transitionTask = (id: string, to: TaskStatus, reasonCode: string, c
   apiRequest<TaskDetail>(`/api/v1/tasks/${id}/transition`, {
     method: "POST",
     body: { to, reason_code: reasonCode || null, comment },
+  });
+/** The moderator (or an admin) sends the same recording back to QC once the consent forms QC
+ * found not right were replaced (D-146). */
+export const sendBackToQc = (id: string, comment = "") =>
+  apiRequest<TaskDetail>(`/api/v1/tasks/${id}/consent-fix/send-to-qc`, {
+    method: "POST",
+    body: { comment },
   });
 export const addComment = (id: string, body: string) =>
   apiRequest<TimelineEntry>(`/api/v1/tasks/${id}/comments`, { method: "POST", body: { body } });

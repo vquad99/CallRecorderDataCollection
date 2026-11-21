@@ -925,6 +925,32 @@ CASES: list[Case] = [
         Perm.TASKS_VIEW,
         lambda e, s, who: {"outcome": "FAIL"},  # no reason: refused after access, task unchanged
     ),
+    # The QC checklist (D-146): read by task viewers; the draft is saved by whoever decides the
+    # task's QC (the Super Admin here); sending a task back to QC after its consent form was
+    # fixed is the moderator's or an admin's, and this task is not waiting for one (409).
+    case(
+        "GET",
+        "/api/v1/tasks/{task_id}/audio-qc/checklist",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/audio-qc/checklist",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "PUT",
+        "/api/v1/tasks/{task_id}/audio-qc/draft",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/audio-qc/draft",
+        {SA},
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"conversation": {"two_speakers": "yes"}},
+    ),
+    case(
+        "POST",
+        "/api/v1/tasks/{task_id}/consent-fix/send-to-qc",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/consent-fix/send-to-qc",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"comment": "access check"},
+    ),
     case(
         "POST",
         "/api/v1/tasks/{task_id}/audio-qc/recheck",

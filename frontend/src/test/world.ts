@@ -39,6 +39,23 @@ export const PROJECT = {
     "recording_district",
     "recording_pincode",
   ],
+  // The project's QC checklist (D-146): two questions here; a new project has the client's 28.
+  qc_checklist: [
+    {
+      key: "two_speakers",
+      question: "The conversation is between exactly two speakers",
+      scope: "conversation",
+      fails_on: "no",
+      required: true,
+    },
+    {
+      key: "echo_in_audio",
+      question: "Is echo present?",
+      scope: "speaker",
+      fails_on: null,
+      required: true,
+    },
+  ],
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -333,6 +350,16 @@ export const TASK = {
   consent_missing: [],
 };
 
+/** The QC checklist of task t1 as its QC Executive sees it before ticking (D-146). */
+export const QC_CHECKLIST = {
+  items: PROJECT.qc_checklist,
+  consent_check: false,
+  consent_question: "Consent form checked: signed, the right person, this project",
+  can_answer: true,
+  draft: null,
+  latest: null,
+};
+
 export const USER = {
   id: "u2",
   email: "mona@example.org",
@@ -454,6 +481,7 @@ export const DASHBOARD = {
     interrupted: 0,
     stale_uploads: 0,
     on_hold: 0,
+    consent_forms_to_fix: 2,
   },
   team: [{ name: "Max Moderator", recordings: 30, recorded_hours: 12.5 }],
   storage_bytes: 3_200_000_000,
@@ -543,6 +571,12 @@ export function worldHandlers(): Record<string, Handler> {
     ]),
     "GET /api/v1/tasks/t1/recordings": ok([]),
     "GET /api/v1/tasks/t1/calls": ok([]),
+    "GET /api/v1/tasks/t1/audio-qc/checklist": ok(QC_CHECKLIST),
+    "PUT /api/v1/tasks/t1/audio-qc/draft": ok({
+      answers: { conversation: {}, speakers: {}, consent: {} },
+      saved_at: "2026-11-21T10:00:00Z",
+      saved_by_name: "Quinn QC",
+    }),
     "GET /api/v1/telephony/status": ok({ configured: true, provider: "TXCONTACT" }),
     "GET /api/v1/telephony/analytics": ok(CALL_ANALYTICS),
     "GET /api/v1/calls": ok({ items: [CALL_ROW], total: 1, page: 1, page_size: 25 }),

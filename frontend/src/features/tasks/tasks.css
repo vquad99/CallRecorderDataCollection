@@ -214,12 +214,10 @@
 .seg__option:hover:not(:disabled) {
   background: var(--surface-hover);
 }
+/* The chosen answer; whether it fails the recording is said in words beside it (D-146). */
 .seg__option[aria-pressed="true"] {
-  background: var(--ok);
+  background: var(--primary);
   color: #fff;
-}
-.seg__option--no[aria-pressed="true"] {
-  background: var(--danger);
 }
 .seg__option:focus-visible {
   box-shadow: var(--focus-ring);
@@ -292,4 +290,55 @@
 }
 .qc__summary p {
   margin: 0;
+}
+
+/* The QC checklist (D-146): a group per subject, one row per question with its Yes / No. */
+.qc-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.qc-group legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-weight: 600;
+}
+.qc-group > p {
+  margin: 0 0 8px;
+}
+.qc-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  list-style: none;
+}
+.qc-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.qc-list__row:last-child {
+  border-bottom: 0;
+}
+.qc-list__question,
+.qc-list__answer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.qc__hint {
+  margin: 0;
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .qc-list__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -295,4 +295,5 @@ export const AUTOMATIC_CHECK_LABELS: Record<string, string> = {
 export const QC_DECISION_LABELS: Record<string, string> = {
   PASS: "Passed",
   FAIL: "Rejected",
+  SEND_BACK_CONSENT: "Sent back for its consent form",
 };

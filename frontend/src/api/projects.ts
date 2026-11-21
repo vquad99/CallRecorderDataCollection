@@ -52,6 +52,16 @@ export interface ProjectSettings {
   consent_text: string;
 }
 
+/** One question of the QC checklist (D-146). `fails_on`: the answer that fails the recording;
+ * null = an observation, recorded and never failing. */
+export interface ChecklistItem {
+  key: string;
+  question: string;
+  scope: "conversation" | "speaker";
+  fails_on: "yes" | "no" | null;
+  required: boolean;
+}
+
 /** What the project's Rules tab edits (D-145). Every client rule is the project's own setting;
  * a new project starts with the server's defaults. */
 export interface ProjectRules {
@@ -69,6 +79,9 @@ export interface ProjectRules {
   consent_mode: ConsentMode;
   /** A QC pass approves the task, with no admin review (D-138). */
   qc_final_approval: boolean;
+  /** What the QC Executive answers Yes or No for each recording (D-146); the first client's list
+   * at the start. */
+  qc_checklist: ChecklistItem[];
 }
 
 /** Everything the project's PATCH takes: a field left out would go back to its default, so the
@@ -104,6 +117,7 @@ export const projectRules = (p: Project): ProjectRules => ({
   unique_pairs: p.unique_pairs,
   consent_mode: p.consent_mode,
   qc_final_approval: p.qc_final_approval,
+  qc_checklist: p.qc_checklist,
 });
 
 export interface Member {

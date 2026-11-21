@@ -31,6 +31,7 @@ const percent = (part: number, whole: number) =>
 const DONUT: Record<string, string> = {
   APPROVED: "var(--ok)",
   AUDIO_QC: "var(--warn)",
+  CONSENT_FIX: "var(--amber)",
   ADMIN_REVIEW: "var(--info)",
   RECORDED: "var(--series-approved)",
   IN_PROGRESS: "var(--primary)",
@@ -82,6 +83,13 @@ const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] 
   { key: "interrupted", label: "Interrupted recordings", icon: "warning" },
   { key: "stale_uploads", label: "Stalled uploads", icon: "upload" },
   { key: "on_hold", label: "Tasks on hold", icon: "pause", status: "ON_HOLD" },
+  // D-146: QC sent them back to their moderator for a new signed consent form.
+  {
+    key: "consent_forms_to_fix",
+    label: "Consent forms to fix",
+    icon: "fileUp",
+    status: "CONSENT_FIX",
+  },
 ];
 
 /** The task list filtered to a status (and the chosen project). */

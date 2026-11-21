@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -21,6 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.modules.audio_qc.checklist import DEFAULT_QC_CHECKLIST
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.participants.speakers import FIELDS as SPEAKER_FIELDS
 from app.modules.recordings.models import ASSET_KINDS
@@ -35,6 +38,10 @@ CONSENT_MODES = ("ONLINE", "UPLOAD")
 # each project sets its own on its Rules tab.
 DEFAULT_SPEAKER_MIN_AGE, DEFAULT_SPEAKER_MAX_AGE = 20, 60
 DEFAULT_REQUIRED_SPEAKER_DETAILS: tuple[str, ...] = tuple(SPEAKER_FIELDS)
+# The QC checklist (D-146, audio_qc/checklist.py) a project starts with, as the database writes it.
+DEFAULT_QC_CHECKLIST_SQL = (
+    "'" + json.dumps(list(DEFAULT_QC_CHECKLIST)).replace("'", "''") + "'::jsonb"
+)
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -68,6 +75,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "jsonb_typeof(required_speaker_details) = 'array'", name="required_speaker_details_list"
         ),
+        CheckConstraint("jsonb_typeof(qc_checklist) = 'array'", name="qc_checklist_list"),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -114,6 +122,11 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=text(
             "'[" + ", ".join(f'"{k}"' for k in DEFAULT_REQUIRED_SPEAKER_DETAILS) + "]'::jsonb"
         ),
+    )
+    # The QC checklist (D-146, audio_qc/checklist.py): what the QC Executive answers Yes or No for
+    # each recording, checked when saved. A decision keeps the questions as they read then.
+    qc_checklist: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text(DEFAULT_QC_CHECKLIST_SQL)
     )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

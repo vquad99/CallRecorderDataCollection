@@ -11,6 +11,7 @@ import {
   PRIORITY_LABELS,
   REASON_LABELS,
   reasonChoices,
+  TASK_STATUS_LABELS,
 } from "./labels";
 import { describeUserAgent } from "./userAgent";
 
@@ -21,6 +22,14 @@ describe("labels", () => {
     expect(labelFor(CONSENT_METHOD_LABELS, "VERBAL_RECORDED")).toBe("Said yes on the recording");
     expect(labelFor({}, "SOME_NEW_CODE")).toBe("Some new code");
     expect(labelFor({}, null)).toBe("-");
+  });
+
+  it("names every task status, a consent form to fix too (D-146)", () => {
+    expect(labelFor(TASK_STATUS_LABELS, "CONSENT_FIX")).toBe("Consent form to fix");
+    // The task list's filter offers them in the order of the work: the fix right after Audio QC.
+    const order = Object.keys(TASK_STATUS_LABELS);
+    expect(order.indexOf("CONSENT_FIX")).toBe(order.indexOf("AUDIO_QC") + 1);
+    expect(order).toHaveLength(11);
   });
 
   it("says the consent answer and its colour", () => {

@@ -92,6 +92,29 @@ def _qc(world: dict[str, Any]) -> tuple[Api, str]:
     return qc, qc.get("/api/v1/auth/me").json()["id"]
 
 
+def answers(api: Api, tid: str, *, consent: str | None = "yes") -> dict[str, Any]:
+    """Every question of the task's QC checklist answered so that the recording passes (D-146),
+    and, where the project takes signed forms, both consent forms checked as `consent`."""
+    view = api.get(f"/api/v1/tasks/{tid}/audio-qc/checklist").json()
+
+    def ok(item: dict[str, Any]) -> str:
+        return "no" if item["fails_on"] == "yes" else "yes"
+
+    speaker = {i["key"]: ok(i) for i in view["items"] if i["scope"] == "speaker"}
+    body: dict[str, Any] = {
+        "conversation": {i["key"]: ok(i) for i in view["items"] if i["scope"] == "conversation"},
+        "speakers": {"A": dict(speaker), "B": dict(speaker)},
+    }
+    if view["consent_check"] and consent:
+        body["consent"] = {"A": consent, "B": consent}
+    return body
+
+
+def passing(api: Api, tid: str, **extra: Any) -> dict[str, Any]:
+    """A PASS decision with every checklist answer that lets it pass (D-146)."""
+    return {"outcome": "PASS", "answers": answers(api, tid), **extra}
+
+
 def _assign_qc(world: dict[str, Any]) -> Api:
     """The task's QC Executive: given by the platform when the task reached QC (D-116), or by
     the project admin here when it has none."""
@@ -158,7 +181,7 @@ def test_a_qc_pass_goes_to_the_admin_who_approves_it(
     qc = _assign_qc(world)
     view = qc.get(f"/api/v1/tasks/{tid}/audio-qc").json()
     assert view["can_decide"] is True
-    decided = qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"})
+    decided = qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json=passing(qc, tid))
     assert decided.status_code == 200, decided.text
     latest = decided.json()["results"][0]
     assert (latest["automated"], latest["outcome"], latest["reviewer_name"]) == (
@@ -252,8 +275,8 @@ def test_passing_a_failed_automatic_check_needs_a_comment(world: dict[str, Any])
     auto = qc.get(f"/api/v1/tasks/{tid}/audio-qc").json()["results"][0]
     assert (auto["outcome"], auto["reason_code"]) == ("FAIL", "TOO_SHORT")
     url = f"/api/v1/tasks/{tid}/audio-qc/decision"
-    assert qc.post(url, json={"outcome": "PASS"}).json()["error"]["code"] == "COMMENT_REQUIRED"
-    ok = qc.post(url, json={"outcome": "PASS", "comment": "Client accepts short greetings"})
+    assert qc.post(url, json=passing(qc, tid)).json()["error"]["code"] == "COMMENT_REQUIRED"
+    ok = qc.post(url, json=passing(qc, tid, comment="Client accepts short greetings"))
     assert ok.status_code == 200, ok.text
 
 
@@ -453,7 +476,7 @@ def test_where_qc_pass_is_the_final_approval_a_pass_approves_the_task(
     qc = _assign_qc(world)
     assert qc.get(f"/api/v1/tasks/{tid}/audio-qc").json()["pass_approves"] is False
     passed = qc.post(
-        f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS", "comment": "Clear"}
+        f"/api/v1/tasks/{tid}/audio-qc/decision", json=passing(qc, tid, comment="Clear")
     )
     assert passed.json()["task_status"] == "ADMIN_REVIEW"
 
@@ -489,7 +512,7 @@ def test_where_qc_pass_is_the_final_approval_a_pass_approves_the_task(
     view = qc.get(f"/api/v1/tasks/{second}/audio-qc").json()
     assert (view["can_decide"], view["pass_approves"]) == (True, True)
     decided = qc.post(
-        f"/api/v1/tasks/{second}/audio-qc/decision", json={"outcome": "PASS", "comment": "Clear"}
+        f"/api/v1/tasks/{second}/audio-qc/decision", json=passing(qc, second, comment="Clear")
     )
     assert decided.json()["task_status"] == "APPROVED"
     moves = [e for e in pa.get(f"/api/v1/tasks/{second}/timeline").json() if e["kind"] == "status"]

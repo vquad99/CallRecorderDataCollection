@@ -5,6 +5,7 @@ Requirements: TASK-002..004, TASK-009.
 Kinds of actor:
 - "assign": a user holding tasks.assign in the task's project (Project Admin, Super Admin)
 - "moderator": the task's active moderator assignee
+- "moderator_or_assign": either of the two (a consent form put right goes back to QC, D-146)
 - "system": only the platform's own modules (recording, audio QC); never reachable through the
   generic transition API, so a status cannot be faked by hand.
 """
@@ -38,7 +39,16 @@ _T: dict[str, dict[str, str]] = {
     # where the project makes QC pass the final approval (D-138); a reject is the QC Executive's
     # decision (D-062: no manual transcription). D-118: no "return to record again" from QC or
     # admin review, only reject; tasks returned before went back to Assigned (0026).
-    "AUDIO_QC": {"ADMIN_REVIEW": "system", "APPROVED": "system", "REJECTED": "system"},
+    # D-146: the audio is fine but a signed consent form is not: QC sends the task to CONSENT_FIX,
+    # and once a new form is uploaded its moderator (or a project admin) sends the same recording
+    # back to QC (audio_qc/service.send_back_to_qc checks the forms were replaced).
+    "AUDIO_QC": {
+        "ADMIN_REVIEW": "system",
+        "APPROVED": "system",
+        "REJECTED": "system",
+        "CONSENT_FIX": "system",
+    },
+    "CONSENT_FIX": {"AUDIO_QC": "moderator_or_assign", "CANCELLED": "assign"},
     "ADMIN_REVIEW": {"APPROVED": "assign", "REJECTED": "assign"},
     "ON_HOLD": {"CANCELLED": "assign"},  # resuming to the held status is handled below
 }
@@ -70,6 +80,15 @@ def required_kind(current: str, target: str, held_from: str | None) -> str | Non
     return _T.get(current, {}).get(target)
 
 
+def _may(kind: str, actor: Actor) -> bool:
+    """A person (not the platform) may make a move of this kind."""
+    return (
+        (kind == "assign" and actor.can_assign)
+        or (kind == "moderator" and actor.is_moderator)
+        or (kind == "moderator_or_assign" and (actor.can_assign or actor.is_moderator))
+    )
+
+
 def check(
     current: str,
     target: str,
@@ -92,12 +111,8 @@ def check(
             code="INVALID_TRANSITION",
             status_code=409,
         )
-    if not actor.system:
-        allowed = (kind == "assign" and actor.can_assign) or (
-            kind == "moderator" and actor.is_moderator
-        )
-        if not allowed:
-            raise forbidden()
+    if not actor.system and not _may(kind, actor):
+        raise forbidden()
     if target in REASONS:
         if reason_code not in REASONS[target]:
             raise AppError(
@@ -118,6 +133,6 @@ def user_options(current: str, held_from: str | None, actor: Actor) -> list[str]
     if current == "ON_HOLD" and held_from:
         targets[held_from] = "assign"
     for target, kind in targets.items():
-        if (kind == "assign" and actor.can_assign) or (kind == "moderator" and actor.is_moderator):
+        if _may(kind, actor):
             options.append(target)
     return sorted(options)

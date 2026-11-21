@@ -45,7 +45,7 @@ MAX_CSV_ROWS = 20_000
 # A call is counted as needing a person in these states.
 NEEDS_PERSON = ("NEEDS_MATCH", "FETCH_FAILED")
 CLOSED_BY_MODERATOR = ("WAITING_FOR_RECORDING", "NEEDS_MATCH", "FETCH_FAILED", "RECORDED")
-REACHED_QC = ("AUDIO_QC", "ADMIN_REVIEW", "APPROVED", "REJECTED")
+REACHED_QC = ("AUDIO_QC", "CONSENT_FIX", "ADMIN_REVIEW", "APPROVED", "REJECTED")
 
 
 def _check(principal: Principal) -> None:

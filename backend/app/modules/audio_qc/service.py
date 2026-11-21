@@ -6,6 +6,12 @@ themselves are in rules.py. The automatic result never approves or rejects anyth
 Executive assigned to the task decides (PASS or FAIL, D-118). A pass goes to the project admin
 for the final approval, or approves the task itself in a project where QC pass is the final
 approval (D-138).
+
+The QC Executive answers the project's QC checklist with every decision (D-146, checklist.py),
+and in a project that takes signed consent forms checks each person's form. A pass needs every
+required answer, none failing and both forms right. When only a form is wrong, SEND_BACK_CONSENT
+moves the task to CONSENT_FIX: its moderator uploads a new scan and sends the same recording back
+(send_back_to_qc), and QC starts again from the answers given, the consent check cleared.
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ from __future__ import annotations
 import logging
 import tempfile
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,7 +32,8 @@ from app.core.config import Settings
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
-from app.modules.audio_qc.models import AudioQcCheck, AudioQcResult
+from app.modules.audio_qc import checklist
+from app.modules.audio_qc.models import AudioQcCheck, AudioQcDraft, AudioQcResult
 from app.modules.audio_qc.rules import (
     Check,
     Duplicate,
@@ -63,10 +71,15 @@ from app.modules.users.service import display_names
 logger = logging.getLogger("app.audio_qc")
 
 # Statuses in which a QC Executive may be (re)assigned: anything still open.
-QC_ASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "ON_HOLD"})
+QC_ASSIGNABLE = frozenset(
+    {"DRAFT", "ASSIGNED", "IN_PROGRESS", "RECORDED", "AUDIO_QC", "CONSENT_FIX", "ON_HOLD"}
+)
 # A pass goes to the project admin for the final approval (D-092), or approves the task where the
 # project says QC pass is the final approval (D-138). D-118: pass or reject only; no return.
-DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED"}
+# D-146: or, when only a signed consent form is wrong, back to the moderator for a new one.
+SEND_BACK = "SEND_BACK_CONSENT"
+CONSENT_FIX = "CONSENT_FIX"
+DECISIONS = {"PASS": "ADMIN_REVIEW", "FAIL": "REJECTED", SEND_BACK: CONSENT_FIX}
 QC_FINAL_STATUS = "APPROVED"
 QC_FINAL_NOTE = "Approved by the QC decision: QC pass is the final approval in this project."
 
@@ -313,6 +326,109 @@ def _latest(db: Session, task_id: uuid.UUID, *, automated: bool) -> AudioQcResul
     )
 
 
+def _sides(db: Session, task: Task, *, forms: bool) -> list[dict[str, Any]]:
+    """The task's two participants as a decision keeps them: side, id, code, and (in a project
+    that takes signed forms) the id of the consent form on file now."""
+    current = (
+        consent.signed_forms(db, task.project_id, [task.participant_a_id, task.participant_b_id])
+        if forms
+        else {}
+    )
+    out = []
+    for side, pid in (("A", task.participant_a_id), ("B", task.participant_b_id)):
+        code = db.scalar(select(Participant.participant_code).where(Participant.id == pid))
+        form = current.get(pid)
+        out.append(
+            {
+                "side": side,
+                "participant_id": pid,
+                "participant_code": code,
+                "consent_form_id": str(form.id) if form is not None else None,
+            }
+        )
+    return out
+
+
+def _checklist_error(code: str, message: str, where: list[str]) -> AppError:
+    return AppError(message, code=code, status_code=422, details=[{"questions": where}])
+
+
+def _require_answers(
+    items: list[checklist.Item], given: checklist.Answers, codes: Mapping[str, str]
+) -> None:
+    """Every required question answered (422 CHECKLIST_INCOMPLETE) and none answered so that the
+    recording fails (422 CHECKLIST_FAILED), naming them."""
+    missing = [checklist.label(i, side, codes) for i, side in checklist.unanswered(items, given)]
+    if missing:
+        more = f" and {len(missing) - 1} more" if len(missing) > 1 else ""
+        raise _checklist_error(
+            "CHECKLIST_INCOMPLETE",
+            f"Answer every question of the checklist first: {missing[0]}{more}.",
+            missing,
+        )
+    failed = [checklist.label(f.item, f.side, codes) for f in checklist.failing(items, given)]
+    if failed:
+        raise _checklist_error(
+            "CHECKLIST_FAILED",
+            f"The recording fails the checklist ({failed[0]}): reject it instead.",
+            failed,
+        )
+
+
+def _consent_rules(
+    outcome: str, uploads: bool, given: checklist.Answers, codes: Mapping[str, str], comment: str
+) -> list[str]:
+    """The consent check of a decision (D-146); returns the codes of the people whose form is not
+    right. Pass: both forms checked and right. Send back: at least one form marked not right, and
+    what is wrong with it in the comment."""
+    wrong = [codes[s] for s in checklist.SIDES if given.consent.get(s) == "no"]
+    if outcome == "PASS" and uploads:
+        unchecked = [codes[s] for s in checklist.SIDES if given.consent.get(s) is None]
+        if unchecked:
+            raise AppError(
+                f"Check the signed consent form of {' and '.join(unchecked)} first.",
+                code="CONSENT_NOT_CHECKED",
+                status_code=422,
+            )
+        if wrong:
+            raise AppError(
+                f"The signed consent form of {' and '.join(wrong)} is not right: send the task "
+                "back for its consent form instead.",
+                code="CONSENT_NOT_OK",
+                status_code=422,
+            )
+    if outcome == SEND_BACK:
+        if not wrong:
+            raise AppError(
+                "Mark No for the consent form that is not right first.",
+                code="CONSENT_NOT_MARKED",
+                status_code=422,
+            )
+        if not comment:
+            raise AppError(
+                "Say what is wrong with the consent form.",
+                code="COMMENT_REQUIRED",
+                status_code=422,
+            )
+    return wrong
+
+
+def _draft_of(db: Session, task_id: uuid.UUID) -> AudioQcDraft | None:
+    return db.scalar(select(AudioQcDraft).where(AudioQcDraft.task_id == task_id))
+
+
+def _write_draft(
+    db: Session, task_id: uuid.UUID, answers: checklist.Answers, saved_by: uuid.UUID | None
+) -> AudioQcDraft:
+    draft = _draft_of(db, task_id)
+    if draft is None:
+        draft = AudioQcDraft(task_id=task_id, answers={})
+        db.add(draft)
+    draft.answers = answers.as_dict()
+    draft.saved_by = saved_by
+    return draft
+
+
 def decide(
     db: Session,
     principal: Principal,
@@ -321,10 +437,13 @@ def decide(
     reason_code: str | None,
     comment: str,
     ip: str | None,
+    answers: Mapping[str, Any] | None = None,
 ) -> AudioQcResult:
-    """The QC Executive's decision (AQC-008): PASS sends the task to the project admin, or
-    approves it where QC pass is the final approval (D-138); FAIL rejects it (D-118: no return).
-    Stored with reason, comment, time and reviewer; the task moves in the same commit."""
+    """The QC Executive's decision (AQC-008) with the QC checklist's answers (D-146): PASS sends
+    the task to the project admin, or approves it where QC pass is the final approval (D-138);
+    FAIL rejects it (D-118: no return); SEND_BACK_CONSENT sends it to its moderator for a new
+    signed consent form. Stored with the answers, reason, comment, time and reviewer; the task
+    moves in the same commit."""
     task = tasks.get_task(db, principal, task_id)
     if not may_decide(db, principal, task):
         raise forbidden()
@@ -339,19 +458,34 @@ def decide(
     project = db.get_one(Project, task.project_id)
     target = decision_target(outcome, project)
     if target is None:
-        raise AppError("Choose PASS or FAIL", code="VALIDATION_ERROR", status_code=422)
+        raise AppError(
+            "Choose PASS, FAIL or SEND_BACK_CONSENT", code="VALIDATION_ERROR", status_code=422
+        )
+    uploads = consent.takes_uploads(project)
+    if outcome == SEND_BACK and not uploads:
+        raise AppError(
+            "This project takes consent online: there is no signed consent form to send back.",
+            code="CONSENT_ONLINE",
+            status_code=409,
+        )
     automatic = _latest(db, task.id, automated=True)
     if automatic is None:
         raise AppError("Run the automatic check first", code="NO_AUTOMATIC_CHECK", status_code=409)
     comment = comment.strip()
-    if outcome == "PASS":
+    items = checklist.items_of(project.qc_checklist)
+    given = checklist.Answers.read(answers).only(items, consent_check=uploads)
+    sides = _sides(db, task, forms=uploads)
+    codes = {p["side"]: p["participant_code"] for p in sides}
+    if outcome in ("PASS", SEND_BACK):
         reason_code = None
-        if automatic.outcome == "FAIL" and not comment:
-            raise AppError(
-                "The automatic check failed: say why it passes anyway",
-                code="COMMENT_REQUIRED",
-                status_code=422,
-            )
+        _require_answers(items, given, codes)
+    to_fix = _consent_rules(outcome, uploads, given, codes, comment)
+    if outcome == "PASS" and automatic.outcome == "FAIL" and not comment:
+        raise AppError(
+            "The automatic check failed: say why it passes anyway",
+            code="COMMENT_REQUIRED",
+            status_code=422,
+        )
     workflow.check(
         task.status,
         target,
@@ -361,6 +495,7 @@ def decide(
         comment=comment,
     )
     rec = db.get_one(Recording, automatic.recording_id)
+    snapshot = checklist.snapshot(items, given, sides, consent_check=uploads)
     result = AudioQcResult(
         id=uuid.uuid4(),
         recording_id=automatic.recording_id,
@@ -379,8 +514,19 @@ def decide(
         rms_dbfs=automatic.rms_dbfs,
         dynamic_range_db=automatic.dynamic_range_db,
         duplicate_of_recording_id=automatic.duplicate_of_recording_id,
+        checklist=snapshot,
     )
     db.add(result)
+    after: dict[str, Any] = {
+        "outcome": outcome,
+        "reason_code": reason_code,
+        "task_status": target,
+        "failing": [
+            f"{f['side']}:{f['key']}" if f["side"] else f["key"] for f in snapshot["failing"]
+        ],
+    }
+    if outcome == SEND_BACK:
+        after["consent_to_fix"] = to_fix
     audit.record(
         db,
         action="audio_qc.decision",
@@ -389,12 +535,20 @@ def decide(
         project_id=task.project_id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"outcome": outcome, "reason_code": reason_code, "task_status": target},
+        after=after,
     )
+    draft = _draft_of(db, task.id)
+    if outcome == SEND_BACK:
+        # QC starts the next check from these answers; only the consent check is asked again.
+        _write_draft(db, task.id, given.without_consent(), None)
+    elif draft is not None:
+        db.delete(draft)
     db.flush()
     note = comment or f"Audio QC: {outcome}"
     if target == QC_FINAL_STATUS:
         note = f"{QC_FINAL_NOTE} {comment}".strip()
+    elif outcome == SEND_BACK:
+        note = f"Consent form to fix: {' and '.join(to_fix)}. {comment}"
     tasks.transition(
         db,
         task,
@@ -405,6 +559,202 @@ def decide(
         comment=note,
     )
     return result
+
+
+def _latest_checked(db: Session, task_id: uuid.UUID) -> AudioQcResult | None:
+    """The task's newest decision that has checklist answers (D-146)."""
+    return db.scalar(
+        select(AudioQcResult)
+        .where(
+            AudioQcResult.task_id == task_id,
+            AudioQcResult.automated.is_(False),
+            AudioQcResult.checklist.is_not(None),
+        )
+        .order_by(AudioQcResult.created_at.desc())
+        .limit(1)
+    )
+
+
+def checklist_view(db: Session, principal: Principal, task_id: uuid.UUID) -> dict[str, Any]:
+    """The project's QC checklist for this task, the answers not yet sent (for whoever decides
+    its QC) and the newest decision's answers (for everyone who sees the task), D-146."""
+    task = tasks.get_task(db, principal, task_id)
+    project = db.get_one(Project, task.project_id)
+    items = checklist.items_of(project.qc_checklist)
+    uploads = consent.takes_uploads(project)
+    deciding = may_decide(db, principal, task)
+    draft = _draft_of(db, task.id) if deciding else None
+    latest = _latest_checked(db, task.id)
+    names = display_names(
+        db, [draft.saved_by if draft else None, latest.reviewer_id if latest else None]
+    )
+    saved = (
+        None
+        if draft is None
+        else {
+            "answers": checklist.Answers.read(draft.answers)
+            .only(items, consent_check=uploads)
+            .as_dict(),
+            "saved_at": draft.updated_at,
+            "saved_by_name": names.get(draft.saved_by) if draft.saved_by else None,
+        }
+    )
+    recorded = (
+        None
+        if latest is None or latest.checklist is None
+        else {
+            "outcome": latest.outcome,
+            "reason_code": latest.reason_code,
+            "comment": latest.comment,
+            "reviewer_name": names.get(latest.reviewer_id) if latest.reviewer_id else None,
+            "decided_at": latest.created_at,
+            **latest.checklist,
+        }
+    )
+    return {
+        "items": [i.as_dict() for i in items],
+        "consent_check": uploads,
+        "consent_question": checklist.CONSENT_QUESTION,
+        "can_answer": deciding and task.status == "AUDIO_QC",
+        "draft": saved,
+        "latest": recorded,
+    }
+
+
+def save_draft(
+    db: Session, principal: Principal, task_id: uuid.UUID, answers: Mapping[str, Any]
+) -> AudioQcDraft:
+    """Keeps the QC Executive's answers while they tick (D-146): one per task, replaced on each
+    save; only the person who decides the task's QC, while it waits for the decision."""
+    task = tasks.get_task(db, principal, task_id)
+    if not may_decide(db, principal, task):
+        raise forbidden()
+    if task.status != "AUDIO_QC":
+        raise AppError(
+            "This task is not waiting for an audio check", code="TASK_NOT_IN_QC", status_code=409
+        )
+    project = db.get_one(Project, task.project_id)
+    items = checklist.items_of(project.qc_checklist)
+    uploads = consent.takes_uploads(project)
+    given = checklist.Answers.read(answers).only(items, consent_check=uploads)
+    draft = _write_draft(db, task.id, given, principal.user_id)
+    db.commit()
+    return draft
+
+
+def _consent_fix(db: Session, task: Task) -> tuple[AudioQcResult | None, list[dict[str, Any]]]:
+    """The newest send-back of the task and the people whose consent form it found not right,
+    each with `replaced`: a new form is on file since (D-146). In a project that no longer takes
+    signed forms there is nothing to replace."""
+    sent = db.scalar(
+        select(AudioQcResult)
+        .where(AudioQcResult.task_id == task.id, AudioQcResult.outcome == SEND_BACK)
+        .order_by(AudioQcResult.created_at.desc())
+        .limit(1)
+    )
+    if sent is None:
+        return None, []
+    project = db.get_one(Project, task.project_id)
+    uploads = consent.takes_uploads(project)
+    wrong = [p for p in (sent.checklist or {}).get("participants", []) if p.get("consent") == "no"]
+    ids = [uuid.UUID(p["participant_id"]) for p in wrong]
+    current = consent.signed_forms(db, task.project_id, ids) if uploads else {}
+    people = []
+    for p in wrong:
+        form = current.get(uuid.UUID(p["participant_id"]))
+        new = form is not None and str(form.id) != p.get("consent_form_id")
+        people.append(
+            {
+                "side": p["side"],
+                "participant_id": p["participant_id"],
+                "participant_code": p["participant_code"],
+                "replaced": new or not uploads,
+                "form_id": str(form.id) if form is not None else None,
+            }
+        )
+    return sent, people
+
+
+def consent_fix_view(db: Session, principal: Principal, task: Task) -> dict[str, Any] | None:
+    """What the task page shows while a consent form is being fixed (D-146): QC's comment, whose
+    form, whether a new one is on file, and whether the caller may send the task back to QC."""
+    if task.status != CONSENT_FIX:
+        return None
+    sent, people = _consent_fix(db, task)
+    if sent is None:
+        return None
+    actor = tasks.actor_for(db, principal, task)
+    names = display_names(db, [sent.reviewer_id])
+    return {
+        "comment": sent.comment,
+        "by": names.get(sent.reviewer_id) if sent.reviewer_id else None,
+        "at": sent.created_at,
+        "participants": [
+            {k: p[k] for k in ("side", "participant_id", "participant_code", "replaced")}
+            for p in people
+        ],
+        "forms_replaced": all(p["replaced"] for p in people),
+        "can_send_back": actor.is_moderator or actor.can_assign,
+    }
+
+
+def send_back_to_qc(
+    db: Session, principal: Principal, task_id: uuid.UUID, comment: str, ip: str | None
+) -> Task:
+    """The moderator (or a project admin) sends the task back to QC once every consent form QC
+    found not right was replaced (D-146): the same recording, the same QC Executive; QC's earlier
+    answers wait for them with the consent check cleared."""
+    task = tasks.get_task(db, principal, task_id)
+    if task.status != CONSENT_FIX:
+        raise AppError(
+            "This task is not waiting for a consent form",
+            code="TASK_NOT_IN_CONSENT_FIX",
+            status_code=409,
+        )
+    actor = tasks.actor_for(db, principal, task)
+    comment = comment.strip()
+    workflow.check(
+        task.status, "AUDIO_QC", actor, held_from=task.held_from, reason_code=None, comment=comment
+    )
+    sent, people = _consent_fix(db, task)
+    if sent is None:
+        raise AppError(
+            "QC's request for a new consent form was not found: ask your admin.",
+            code="CONSENT_FIX_UNKNOWN",
+            status_code=409,
+        )
+    waiting = [p["participant_code"] for p in people if not p["replaced"]]
+    if waiting:
+        raise AppError(
+            f"Upload a new signed consent form for {' and '.join(waiting)} first: QC found a "
+            "problem with the one on file.",
+            code="CONSENT_FORM_NOT_REPLACED",
+            status_code=409,
+            details=[{"participants": waiting}],
+        )
+    audit.record(
+        db,
+        action="audio_qc.consent_fixed",
+        entity_type="task",
+        entity_id=task.id,
+        project_id=task.project_id,
+        actor_id=principal.user_id,
+        ip=ip,
+        after={
+            "participants": [p["participant_code"] for p in people],
+            "forms": [p["form_id"] for p in people],
+            "send_back": str(sent.id),
+        },
+    )
+    return tasks.transition(
+        db,
+        task,
+        "AUDIO_QC",
+        actor,
+        actor_id=principal.user_id,
+        comment=comment or "New signed consent form uploaded: the same recording goes back to QC.",
+        ip=ip,
+    )
 
 
 def results_for(db: Session, task_id: uuid.UUID) -> list[AudioQcResult]:

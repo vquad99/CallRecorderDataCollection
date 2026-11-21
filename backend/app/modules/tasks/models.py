@@ -21,6 +21,9 @@ TASK_STATUSES = (
     "REJECTED",
     "CANCELLED",
     "ON_HOLD",
+    # QC found the audio fine but a signed consent form not: the moderator uploads a new scan and
+    # sends the same recording back to QC (D-146).
+    "CONSENT_FIX",
 )
 PRIORITIES = ("LOW", "NORMAL", "HIGH", "URGENT")
 ASSIGNMENT_ROLES = ("MODERATOR", "QC_EXECUTIVE")

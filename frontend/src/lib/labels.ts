@@ -12,7 +12,8 @@ export type TaskStatus =
   | "APPROVED"
   | "REJECTED"
   | "CANCELLED"
-  | "ON_HOLD";
+  | "ON_HOLD"
+  | "CONSENT_FIX";
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   DRAFT: "Draft",
@@ -20,6 +21,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   IN_PROGRESS: "In progress",
   RECORDED: "Recorded",
   AUDIO_QC: "Audio QC",
+  CONSENT_FIX: "Consent form to fix",
   ADMIN_REVIEW: "Admin review",
   APPROVED: "Approved",
   REJECTED: "Rejected",

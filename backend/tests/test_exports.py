@@ -26,7 +26,9 @@ def test_a_project_exports_its_recordings_and_a_progress_report(world: dict[str,
     test_audio_qc._record(world)
     qc = test_audio_qc._assign_qc(world)
     assert (
-        qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"}).status_code
+        qc.post(
+            f"/api/v1/tasks/{tid}/audio-qc/decision", json=test_audio_qc.passing(qc, tid)
+        ).status_code
         == 200
     )
     pa: Api = world["pa"]
@@ -86,7 +88,9 @@ def test_each_participant_is_credited_with_half_of_an_approved_conversation(
 
     qc = test_audio_qc._assign_qc(world)
     assert (
-        qc.post(f"/api/v1/tasks/{tid}/audio-qc/decision", json={"outcome": "PASS"}).status_code
+        qc.post(
+            f"/api/v1/tasks/{tid}/audio-qc/decision", json=test_audio_qc.passing(qc, tid)
+        ).status_code
         == 200
     )
     assert pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"}).status_code == 200
