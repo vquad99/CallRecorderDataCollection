@@ -50,6 +50,8 @@ const project = {
   consent_policy_version: "1",
   consent_text: "",
   qc_final_approval: false,
+  max_conversations_per_speaker: 3,
+  unique_pairs: true,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -116,6 +118,40 @@ describe("project detail", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
         qc_final_approval: true,
+      }),
+    );
+  });
+
+  it("sets how many conversations a speaker may have and whether a pair may meet twice (D-143)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1");
+    const limit = await screen.findByRole("spinbutton", {
+      name: "Conversations per speaker (at most)",
+    });
+    const once = screen.getByRole("checkbox", { name: "Each pair of speakers only once" });
+    expect(limit).toHaveValue(3);
+    expect(once).toBeChecked();
+    await userEvent.clear(limit);
+    await userEvent.type(limit, "5");
+    await userEvent.click(once);
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
+        max_conversations_per_speaker: 5,
+        unique_pairs: false,
+      }),
+    );
+    // Empty means no limit.
+    await userEvent.clear(limit);
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
+        max_conversations_per_speaker: null,
       }),
     );
   });
@@ -195,7 +231,7 @@ describe("project detail", () => {
 
   it("goes back to the project list with a note after creating a project", async () => {
     const created = { ...project, id: "p9", code: "PRJ0009", name: "Tamil talk" };
-    fakeApi(
+    const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.create", "projects.manage"], {
         "POST /api/v1/projects": () => [201, created],
         "GET /api/v1/projects": () => [200, { items: [created], total: 1, page: 1, page_size: 25 }],
@@ -203,10 +239,17 @@ describe("project detail", () => {
     );
     renderAt("/projects/new");
     await userEvent.type(await screen.findByLabelText(/^Name/), "Tamil talk");
+    // A new project starts with the pairing rules on (D-143).
+    expect(screen.getByLabelText("Conversations per speaker (at most)")).toHaveValue(3);
+    expect(screen.getByRole("checkbox", { name: "Each pair of speakers only once" })).toBeChecked();
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
     expect(
       await screen.findByText(/^PRJ0009 Tamil talk created\. It starts as Draft/),
     ).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      max_conversations_per_speaker: 3,
+      unique_pairs: true,
+    });
     expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "PRJ0009" })).toHaveAttribute(
       "href",

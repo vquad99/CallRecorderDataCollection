@@ -467,6 +467,9 @@ def test_where_qc_pass_is_the_final_approval_a_pass_approves_the_task(
         "phone_visibility_policy",
         "consent_policy_version",
         "consent_text",
+        # The project's pairing rules stay as they are (D-143): the next task pairs the same two.
+        "max_conversations_per_speaker",
+        "unique_pairs",
     )
     turned = pa.patch(
         f"/api/v1/projects/{pid}",

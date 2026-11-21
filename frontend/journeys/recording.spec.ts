@@ -12,6 +12,7 @@ import {
   agree,
   api,
   emailedLink,
+  fillSpeakerDetails,
   NEW_PASSWORD,
   playToEnd,
   requireSetup,
@@ -123,6 +124,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
         .getByLabel(/^Email address/)
         .fill(`${person.toLowerCase()}.${code.toLowerCase()}@example.org`);
       await form.getByLabel(/^Language/).selectOption("hi");
+      await fillSpeakerDetails(form); // every one, for someone new (D-143)
       await form.getByRole("button", { name: "Add participant" }).click();
       await expect(admin.getByRole("cell", { name: `${person} ${code}` })).toBeVisible();
       // The project's consent form goes out by itself (D-129; the project has the sample text).
@@ -295,7 +297,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .click();
     for (const action of [
       "task.created",
-      "consent.recorded",
+      "consent.self_recorded",
       "recording.started",
       "recording.completed",
       "export.requested",

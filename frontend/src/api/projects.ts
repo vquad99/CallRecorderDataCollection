@@ -42,6 +42,9 @@ export interface Project extends ProjectSummary {
   consent_policy_version: string;
   consent_text: string;
   qc_final_approval: boolean;
+  /** Task rules (D-143): null = no limit. */
+  max_conversations_per_speaker: number | null;
+  unique_pairs: boolean;
   status_reason: string | null;
   status_changed_at: string | null;
   languages: Language[];
@@ -62,6 +65,10 @@ export interface ProjectFields {
   consent_text: string;
   /** A QC pass approves the task, with no admin review (D-138). */
   qc_final_approval: boolean;
+  /** At most this many conversations per speaker in the project; null = no limit (D-143). */
+  max_conversations_per_speaker: number | null;
+  /** The same two speakers never share a second task (D-143). */
+  unique_pairs: boolean;
 }
 
 export interface Member {

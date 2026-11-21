@@ -3,7 +3,8 @@ import { useId, type SelectHTMLAttributes } from "react";
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"> {
   label: string;
-  options: readonly { value: string; label: string }[];
+  /** A disabled option is shown but cannot be chosen; its label says why. */
+  options: readonly { value: string; label: string; disabled?: boolean }[];
 }
 
 export function Select({ label, options, required, ...props }: SelectProps) {
@@ -16,7 +17,7 @@ export function Select({ label, options, required, ...props }: SelectProps) {
       </label>
       <select id={id} className="field__input" required={required} {...props}>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </option>
         ))}

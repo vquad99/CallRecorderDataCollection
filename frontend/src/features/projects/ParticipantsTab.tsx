@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
+import { DetailsMissing } from "../participants/ParticipantDetails";
 import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
 import "../participants/participants.css";
 import { languageLabel } from "./choices";
@@ -296,7 +297,14 @@ export function ParticipantsTab() {
               {list.state.data.items.map((p) => (
                 <tr key={p.id}>
                   <td>{p.participant_code}</td>
-                  <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
+                  <td>
+                    {p.display_label ?? <span className="muted">Hidden</span>}
+                    {!p.deleted && p.speaker_details_complete === false ? (
+                      <div>
+                        <DetailsMissing />
+                      </div>
+                    ) : null}
+                  </td>
                   <td>
                     {p.phone ?? (p.has_phone ? <span className="muted">Hidden</span> : "None")}
                   </td>

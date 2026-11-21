@@ -2,7 +2,8 @@
 
 Visibility: Super Admin sees every task; a holder of tasks.assign sees tasks in their projects;
 everyone else sees only tasks they are actively assigned to (TASK-005). A task is made, and given
-to a moderator, only for two people who agreed to the project's consent form (D-129).
+to a moderator, only for two people who agreed to the project's consent form (D-129), and made
+only within the project's pairing rules (D-143, pairing.py).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
 from app.modules.projects.models import ProjectMembership
 from app.modules.projects.service import ensure_accepts_new_work, get_manageable
-from app.modules.tasks import workflow
+from app.modules.tasks import pairing, workflow
 from app.modules.tasks.models import Task, TaskAssignment, TaskComment, TaskStatusHistory
 from app.modules.users.service import display_names
 
@@ -404,6 +405,10 @@ def create_task(
     a = _project_participant(db, project.id, data.participant_a_id)
     b = _project_participant(db, project.id, data.participant_b_id)
     require_agreed(db, project.id, [a, b], status_code=422)
+    # Speaker details, conversations per speaker, each pair once (D-143): counted under a lock
+    # held until this task is saved, so two at once cannot both take the last place.
+    pairing.lock(db, project.id)
+    pairing.check(pairing.tally(db, project, [a.id, b.id]), a, b)
     if data.recording_mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
         raise AppError(
             "Telephony tasks need a phone number for both participants",

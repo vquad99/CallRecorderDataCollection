@@ -7,7 +7,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "demo.super-admin@example.org";
 export const SEEDED_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "";
@@ -138,6 +138,44 @@ export interface Setup {
   taskCode: string;
 }
 
+/** Complete speaker details (D-143): a task is made only for people who have them all. */
+export const SPEAKER_DETAILS = {
+  age: 34,
+  gender: "FEMALE",
+  current_state: "Goa",
+  current_district: "North Goa",
+  current_pincode: "403001",
+  native_state: "Goa",
+  district: "Salcete",
+  native_pincode: "403601",
+  native_language: "Konkani",
+  education: "BACHELORS",
+  education_medium: "ENGLISH",
+  recording_state: "Goa",
+  recording_district: "North Goa",
+  recording_pincode: "403001",
+};
+
+/** Fills every speaker detail in the Add participant window, as a person would (D-143). */
+export async function fillSpeakerDetails(form: Locator): Promise<void> {
+  const box = (label: string) => form.getByLabel(new RegExp(`^${label}`));
+  const d = SPEAKER_DETAILS;
+  await box("Age").fill(String(d.age));
+  await box("Gender").selectOption(d.gender);
+  for (const [where, title] of [
+    ["current", "Current"],
+    ["native", "Native"],
+    ["recording", "Recording"],
+  ] as const) {
+    await box(`${title} state`).selectOption(d[`${where}_state`]);
+    await box(`${title} district`).fill(where === "native" ? d.district : d[`${where}_district`]);
+    await box(`${title} PIN code`).fill(d[`${where}_pincode`]);
+  }
+  await box("Native language").fill(d.native_language);
+  await box("Education").selectOption(d.education);
+  await box("Medium of education").selectOption(d.education_medium);
+}
+
 /** The participant agrees to the project's consent form the real way (D-129: tasks are made only
  * for people who agreed): with the personal link emailed to them when they joined the project,
  * the answer goes in through the personal page's API with the link's secret, as the page itself
@@ -202,6 +240,7 @@ export async function setUpTask(
         display_label: `${label} ${code}`,
         language_code: "hi",
         email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
+        ...SPEAKER_DETAILS,
       },
     );
     await agree(admin, project.id, person.id);

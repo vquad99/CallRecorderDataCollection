@@ -17,6 +17,8 @@ export const PROJECT = {
   consent_policy_version: "1",
   consent_text: "",
   qc_final_approval: false,
+  max_conversations_per_speaker: 3,
+  unique_pairs: true,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -36,11 +38,50 @@ export const PROJECT = {
   accepts_new_work: true,
 };
 
+/** Complete speaker details (D-143) as a person enters them on the participant form: the label,
+ * what is typed or chosen, and whether it is a list. */
+export const SPEAKER_INPUT: readonly { label: string; value: string; list?: boolean }[] = [
+  { label: "Age", value: "34" },
+  { label: "Gender", value: "FEMALE", list: true },
+  { label: "Current state", value: "Goa", list: true },
+  { label: "Current district", value: "North Goa" },
+  { label: "Current PIN code", value: "403001" },
+  { label: "Native state", value: "Goa", list: true },
+  { label: "Native district", value: "Salcete" },
+  { label: "Native PIN code", value: "403601" },
+  { label: "Native language", value: "Konkani" },
+  { label: "Education", value: "BACHELORS", list: true },
+  { label: "Medium of education", value: "ENGLISH", list: true },
+  { label: "Recording state", value: "Goa", list: true },
+  { label: "Recording district", value: "North Goa" },
+  { label: "Recording PIN code", value: "403001" },
+];
+
+/** The same details as the form sends them, and as the server answers them. */
+export const SPEAKER_DETAILS = {
+  age: 34,
+  gender: "FEMALE",
+  current_state: "Goa",
+  current_district: "North Goa",
+  current_pincode: "403001",
+  native_state: "Goa",
+  district: "Salcete",
+  native_pincode: "403601",
+  native_language: "Konkani",
+  education: "BACHELORS",
+  education_medium: "ENGLISH",
+  recording_state: "Goa",
+  recording_district: "North Goa",
+  recording_pincode: "403001",
+};
+
 export const PARTICIPANT = {
   id: "a1",
   participant_code: "P000001",
   language_code: "hi",
   dialect: "",
+  ...SPEAKER_DETAILS,
+  speaker_details_complete: true,
   display_label: "Asha",
   phone: "+919876543210",
   phone_masked: false,

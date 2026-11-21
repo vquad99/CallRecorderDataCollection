@@ -192,3 +192,17 @@ migration adds the permission `payments.manage` for Super Admin and Project Admi
 
 `projects.qc_final_approval` (boolean, default false): when true, a QC pass approves the task and
 the admin review step is skipped.
+
+## Speaker details and pairing rules (migration 0033, D-143)
+
+`participants` gains the speaker details, all nullable (people saved before have none): `age`
+(check 20 to 60), `gender` (check MALE, FEMALE), `current_state`, `current_district`,
+`current_pincode`, `native_state`, `native_pincode`, `native_language`, `education` (check
+PRIMARY ... OTHER), `education_medium` (check ENGLISH, NON_ENGLISH), `recording_state`,
+`recording_district`, `recording_pincode` (checks: each PIN code is 6 digits, not starting with 0).
+The native district is the existing `district`. State names are checked by the application
+(`participants/speakers.py`), not the database. They are personal data: a removal clears them.
+
+`projects.max_conversations_per_speaker` (integer, default 3, null = no limit, check at least 1)
+and `projects.unique_pairs` (boolean, default true): the task rules in `tasks/pairing.py`. Nothing
+new is stored per task; the counts come from the tasks that are not CANCELLED or REJECTED.

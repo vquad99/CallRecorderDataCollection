@@ -168,3 +168,12 @@
     display: none;
   }
 }
+
+/* Speaker details on the participant form (D-143): place, district and PIN code side by side, so
+   the group may be as wide as its rows (a single field keeps its readable width). */
+.shell__content form fieldset.speaker-details {
+  max-width: 900px;
+}
+.speaker-details .notice {
+  margin: 0 0 12px;
+}

@@ -617,6 +617,160 @@ describe("tasks", () => {
   });
 });
 
+describe("new task: the project's pairing rules (D-143)", () => {
+  it("greys out who cannot be chosen and says why; the server stays the judge", async () => {
+    const proj = {
+      id: "p1",
+      code: "PRJ0001",
+      name: "Konkani",
+      status: "ACTIVE",
+      allows_telephony: false,
+      allows_face_to_face: true,
+      languages: [],
+      max_conversations_per_speaker: 3,
+      unique_pairs: true,
+    };
+    const person = (
+      code: string,
+      conversations: number,
+      pairedWith: string[],
+      complete = true,
+    ) => ({
+      id: code,
+      participant_code: code,
+      display_label: `Name ${code}`,
+      has_phone: true,
+      consent_status: "GIVEN",
+      speaker_details_complete: complete,
+      pairing: { conversations, paired_with: pairedWith },
+    });
+    const people = [
+      person("P000001", 1, ["P000002"]),
+      person("P000002", 1, ["P000001"]),
+      person("P000003", 0, [], false),
+      person("P000004", 3, ["P000007", "P000008", "P000009"]),
+      person("P000005", 1, ["P000006"]),
+      person("P000006", 1, ["P000005"]),
+    ];
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: people, total: people.length, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks": () => [
+          409,
+          {
+            error: {
+              code: "PAIR_ALREADY_USED",
+              message: "P000001 and P000005 already have a conversation together in this project.",
+            },
+          },
+        ],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    await userEvent.selectOptions(await screen.findByLabelText("Recording type"), "FACE_TO_FACE");
+    const options = (label: string) =>
+      within(screen.getByLabelText(label))
+        .getAllByRole("option")
+        .slice(1)
+        .map((o) => [o.textContent, (o as HTMLOptionElement).disabled]);
+    expect(options("Participant A")).toEqual([
+      ["P000001 Name P000001", false],
+      ["P000002 Name P000002", false],
+      ["P000003 Name P000003 – details missing", true],
+      ["P000004 Name P000004 – 3 conversations already", true],
+      ["P000005 Name P000005", false],
+      ["P000006 Name P000006", false],
+    ]);
+    expect(
+      screen.getByText(
+        "Greyed-out people cannot be chosen now; the reason is after their name. A task needs " +
+          "complete speaker details, at most 3 conversations per speaker, and each pair of " +
+          "speakers only once.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Participant A"), "P000001");
+    expect(options("Participant B")).toEqual([
+      ["P000002 Name P000002 – already paired with the chosen A", true],
+      ["P000003 Name P000003 – details missing", true],
+      ["P000004 Name P000004 – 3 conversations already", true],
+      ["P000005 Name P000005", false],
+      ["P000006 Name P000006", false],
+    ]);
+    await userEvent.selectOptions(screen.getByLabelText("Participant B"), "P000005");
+    // Another A who may still be paired with B keeps B; one B worked with clears it (below).
+    await userEvent.selectOptions(screen.getByLabelText("Participant A"), "P000002");
+    expect(screen.getByLabelText("Participant B")).toHaveValue("P000005");
+    // The server stays the judge: its answer is shown as it is.
+    await userEvent.selectOptions(screen.getByLabelText("Participant A"), "P000001");
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    expect(
+      await screen.findByText(
+        "P000001 and P000005 already have a conversation together in this project.",
+      ),
+    ).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST" && c.path === "/api/v1/tasks")).toHaveLength(1);
+  });
+
+  it("clears B when the new A has already been paired with them", async () => {
+    const proj = {
+      id: "p1",
+      code: "PRJ0001",
+      name: "Konkani",
+      status: "ACTIVE",
+      allows_telephony: false,
+      allows_face_to_face: true,
+      languages: [],
+      max_conversations_per_speaker: null,
+      unique_pairs: true,
+    };
+    const person = (code: string, pairedWith: string[]) => ({
+      id: code,
+      participant_code: code,
+      display_label: null,
+      has_phone: true,
+      consent_status: "GIVEN",
+      speaker_details_complete: true,
+      pairing: { conversations: pairedWith.length, paired_with: pairedWith },
+    });
+    const people = [
+      person("P000001", []),
+      person("P000002", ["P000003"]),
+      person("P000003", ["P000002"]),
+    ];
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: people, total: people.length, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    await userEvent.selectOptions(await screen.findByLabelText("Participant A"), "P000001");
+    await userEvent.selectOptions(screen.getByLabelText("Participant B"), "P000002");
+    await userEvent.selectOptions(screen.getByLabelText("Participant A"), "P000003");
+    expect((screen.getByLabelText("Participant B") as HTMLSelectElement).value).toBe("");
+    // No limit in this project: the sentence leaves it out.
+    expect(
+      screen.getByText(
+        "Greyed-out people cannot be chosen now; the reason is after their name. A task needs " +
+          "complete speaker details, and each pair of speakers only once.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("task page in plain words (UI review 2026-11-17)", () => {
   it("shows the history in words, not status codes", async () => {
     fakeApi(

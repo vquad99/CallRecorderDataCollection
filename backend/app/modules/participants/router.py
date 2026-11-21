@@ -19,10 +19,11 @@ from app.db.paging import Page, PageNumber, PageSize
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import minutes as minutes_report
-from app.modules.participants import consent_view, details, manage, service
+from app.modules.participants import consent_view, details, manage, service, speakers
 from app.modules.participants.models import ConsentStatus, Participant
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
+from app.modules.tasks import pairing
 
 router = APIRouter(
     prefix="/projects/{project_id}/participants",
@@ -55,12 +56,40 @@ def minutes_out(t: minutes_report.Minutes | None) -> MinutesOut:
     )
 
 
+class PairingOut(BaseModel):
+    """For people who make tasks (D-143): this participant's conversations in the project that
+    count toward the per-speaker limit (tasks not cancelled or rejected), and the participants
+    they already share one with."""
+
+    conversations: int
+    paired_with: list[uuid.UUID]
+
+
 class ParticipantOut(BaseModel):
     id: uuid.UUID
     participant_code: str
     language_code: str
     dialect: str
+    # The native district (D-121, D-143), shown like the language.
     district: str = ""
+    # Speaker details (D-143): shown like the name (null for others, and when not given).
+    age: int | None = None
+    gender: str | None = None
+    current_state: str | None = None
+    current_district: str | None = None
+    current_pincode: str | None = None
+    native_state: str | None = None
+    native_pincode: str | None = None
+    native_language: str | None = None
+    education: str | None = None
+    education_medium: str | None = None
+    recording_state: str | None = None
+    recording_district: str | None = None
+    recording_pincode: str | None = None
+    # Every speaker detail is given (to everyone who sees the row): a task needs it (D-143).
+    speaker_details_complete: bool = False
+    # Only in the list, for people who make tasks in the project (D-143).
+    pairing: PairingOut | None = None
     display_label: str | None
     phone: str | None
     has_phone: bool
@@ -97,12 +126,17 @@ def present(
         phone = cipher.decrypt(p.phone_e164_enc)
     else:
         phone = f"{MASK}{p.phone_hint}"
+    details = {
+        name: getattr(p, name) for name in speakers.FIELDS if name != "district" and v.profile
+    }
     return ParticipantOut(
         id=p.id,
         participant_code=p.participant_code,
         language_code=p.language_code,
         dialect=p.dialect,
         district=p.district,
+        **details,
+        speaker_details_complete=speakers.complete(p),
         display_label=p.display_label if v.profile else None,
         phone=phone,
         has_phone=p.phone_e164_enc is not None,
@@ -148,6 +182,14 @@ def list_participants(
         totals = minutes_report.per_participant(db, project.id, [p.id for p in items])
         for out in shown:
             out.minutes = minutes_out(totals.get(out.id))
+    if principal.can_in_project(Perm.TASKS_ASSIGN, project.id):
+        # What the task form needs to say who cannot be paired, and why (D-143).
+        counted = pairing.tally(db, project, [p.id for p in items])
+        for out in shown:
+            out.pairing = PairingOut(
+                conversations=counted.conversations.get(out.id, 0),
+                paired_with=counted.partners(out.id),
+            )
     return ParticipantPage(
         items=shown,
         total=total,
@@ -164,11 +206,35 @@ class ParticipantBody(BaseModel):
         min_length=2, max_length=35, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
     )
     dialect: str = Field(default="", max_length=100)
-    district: str = Field(default="", max_length=100)
     notes: str = Field(default="", max_length=5000)
+    # Speaker details (D-143), checked by participants/speakers.py (422 INVALID_SPEAKER_DETAILS
+    # naming the field). Null or empty = not given; on PATCH a field left out keeps its value.
+    district: str | None = Field(default=None, max_length=100)  # the native district
+    age: int | None = None
+    gender: str | None = Field(default=None, max_length=20)
+    current_state: str | None = Field(default=None, max_length=60)
+    current_district: str | None = Field(default=None, max_length=100)
+    current_pincode: str | None = Field(default=None, max_length=10)
+    native_state: str | None = Field(default=None, max_length=60)
+    native_pincode: str | None = Field(default=None, max_length=10)
+    native_language: str | None = Field(default=None, max_length=50)
+    education: str | None = Field(default=None, max_length=30)
+    education_medium: str | None = Field(default=None, max_length=30)
+    recording_state: str | None = Field(default=None, max_length=60)
+    recording_district: str | None = Field(default=None, max_length=100)
+    recording_pincode: str | None = Field(default=None, max_length=10)
 
     def to_input(self) -> service.ParticipantInput:
-        return service.ParticipantInput(**self.model_dump())
+        sent = self.model_fields_set
+        return service.ParticipantInput(
+            display_label=self.display_label,
+            phone=self.phone,
+            email=self.email,
+            language_code=self.language_code,
+            dialect=self.dialect,
+            notes=self.notes,
+            speaker={name: getattr(self, name) for name in speakers.FIELDS if name in sent},
+        )
 
 
 # What staff are told about the consent form once someone joins a project (D-129).

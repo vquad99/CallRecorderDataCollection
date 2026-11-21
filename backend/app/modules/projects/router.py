@@ -87,6 +87,8 @@ class ProjectDetail(ProjectSummary):
     consent_policy_version: str
     consent_text: str
     qc_final_approval: bool
+    max_conversations_per_speaker: int | None
+    unique_pairs: bool
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -107,6 +109,8 @@ def detail(p: Project) -> ProjectDetail:
         consent_policy_version=p.consent_policy_version,
         consent_text=p.consent_text,
         qc_final_approval=p.qc_final_approval,
+        max_conversations_per_speaker=p.max_conversations_per_speaker,
+        unique_pairs=p.unique_pairs,
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -152,6 +156,9 @@ class ProjectBody(BaseModel):
     consent_policy_version: str = Field(default="1", min_length=1, max_length=50)
     consent_text: str = Field(default="", max_length=20_000)
     qc_final_approval: bool = False
+    # Task rules (D-143): null = no limit on conversations per speaker.
+    max_conversations_per_speaker: int | None = Field(default=3, ge=1, le=1000)
+    unique_pairs: bool = True
 
     def to_input(self) -> service.ProjectInput:
         return service.ProjectInput(**self.model_dump())

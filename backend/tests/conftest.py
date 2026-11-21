@@ -249,7 +249,16 @@ def make_user(
     return user
 
 
-def make_project(db: Any, code: str, status: str = "ACTIVE") -> Any:
+def make_project(
+    db: Any,
+    code: str,
+    status: str = "ACTIVE",
+    *,
+    max_conversations_per_speaker: int | None = None,
+    unique_pairs: bool = False,
+) -> Any:
+    """A project. Its pairing rules (D-143) are off unless asked for: many tests make several
+    tasks with the same two people; tests/test_pairing_rules.py turns them on."""
     from app.modules.projects.models import Project
 
     project = Project(
@@ -258,6 +267,8 @@ def make_project(db: Any, code: str, status: str = "ACTIVE") -> Any:
         status=status,
         allows_telephony=True,
         allows_face_to_face=True,
+        max_conversations_per_speaker=max_conversations_per_speaker,
+        unique_pairs=unique_pairs,
     )
     db.add(project)
     db.commit()
@@ -319,6 +330,25 @@ def agree(api: Api, project_id: Any, participant_id: Any) -> None:
         db.commit()
 
 
+# Complete speaker details (D-143): a task is made only for people who have them all.
+SPEAKER_DETAILS: dict[str, Any] = {
+    "age": 34,
+    "gender": "FEMALE",
+    "current_state": "Goa",
+    "current_district": "North Goa",
+    "current_pincode": "403001",
+    "native_state": "Goa",
+    "district": "North Goa",
+    "native_pincode": "403601",
+    "native_language": "Konkani",
+    "education": "BACHELORS",
+    "education_medium": "ENGLISH",
+    "recording_state": "Goa",
+    "recording_district": "North Goa",
+    "recording_pincode": "403001",
+}
+
+
 def make_participant(
     api: Api,
     project_id: Any,
@@ -327,13 +357,15 @@ def make_participant(
     lang: str = "hi",
     *,
     agreed: bool = True,
+    speaker: dict[str, Any] | None = None,
 ) -> Any:
     """A new participant of the project who, unless `agreed` is False, agreed to its consent
-    form."""
+    form, with complete speaker details unless `speaker` gives others (D-143)."""
     body: dict[str, Any] = {
         "display_label": label,
         "language_code": lang,
         "email": email_for(label),
+        **(SPEAKER_DETAILS if speaker is None else speaker),
     }
     if phone:
         body["phone"] = phone

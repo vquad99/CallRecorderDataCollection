@@ -4,13 +4,36 @@ import { ApiError, apiRequest, query, type Page } from "./client";
 
 export type { TaskStatus };
 
-export interface Participant {
+/** Speaker details (D-143), the same in every project; null = not given (or not shown to this
+ * user). The native district is the participant's `district`. */
+export interface SpeakerDetails {
+  age: number | null;
+  gender: string | null;
+  current_state: string | null;
+  current_district: string | null;
+  current_pincode: string | null;
+  native_state: string | null;
+  native_pincode: string | null;
+  native_language: string | null;
+  education: string | null;
+  education_medium: string | null;
+  recording_state: string | null;
+  recording_district: string | null;
+  recording_pincode: string | null;
+}
+
+export interface Participant extends Partial<SpeakerDetails> {
   id: string;
   participant_code: string;
   language_code: string;
   dialect: string;
-  /** Where the participant lives (D-121); empty when not given. */
+  /** The native district (D-121, D-143); empty when not given. */
   district?: string;
+  /** Every speaker detail is given: a task needs it (D-143). */
+  speaker_details_complete?: boolean;
+  /** In the list, for people who make tasks: conversations that count toward the project's
+   * per-speaker limit, and who they are already paired with (D-143). */
+  pairing?: { conversations: number; paired_with: string[] } | null;
   display_label: string | null;
   /** The number, or a masked one ("••••••3210") for people who may not see it in full. */
   phone: string | null;
@@ -47,11 +70,12 @@ export interface ParticipantMinutes {
   payable_minutes: number;
 }
 
-export interface ParticipantFields {
+export interface ParticipantFields extends SpeakerDetails {
   display_label: string;
   phone: string | null;
   language_code: string;
   dialect: string;
+  /** The native district (D-143). */
   district: string;
   notes: string;
   /** Not sent = keep the stored address; empty = remove it. */

@@ -9,6 +9,7 @@ import {
   ADMIN_EMAIL,
   api,
   emailedConsentLink,
+  fillSpeakerDetails,
   requireSetup,
   runCode,
   SEEDED,
@@ -44,6 +45,7 @@ test("a participant answers the consent form on their personal page", async ({
     await form.getByLabel(/^Name or label/).fill(name);
     await form.getByLabel(/^Email address/).fill(email);
     await form.getByLabel(/^Language/).selectOption("hi");
+    await fillSpeakerDetails(form); // every one, for someone new (D-143)
     await form.getByRole("button", { name: "Add participant" }).click();
     await expect(page.getByText(/^P\d{6} added\. Consent form emailed\.$/)).toBeVisible();
     // Staff cannot make or see the participant's link: it is in the participant's email only.

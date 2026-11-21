@@ -1,14 +1,26 @@
-// Requirements: PART-001, PART-008, PART-009, PART-012
+// Requirements: PART-001, PART-005, PART-008, PART-009, PART-012
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { SPEAKER_DETAILS, SPEAKER_INPUT } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
 // What the server says once someone joins a project: the form went out by itself (D-129).
 const EMAILED = "Consent form emailed.";
+
+type Box = ReturnType<typeof within>;
+const labelled = (form: Box, label: string) => form.getByLabelText(new RegExp(`^${label}( \\*)?$`));
+
+/** Every speaker detail, as a person fills them in for someone new (D-143). */
+async function fillSpeakerDetails(form: Box) {
+  for (const f of SPEAKER_INPUT) {
+    if (f.list) await userEvent.selectOptions(labelled(form, f.label), f.value);
+    else await userEvent.type(labelled(form, f.label), f.value);
+  }
+}
 
 const project = {
   id: "p1",
@@ -137,17 +149,20 @@ describe("participants tab", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
     const form = within(screen.getByRole("dialog", { name: "Add participant" }));
     await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.type(form.getByLabelText(/Email address/), "chitra@example.org");
     await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    await fillSpeakerDetails(form);
     await userEvent.click(form.getByRole("button", { name: "Add participant" }));
     expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       display_label: "Chitra",
       phone: null,
+      email: "chitra@example.org",
       language_code: "hi",
       dialect: "",
-      district: "",
       notes: "",
+      ...SPEAKER_DETAILS,
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -181,7 +196,9 @@ describe("participants tab", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
     const form = within(screen.getByRole("dialog", { name: "Add participant" }));
     await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.type(form.getByLabelText(/Email address/), "chitra@example.org");
     await userEvent.selectOptions(form.getByLabelText(/^Language/), "ta");
+    await fillSpeakerDetails(form);
     await userEvent.type(form.getByLabelText(/Phone number/), "98765-4");
     expect(form.getByText("Type exactly 10 digits (you typed 6).")).toBeInTheDocument();
     expect(form.getByRole("button", { name: "Add participant" })).toBeDisabled();
@@ -301,5 +318,151 @@ describe("participants tab", () => {
       phone: null,
       email: "asha@example.org",
     });
+  });
+
+  it("needs every speaker detail for someone new and says what is wrong (D-143)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+        "POST /api/v1/projects/p1/participants": () => [
+          201,
+          { ...asha, id: "c1", participant_code: "P000003", consent_email: EMAILED },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
+    const form = within(screen.getByRole("dialog", { name: "Add participant" }));
+    const add = form.getByRole("button", { name: "Add participant" });
+    await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
+    await userEvent.type(form.getByLabelText(/Email address/), "chitra@example.org");
+    await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    expect(form.getByRole("group", { name: "Speaker details" })).toBeInTheDocument();
+    // Short fields side by side; every one is required.
+    for (const f of SPEAKER_INPUT) expect(labelled(form, f.label)).toBeRequired();
+    expect(labelled(form, "Current state").closest(".form-grid")).toContainElement(
+      labelled(form, "Current PIN code"),
+    );
+    // The states of India, the education levels and the two media, in words.
+    const states = within(labelled(form, "Native state")).getAllByRole("option");
+    expect(states).toHaveLength(37);
+    expect(states.map((o) => o.textContent)).toContain("Dadra and Nagar Haveli and Daman and Diu");
+    expect(
+      within(labelled(form, "Education"))
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual([
+      "Choose",
+      "Primary School",
+      "Secondary School",
+      "Higher Secondary",
+      "Diploma",
+      "Bachelor's Degree",
+      "Master's Degree",
+      "PhD",
+      "Other",
+    ]);
+    expect(
+      within(labelled(form, "Medium of education"))
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Choose", "English", "Non-English"]);
+    expect(add).toBeDisabled();
+    await fillSpeakerDetails(form);
+    expect(add).toBeEnabled();
+    // A wrong age or PIN code is said under the box and stops the form.
+    await userEvent.clear(labelled(form, "Age"));
+    await userEvent.type(labelled(form, "Age"), "61");
+    expect(form.getByText("Age must be a whole number from 20 to 60.")).toBeInTheDocument();
+    expect(add).toBeDisabled();
+    await userEvent.clear(labelled(form, "Age"));
+    await userEvent.type(labelled(form, "Age"), "20");
+    await userEvent.clear(labelled(form, "Native PIN code"));
+    await userEvent.type(labelled(form, "Native PIN code"), "0a12345");
+    expect(labelled(form, "Native PIN code")).toHaveValue("012345");
+    expect(
+      form.getByText("Type the 6 digits of the PIN code; it cannot start with 0."),
+    ).toBeInTheDocument();
+    expect(add).toBeDisabled();
+    await userEvent.clear(labelled(form, "Native PIN code"));
+    await userEvent.type(labelled(form, "Native PIN code"), "403601");
+    await userEvent.click(add);
+    expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      ...SPEAKER_DETAILS,
+      age: 20,
+    });
+  });
+
+  it("saves someone added before without speaker details and says what is missing (D-143)", async () => {
+    const old = {
+      ...asha,
+      email: "asha@example.org",
+      has_email: true,
+      district: "Pune",
+      age: 41,
+      speaker_details_complete: false,
+    };
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [old], total: 1, page: 1, page_size: 25 },
+        ],
+        "PATCH /api/v1/projects/p1/participants/a1": () => [200, old],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const form = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    expect(labelled(form, "Age")).toHaveValue(41);
+    expect(labelled(form, "Native district")).toHaveValue("Pune");
+    expect(labelled(form, "Gender")).not.toBeRequired();
+    expect(form.getByRole("status")).toHaveTextContent(
+      "Missing: Gender, Current state, Current district, Current PIN code, Native state, " +
+        "Native PIN code, Native language, Education, Medium of education, Recording state, " +
+        "Recording district, Recording PIN code.",
+    );
+    await userEvent.selectOptions(labelled(form, "Gender"), "MALE");
+    expect(form.getByRole("status")).not.toHaveTextContent("Gender,");
+    await userEvent.click(form.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("P000001 saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+      age: 41,
+      gender: "MALE",
+      district: "Pune",
+      current_state: null,
+      recording_pincode: null,
+    });
+  });
+
+  it("marks people whose speaker details are missing (D-143)", async () => {
+    fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          {
+            items: [
+              { ...asha, speaker_details_complete: true },
+              { ...hidden, display_label: "Bina", speaker_details_complete: false },
+            ],
+            total: 2,
+            page: 1,
+            page_size: 25,
+          },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    const missing = (await screen.findByText("P000002")).closest("tr") as HTMLElement;
+    expect(within(missing).getByText("Details missing")).toBeInTheDocument();
+    const complete = screen.getByText("P000001").closest("tr") as HTMLElement;
+    expect(within(complete).queryByText("Details missing")).toBeNull();
   });
 });

@@ -80,7 +80,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 |---|---|---|
 | GET | /projects | member. Newest first (D-105) |
 | POST | /projects | `projects.create` |
-| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138) |
+| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138). Includes `max_conversations_per_speaker` (1 to 1000, default 3, null = no limit) and `unique_pairs` (default true); POST and PATCH take them (D-143) |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
@@ -91,7 +91,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks. POST answers the participant with `consent_email` (D-129) |
+| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks. POST answers the participant with `consent_email` (D-129). Rows carry the speaker details, `speaker_details_complete` and, for people with `tasks.assign`, `pairing` (D-143) |
 | POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code); answers with `consent_email` (D-129) |
 | GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
@@ -102,7 +102,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100). POST: both participants must have agreed to the project's consent form, else 422 `CONSENT_REQUIRED` naming them ("P000009 and P000010 have not agreed to this project's consent form yet.", `details[0].participants`, D-129) |
+| GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100). POST: both participants must have agreed to the project's consent form, else 422 `CONSENT_REQUIRED` naming them ("P000009 and P000010 have not agreed to this project's consent form yet.", `details[0].participants`, D-129), and be within the project's pairing rules: 422 `SPEAKER_DETAILS_MISSING`, 409 `SPEAKER_LIMIT_REACHED`, 409 `PAIR_ALREADY_USED` (D-143) |
 | GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has not agreed to the project's consent form (D-119, D-129) |
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment); 409 `CONSENT_REQUIRED` while a participant has not agreed to the consent form (D-129) |
@@ -275,7 +275,7 @@ history, `captured_by` is `null` for the participant's own answers.
 
 | GET | /recordings/{id}/consent-form | `recordings.download` in the project and the task visible. A printable HTML consent record for the recording, as an attachment (D-068). |
 | POST | /projects/{id}/participants/{id}/portal-link/email | `participants.manage`. Creates a fresh link and emails it to the participant; answers `{sent, expires_at}`; 409 `NO_EMAIL`; 409 `EMAILED_RECENTLY` within 10 minutes of the last email of this project's link (D-142; joining, import and bulk rows say "Emailed less than 10 minutes ago: not sent again."). A link whose email could not be sent is ended at once. Staff never get the link itself: the old `POST .../portal-link` that answered `{url}` is removed (405, D-142). Participants carry `email` (contact viewers only) and `has_email`; create/correct accept `email` (omitted = keep, empty = remove). |
-| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]`; answers each row's result, `ready`, `created`; an added row's message says what happened to the consent form email (D-129). Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
+| POST | /projects/{id}/participants/import | `participants.manage`. `{csv, confirm}`; columns `name,phone,email,language,dialect[,district]` and the speaker details (D-143); answers each row's result, `ready`, `created`; an added row's message says what happened to the consent form email (D-129). Participants carry `district` (free text, at most 100) on create, correct and read (D-121) |
 | POST | /projects/{id}/participants/bulk | `participants.manage`. `{action: assign / remove, participant_ids (1-200), target_project_id?, reason?}`; answers each participant's result (an assigned one's message says what happened to the other project's consent form email, D-129). Participants carry `consent_status` (their answer as it counts now; `NONE` = no answer yet) and `link_active` for callers who may see consent. |
 | GET | /projects/{id}/participants/{id}/consent-form | `consent.view`, same rule as consent history. The form text answered, version, current answer, earlier answers. |
 | GET | /projects/{id}/participants/{id}/consent-form/file | Same access. The same as a printable HTML attachment (audited). |
@@ -305,3 +305,37 @@ Everyone who joins a project (added, added from a file, added as an existing par
 ## Bulk consent form again (D-139)
 
 `POST /projects/{id}/participants/bulk` also takes `action: send_consent`: everyone listed who has not agreed gets this project's consent form again (in the background); people who agreed get `ok: false` with "Already agreed: no form sent".
+
+## Speaker details and pairing rules (D-143)
+
+**Speaker details.** Participants carry these fields on create (`POST /projects/{id}/participants`), correct (`PATCH .../participants/{pid}`), list rows, `GET .../participants/{pid}` and `.../details`. Each may be null (people saved before D-143 have none); a value that is given is checked, else 422 `INVALID_SPEAKER_DETAILS` with the message and `details: [{"field": "<name>"}]`:
+
+| Field | Value |
+|---|---|
+| `age` | whole number, 20 to 60 |
+| `gender` | `MALE`, `FEMALE` |
+| `current_state`, `native_state`, `recording_state` | one of the 28 states and 8 union territories of India, written in full (any case; answered as the list writes it) |
+| `current_district`, `recording_district` | free text, at most 100 |
+| `district` | the native district (D-121): free text, at most 100; empty string when not given |
+| `current_pincode`, `native_pincode`, `recording_pincode` | 6 digits, the first not 0 (spaces are dropped) |
+| `native_language` | free text, at most 50 (e.g. `Konkani`) |
+| `education` | `PRIMARY`, `SECONDARY`, `HIGHER_SECONDARY`, `DIPLOMA`, `BACHELORS`, `MASTERS`, `PHD`, `OTHER` |
+| `education_medium` | `ENGLISH`, `NON_ENGLISH` |
+
+Codes are taken in any case, with spaces or hyphens for underscores (`higher secondary`, `non-english`). On PATCH a field left out keeps its stored value; null (or an empty string) removes it. They are shown like the name: to people who manage participants in the project and to the moderator of an open task with the person; everyone else gets null, except `district` (shown as before). Every row also carries `speaker_details_complete` (all of the fields above are given), for everyone who sees the row. Removing a participant removes them. The correction's audit entry names the fields that changed (`speaker_details_changed`), not their values.
+
+**File import.** `POST .../participants/import` takes, after `district`, the columns `age,gender,current_state,current_district,current_pincode,native_state,native_pincode,native_language,education,education_medium,recording_state,recording_district,recording_pincode` (any of them may be left out of the file or empty). A value that is given is checked as above and a wrong one fails its row with the same message. A row without every detail is added; its message says `Ready to add (speaker details missing: add them with Edit before making tasks)` and `Added (...)`.
+
+**Project options.** `projects.max_conversations_per_speaker` (integer 1 to 1000, default 3, null = no limit) and `projects.unique_pairs` (boolean, default true) on `GET`, `POST` and `PATCH /projects/{id}` (migration 0033 gives every existing project 3 and true). A PATCH that leaves them out sets the defaults, like the other project fields.
+
+**Task rules.** `POST /tasks` and every row of `POST /tasks/import` (the check counts the rows above it) refuse, in this order:
+
+| Code | Status | When |
+|---|---|---|
+| `SPEAKER_DETAILS_MISSING` | 422 | A participant lacks a speaker detail: "Participant P000123 has no complete speaker details yet: add them with Edit." (`details[0].participants`) |
+| `SPEAKER_LIMIT_REACHED` | 409 | A participant already has `max_conversations_per_speaker` conversations in the project: "Participant P000123 already has 3 conversations in this project, the most for one speaker." (`details[0].participants`, `details[0].limit`) |
+| `PAIR_ALREADY_USED` | 409 | With `unique_pairs`, the two (either way round) already share a task: "P000123 and P000124 already have a conversation together in this project (T000045): each pair of speakers only once." (`details[0].participants`, `details[0].task`) |
+
+A conversation counts while its task is not `CANCELLED` or `REJECTED`; a deleted task counts for nothing. Tasks made before stay as they are.
+
+**Pairing on the list.** For callers with `tasks.assign` in the project, each row of `GET /projects/{id}/participants` carries `pairing: {conversations, paired_with}`: the conversations that count toward the limit, and the ids of the participants they already share one with. Null elsewhere (one participant's own answer, other callers).

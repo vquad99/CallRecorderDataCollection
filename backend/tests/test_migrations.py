@@ -74,6 +74,18 @@ def _project_row(db: Any, code: str) -> Any:
     ).scalar_one()
 
 
+def _participant_row(db: Any, code: str) -> Any:
+    """A participant written as SQL, like _project_row: the participants table as it was at an
+    older revision (speaker details came with 0033)."""
+    return db.execute(
+        text(
+            "INSERT INTO participants (participant_code, display_label, language_code) "
+            "VALUES (:code, 'x', 'hi') RETURNING id"
+        ),
+        {"code": code},
+    ).scalar_one()
+
+
 def test_returned_tasks_leave_the_removed_status(test_database_url: str) -> None:
     """0026 (D-118): a task still at RETURNED goes back to ASSIGNED (DRAFT when nobody records
     it), with a history entry by the platform; a task on hold from RETURNED resumes there too."""
@@ -146,7 +158,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
     every role (and comes back on downgrade)."""
     from sqlalchemy.orm import Session
 
-    from app.modules.participants.models import ConsentRecord, Participant
+    from app.modules.participants.models import ConsentRecord
 
     grants = (
         "SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id "
@@ -165,13 +177,7 @@ def test_answers_waiting_for_review_are_accepted(test_database_url: str) -> None
                 "RETURNING id"
             )
         ).scalar_one()
-        people = [
-            Participant(participant_code=f"P90000{i}", display_label="x", language_code="hi")
-            for i in (1, 2, 3)
-        ]
-        db.add_all(people)
-        db.flush()
-        ids = [p.id for p in people]
+        ids = [_participant_row(db, f"P90000{i}") for i in (1, 2, 3)]
         for pid, review, staff in zip(
             ids, ("PENDING", "REJECTED", "PENDING"), (None, None, staff_id), strict=True
         ):
@@ -329,4 +335,58 @@ def test_payments_and_the_qc_final_approval_option_come_and_go(test_database_url
         assert "payment_rates" not in inspect(conn).get_table_names()
         columns = {c["name"] for c in inspect(conn).get_columns("projects")}
         assert "qc_final_approval" not in columns
+    engine.dispose()
+
+
+def test_speaker_details_and_pairing_rules_come_and_go(test_database_url: str) -> None:
+    """0033 (D-143): people saved before have no speaker details; the codes, the age range and
+    PIN codes are kept valid by the database too; every project gets at most 3 conversations per
+    speaker and each pair once; going back removes them."""
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0032")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+        person_id = _participant_row(conn, "P900001")
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        rules = conn.execute(
+            text("SELECT max_conversations_per_speaker, unique_pairs FROM projects WHERE id = :p"),
+            {"p": project_id},
+        ).one()
+        assert tuple(rules) == (3, True)
+        person = conn.execute(
+            text("SELECT age, gender, native_state, recording_pincode, district FROM participants")
+        ).one()
+        assert tuple(person) == (None, None, None, None, "")
+        conn.execute(
+            text(
+                "UPDATE participants SET age = 60, gender = 'FEMALE', education = 'PHD', "
+                "education_medium = 'NON_ENGLISH', current_pincode = '403001' WHERE id = :p"
+            ),
+            {"p": person_id},
+        )
+    for column, bad in (
+        ("age", 19),
+        ("age", 61),
+        ("gender", "OTHER"),
+        ("education", "SCHOOL"),
+        ("education_medium", "HINDI"),
+        ("native_pincode", "012345"),
+        ("recording_pincode", "40300"),
+        ("current_pincode", "40300A"),
+    ):
+        update = text("UPDATE participants SET " + column + " = :v")  # noqa: S608 - fixed names
+        with pytest.raises(Exception, match="ck_participants_"), engine.begin() as conn:
+            conn.execute(update, {"v": bad})
+    with pytest.raises(Exception, match="max_conversations_range"), engine.begin() as conn:
+        conn.execute(text("UPDATE projects SET max_conversations_per_speaker = 0"))
+    command.downgrade(cfg, "0032")
+    with engine.begin() as conn:
+        people = {c["name"] for c in inspect(conn).get_columns("participants")}
+        projects = {c["name"] for c in inspect(conn).get_columns("projects")}
+    assert {"age", "recording_pincode"}.isdisjoint(people)
+    assert "district" in people
+    assert {"max_conversations_per_speaker", "unique_pairs"}.isdisjoint(projects)
     engine.dispose()

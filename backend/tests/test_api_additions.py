@@ -179,7 +179,10 @@ def test_everyone_who_joins_a_project_is_emailed_its_consent_form(
         f"{base}/import",
         json={"csv": "name,email,language\nDevi,devi@example.org,hi\n", "confirm": True},
     ).json()
-    assert imported["rows"][0]["message"] == "Added. Consent form emailed."
+    assert imported["rows"][0]["message"] == (
+        "Added (speaker details missing: add them with Edit before making tasks). "
+        "Consent form emailed."
+    )
     linked = pa.post(f"{base}/link", json={"participant_code": existing["participant_code"]})
     assert linked.status_code == 201, linked.text
     assert linked.json()["consent_email"] == "Consent form emailed."

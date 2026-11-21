@@ -25,15 +25,18 @@ from app.core.errors import AppError, not_found
 from app.core.permissions import Perm
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher
-from app.modules.participants import consent, service
+from app.modules.participants import consent, service, speakers
 from app.modules.participants.models import ParticipantPortalLink
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 
 MAX_IMPORT_ROWS = 500
 MAX_BULK = 200
-COLUMNS = ("name", "phone", "email", "language", "dialect", "district")
+# The speaker details (D-143) after the first six; `district` is the native district.
+SPEAKER_COLUMNS = tuple(name for name in speakers.FIELDS if name != "district")
+COLUMNS = ("name", "phone", "email", "language", "dialect", "district", *SPEAKER_COLUMNS)
 ALREADY_AGREED = "Already agreed: no form sent"
+DETAILS_MISSING = "speaker details missing: add them with Edit before making tasks"
 _LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 
 
@@ -62,8 +65,9 @@ def import_csv(
     ip: str | None,
 ) -> list[RowResult]:
     """Check every row; with confirm, create the rows that passed. Header: name,phone,email,
-    language,dialect[,district] (phone, dialect and district may be empty; email may not,
-    D-128)."""
+    language,dialect[,district and the speaker details] (phone, dialect and the speaker details
+    may be empty; email may not, D-128). A speaker detail that is given is checked as on the form
+    (D-143); a row without all of them is added, and its result says they are missing."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     rows = read_rows(
         text,
@@ -96,10 +100,13 @@ def import_csv(
             if not row.get("email"):
                 raise _bad("Email is missing")
             clean_email(row["email"])
-            if len(row.get("district", "")) > 100:
-                raise _bad("District is too long")
+            given = {field: row.get(field, "") for field in speakers.FIELDS}
+            details = speakers.clean_all(given)
+            ready, added = "Ready to add", "Added"
+            if any(value is None for value in details.values()):
+                ready, added = f"{ready} ({DETAILS_MISSING})", f"{added} ({DETAILS_MISSING})"
             if not confirm:
-                results.append(RowResult(i, name, True, "Ready to add"))
+                results.append(RowResult(i, name, True, ready))
                 continue
             created = service.create_participant(
                 db,
@@ -114,11 +121,11 @@ def import_csv(
                     dialect=row.get("dialect", ""),
                     notes="",
                     email=row.get("email") or None,
-                    district=row.get("district", ""),
+                    speaker=given,
                 ),
                 ip,
             )
-            results.append(RowResult(i, name, True, "Added", created.participant_code, created.id))
+            results.append(RowResult(i, name, True, added, created.participant_code, created.id))
         except AppError as exc:
             db.rollback()
             results.append(RowResult(i, name, False, exc.message))

@@ -1,4 +1,4 @@
-// Participants section (D-073, D-129). Requirements: PART-006, PART-016
+// Participants section (D-073, D-129). Requirements: PART-005, PART-006, PART-016
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -270,6 +270,19 @@ describe("participants section", () => {
     await openList();
     await screen.findByText("P000001", {}, wait);
     await userEvent.click(screen.getByRole("button", { name: "Add many" }));
+    // The file's columns include the speaker details (D-143); district is the native district.
+    const columns =
+      "name,phone,email,language,dialect,district,age,gender,current_state,current_district," +
+      "current_pincode,native_state,native_pincode,native_language,education,education_medium," +
+      "recording_state,recording_district,recording_pincode";
+    expect(screen.getByText(columns)).toBeInTheDocument();
+    expect(screen.getByLabelText("Participants (CSV)")).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(
+        new RegExp(`^${columns}
+`),
+      ),
+    );
     await userEvent.type(screen.getByLabelText("Participants (CSV)"), "name,language");
     expect(screen.getByRole("button", { name: "Add 0 participants" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Check rows" }));
@@ -308,6 +321,16 @@ describe("participants section", () => {
     expect(panel).toHaveTextContent("Added byPriya Admin");
     expect(panel).toHaveTextContent("ProjectsHINDI · Hindi conversations, TAMIL · Tamil talks");
     expect(panel).toHaveTextContent("NotesPrefers evening calls");
+    // Speaker details (D-143), in words.
+    expect(panel).toHaveTextContent("Speaker detailsComplete");
+    expect(panel).toHaveTextContent("Age34");
+    expect(panel).toHaveTextContent("GenderFemale");
+    expect(panel).toHaveTextContent("Lives inNorth Goa, Goa 403001");
+    expect(panel).toHaveTextContent("Native placeSalcete, Goa 403601");
+    expect(panel).toHaveTextContent("Native languageKonkani");
+    expect(panel).toHaveTextContent("EducationBachelor's Degree, English medium");
+    expect(panel).toHaveTextContent("Recorded inNorth Goa, Goa 403001");
+    expect(within(panel).queryByText("Details missing")).toBeNull();
     // Work: minutes and the phone calls made to them.
     expect(panel).toHaveTextContent("Sessions2");
     expect(panel).toHaveTextContent("Payable minutes3.5 min");
@@ -354,6 +377,12 @@ describe("participants section", () => {
         200,
         {
           ...DETAILS,
+          participant: {
+            ...DETAILS.participant,
+            age: null,
+            native_language: null,
+            speaker_details_complete: false,
+          },
           link: null,
           calls: null,
           minutes: null,
@@ -374,6 +403,9 @@ describe("participants section", () => {
       within(panel).getByText("This participant has not been part of a session yet."),
     ).toBeInTheDocument();
     expect(panel).toHaveTextContent("Phone calls to them0");
+    // Speaker details still missing (D-143): said at the top and in the profile.
+    expect(within(panel).getByText("Details missing")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Speaker detailsMissing: Age, Native language");
     expect(panel).not.toHaveTextContent("Payable minutes");
     expect(within(panel).queryByRole("heading", { name: "Consent form" })).toBeNull();
     expect(within(panel).queryByRole("button", { name: "Download consent form" })).toBeNull();

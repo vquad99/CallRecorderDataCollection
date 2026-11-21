@@ -125,6 +125,10 @@ class ProjectInput:
     # A QC pass approves the task, with no admin review (D-138). Tasks already waiting for admin
     # review stay there when this changes.
     qc_final_approval: bool = False
+    # Task rules (D-143): at most this many conversations per speaker (None = no limit), and
+    # each pair of speakers only once. They apply to tasks made from now on.
+    max_conversations_per_speaker: int | None = 3
+    unique_pairs: bool = True
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -154,6 +158,8 @@ def _snapshot(p: Project) -> dict[str, object]:
         "consent_policy_version": p.consent_policy_version,
         "consent_text": p.consent_text,
         "qc_final_approval": p.qc_final_approval,
+        "max_conversations_per_speaker": p.max_conversations_per_speaker,
+        "unique_pairs": p.unique_pairs,
     }
 
 

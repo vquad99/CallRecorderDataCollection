@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import text
 
 from tests import test_audio_qc, test_export_jobs, test_telephony
-from tests.conftest import Api, agree, make_user, set_status
+from tests.conftest import SPEAKER_DETAILS, Api, agree, make_user, set_status
 
 pytestmark = pytest.mark.db
 
@@ -44,11 +44,14 @@ def board(w: dict[str, Any]) -> dict[str, Any]:
                 "display_label": name,
                 "language_code": "ta",
                 "dialect": dialect,
-                "district": district,
                 "email": f"{name.lower()}@example.org",
+                # Complete speaker details, needed for a task (D-143); the native district is
+                # the one the dashboard filters by (D-121).
+                **SPEAKER_DETAILS,
+                "district": "Madurai",
             },
         ).json()
-        for name, dialect, district in (("Chitra", "Madurai", "Madurai"), ("Devi", "", ""))
+        for name, dialect in (("Chitra", "Madurai"), ("Devi", ""))
     ]
     for person in people:  # a task is only for people who agreed (D-129)
         agree(pa, pid, person["id"])
@@ -244,8 +247,10 @@ def test_filters_narrow_every_figure(board: dict[str, Any]) -> None:
     assert figures(dialect="Madurai") == (0.5, 1, 1)
     assert figures(language="hi", dialect="Madurai") == (0.0, 0, 0)
     assert figures(language="bn") == (0.0, 0, 0)  # nobody speaks it here: empty, not an error
-    # District of the people in the conversation (D-121).
+    # Native district of the people in the conversation (D-121, D-143); the others are from
+    # North Goa (tests.conftest.SPEAKER_DETAILS).
     assert figures(district="Madurai") == (0.5, 1, 1)
+    assert figures(district="North Goa") == (3.5, 2, 2)
     assert figures(district="Pune") == (0.0, 0, 0)
     # Status of the task.
     assert figures(status="APPROVED") == (0.5, 1, 1)
@@ -268,7 +273,7 @@ def test_filters_narrow_every_figure(board: dict[str, Any]) -> None:
     options = get(b)["options"]
     assert options["languages"] == ["hi", "ta"]
     assert options["dialects"] == ["Madurai"]
-    assert options["districts"] == ["Madurai"]
+    assert options["districts"] == ["Madurai", "North Goa"]
     assert sorted(s["name"] for s in options["staff"]) == ["mod", "mod2"]
 
     # What makes no sense is refused.
@@ -343,7 +348,7 @@ def test_filters_respect_who_is_asking(board: dict[str, Any]) -> None:
     assert seen["options"] == {
         "languages": ["hi", "ta"],
         "dialects": ["Madurai"],
-        "districts": ["Madurai"],
+        "districts": ["Madurai", "North Goa"],
     }
     assert seen["team"] is None
     assert seen["calls"] is None

@@ -12,7 +12,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, ME, renderAt, signedInAs, type Handler } from "../test/fakeApi";
-import { ALL_PERMISSIONS, PROJECT, RATES, TASK, USER, worldHandlers } from "../test/world";
+import {
+  ALL_PERMISSIONS,
+  PROJECT,
+  RATES,
+  SPEAKER_DETAILS,
+  SPEAKER_INPUT,
+  TASK,
+  USER,
+  worldHandlers,
+} from "../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -321,11 +330,22 @@ const FORMS: Record<string, FormSpec> = {
     url: "/projects/p1/participants",
     ready: /P000002/,
     open: [click("Add participant")],
-    fill: [type("Name or label", "Chandra"), choose("Language", "hi")],
+    fill: [
+      type("Name or label", "Chandra"),
+      type("Email address", "chandra@example.org"),
+      choose("Language", "hi"),
+      // Every speaker detail for someone new (D-143).
+      ...SPEAKER_INPUT.map((f) => (f.list ? choose : type)(f.label, f.value)),
+    ],
     submit: "Add participant",
     write: "POST /api/v1/projects/p1/participants",
     reply: [201, { ...PROJECT, id: "c1" }],
-    body: { display_label: "Chandra", language_code: "hi" },
+    body: {
+      display_label: "Chandra",
+      email: "chandra@example.org",
+      language_code: "hi",
+      ...SPEAKER_DETAILS,
+    },
     kept: "Name or label",
   },
   "edit participant": {

@@ -3,7 +3,13 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getProject, listMembers, listProjects } from "../../api/projects";
-import { createTask, importTasks, listParticipants, type TaskImportResult } from "../../api/work";
+import {
+  createTask,
+  importTasks,
+  listParticipants,
+  type Participant,
+  type TaskImportResult,
+} from "../../api/work";
 import { BackLink } from "../../components/BackLink";
 import { Button } from "../../components/form/Button";
 import { Icon } from "../../components/Icon";
@@ -46,9 +52,11 @@ function BulkTasks({ projectId }: { projectId: string }) {
       <p className="muted">
         Paste rows or choose a CSV file, one task per line. First line:{" "}
         <code>participant_a,participant_b,mode,priority,due_date,moderator</code>. Write
-        participants by their code (P000001); both must have agreed to the consent form. Mode,
-        priority, due date (YYYY-MM-DD) and moderator (their email) may be empty; with a moderator
-        the task is assigned at once. Check the rows first; only rows without a problem are added.
+        participants by their code (P000001); both must have agreed to the consent form and have
+        complete speaker details, and the project&apos;s limits on conversations per speaker and
+        pairs apply, counting the rows above. Mode, priority, due date (YYYY-MM-DD) and moderator
+        (their email) may be empty; with a moderator the task is assigned at once. Check the rows
+        first; only rows without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-tasks-csv" className="field__label">
@@ -184,10 +192,36 @@ export function TaskCreatePage() {
   const listed = people.state.status === "loaded" ? people.state.data : null;
   // A task is only for people who agreed to the project's consent form (D-129).
   const agreed = (listed?.items ?? []).filter((p) => p.consent_status === "GIVEN");
-  const options = agreed.map((p) => ({
-    value: p.id,
-    label: `${p.participant_code}${p.display_label ? ` ${p.display_label}` : ""}${p.has_phone ? "" : " (no phone)"}`,
-  }));
+  // The project's pairing rules (D-143): who cannot be chosen is shown greyed out, with why. A is
+  // chosen first; B's list also leaves out who already had a conversation with that A. The server
+  // checks again when the task is made.
+  const limit = detail?.max_conversations_per_speaker ?? null;
+  const blocked = (p: Participant, chosenA = "") => {
+    const used = p.pairing?.conversations ?? 0;
+    if (p.speaker_details_complete === false) return "details missing";
+    if (limit !== null && used >= limit)
+      return `${used} ${used === 1 ? "conversation" : "conversations"} already`;
+    if (detail?.unique_pairs && chosenA && p.pairing?.paired_with.includes(chosenA))
+      return "already paired with the chosen A";
+    return "";
+  };
+  const option = (p: Participant, chosenA = "") => {
+    const why = blocked(p, chosenA);
+    return {
+      value: p.id,
+      label: `${p.participant_code}${p.display_label ? ` ${p.display_label}` : ""}${p.has_phone ? "" : " (no phone)"}${why ? ` – ${why}` : ""}`,
+      disabled: Boolean(why),
+    };
+  };
+  const optionsA = agreed.map((p) => option(p));
+  const optionsB = agreed.filter((p) => p.id !== a).map((p) => option(p, a));
+  const someBlocked = [...optionsA, ...optionsB].some((o) => o.disabled);
+  const chooseA = (next: string) => {
+    setA(next);
+    // B stays only while it may still be paired with the new A.
+    const chosenB = agreed.find((p) => p.id === b);
+    if (next === b || (chosenB && blocked(chosenB, next))) setB("");
+  };
   // A task needs two people: say so instead of showing two empty lists.
   const tooFew = listed && listed.total < 2 ? listed.total : null;
   const leftOut = listed !== null && listed.total > agreed.length;
@@ -271,18 +305,23 @@ export function TaskCreatePage() {
             <Select
               label="Participant A"
               value={a}
-              onChange={(e) => setA(e.target.value)}
-              options={[{ value: "", label: "Choose participant A" }, ...options]}
+              onChange={(e) => chooseA(e.target.value)}
+              options={[{ value: "", label: "Choose participant A" }, ...optionsA]}
             />
             <Select
               label="Participant B"
               value={b}
               onChange={(e) => setB(e.target.value)}
-              options={[
-                { value: "", label: "Choose participant B" },
-                ...options.filter((o) => o.value !== a),
-              ]}
+              options={[{ value: "", label: "Choose participant B" }, ...optionsB]}
             />
+            {someBlocked ? (
+              <p className="field__hint">
+                Greyed-out people cannot be chosen now; the reason is after their name. A task needs
+                complete speaker details
+                {limit === null ? "" : `, at most ${limit} conversations per speaker`}
+                {detail?.unique_pairs ? ", and each pair of speakers only once" : ""}.
+              </p>
+            ) : null}
             <Select
               label="Priority"
               value={priority}

@@ -6,7 +6,9 @@ the others and every row gets its own result. Check first (confirm=False), then 
 
 Columns: participant_a,participant_b,mode,priority,due_date,moderator
 - participant_a, participant_b: participant codes such as P000001 (required); both must have
-  agreed to the project's consent form (D-129), which the check already says.
+  agreed to the project's consent form (D-129) and be within the project's pairing rules (D-143:
+  complete speaker details, conversations per speaker, each pair once, counting the rows above),
+  which the check already says.
 - mode: face_to_face or telephony; empty = face_to_face, or the project's only mode.
 - priority: low, normal, high or urgent; empty = normal.
 - due_date: YYYY-MM-DD; may be empty.
@@ -31,7 +33,7 @@ from app.modules.auth.models import User
 from app.modules.participants.models import Participant, ParticipantProjectLink
 from app.modules.projects.models import Project
 from app.modules.projects.service import ensure_accepts_new_work, get_manageable
-from app.modules.tasks import service
+from app.modules.tasks import pairing, service
 
 MAX_IMPORT_ROWS = 500
 COLUMNS = ("participant_a", "participant_b", "mode", "priority", "due_date", "moderator")
@@ -127,6 +129,9 @@ def import_csv(
         noun="tasks",
     )
     results: list[RowResult] = []
+    # The project's conversations so far, and each row's once it passes, so the check sees what
+    # the rows above it will add (D-143).
+    counted = pairing.tally(db, project)
     for csv_row in rows:
         i, row = csv_row.line, csv_row.values
         pair = f"{row.get('participant_a', '')} + {row.get('participant_b', '')}"
@@ -138,6 +143,7 @@ def import_csv(
             if a.id == b.id:
                 raise _bad("Participant A and B must be different people")
             service.require_agreed(db, project.id, [a, b], status_code=422)
+            pairing.check(counted, a, b)
             mode = _mode(project, row.get("mode", ""))
             if mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
                 raise _bad("Telephony tasks need a phone number for both participants")
@@ -147,6 +153,7 @@ def import_csv(
             due_at = _due(row.get("due_date", ""))
             moderator = _moderator(db, project.id, row.get("moderator", ""))
             if not confirm:
+                counted.add(a.id, b.id, f"line {i} of this file")
                 results.append(RowResult(i, pair, True, "Ready to add"))
                 continue
             task = service.create_task(
@@ -162,6 +169,7 @@ def import_csv(
                 ),
                 ip,
             )
+            counted.add(a.id, b.id, task.task_code)
             message = "Added"
             if moderator is not None:
                 try:

@@ -43,6 +43,8 @@ export const EMPTY_FIELDS: ProjectFields = {
   consent_policy_version: "1",
   consent_text: SAMPLE_CONSENT_TEXT,
   qc_final_approval: false,
+  max_conversations_per_speaker: 3,
+  unique_pairs: true,
 };
 
 export function ProjectForm({
@@ -158,6 +160,37 @@ export function ProjectForm({
           <p id="qc-final-hint" className="field__hint">
             When ticked, a recording the QC Executive passes is approved at once. Tasks already
             waiting for admin review stay there.
+          </p>
+        </fieldset>
+        {/* Task rules (D-143): checked by the server whenever a task is made. */}
+        <fieldset className="field">
+          <legend className="field__label">Pairing speakers</legend>
+          <TextField
+            label="Conversations per speaker (at most)"
+            type="number"
+            min={1}
+            step={1}
+            hint="Cancelled and rejected tasks do not count. Leave empty for no limit."
+            value={f.max_conversations_per_speaker ?? ""}
+            onChange={(e) =>
+              set(
+                "max_conversations_per_speaker",
+                e.target.value ? Math.max(1, Math.trunc(Number(e.target.value))) : null,
+              )
+            }
+          />
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={f.unique_pairs}
+              aria-describedby="unique-pairs-hint"
+              onChange={(e) => set("unique_pairs", e.target.checked)}
+            />
+            Each pair of speakers only once
+          </label>
+          <p id="unique-pairs-hint" className="field__hint">
+            When ticked, two people who already share a task (not cancelled or rejected) cannot be
+            put on another one together. Tasks made before stay as they are.
           </p>
         </fieldset>
         <TextField

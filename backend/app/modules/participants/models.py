@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -31,12 +32,45 @@ ConsentMethod = Literal["VERBAL_RECORDED", "VERBAL_NOTED", "WRITTEN", "DIGITAL"]
 CONSENT_STATUSES: tuple[str, ...] = get_args(ConsentStatus)
 CONSENT_METHODS: tuple[str, ...] = get_args(ConsentMethod)
 
+# Speaker details (D-143): the codes and limits, which speakers.py checks with clear words and the
+# database keeps as constraints.
+MIN_AGE, MAX_AGE = 20, 60
+GENDER_CODES = ("MALE", "FEMALE")
+EDUCATION_CODES = (
+    "PRIMARY",
+    "SECONDARY",
+    "HIGHER_SECONDARY",
+    "DIPLOMA",
+    "BACHELORS",
+    "MASTERS",
+    "PHD",
+    "OTHER",
+)
+EDUCATION_MEDIUM_CODES = ("ENGLISH", "NON_ENGLISH")
+PINCODE_COLUMNS = ("current_pincode", "native_pincode", "recording_pincode")
+
+
+def _one_of(column: str, codes: tuple[str, ...]) -> str:
+    return f"{column} IS NULL OR {column} IN ({', '.join(repr(c) for c in codes)})"
+
+
+SPEAKER_CHECKS = {
+    "age_range": f"age IS NULL OR age BETWEEN {MIN_AGE} AND {MAX_AGE}",
+    "gender_allowed": _one_of("gender", GENDER_CODES),
+    "education_allowed": _one_of("education", EDUCATION_CODES),
+    "education_medium_allowed": _one_of("education_medium", EDUCATION_MEDIUM_CODES),
+    "pincode_format": " AND ".join(
+        f"({c} IS NULL OR {c} ~ '^[1-9][0-9]{{5}}$')" for c in PINCODE_COLUMNS
+    ),
+}
+
 
 class Participant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "participants"
     __table_args__ = (
         CheckConstraint("participant_code ~ '^P[0-9]{6,}$'", name="code_format"),
         Index("ix_participants_phone_hash", "phone_hash"),
+        *(CheckConstraint(sql, name=name) for name, sql in SPEAKER_CHECKS.items()),
     )
     participant_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     display_label: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -49,8 +83,23 @@ class Participant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email_enc: Mapped[str | None] = mapped_column(Text)
     language_code: Mapped[str] = mapped_column(String(35), nullable=False)
     dialect: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
-    # Where the participant lives, free text; the dashboard filters by it (D-121).
+    # The participant's native district (where they were born), free text; the dashboard filters
+    # by it (D-121). One of the speaker details below (D-143), kept under its first name.
     district: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
+    # Speaker details (D-143), checked by speakers.py; empty for people saved before them.
+    age: Mapped[int | None] = mapped_column(Integer)
+    gender: Mapped[str | None] = mapped_column(String(10))
+    current_state: Mapped[str | None] = mapped_column(String(60))
+    current_district: Mapped[str | None] = mapped_column(String(100))
+    current_pincode: Mapped[str | None] = mapped_column(String(6))
+    native_state: Mapped[str | None] = mapped_column(String(60))
+    native_pincode: Mapped[str | None] = mapped_column(String(6))
+    native_language: Mapped[str | None] = mapped_column(String(50))
+    education: Mapped[str | None] = mapped_column(String(20))
+    education_medium: Mapped[str | None] = mapped_column(String(20))
+    recording_state: Mapped[str | None] = mapped_column(String(60))
+    recording_district: Mapped[str | None] = mapped_column(String(100))
+    recording_pincode: Mapped[str | None] = mapped_column(String(6))
     notes: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")

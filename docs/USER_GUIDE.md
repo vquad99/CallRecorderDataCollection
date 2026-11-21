@@ -175,6 +175,12 @@ consent buttons.
 - **QC pass is the final approval (no admin review)**: leave it empty to keep the admin's final
   approval. Tick it and a recording the QC Executive passes is **Approved** at once. Tasks already
   waiting in **Admin review** stay there; approve them as usual.
+- **Pairing speakers** (checked whenever a task is made, see section 6):
+  - **Conversations per speaker (at most)**: how many tasks one person may be on in this project.
+    It starts at 3. Leave it empty for no limit. Cancelled and rejected tasks do not count.
+  - **Each pair of speakers only once**: ticked at the start. Two people who already share a task
+    cannot be put on another one together. Untick it to allow it.
+  Projects made before these options got 3 and ticked too. Tasks made before stay as they are.
 
 After **Create project** you return to the project list. A new project starts as **Draft**: click
 its code to open it and, on **Overview → Status**, click **Make active**. Only **Active**
@@ -229,11 +235,32 @@ Project tabs:
 - **Language** (required; choose from the list. When the project has languages, only those
   are listed).
 - **Dialect**, **Internal notes** (optional).
+- **Speaker details** (all required for someone new; the client needs them with every
+  conversation, and a task can only be made for people who have them all):
+  - **Age** (20 to 60) and **Gender** (**Male** or **Female**).
+  - Where they live now: **Current state**, **Current district**, **Current PIN code**.
+  - Where they were born: **Native state**, **Native district**, **Native PIN code**.
+  - **Native language** (type it, for example Konkani).
+  - **Education** (**Primary School**, **Secondary School**, **Higher Secondary**, **Diploma**,
+    **Bachelor's Degree**, **Master's Degree**, **PhD** or **Other**) and **Medium of education**
+    (**English** or **Non-English**).
+  - Where the recording takes place: **Recording state**, **Recording district**, **Recording PIN
+    code**.
 
-Each participant gets a code such as `P000123`.
+  States are chosen from the list of Indian states and union territories. A PIN code has 6
+  digits and does not start with 0. **Add participant** stays grey until every detail is filled
+  in; a wrong age or PIN code is named under its box.
+
+Each participant gets a code such as `P000123`. The speaker details belong to the person: they are
+the same in every project they are in.
 
 To change someone's details, click **Edit** on their row. A window **Edit P000123** opens; change
-the details and click **Save changes**.
+the details and click **Save changes**. Someone added before speaker details existed can be saved
+without them; the window says what is still missing (**Missing: Age, Gender, ...**). Their row
+shows **Details missing** until every detail is in.
+
+Who sees the speaker details: Super Admins, Project Admins and the moderator of an open task with
+the person, like the name. QC Executives and Client Viewers do not.
 
 **Add existing participant** (on a project's **Participants** tab): adds someone who is already
 in another of your projects, instead of creating them again. Search by code or name, then click
@@ -241,12 +268,21 @@ in another of your projects, instead of creating them again. Search by code or n
 project's languages are listed. To add many at once, tick the boxes (or **Select all shown**)
 and click **Add selected**.
 
-**District**: each participant can have a district (on the form and in the file). The dashboard
-can be filtered by it.
+**Native district**: the district the participant was born in (it was called **District**
+before). The dashboard can be filtered by it.
 
 **Add many**: paste or choose a file whose first line is
-`name,phone,email,language,dialect,district` (`district` may be left out). Every row needs
-an email.
+
+```
+name,phone,email,language,dialect,district,age,gender,current_state,current_district,current_pincode,native_state,native_pincode,native_language,education,education_medium,recording_state,recording_district,recording_pincode
+```
+
+`district` is the native district. Every row needs an email. The speaker details may be left out
+or empty, but such a row says **speaker details missing**: add them with **Edit** before making a
+task with that person. Write `gender` as `male` or `female`; `education` as `primary`,
+`secondary`, `higher_secondary`, `diploma`, `bachelors`, `masters`, `phd` or `other`;
+`education_medium` as `english` or `non_english`; states in full (for example `Goa`); PIN codes
+as 6 digits. A wrong value fails its row with the same words as the form.
 Click **Check rows**, then **Add N participants**. Up to 500 rows.
 
 ### Consent
@@ -274,8 +310,11 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
 Click **View** on a participant's row. One window shows all the platform holds about them in the
 project:
 
-- **Profile**: code, name, phone, email, language, notes, who added them and when, when they
-  were last changed, and the projects they are in.
+- **Profile**: code, name, phone, email, language, the speaker details (**Speaker details**
+  says **Complete** or what is missing; **Age**, **Gender**, **Lives in**, **Native place**,
+  **Native language**, **Education**, **Recorded in**), notes, who added them and when, when they
+  were last changed, and the projects they are in. **Details missing** at the top means a task
+  cannot be made with them yet.
 - **Work in this project**: sessions, recorded and approved conversations and minutes, payable
   minutes, phone calls made to them, calls with a recording, and the last call.
 - **Personal link**: whether it works, who made it and when, until when it works, when it was
@@ -294,8 +333,8 @@ same person.
 ### Other actions on ticked rows
 
 - **Also add them to another project**: choose the other project and click **Add to that project**. They stay in this project too, with the same code and consent history. Each one is emailed the other project's consent form; the list under the buttons says what happened to each.
-- **Remove**: deletes the person's name, phone, email and notes everywhere. Not possible while
-  they are on an open task.
+- **Remove**: deletes the person's name, phone, email, notes and speaker details everywhere.
+  Not possible while they are on an open task.
 
 ---
 
@@ -311,6 +350,19 @@ the page says **Only people who agreed to the consent form can be chosen.** If t
 fewer than two participants, the page says so and links to **Add participants to the project**;
 add them first.
 
+The project's pairing rules (project **Overview**, section 4) also apply. Someone who cannot be
+chosen is greyed out in the list, with the reason after their name:
+
+- **details missing**: their speaker details are not complete. Add them with **Edit** on the
+  Participants page.
+- **3 conversations already**: they reached **Conversations per speaker (at most)**. Cancelled and
+  rejected tasks do not count.
+- **already paired with the chosen A** (in the **Participant B** list): these two already share a
+  task and the project has **Each pair of speakers only once**. Choosing another A clears a B who
+  cannot be paired with them.
+
+The server checks the same rules when you click **Create task** and says why if it refuses.
+
 **Add many tasks** (on the same page, after choosing the project): paste or choose a CSV file, one
 task per line. The first line must be exactly:
 
@@ -319,7 +371,9 @@ participant_a,participant_b,mode,priority,due_date,moderator
 ```
 
 Write participants by their code (`P000001`); both must have agreed to the consent form, or
-the row says who has not. `mode` is `face_to_face` or `telephony` (a phone
+the row says who has not. The pairing rules apply to each row too, counting the rows above it: a
+row says when someone has no complete speaker details, has reached the most conversations, or is
+already paired with the other person (in the project or higher up in the file). `mode` is `face_to_face` or `telephony` (a phone
 call; empty means face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means
 normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
 leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
@@ -618,7 +672,7 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 | **From**, **To** (with Choose dates) | everyone | Counts only recordings started on those days; the chart shows exactly those days. At most 366 days |
 | **Recording type** | everyone | Face-to-face or phone call |
 | **Language**, **Dialect** | everyone | Conversations in which a participant speaks it |
-| **District** | everyone | Conversations with a participant from that district (shown once participants have a district) |
+| **District** | everyone | Conversations with a participant whose native district it is (shown once participants have one) |
 | **Task status** | staff | Tasks in that status |
 | **Staff** | Super Admin, Project Admin | One person's tasks and the recordings they made |
 
@@ -668,6 +722,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "This browser cannot record at 16000 Hz" | Use the latest Chrome or Edge. |
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
 | New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. |
+| New task: a participant is greyed out | The reason is after their name: **details missing** (add them with **Edit**), **3 conversations already**, or **already paired with the chosen A**. See section 6. |
 | "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
 | "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |

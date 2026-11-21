@@ -44,6 +44,10 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "target_telephony_hours_per_day >= 0 AND target_face_to_face_hours_per_day >= 0",
             name="targets_non_negative",
         ),
+        CheckConstraint(
+            "max_conversations_per_speaker IS NULL OR max_conversations_per_speaker >= 1",
+            name="max_conversations_range",
+        ),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -69,6 +73,10 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     qc_final_approval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Task rules (D-143, tasks/pairing.py): at most this many conversations per speaker in the
+    # project (empty = no limit), and each pair of speakers only once.
+    max_conversations_per_speaker: Mapped[int | None] = mapped_column(Integer, server_default="3")
+    unique_pairs: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

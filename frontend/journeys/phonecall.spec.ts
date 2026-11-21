@@ -18,6 +18,7 @@ import {
   SEEDED,
   SEEDED_PASSWORD,
   signIn,
+  SPEAKER_DETAILS,
 } from "./support";
 
 interface Participant {
@@ -79,6 +80,7 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
         language_code: "hi",
         phone: number,
         email: `${label.toLowerCase()}.${code.toLowerCase()}@example.org`,
+        ...SPEAKER_DETAILS,
       },
     );
     await agree(admin, project.id, made.id);

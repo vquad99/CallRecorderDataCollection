@@ -17,6 +17,19 @@ import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { CONSENT_METHOD_LABELS, consentAnswer, labelFor } from "../../lib/labels";
+import {
+  ageProblem,
+  EDUCATION_LABELS,
+  EDUCATION_MEDIUM_LABELS,
+  EMPTY_SPEAKER_DETAILS,
+  GENDER_LABELS,
+  INDIAN_STATES,
+  MAX_AGE,
+  MIN_AGE,
+  missingSpeakerDetails,
+  pincodeProblem,
+  speakerDetailsOf,
+} from "../../lib/speakers";
 import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "../projects/choices";
 import { ParticipantDetails } from "./ParticipantDetails";
 import "./participants.css";
@@ -24,10 +37,12 @@ import "./participants.css";
 export const EMPTY_PARTICIPANT: work.ParticipantFields = {
   display_label: "",
   phone: null,
+  email: "",
   language_code: "",
   dialect: "",
   district: "",
   notes: "",
+  ...EMPTY_SPEAKER_DETAILS,
 };
 
 /** Shown once a participant is added: the server says what happened to their consent form. */
@@ -44,7 +59,115 @@ export const fieldsOf = (p: work.Participant): work.ParticipantFields => ({
   district: p.district ?? "",
   notes: p.notes ?? "",
   email: p.email ?? (p.has_email ? undefined : ""),
+  ...speakerDetailsOf(p),
 });
+
+type Place = "current" | "native" | "recording";
+/** The speaker details typed as text or chosen from a list (all but the age). */
+type SpeakerText = Exclude<keyof work.SpeakerDetails, "age"> | "district";
+
+/** Speaker details (D-143), short fields side by side: all of them for someone new; someone saved
+ * before may be saved without them, and the form says which are still missing. */
+function SpeakerFields({
+  f,
+  setF,
+  isNew,
+}: {
+  f: work.ParticipantFields;
+  setF: (next: work.ParticipantFields) => void;
+  isNew: boolean;
+}) {
+  const missing = missingSpeakerDetails(f);
+  // The native district is the participant's district: a string, never null.
+  const set = (key: SpeakerText, value: string) =>
+    setF({ ...f, [key]: key === "district" || value ? value : null });
+  const choices = (labels: Record<string, string>) => [
+    { value: "", label: "Choose" },
+    ...Object.entries(labels).map(([value, label]) => ({ value, label })),
+  ];
+  const pick = (key: SpeakerText, label: string, options: { value: string; label: string }[]) => (
+    <Select
+      label={label}
+      required={isNew}
+      value={f[key] ?? ""}
+      onChange={(e) => set(key, e.target.value)}
+      options={options}
+    />
+  );
+  const type = (key: SpeakerText, label: string, max = 100, hint = "") => (
+    <TextField
+      label={label}
+      required={isNew}
+      maxLength={max}
+      {...(hint ? { hint } : {})}
+      value={f[key] ?? ""}
+      onChange={(e) => set(key, e.target.value)}
+    />
+  );
+  const place = (where: Place, title: string, note: string) => {
+    const pin = `${where}_pincode` as const;
+    const problem = pincodeProblem(f[pin]);
+    return (
+      <>
+        <p className="field__hint">{note}</p>
+        <div className="form-grid">
+          {pick(`${where}_state`, `${title} state`, [
+            { value: "", label: "Choose a state" },
+            ...INDIAN_STATES.map((s) => ({ value: s, label: s })),
+          ])}
+          {type(where === "native" ? "district" : `${where}_district`, `${title} district`)}
+          <TextField
+            label={`${title} PIN code`}
+            required={isNew}
+            inputMode="numeric"
+            maxLength={6}
+            value={f[pin] ?? ""}
+            {...(problem ? { error: problem } : {})}
+            onChange={(e) => set(pin, e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+      </>
+    );
+  };
+  const agePrompt = ageProblem(f.age);
+  return (
+    <fieldset className="field speaker-details">
+      <legend className="field__label">Speaker details</legend>
+      {isNew ? (
+        <p className="field__hint">
+          All are needed: a task is made only for people whose speaker details are complete.
+        </p>
+      ) : missing.length > 0 ? (
+        <p className="notice notice--info" role="status">
+          Missing: {missing.join(", ")}. A task is made only for people whose speaker details are
+          complete.
+        </p>
+      ) : null}
+      <div className="form-grid">
+        <TextField
+          label="Age"
+          type="number"
+          required={isNew}
+          min={MIN_AGE}
+          max={MAX_AGE}
+          step={1}
+          value={f.age ?? ""}
+          {...(agePrompt ? { error: agePrompt } : {})}
+          onChange={(e) => setF({ ...f, age: e.target.value ? Number(e.target.value) : null })}
+        />
+        {pick("gender", "Gender", choices(GENDER_LABELS))}
+      </div>
+      {place("current", "Current", "Where they live now.")}
+      {place("native", "Native", "Where they were born.")}
+      {type("native_language", "Native language", 50, "For example Konkani.")}
+      <div className="form-grid">
+        {pick("education", "Education", choices(EDUCATION_LABELS))}
+        {pick("education_medium", "Medium of education", choices(EDUCATION_MEDIUM_LABELS))}
+      </div>
+      {place("recording", "Recording", "Where the recording takes place.")}
+    </fieldset>
+  );
+}
 
 export function ParticipantForm({
   initial,
@@ -53,6 +176,7 @@ export function ParticipantForm({
   onSubmit,
   busy,
   error,
+  isNew = false,
 }: {
   initial: work.ParticipantFields;
   languages: readonly Language[]; // the project's languages; empty means any
@@ -60,6 +184,8 @@ export function ParticipantForm({
   onSubmit: (f: work.ParticipantFields) => void;
   busy: boolean;
   error: ApiError | null;
+  /** A new participant needs every speaker detail (D-143). */
+  isNew?: boolean;
 }) {
   const [f, setF] = useState(initial);
   const [phone, setPhone] = useState(() => splitPhone(initial.phone));
@@ -67,6 +193,11 @@ export function ParticipantForm({
     phone.digits && phone.digits.length !== PHONE_DIGITS
       ? `Type exactly ${PHONE_DIGITS} digits (you typed ${phone.digits.length}).`
       : undefined;
+  // A wrong speaker detail stops the form; a missing one only for someone new (D-143).
+  const speakerWrong =
+    Boolean(ageProblem(f.age)) ||
+    [f.current_pincode, f.native_pincode, f.recording_pincode].some((pin) => pincodeProblem(pin));
+  const speakerMissing = isNew && missingSpeakerDetails(f).length > 0;
   return (
     <form
       onSubmit={(e) => {
@@ -128,21 +259,23 @@ export function ParticipantForm({
         onChange={(e) => setF({ ...f, dialect: e.target.value })}
       />
       <TextField
-        label="District"
-        value={f.district}
-        onChange={(e) => setF({ ...f, district: e.target.value })}
-      />
-      <TextField
         label="Internal notes"
         value={f.notes}
         onChange={(e) => setF({ ...f, notes: e.target.value })}
       />
+      <SpeakerFields f={f} setF={setF} isNew={isNew} />
       <ErrorNotice error={error} />
       <div className="dialog__actions">
         <Button
           type="submit"
           busy={busy}
-          disabled={!f.display_label.trim() || !f.language_code.trim() || Boolean(phoneError)}
+          disabled={
+            !f.display_label.trim() ||
+            !f.language_code.trim() ||
+            Boolean(phoneError) ||
+            speakerWrong ||
+            speakerMissing
+          }
         >
           {submitLabel}
         </Button>
@@ -211,10 +344,12 @@ export function useParticipantWindows({
       <Modal
         title={editing ? `Edit ${editing.participant_code}` : "Add participant"}
         onClose={close}
+        wide
       >
         <ParticipantForm
           initial={editing ? fieldsOf(editing) : EMPTY_PARTICIPANT}
           languages={languages}
+          isNew={!editing}
           submitLabel={editing ? "Save changes" : "Add participant"}
           busy={busy !== null}
           error={error}

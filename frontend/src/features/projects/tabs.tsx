@@ -117,6 +117,8 @@ export function OverviewTab() {
           consent_policy_version: project.consent_policy_version,
           consent_text: project.consent_text,
           qc_final_approval: project.qc_final_approval,
+          max_conversations_per_speaker: project.max_conversations_per_speaker,
+          unique_pairs: project.unique_pairs,
         }}
         submitLabel="Save project"
         busy={busy !== null}

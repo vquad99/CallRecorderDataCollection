@@ -17,10 +17,27 @@ import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { day, duration, when } from "../../lib/format";
 import { consentAnswer, labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
+import {
+  EDUCATION_LABELS,
+  EDUCATION_MEDIUM_LABELS,
+  GENDER_LABELS,
+  missingSpeakerDetails,
+  placeText,
+  speakerDetailsOf,
+} from "../../lib/speakers";
 import { languageLabel } from "../projects/choices";
 import "./participants.css";
 
 const minutes = (n: number) => `${n.toFixed(1)} min`;
+
+/** A participant without every speaker detail cannot be put on a task yet (D-143). */
+export function DetailsMissing() {
+  return (
+    <span title="Some speaker details are missing: add them with Edit before making a task.">
+      <StatusBadge tone="warning" label="Details missing" />
+    </span>
+  );
+}
 const language = (p: work.Participant) =>
   `${languageLabel(p.language_code)}${p.dialect ? `, ${p.dialect}` : ""}`;
 
@@ -79,6 +96,13 @@ function Work({ d }: { d: work.ParticipantDetails }) {
 
 function Profile({ d }: { d: work.ParticipantDetails }) {
   const p = d.participant;
+  const missing = missingSpeakerDetails({ ...speakerDetailsOf(p), district: p.district ?? "" });
+  const education = [
+    p.education ? labelFor(EDUCATION_LABELS, p.education) : null,
+    p.education_medium ? `${labelFor(EDUCATION_MEDIUM_LABELS, p.education_medium)} medium` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <Block icon="id" title="Profile">
       <dl className="checks">
@@ -89,7 +113,21 @@ function Profile({ d }: { d: work.ParticipantDetails }) {
         <Fact label="Phone">{p.phone ?? (p.has_phone ? "On file (hidden)" : "None")}</Fact>
         <Fact label="Email">{p.email ?? (p.has_email ? "On file (hidden)" : "None")}</Fact>
         <Fact label="Language">{language(p)}</Fact>
-        {p.district ? <Fact label="District">{p.district}</Fact> : null}
+        {/* Speaker details (D-143). */}
+        <Fact label="Speaker details">
+          {p.speaker_details_complete ? "Complete" : `Missing: ${missing.join(", ")}`}
+        </Fact>
+        <Fact label="Age">{p.age ?? "-"}</Fact>
+        <Fact label="Gender">{p.gender ? labelFor(GENDER_LABELS, p.gender) : "-"}</Fact>
+        <Fact label="Lives in">
+          {placeText(p.current_state, p.current_district, p.current_pincode)}
+        </Fact>
+        <Fact label="Native place">{placeText(p.native_state, p.district, p.native_pincode)}</Fact>
+        <Fact label="Native language">{p.native_language ?? "-"}</Fact>
+        <Fact label="Education">{education || "-"}</Fact>
+        <Fact label="Recorded in">
+          {placeText(p.recording_state, p.recording_district, p.recording_pincode)}
+        </Fact>
         <Fact label="Added on">{when(p.created_at)}</Fact>
         <Fact label="Added by">{d.added_by ?? "-"}</Fact>
         <Fact label="Last changed">{when(d.updated_at)}</Fact>
@@ -235,6 +273,7 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
         </p>
         <div className="pd-head__badges">
           {d.removed ? <StatusBadge tone="danger" label="Removed" /> : null}
+          {!d.removed && p.speaker_details_complete === false ? <DetailsMissing /> : null}
           {answer ? (
             <StatusBadge tone={answer.tone} label={`Consent form: ${answer.label}`} />
           ) : null}

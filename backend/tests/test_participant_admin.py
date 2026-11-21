@@ -61,8 +61,10 @@ def test_a_file_is_checked_first_and_only_good_rows_are_added(world: dict[str, A
     assert pa.get(base).json()["total"] == before + 2
     assert all(r["participant_code"] for r in done["rows"] if r["ok"])
     # The project has no consent form yet: nothing is sent, and the rows say what to do (D-129).
+    # The file has no speaker details: added, and the rows say they are missing (D-143).
     assert [r["message"] for r in done["rows"] if r["ok"]] == [
-        "Added. Write the project's consent form, then send it."
+        "Added (speaker details missing: add them with Edit before making tasks). "
+        "Write the project's consent form, then send it."
     ] * 2
     bad = pa.post(f"{base}/import", json={"csv": "label\nx\n"})
     assert bad.json()["error"]["code"] == "INVALID_CSV"

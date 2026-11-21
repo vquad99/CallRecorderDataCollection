@@ -1,8 +1,10 @@
 """Participants (PART-*), consent history (PART-006, SEC-010).
 
 Visibility tiers for a participant inside a project:
-- identity (code, language, dialect): participants.view, i.e. every member role.
-- profile (name, notes): participants.manage, or the moderator assigned to an open task with them.
+- identity (code, language, dialect, native district, whether the speaker details are complete):
+  participants.view, i.e. every member role.
+- profile (name, notes, speaker details - D-143): participants.manage, or the moderator assigned to
+  an open task with them.
 - contact (phone number): participants.contact AND either participants.manage, or the project policy
   ASSIGNED_MODERATOR with the moderator assigned to an open task with them.
 Others see a masked phone ("......12") or nothing.
@@ -13,8 +15,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
-from collections.abc import Collection, Iterator
-from dataclasses import dataclass
+from collections.abc import Collection, Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import Select, exists, or_, select, text, update
@@ -29,6 +31,7 @@ from app.db.paging import paginate
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.security import FieldCipher
+from app.modules.participants import speakers
 from app.modules.participants.models import (
     ConsentRecord,
     Participant,
@@ -229,7 +232,21 @@ class ParticipantInput:
     dialect: str
     notes: str
     email: str | None = None
-    district: str = ""
+    # Speaker details given, by field name (speakers.FIELDS, the native district as `district`),
+    # as typed; checked here. On a correction, a field left out keeps its stored value (D-143).
+    speaker: Mapping[str, object] = field(default_factory=dict)
+
+
+def _apply_speaker(p: Participant, given: Mapping[str, object]) -> list[str]:
+    """Stores the given speaker details (422 INVALID_SPEAKER_DETAILS for a wrong one); returns
+    the names of the fields that changed."""
+    changed = []
+    for name, value in speakers.clean_all(given).items():
+        stored = "" if name == "district" and value is None else value
+        if getattr(p, name) != stored:
+            setattr(p, name, stored)
+            changed.append(name)
+    return changed
 
 
 def check_language(project: Project, language_code: str, dialect: str) -> None:
@@ -319,17 +336,18 @@ def create_participant(
     phone = normalize_phone(data.phone) if data.phone else None
     if phone:
         _duplicate(db, principal, phone_hash(settings, phone))
-    code = f"P{db.scalar(text("SELECT nextval('participant_code_seq')")):06d}"
     participant = Participant(
         id=uuid.uuid4(),
-        participant_code=code,
         display_label=data.display_label.strip(),
         language_code=data.language_code,
         dialect=data.dialect,
-        district=data.district.strip(),
+        district="",
         notes=data.notes,
         created_by=principal.user_id,
     )
+    _apply_speaker(participant, data.speaker)
+    code = f"P{db.scalar(text("SELECT nextval('participant_code_seq')")):06d}"
+    participant.participant_code = code
     _apply_phone(participant, settings, cipher, phone)
     # Every participant needs an email: the consent form reaches them by email (D-128).
     participant.email_enc = cipher.encrypt(clean_email(require_email(data.email)))
@@ -348,6 +366,7 @@ def create_participant(
             "language_code": data.language_code,
             "has_phone": phone is not None,
             "has_email": bool(data.email),
+            "speaker_details_complete": speakers.complete(participant),
         },
     )
     db.commit()
@@ -460,7 +479,7 @@ def correct_participant(
     participant.display_label = data.display_label.strip()
     participant.language_code = data.language_code
     participant.dialect = data.dialect
-    participant.district = data.district.strip()
+    speaker_changed = _apply_speaker(participant, data.speaker)
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
@@ -499,6 +518,9 @@ def correct_participant(
             "district": participant.district,
             "phone_changed": phone_changed,
             "email_changed": email_changed,
+            # Which speaker details changed, not their values (D-143).
+            "speaker_details_changed": speaker_changed,
+            "speaker_details_complete": speakers.complete(participant),
         },
     )
     db.commit()
@@ -544,6 +566,7 @@ def delete_participant(
     participant.notes = ""
     participant.phone_e164_enc = participant.phone_hash = participant.phone_hint = None
     participant.email_enc = None
+    _apply_speaker(participant, dict.fromkeys(speakers.FIELDS))  # personal too (D-143)
     participant.deleted_at = datetime.now(UTC)
     participant.deleted_by = principal.user_id
     participant.deletion_reason = reason.strip()

@@ -21,10 +21,19 @@ import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
 import { consentAnswer } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
+import { DetailsMissing } from "./ParticipantDetails";
 import { useParticipantWindows } from "./ParticipantEditor";
 
+// The file's columns: who they are, then the speaker details (D-143); `district` is the native
+// district.
+const COLUMNS =
+  "name,phone,email,language,dialect,district,age,gender,current_state,current_district," +
+  "current_pincode,native_state,native_pincode,native_language,education,education_medium," +
+  "recording_state,recording_district,recording_pincode";
 const SAMPLE =
-  "name,phone,email,language,dialect,district\nAsha Rao,+919876543210,asha@example.org,hi,,Pune\n";
+  `${COLUMNS}\n` +
+  "Asha Naik,+919876543210,asha@example.org,kok,,Salcete,34,female,Goa,North Goa,403001,Goa," +
+  "403601,Konkani,bachelors,english,Goa,North Goa,403001\n";
 
 type BulkAction = "assign" | "remove" | "send_consent";
 
@@ -46,10 +55,13 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
     <section className="card stack stack--tight" aria-labelledby="bulk-add-title">
       <h2 id="bulk-add-title">Add many participants</h2>
       <p className="muted">
-        Paste rows or choose a CSV file. First line:{" "}
-        <code>name,phone,email,language,dialect,district</code>. Every row needs an email; phone,
-        dialect and district may be empty. Check the rows first; only rows without a problem are
-        added.
+        Paste rows or choose a CSV file. First line: <code>{COLUMNS}</code>. Every row needs an
+        email; phone and dialect may be empty. The speaker details (<code>district</code> is the
+        native district; <code>gender</code> male or female; <code>education</code> primary,
+        secondary, higher_secondary, diploma, bachelors, masters, phd or other;{" "}
+        <code>education_medium</code> english or non_english; states written in full; PIN codes of 6
+        digits) may be left empty, but a task needs them all. Check the rows first; only rows
+        without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-csv" className="field__label">
@@ -398,7 +410,14 @@ export function ParticipantsPage() {
                       )}
                     </td>
                     <td className="mono">{p.participant_code}</td>
-                    <td>{p.display_label ?? <span className="muted">Hidden</span>}</td>
+                    <td>
+                      {p.display_label ?? <span className="muted">Hidden</span>}
+                      {!p.deleted && p.speaker_details_complete === false ? (
+                        <div>
+                          <DetailsMissing />
+                        </div>
+                      ) : null}
+                    </td>
                     <td>
                       {p.phone ?? (p.has_phone ? "Phone on file" : "")}
                       {p.has_email ? (
