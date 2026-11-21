@@ -36,6 +36,9 @@ export interface RequestOptions {
   acceptStatuses?: readonly number[];
   /** Extra request headers (the participant page sends its link secret this way). */
   headers?: Record<string, string>;
+  /** A file sent as it is, instead of a JSON `body` (an uploaded document, D-144); its type goes
+   * in `headers`. */
+  file?: Blob;
 }
 
 export const UNAUTHENTICATED_EVENT = "ccp:unauthenticated";
@@ -149,6 +152,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       headers,
       credentials: "include",
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+      ...(options.file !== undefined ? { body: options.file } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (error) {

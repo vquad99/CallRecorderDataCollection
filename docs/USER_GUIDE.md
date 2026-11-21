@@ -172,6 +172,15 @@ consent buttons.
 - **Who may see participant phone numbers**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
+- **Consent**: choose one of two.
+  - **Online (participant agrees on their personal page)**: the platform emails each person the
+    consent form when they join, and they agree online (section 5, **Consent**). Every project
+    made before this option is Online.
+  - **Upload (scanned signed form)**: nothing is emailed. The person signs a paper consent form;
+    you scan it and upload it when you add them (section 5, **Signed consent forms**). The
+    uploaded form is their consent.
+  Changing it is saved in the audit log with the project. Switching back to Online keeps the
+  uploaded forms on file, but then people need to agree online.
 - **QC pass is the final approval (no admin review)**: leave it empty to keep the admin's final
   approval. Tick it and a recording the QC Executive passes is **Approved** at once. Tasks already
   waiting in **Admin review** stay there; approve them as usual.
@@ -225,7 +234,7 @@ Project tabs:
 
 ## 5. Project Admin: participants
 
-**Participants → Add participant** (opens a window):
+**Participants → Add participant** (opens a window; choose the project first):
 
 - **Name or label** (required).
 - **Country code** (choose from the list; India +91 is first) and **Phone number** (optional;
@@ -250,6 +259,16 @@ Project tabs:
   States are chosen from the list of Indian states and union territories. A PIN code has 6
   digits and does not start with 0. **Add participant** stays grey until every detail is filled
   in; a wrong age or PIN code is named under its box.
+- **Documents** (PDF, JPEG or PNG, at most 10 MB each):
+  - **Signed consent form (scan)**: only in a project whose **Consent** is **Upload**, and
+    required there.
+  - **Address proof (optional now, needed before delivery)**: in every project. It belongs to the
+    person, so it is the same in all their projects.
+
+  A wrong type or a file over 10 MB is named under its box. The files are uploaded right after
+  the person is added: the message then says, for example, **P000123 added. Signed consent form
+  uploaded.** If an upload fails, the person is still added and their **Documents** window opens
+  with what went wrong; upload the file again there.
 
 Each participant gets a code such as `P000123`. The speaker details belong to the person: they are
 the same in every project they are in.
@@ -304,6 +323,38 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
    bar that appears; people who already agreed are skipped and named.
 6. **Consent history** shows earlier answers, in a window.
 7. You can make a task only with people who have agreed (see section 6).
+
+### Signed consent forms (projects whose Consent is Upload)
+
+1. Nothing is emailed. The message after adding someone says **This project takes a signed
+   consent form uploaded by staff: no consent form is emailed. Upload it with Documents.**, unless
+   you uploaded the form with **Add participant**.
+2. The uploaded form is their consent: the **Consent form** column shows **Form uploaded**, and
+   you can make tasks with them. Someone who already agreed online (for example before the
+   project was switched to Upload) still counts.
+3. Without either, the row shows **Consent form missing**, and no task can be made with them.
+4. **Email consent form again** is not offered in these projects.
+
+### Documents
+
+Every row has **Documents** (the page icon). The window shows:
+
+- **Signed consent form** (this project's) and **Address proof**, each with **Uploaded**, or
+  **Consent form missing** / **Address proof missing**; the file name, who uploaded it and when,
+  and its size.
+- **View** opens the file in a new browser tab. The link works for a few minutes only; click
+  **View** again later.
+- **Upload signed consent form** / **Replace signed consent form** and **Upload address proof** /
+  **Replace address proof**. A new file takes the place of the current one; the old one is kept.
+- **Earlier versions**: files that were replaced, with who uploaded and who replaced them, and
+  when; each has **View**.
+
+The rows also show **Consent form missing** (Upload projects) and **Address proof missing**, so
+you can see at a glance who still needs one. The participant's **View** window has the same
+**Documents** block. Every upload, replacement and **View** is saved in the audit log.
+
+Removing a participant deletes their address proofs. Their signed consent forms are kept, as the
+record of their consent for what was recorded.
 
 ### Everything about one participant
 
@@ -428,6 +479,11 @@ payments. QC Executives see only the newest one.
    older task where someone has not agreed, a **Waiting for consent** card lists them; people who
    manage participants can click **Email consent form again** there. A moderator asks their
    admin. **Open the recorder stays grey until both participants have agreed.**
+
+   In a project whose **Consent** is **Upload**, each person shows **Form uploaded** or
+   **Consent form missing**. The **Signed consent forms** card lists both forms: **View** opens
+   one, and as the task's moderator you can **Upload** a missing form or **Replace** one (for
+   example with a clearer scan) while the task is open. You cannot see their address proof.
 4. Click **Open the recorder** (in the same highlighted box). The recorder shows the steps
    **Microphone**, **Sound check**, **Record**, **Save**, **Done**; **Back to the task** is above
    them. It records at 16000 Hz (the project's rate).
@@ -552,6 +608,9 @@ in the project's metadata export) carries the same history in its **call** secti
    recording the automatic check failed asks **Why does it pass?**.
 
 **Check the stored file again** repeats the automatic check on the stored file.
+
+In a project whose **Consent** is **Upload**, the **Signed consent forms** card on the task lets
+you **View** both participants' signed forms. You cannot upload or replace them.
 
 You see only the newest recording of a task. Older ones the moderator replaced with **Record
 again** are not shown to you.
@@ -721,7 +780,8 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | "This browser cannot record here" | Use the latest Chrome or Edge on a computer. |
 | "This browser cannot record at 16000 Hz" | Use the latest Chrome or Edge. |
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
-| New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. |
+| New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. In an Upload project, upload their signed consent form with **Documents**. |
+| An upload says "Only PDF, JPEG or PNG files can be uploaded" or "larger than 10 MB" | Scan the page again as a PDF or a photo (JPEG or PNG), at a lower resolution if it is large. |
 | New task: a participant is greyed out | The reason is after their name: **details missing** (add them with **Edit**), **3 conversations already**, or **already paired with the chosen A**. See section 6. |
 | "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
 | "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |

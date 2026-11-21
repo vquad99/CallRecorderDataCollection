@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import uuid
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import Select, exists, or_, select, text, update
 from sqlalchemy.orm import Session
 
@@ -27,14 +29,17 @@ from app.core.contact import clean_email, normalize_phone
 from app.core.csvio import write_table
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
+from app.core.storage import ObjectStorage
 from app.db.paging import paginate
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.security import FieldCipher
 from app.modules.participants import speakers
 from app.modules.participants.models import (
+    ADDRESS_PROOF,
     ConsentRecord,
     Participant,
+    ParticipantDocument,
     ParticipantPortalLink,
     ParticipantProjectLink,
 )
@@ -42,6 +47,8 @@ from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 from app.modules.tasks.models import Task, TaskAssignment
 from app.modules.tasks.workflow import TERMINAL
+
+logger = logging.getLogger(__name__)
 
 CONTACT_COLUMNS = (
     "participant_code",
@@ -534,8 +541,13 @@ def delete_participant(
     participant_id: uuid.UUID,
     reason: str,
     ip: str | None,
+    *,
+    storage: ObjectStorage | None = None,
 ) -> Participant:
-    """Removes personal data now (PART-009); the row stays so tasks and audit keep their links."""
+    """Removes personal data now (PART-009); the row stays so tasks and audit keep their links.
+    Their address proofs go too, files and all (D-144); signed consent forms stay, as the record of
+    consent for what was recorded, like consent records. A file storage cannot delete now is left
+    to the storage-orphans command (O12)."""
     project, participant = get_in_project(
         db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
     )
@@ -570,6 +582,18 @@ def delete_participant(
     participant.deleted_at = datetime.now(UTC)
     participant.deleted_by = principal.user_id
     participant.deletion_reason = reason.strip()
+    proofs = list(
+        db.scalars(
+            update(ParticipantDocument)
+            .where(
+                ParticipantDocument.participant_id == participant.id,
+                ParticipantDocument.kind == ADDRESS_PROOF,
+                ParticipantDocument.removed_at.is_(None),
+            )
+            .values(removed_at=participant.deleted_at)
+            .returning(ParticipantDocument.storage_key)
+        )
+    )
     audit.record(
         db,
         action="participant.deleted",
@@ -578,9 +602,17 @@ def delete_participant(
         project_id=project.id,
         actor_id=principal.user_id,
         ip=ip,
-        after={"reason": participant.deletion_reason},
+        after={"reason": participant.deletion_reason, "address_proofs_removed": len(proofs)},
     )
     db.commit()
+    for key in proofs:
+        try:
+            if storage is not None:
+                storage.delete(key)
+        except (BotoCoreError, ClientError):  # the storage-orphans command removes it later
+            logger.warning(
+                "address_proof_not_deleted", extra={"participant_id": str(participant.id)}
+            )
     return participant
 
 

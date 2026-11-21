@@ -70,7 +70,8 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Secure headers: HSTS, Content-Security-Policy, X-Content-Type-Options, frame-ancestors none,
   Referrer-Policy, Permissions-Policy allowing microphone only for the app origin (SEC-013).
 - Rate limits on every /api/v1 request: per session, or per IP when signed out (SEC-005, D-039).
-- Request limits: 413 above 2.5 MB (audio chunks 8 MB); NUL characters refused with 422; every API
+- Request limits: 413 above 2.5 MB (audio chunks 8 MB; a participant's scanned document 10 MB, only
+  PDF, JPEG or PNG by its first bytes, D-144); NUL characters refused with 422; every API
   answer is `no-store` and carries `default-src 'none'` (D-052).
 - Web server content policy allows media only from the site and the storage service named by
   `MEDIA_ORIGINS` (D-061); security headers stay on cached files (caching uses `expires`).

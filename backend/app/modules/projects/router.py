@@ -28,6 +28,7 @@ TwoPlaces = Annotated[Decimal, AfterValidator(lambda v: v.quantize(Decimal("0.01
 
 Status = Literal["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"]
 Mode = Literal["TELEPHONY", "FACE_TO_FACE"]
+ConsentMode = Literal["ONLINE", "UPLOAD"]
 AssetKind = Literal[
     "PROVIDER_ORIGINAL_TRACK",
     "PROVIDER_ORIGINAL_MIXED",
@@ -89,6 +90,7 @@ class ProjectDetail(ProjectSummary):
     qc_final_approval: bool
     max_conversations_per_speaker: int | None
     unique_pairs: bool
+    consent_mode: ConsentMode
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -111,6 +113,7 @@ def detail(p: Project) -> ProjectDetail:
         qc_final_approval=p.qc_final_approval,
         max_conversations_per_speaker=p.max_conversations_per_speaker,
         unique_pairs=p.unique_pairs,
+        consent_mode=p.consent_mode,
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -159,6 +162,9 @@ class ProjectBody(BaseModel):
     # Task rules (D-143): null = no limit on conversations per speaker.
     max_conversations_per_speaker: int | None = Field(default=3, ge=1, le=1000)
     unique_pairs: bool = True
+    # How participants give consent (D-144): ONLINE on their personal page, or UPLOAD, a scanned
+    # signed form uploaded by staff.
+    consent_mode: ConsentMode = "ONLINE"
 
     def to_input(self) -> service.ProjectInput:
         return service.ProjectInput(**self.model_dump())

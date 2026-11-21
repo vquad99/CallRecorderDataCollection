@@ -14,8 +14,8 @@ code in each phase; this file lists the planned surface so the traceability tabl
 - State-changing requests need the CSRF header; session is an HttpOnly cookie.
 - List endpoints: `page`, `page_size`, `sort`, filters as query parameters.
 - External service not configured: 503 with code `NOT_CONFIGURED` (GEN-004).
-- Request limits (D-052): bodies over MAX_REQUEST_BYTES (2.5 MB; audio chunks MAX_CHUNK_BYTES, 8 MB)
-  get 413 `PAYLOAD_TOO_LARGE`; a NUL character in the path, query string or a JSON body gets 422
+- Request limits (D-052): bodies over MAX_REQUEST_BYTES (2.5 MB; audio chunks MAX_CHUNK_BYTES, 8 MB;
+  a participant's document upload 10 MB, D-144) get 413 `PAYLOAD_TOO_LARGE`; a NUL character in the path, query string or a JSON body gets 422
   `VALIDATION_ERROR`. Every /api response carries `Cache-Control: no-store` and
   `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
 - An object in a project the caller cannot see answers exactly like an object that does not exist.
@@ -80,7 +80,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 |---|---|---|
 | GET | /projects | member. Newest first (D-105) |
 | POST | /projects | `projects.create` |
-| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138). Includes `max_conversations_per_speaker` (1 to 1000, default 3, null = no limit) and `unique_pairs` (default true); POST and PATCH take them (D-143) |
+| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138). Includes `max_conversations_per_speaker` (1 to 1000, default 3, null = no limit) and `unique_pairs` (default true); POST and PATCH take them (D-143). Includes `consent_mode` (`ONLINE`, default, or `UPLOAD`); POST and PATCH take it, audited with the project (D-144) |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
@@ -97,13 +97,16 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
 | GET | /projects/{id}/participants/{pid}/consent | `consent.view` + participant manager, or the moderator on an open task with that person (D-049); each participant row carries `consent_visible` |
 | GET | /projects/{id}/participants/export | `participants.export` |
+| GET | /projects/{id}/participants/{pid}/documents | People who manage participants, the moderator of an open task with the person, a QC Executive who decides the QC of a task with them; 403 for others in the project (D-144) |
+| POST | /projects/{id}/participants/{pid}/documents/{kind} | `kind` `consent-form` (people who manage participants, the moderator of an open task with the person; Upload projects only) or `address-proof` (people who manage participants). The body is the file (D-144) |
+| POST | /projects/{id}/participants/{pid}/documents/{document_id}/url | Whoever may see that kind (D-144): a short-lived link |
 
 ## Tasks (TASK-*)
 
 | Method | Path | Permission |
 |---|---|---|
 | GET, POST | /tasks | `tasks.view` / `tasks.assign`; GET filters: project_id, status, mode, mine, search (task or participant code, D-057), page, page_size (at most 100). POST: both participants must have agreed to the project's consent form, else 422 `CONSENT_REQUIRED` naming them ("P000009 and P000010 have not agreed to this project's consent form yet.", `details[0].participants`, D-129), and be within the project's pairing rules: 422 `SPEAKER_DETAILS_MISSING`, 409 `SPEAKER_LIMIT_REACHED`, 409 `PAIR_ALREADY_USED` (D-143) |
-| GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has not agreed to the project's consent form (D-119, D-129) |
+| GET | /tasks/{id} | `tasks.view`. Includes `consent_missing` (`["A"]`, `["B"]`, both or empty): who has not agreed to the project's consent form (D-119, D-129), and `consent_mode`; each participant carries `consent_form` and `can_upload_consent_form` (D-144) |
 | POST | /tasks/{id}/transition | depends on target (backend/app/modules/tasks/workflow.py); body `{to, reason_code, comment}`; platform-only targets refused (D-037) |
 | POST | /tasks/{id}/assign | `tasks.assign` (reason required on reassignment); 409 `CONSENT_REQUIRED` while a participant has not agreed to the consent form (D-129) |
 | POST | /tasks/{id}/comments | `tasks.view` |
@@ -339,3 +342,40 @@ Codes are taken in any case, with spaces or hyphens for underscores (`higher sec
 A conversation counts while its task is not `CANCELLED` or `REJECTED`; a deleted task counts for nothing. Tasks made before stay as they are.
 
 **Pairing on the list.** For callers with `tasks.assign` in the project, each row of `GET /projects/{id}/participants` carries `pairing: {conversations, paired_with}`: the conversations that count toward the limit, and the ids of the participants they already share one with. Null elsewhere (one participant's own answer, other callers).
+
+## Consent online or by upload, and participant documents (D-144)
+
+**Project option.** `projects.consent_mode`: `ONLINE` (default; every project made before) or `UPLOAD`, on `GET`, `POST` and `PATCH /projects/{id}` (a PATCH that leaves it out sets `ONLINE`, like the other project fields; another value is 422). In an `UPLOAD` project nothing is emailed: `consent_email` on add and link, and the row messages of a file and of a bulk assignment, say "This project takes a signed consent form uploaded by staff: no consent form is emailed. Upload it with Documents."; `POST .../participants/{pid}/portal-link/email` and `POST .../participants/bulk` with `action: send_consent` answer 409 `CONSENT_BY_UPLOAD` with the same words.
+
+**Consent that counts.** In an `UPLOAD` project a participant whose current signed consent form for the project is uploaded counts as having agreed, for `POST /tasks`, `POST /tasks/import`, `POST /tasks/{id}/assign`, calls and the recorder; an online "I agree" still counts too. Participant rows (`consent_status`) and task parties (`consent_status`, `consent_at` = when it was uploaded) then read `UPLOADED`. A form counts only while the project is `UPLOAD`. `CONSENT_REQUIRED` says "P000009 has no signed consent form uploaded in this project yet." The recording details file's `consent_form_answer` (and the export's `participant_a_consent`, `participant_b_consent`) may be `UPLOADED`.
+
+**Rows.** Participant rows carry `has_consent_form` (this project's signed form is uploaded) and `has_address_proof`, for people who manage participants; null for others. `GET /tasks/{id}` carries `consent_mode` and, on each participant in an `UPLOAD` project, `consent_form` (the document below, for people who may see it; null otherwise) and `can_upload_consent_form`.
+
+**Who.** People who manage participants in the project (Super Admin, Project Admin): both kinds. The moderator of an open task (not `APPROVED`, `REJECTED` or `CANCELLED`) with the participant: view, upload and replace the project's consent form. A QC Executive who decides the QC of a task with the participant: view the consent form. Others in the project: 403; a project the caller is not in, a participant not in the project, or a document of another participant or project: 404. A document of a kind the caller may not see answers 404 like one that does not exist.
+
+`GET /projects/{id}/participants/{pid}/documents` answers:
+
+| Field | Value |
+|---|---|
+| `consent_mode` | the project's |
+| `consent_form`, `address_proof` | the current one (below) or null (none, or a kind the caller may not see) |
+| `earlier` | replaced ones of the kinds the caller may see, newest first |
+| `may_view_address_proof`, `may_upload_consent_form`, `may_upload_address_proof` | what the caller may do now (no consent form upload in an `ONLINE` project, nothing for a removed participant) |
+| `max_bytes` | 10485760 |
+
+A document: `{id, kind (CONSENT_FORM, ADDRESS_PROOF), file_name, content_type, size_bytes, sha256, uploaded_by, uploaded_at, replaced_by, replaced_at}` (`uploaded_by`, `replaced_by` are names).
+
+`POST /projects/{id}/participants/{pid}/documents/{kind}` (`consent-form` or `address-proof`): the body is the file itself, its name percent-encoded in `X-File-Name` (at most 200 characters are kept; no name gives `consent_form.pdf` and the like). Answers 201 with the document; the current one of that kind (per project for a consent form) is marked replaced. Refusals:
+
+| Code | Status | When |
+|---|---|---|
+| `INVALID_FILE_TYPE` | 422 | Not a PDF, JPEG or PNG by its first bytes (`%PDF-`, `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`), whatever its name or `Content-Type`: "Only PDF, JPEG or PNG files can be uploaded, and this file is none of them. ..." |
+| `INVALID_FILE` | 422 | An empty file |
+| `PAYLOAD_TOO_LARGE` | 413 | Over 10 MB (10485760 bytes): "The file is larger than 10 MB. Scan it again at a lower resolution, or save it as a smaller PDF." |
+| `CONSENT_ONLINE` | 409 | A consent form in an `ONLINE` project |
+| `PARTICIPANT_DELETED` | 409 | The participant was removed |
+| `STORAGE_UNAVAILABLE` / `NOT_CONFIGURED` | 503 | Storage failed / is not set up |
+
+`POST /projects/{id}/participants/{pid}/documents/{document_id}/url` answers `{url, expires_in}`: a signed link to the file that shows it in the browser (no download name), valid `SIGNED_URL_SECONDS`.
+
+**Audit.** `participant.document_uploaded` or `participant.document_replaced` (the replaced document's id and SHA-256 in `before`), and `participant.document_view_link`; with the kind, type, size and SHA-256, never the file or its name. Removing a participant (`participant.deleted`, with `address_proofs_removed`) deletes their address proofs from storage; their signed consent forms stay.

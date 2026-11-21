@@ -85,6 +85,21 @@ def _events(records: list[ConsentRecord], *, own: bool) -> str:
     return "<br>".join(parts)
 
 
+def _signed_form(side: consent.SideConsent) -> str:
+    """The signed consent form uploaded for the participant, where the project takes uploads
+    (D-144): when, and the file's checksum (the file itself is delivered separately)."""
+    form = side.form
+    if form is None:
+        return ""
+    return (
+        "<h3>Signed consent form (uploaded scan)</h3><table>"
+        + _row("Consent", "Signed form uploaded")
+        + _row("Uploaded on", _when(form.uploaded_at))
+        + _row("File", f"{form.content_type}, {form.size_bytes} bytes, SHA-256 {form.sha256}")
+        + "</table>"
+    )
+
+
 def build(
     db: Session, principal: Principal, recording_id: uuid.UUID, ip: str | None
 ) -> tuple[str, str]:
@@ -125,6 +140,7 @@ def render(db: Session, rec: Recording, task: Task, project: Project) -> str:
                 if side.noted
                 else ""
             )
+            + _signed_form(side)
             + f"<h3>Participant's own answers on the consent form</h3>"
             f"{_events(side.own, own=True)}"
         )

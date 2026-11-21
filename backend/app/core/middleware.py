@@ -29,6 +29,10 @@ _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 
 
 _CHUNK_PATH = re.compile(r"^/api/v1/recordings/[^/]+/chunks/[^/]+$")
+# A participant's document upload (D-144): the scanned file itself is the body.
+_DOCUMENT_PATH = re.compile(
+    r"^/api/v1/projects/[^/]+/participants/[^/]+/documents/(consent-form|address-proof)$"
+)
 # A JSON \u0000 escape: preceded by an even number of backslashes (an odd number means the text
 # itself contains a backslash followed by "u0000", which is allowed).
 _JSON_NUL = re.compile(rb"(?<!\\)(?:\\\\)*\\u0000")
@@ -61,21 +65,34 @@ class RequestLimitsMiddleware:
     with the answer the auth checks would give later. Only presence is checked here; the values
     are checked by the auth dependencies as before.
 
-    Size: audio chunk uploads may be up to MAX_CHUNK_BYTES, everything else up to MAX_REQUEST_BYTES;
-    larger bodies get 413. The declared Content-Length is checked first; a body sent without one
-    (chunked transfer) is read up to the limit and refused as soon as it passes it, so memory use
-    stays bounded either way. At most BODY_READ_SLOTS large bodies are read at once in a process;
+    Size: audio chunk uploads may be up to MAX_CHUNK_BYTES, a participant's document upload up to
+    the document limit (participants/documents.MAX_DOCUMENT_BYTES, D-144), everything else up to
+    MAX_REQUEST_BYTES; larger bodies get 413. The declared Content-Length is checked first; a body
+    sent without one (chunked transfer) is read up to the limit and refused as soon as it passes
+    it, so memory use stays bounded either way. At most BODY_READ_SLOTS large bodies are read at
+    once in a process;
     others wait their turn and get 503 BUSY when no turn comes in BODY_READ_WAIT_SECONDS.
 
     NUL characters: PostgreSQL text cannot hold them, so a NUL in the path, the query string or a
     JSON body is refused with 422 here instead of failing as a server error deeper down (any caller,
-    signed in or not, could otherwise trigger 500s at will). Binary audio chunks are not inspected.
+    signed in or not, could otherwise trigger 500s at will). Binary bodies (audio chunks, uploaded
+    documents) are not inspected.
     """
 
-    def __init__(self, app: ASGIApp, *, default_limit: int, chunk_limit: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        default_limit: int,
+        chunk_limit: int,
+        document_limit: int,
+        document_too_large: str = "",
+    ) -> None:
         self.app = app
         self.default_limit = default_limit
         self.chunk_limit = chunk_limit
+        self.document_limit = document_limit
+        self.document_too_large = document_too_large
         self._large_reads = asyncio.Semaphore(BODY_READ_SLOTS)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -95,10 +112,18 @@ class RequestLimitsMiddleware:
             await _send_error(send, *refusal)
             return
         is_chunk = bool(_CHUNK_PATH.match(path))
-        limit = self.chunk_limit if is_chunk else self.default_limit
+        is_document = bool(_DOCUMENT_PATH.match(path))
+        limit = (
+            self.chunk_limit
+            if is_chunk
+            else self.document_limit
+            if is_document
+            else self.default_limit
+        )
+        too_large = self.document_too_large if is_document else ""
         declared = headers.get("content-length")
         if declared is not None and (not declared.isdigit() or int(declared) > limit):
-            await self._refuse(send, limit)
+            await self._refuse(send, limit, too_large)
             return
         if declared is not None and int(declared) <= LARGE_BODY_BYTES:
             body = await _read(receive, limit)
@@ -114,19 +139,19 @@ class RequestLimitsMiddleware:
             finally:
                 self._large_reads.release()
         if body is None:
-            await self._refuse(send, limit)
+            await self._refuse(send, limit, too_large)
             return
         if not body.complete:
             return  # client went away before sending the whole body
-        if not is_chunk and _JSON_NUL.search(body.joined()):
+        if not (is_chunk or is_document) and _JSON_NUL.search(body.joined()):
             await _send_error(send, *_NUL)
             return
         await self.app(scope, body.replay(receive), send)
 
     @staticmethod
-    async def _refuse(send: Send, limit: int) -> None:
+    async def _refuse(send: Send, limit: int, message: str = "") -> None:
         await _send_error(
-            send, 413, "PAYLOAD_TOO_LARGE", f"Request body is larger than {limit} bytes"
+            send, 413, "PAYLOAD_TOO_LARGE", message or f"Request body is larger than {limit} bytes"
         )
 
 

@@ -1,4 +1,4 @@
-// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010
+// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,7 @@ const project = {
   qc_final_approval: false,
   max_conversations_per_speaker: 3,
   unique_pairs: true,
+  consent_mode: "ONLINE",
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -156,6 +157,33 @@ describe("project detail", () => {
     );
   });
 
+  it("takes consent online or as a scanned signed form, one of two choices (D-144)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1");
+    const group = await screen.findByRole("group", { name: "Consent" });
+    const online = within(group).getByRole("radio", {
+      name: "Online (participant agrees on their personal page)",
+    });
+    const upload = within(group).getByRole("radio", { name: "Upload (scanned signed form)" });
+    expect(within(group).getAllByRole("radio")).toHaveLength(2);
+    expect(online).toBeChecked();
+    expect(group).toHaveAccessibleDescription(/is emailed the consent form/);
+    await userEvent.click(upload);
+    expect(online).not.toBeChecked();
+    expect(group).toHaveAccessibleDescription(/No consent form is emailed/);
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({
+        consent_mode: "UPLOAD",
+      }),
+    );
+  });
+
   it("pauses a project and makes it active again, archiving only with a reason", async () => {
     let current = { ...project, status: "ACTIVE", accepts_new_work: true };
     const { calls } = fakeApi(
@@ -242,6 +270,8 @@ describe("project detail", () => {
     // A new project starts with the pairing rules on (D-143).
     expect(screen.getByLabelText("Conversations per speaker (at most)")).toHaveValue(3);
     expect(screen.getByRole("checkbox", { name: "Each pair of speakers only once" })).toBeChecked();
+    // Consent online unless chosen otherwise (D-144).
+    expect(screen.getByRole("radio", { name: /^Online/ })).toBeChecked();
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
     expect(
       await screen.findByText(/^PRJ0009 Tamil talk created\. It starts as Draft/),
@@ -249,6 +279,7 @@ describe("project detail", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       max_conversations_per_speaker: 3,
       unique_pairs: true,
+      consent_mode: "ONLINE",
     });
     expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "PRJ0009" })).toHaveAttribute(

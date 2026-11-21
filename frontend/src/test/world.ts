@@ -19,6 +19,7 @@ export const PROJECT = {
   qc_final_approval: false,
   max_conversations_per_speaker: 3,
   unique_pairs: true,
+  consent_mode: "ONLINE",
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -90,6 +91,8 @@ export const PARTICIPANT = {
   has_email: true,
   consent_status: "GIVEN",
   link_active: true,
+  has_consent_form: false,
+  has_address_proof: false,
   consent_visible: true,
   notes: "",
   deleted: false,
@@ -100,6 +103,32 @@ export const PARTICIPANT_B = {
   id: "b1",
   participant_code: "P000002",
   display_label: "Bina",
+};
+
+/** An uploaded scan (D-144), as the server describes it. */
+export const DOCUMENT = {
+  id: "d1",
+  kind: "CONSENT_FORM",
+  file_name: "asha-consent.pdf",
+  content_type: "application/pdf",
+  size_bytes: 245_760,
+  sha256: "a".repeat(64),
+  uploaded_by: "Ada Admin",
+  uploaded_at: "2026-11-21T05:00:00Z",
+  replaced_by: null,
+  replaced_at: null,
+};
+
+/** One participant's documents in an Online project with nothing uploaded yet (D-144). */
+export const NO_DOCUMENTS = {
+  consent_mode: "ONLINE",
+  consent_form: null,
+  address_proof: null,
+  earlier: [],
+  may_view_address_proof: true,
+  may_upload_consent_form: false,
+  may_upload_address_proof: true,
+  max_bytes: 10 * 1024 * 1024,
 };
 
 const party = (p: typeof PARTICIPANT) => ({
@@ -475,6 +504,7 @@ export function worldHandlers(): Record<string, Handler> {
     ]),
     "GET /api/v1/projects/p1/participants": ok(page([PARTICIPANT, PARTICIPANT_B])),
     "GET /api/v1/projects/p1/participants/a1/consent": ok([]),
+    "GET /api/v1/projects/p1/participants/a1/documents": ok(NO_DOCUMENTS),
     "GET /api/v1/tasks": ok(page([TASK])),
     "GET /api/v1/dashboard": ok(DASHBOARD),
     "GET /api/v1/portal/me": ok(PORTAL),

@@ -1,6 +1,7 @@
 // Participants, tasks and audit-log API calls (Phase 3).
 import type { TaskStatus } from "../lib/labels";
 import { ApiError, apiRequest, query, type Page } from "./client";
+import type { ConsentMode } from "./projects";
 
 export type { TaskStatus };
 
@@ -44,10 +45,15 @@ export interface Participant extends Partial<SpeakerDetails> {
   consent_visible: boolean;
   email: string | null; // only for people who may see contact details
   has_email: boolean;
-  /** The participant's own answer on the consent form as it counts now (D-129); "NONE" = not
-   * answered yet. WITHDRAWN only on answers from before D-129. */
-  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "NONE" | null;
+  /** The participant's consent as it counts now: their own answer on the consent form (D-129;
+   * "NONE" = not answered yet; WITHDRAWN only on answers from before D-129), or UPLOADED for a
+   * signed form uploaded where the project takes uploads (D-144). */
+  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "UPLOADED" | "NONE" | null;
   link_active: boolean | null;
+  /** Whether the signed consent form (this project) and the address proof are uploaded (D-144);
+   * for people who manage participants, null for others. */
+  has_consent_form?: boolean | null;
+  has_address_proof?: boolean | null;
   /** Minutes in this project (D-095); only for people who may export it. Payable = half of
    * approved, since every conversation has two participants. */
   minutes?: ParticipantMinutes | null;
@@ -110,11 +116,17 @@ export interface Party {
   /** The name, for people who may see the participant's profile (null otherwise). */
   display_label: string | null;
   has_email: boolean;
-  /** The participant's answer on the project's consent form as it counts now (D-127, D-129). */
+  /** The participant's consent as it counts now (D-127, D-129): their answer on the consent
+   * form, or UPLOADED for a signed form uploaded where the project takes uploads (D-144). */
   consent_status: string | null;
   consent_at: string | null;
-  /** True when this answer lets the call and the recording go ahead. */
+  /** True when this consent lets the call and the recording go ahead. */
   may_record: boolean;
+  /** Upload projects (D-144): the current signed form, for people who may look at it. */
+  consent_form?: ParticipantDocument | null;
+  /** The caller may upload or replace the signed form here (the project's admins, the task's
+   * moderator while the task is open). */
+  can_upload_consent_form?: boolean;
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -132,6 +144,8 @@ export interface TaskDetail extends TaskSummary {
   is_moderator: boolean;
   /** D-119: participants ("A", "B") without consent to record; recording waits for them. */
   consent_missing: string[];
+  /** How participants give consent in the project (D-144). */
+  consent_mode?: ConsentMode;
 }
 
 export interface TimelineEntry {
@@ -356,3 +370,87 @@ export interface ParticipantDetails {
 }
 export const participantDetails = (projectId: string, participantId: string) =>
   apiRequest<ParticipantDetails>(`${pp(projectId)}/${participantId}/details`);
+
+// ------------------------------------------------- uploaded documents (D-144)
+
+/** The largest scan taken, in MB (the server's MAX_DOCUMENT_BYTES; a backend test checks they
+ * match). */
+export const MAX_DOCUMENT_MB = 10;
+/** The file types taken: a PDF or a photo of the page. */
+export const DOCUMENT_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+
+export type DocumentKind = "CONSENT_FORM" | "ADDRESS_PROOF";
+const KIND_PATH: Record<DocumentKind, string> = {
+  CONSENT_FORM: "consent-form",
+  ADDRESS_PROOF: "address-proof",
+};
+
+/** One uploaded file; `replaced_at` is set on an earlier version. */
+export interface ParticipantDocument {
+  id: string;
+  kind: DocumentKind;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  uploaded_by: string | null;
+  uploaded_at: string;
+  replaced_by: string | null;
+  replaced_at: string | null;
+}
+
+/** One participant's documents in a project, as far as this user may see them. */
+export interface ParticipantDocuments {
+  consent_mode: ConsentMode;
+  consent_form: ParticipantDocument | null;
+  address_proof: ParticipantDocument | null;
+  earlier: ParticipantDocument[];
+  may_view_address_proof: boolean;
+  may_upload_consent_form: boolean;
+  may_upload_address_proof: boolean;
+  max_bytes: number;
+}
+
+export const participantDocuments = (projectId: string, participantId: string) =>
+  apiRequest<ParticipantDocuments>(`${pp(projectId)}/${participantId}/documents`);
+
+/** What is wrong with a file before it is sent (type or size), or "" when it can go. */
+export function documentProblem(file: File | null | undefined): string {
+  if (!file) return "";
+  if (
+    !/\.(pdf|jpe?g|png)$/i.test(file.name) &&
+    !/^(application\/pdf|image\/(jpeg|png))$/.test(file.type)
+  )
+    return "Choose a PDF, JPEG or PNG file.";
+  if (file.size === 0) return "This file is empty.";
+  if (file.size > MAX_DOCUMENT_MB * 1024 * 1024)
+    return `This file is larger than ${MAX_DOCUMENT_MB} MB. Scan it at a lower resolution, or as a smaller PDF.`;
+  return "";
+}
+
+/** Sends the file itself; the server checks its type from its first bytes. */
+export const uploadDocument = (
+  projectId: string,
+  participantId: string,
+  kind: DocumentKind,
+  file: File,
+) =>
+  apiRequest<ParticipantDocument>(
+    `${pp(projectId)}/${participantId}/documents/${KIND_PATH[kind]}`,
+    {
+      method: "POST",
+      file,
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        // The server keeps 200 characters of the name; percent-encoded it stays a short header.
+        "X-File-Name": encodeURIComponent(Array.from(file.name).slice(0, 200).join("")),
+      },
+    },
+  );
+
+/** A short-lived link to look at the file (it opens in the browser). */
+export const documentLink = (projectId: string, participantId: string, documentId: string) =>
+  apiRequest<{ url: string; expires_in: number }>(
+    `${pp(projectId)}/${participantId}/documents/${documentId}/url`,
+    { method: "POST" },
+  );

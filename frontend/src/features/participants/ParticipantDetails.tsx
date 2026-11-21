@@ -1,10 +1,11 @@
 // Everything about one participant in one project (D-104), opened by "View": profile, who added
-// them, the projects they are in, their personal link, the consent form as they answered it,
-// minutes, phone calls, and every session they were part of.
+// them, the projects they are in, their personal link, the consent form as they answered it, their
+// uploaded documents (D-144), minutes, phone calls, and every session they were part of.
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { apiDownload } from "../../api/client";
+import type { ConsentMode } from "../../api/projects";
 import { CALL_STATE_LABELS } from "../../api/telephony";
 import * as work from "../../api/work";
 import { DataTable } from "../../components/DataTable";
@@ -16,7 +17,13 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { day, duration, when } from "../../lib/format";
-import { consentAnswer, labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
+import {
+  consentAnswer,
+  FORM_MISSING,
+  labelFor,
+  MODE_LABELS,
+  TASK_STATUS_LABELS,
+} from "../../lib/labels";
 import {
   EDUCATION_LABELS,
   EDUCATION_MEDIUM_LABELS,
@@ -26,6 +33,7 @@ import {
   speakerDetailsOf,
 } from "../../lib/speakers";
 import { languageLabel } from "../projects/choices";
+import { DocumentBadges, DocumentsPanel } from "./Documents";
 import "./participants.css";
 
 const minutes = (n: number) => `${n.toFixed(1)} min`;
@@ -257,9 +265,27 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
   );
 }
 
-function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() => void) | null }) {
+/** The consent badge's words: "Consent form: Agreed" online, "Consent: Form uploaded" or
+ * "Consent form missing" where the project takes signed forms (D-144). */
+function consentBadge(status: string | null, mode: ConsentMode | undefined): string | null {
+  if (!status) return null;
+  const { label } = consentAnswer(status, mode);
+  if (label === FORM_MISSING.label) return label;
+  return mode === "UPLOAD" ? `Consent: ${label}` : `Consent form: ${label}`;
+}
+
+function Head({
+  d,
+  mode,
+  onDownload,
+}: {
+  d: work.ParticipantDetails;
+  mode: ConsentMode | undefined;
+  onDownload: (() => void) | null;
+}) {
   const p = d.participant;
-  const answer = p.consent_status ? consentAnswer(p.consent_status) : null;
+  const answer = p.consent_status ? consentAnswer(p.consent_status, mode) : null;
+  const badge = consentBadge(p.consent_status, mode);
   return (
     <div className="pd-head">
       <IconTile name="user" size={46} />
@@ -274,8 +300,9 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
         <div className="pd-head__badges">
           {d.removed ? <StatusBadge tone="danger" label="Removed" /> : null}
           {!d.removed && p.speaker_details_complete === false ? <DetailsMissing /> : null}
-          {answer ? (
-            <StatusBadge tone={answer.tone} label={`Consent form: ${answer.label}`} />
+          {answer && badge ? <StatusBadge tone={answer.tone} label={badge} /> : null}
+          {!d.removed ? (
+            <DocumentBadges p={p} mode={mode} consent={badge !== FORM_MISSING.label} />
           ) : null}
           {d.link ? (
             <StatusBadge
@@ -299,9 +326,12 @@ function Head({ d, onDownload }: { d: work.ParticipantDetails; onDownload: (() =
 export function ParticipantDetails({
   projectId,
   participantId,
+  consentMode,
 }: {
   projectId: string;
   participantId: string;
+  /** The project's way of consent (D-144), for the consent badge's words. */
+  consentMode?: ConsentMode | undefined;
 }) {
   const { state, reload } = useResource(
     () => work.participantDetails(projectId, participantId),
@@ -316,6 +346,7 @@ export function ParticipantDetails({
     <div className="stack pd">
       <Head
         d={d}
+        mode={consentMode}
         onDownload={
           form
             ? () =>
@@ -333,6 +364,10 @@ export function ParticipantDetails({
       <Profile d={d} />
       <PersonalLink link={d.link} />
       {form ? <ConsentForm form={form} /> : null}
+      {/* D-144: the signed consent form and the address proof, as in the Documents window. */}
+      <Block icon="fileText" title="Documents">
+        <DocumentsPanel projectId={projectId} participantId={participantId} onChanged={reload} />
+      </Block>
       <Sessions d={d} />
     </div>
   );

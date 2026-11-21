@@ -119,6 +119,7 @@ export function OverviewTab() {
           qc_final_approval: project.qc_final_approval,
           max_conversations_per_speaker: project.max_conversations_per_speaker,
           unique_pairs: project.unique_pairs,
+          consent_mode: project.consent_mode,
         }}
         submitLabel="Save project"
         busy={busy !== null}

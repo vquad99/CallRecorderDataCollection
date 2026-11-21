@@ -129,6 +129,9 @@ class ProjectInput:
     # each pair of speakers only once. They apply to tasks made from now on.
     max_conversations_per_speaker: int | None = 3
     unique_pairs: bool = True
+    # ONLINE or UPLOAD (D-144): how participants give consent. Changing it changes nothing
+    # already stored; an uploaded form counts only while the project is UPLOAD.
+    consent_mode: str = "ONLINE"
 
 
 def _check_modes(data: ProjectInput) -> None:
@@ -160,6 +163,7 @@ def _snapshot(p: Project) -> dict[str, object]:
         "qc_final_approval": p.qc_final_approval,
         "max_conversations_per_speaker": p.max_conversations_per_speaker,
         "unique_pairs": p.unique_pairs,
+        "consent_mode": p.consent_mode,
     }
 
 

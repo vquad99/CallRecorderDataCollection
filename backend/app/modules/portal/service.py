@@ -159,6 +159,7 @@ def email_link(
     project, participant = participants.get_in_project(
         db, principal, project_id, participant_id, Perm.PARTICIPANTS_MANAGE
     )
+    consent.require_online(project)  # D-144: nothing is emailed where staff upload the form
     email_of(participant)
     check_linkable(participant)
     if recently_emailed(db, project.id, [participant.id]):
@@ -224,8 +225,8 @@ def send_links_job(
     the others still go out."""
     with state.session_factory() as db:
         project = db.get(Project, uuid.UUID(project_id))
-        if project is None:
-            return
+        if project is None or consent.takes_uploads(project):
+            return  # gone, or switched to signed forms uploaded by staff since (D-144)
         for pid in participant_ids:
             participant = db.get(Participant, uuid.UUID(pid))
             if participant is None:

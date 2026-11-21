@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import datetime
 from typing import Literal, get_args
 
@@ -14,10 +15,15 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Select,
     String,
     Text,
     UniqueConstraint,
     and_,
+    false,
+    func,
+    or_,
+    select,
     text,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -180,6 +186,118 @@ class ConsentRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     @classmethod
     def _is_own_answer_expression(cls) -> ColumnElement[bool]:
         return and_(cls.task_id.is_(None), cls.captured_by.is_(None))
+
+
+# Uploaded documents (D-144): a participant's signed consent form for one project (scanned), and
+# their address proof, one for the person whatever the project. The file types documents.py
+# accepts, recognised by their first bytes.
+CONSENT_FORM, ADDRESS_PROOF = "CONSENT_FORM", "ADDRESS_PROOF"
+DOCUMENT_KINDS = (CONSENT_FORM, ADDRESS_PROOF)
+DOCUMENT_TYPES = ("application/pdf", "image/jpeg", "image/png")
+
+
+class ParticipantDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One uploaded file (D-144). A new upload replaces the current one of its kind: the older
+    row stays, with `replaced_at`, for the record. Only the current one counts."""
+
+    __tablename__ = "participant_documents"
+    __table_args__ = (
+        CheckConstraint(f"kind IN {DOCUMENT_KINDS}", name="kind_allowed"),
+        CheckConstraint(f"content_type IN {DOCUMENT_TYPES}", name="content_type_allowed"),
+        # A consent form belongs to a project; an address proof to the person only.
+        CheckConstraint(
+            f"(kind = '{CONSENT_FORM}') = (project_id IS NOT NULL)", name="project_for_consent_form"
+        ),
+        CheckConstraint("size_bytes > 0", name="size_positive"),
+        # At most one current document of a kind: per project for consent forms.
+        Index(
+            "uq_participant_documents_current_consent_form",
+            "participant_id",
+            "project_id",
+            unique=True,
+            postgresql_where=text(
+                f"kind = '{CONSENT_FORM}' AND replaced_at IS NULL AND removed_at IS NULL"
+            ),
+        ),
+        Index(
+            "uq_participant_documents_current_address_proof",
+            "participant_id",
+            unique=True,
+            postgresql_where=text(
+                f"kind = '{ADDRESS_PROOF}' AND replaced_at IS NULL AND removed_at IS NULL"
+            ),
+        ),
+        Index("ix_participant_documents_participant_kind", "participant_id", "kind"),
+    )
+    participant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False
+    )
+    # The project of a consent form; empty for an address proof.
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT")
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
+    # The name the file had on the uploader's computer, for people to recognise it.
+    file_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Found from the file's first bytes, not taken from the browser.
+    content_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # Set when a newer upload of the same kind took its place.
+    replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replaced_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    # Set when the file was deleted from storage because the participant was removed (address
+    # proofs only: a signed consent form stays as the record of consent, like consent records).
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @hybrid_property
+    def is_current(self) -> bool:
+        return self.replaced_at is None and self.removed_at is None
+
+    @is_current.inplace.expression
+    @classmethod
+    def _is_current_expression(cls) -> ColumnElement[bool]:
+        return and_(cls.replaced_at.is_(None), cls.removed_at.is_(None))
+
+
+def of_project(
+    project_id: uuid.UUID, kinds: Collection[str] = DOCUMENT_KINDS
+) -> ColumnElement[bool]:
+    """Documents of these kinds that count in a project: its consent forms, and the person's
+    address proof (which belongs to no project)."""
+    which = []
+    if CONSENT_FORM in kinds:
+        which.append(
+            and_(
+                ParticipantDocument.kind == CONSENT_FORM,
+                ParticipantDocument.project_id == project_id,
+            )
+        )
+    if ADDRESS_PROOF in kinds:
+        which.append(ParticipantDocument.kind == ADDRESS_PROOF)
+    return or_(false(), *which)
+
+
+def current_documents(
+    project_id: uuid.UUID,
+    participant_ids: Collection[uuid.UUID],
+    kinds: Collection[str] = DOCUMENT_KINDS,
+) -> Select[ParticipantDocument]:
+    """The participants' current documents of these kinds that count in this project."""
+    return select(ParticipantDocument).where(
+        ParticipantDocument.participant_id.in_(list(participant_ids)),
+        ParticipantDocument.is_current,
+        of_project(project_id, kinds),
+    )
 
 
 class ParticipantPortalLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):

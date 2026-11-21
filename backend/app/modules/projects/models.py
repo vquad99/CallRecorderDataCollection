@@ -25,6 +25,9 @@ from app.modules.recordings.models import ASSET_KINDS
 PROJECT_STATUSES = ("DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED")
 RECORDING_MODES = ("TELEPHONY", "FACE_TO_FACE")
 PHONE_POLICIES = ("ADMINS_ONLY", "ASSIGNED_MODERATOR")
+# How participants give consent (D-144): ONLINE, on their personal page (D-067, D-129), or
+# UPLOAD, a scanned signed consent form that staff upload.
+CONSENT_MODES = ("ONLINE", "UPLOAD")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -48,6 +51,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "max_conversations_per_speaker IS NULL OR max_conversations_per_speaker >= 1",
             name="max_conversations_range",
         ),
+        CheckConstraint(_in("consent_mode", CONSENT_MODES), name="consent_mode_allowed"),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -69,6 +73,9 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     # The consent form participants read and answer on their personal page (D-067).
     consent_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # ONLINE: the form is emailed and answered on the personal page; UPLOAD: staff upload each
+    # participant's scanned signed form, which counts as consent (D-144, participants/consent.py).
+    consent_mode: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ONLINE")
     # A QC pass approves the task: no admin review in this project (D-138).
     qc_final_approval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")

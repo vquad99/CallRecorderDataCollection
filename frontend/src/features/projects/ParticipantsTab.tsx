@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
+import { DocumentBadges } from "../participants/Documents";
 import { DetailsMissing } from "../participants/ParticipantDetails";
 import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
 import "../participants/participants.css";
@@ -155,9 +156,12 @@ export function ParticipantsTab() {
   );
   const { busy, error, message, run, setMessage } = useAction(list.reload);
   const confirm = useConfirm(setMessage);
+  // Consent online (emailed) or a signed form uploaded by staff (D-144).
+  const online = project.consent_mode !== "UPLOAD";
   const windows = useParticipantWindows({
     projectId: project.id,
     languages: project.languages,
+    consentMode: project.consent_mode,
     onSaved: (text) => {
       setMessage(text);
       list.reload();
@@ -299,11 +303,12 @@ export function ParticipantsTab() {
                   <td>{p.participant_code}</td>
                   <td>
                     {p.display_label ?? <span className="muted">Hidden</span>}
-                    {!p.deleted && p.speaker_details_complete === false ? (
-                      <div>
-                        <DetailsMissing />
+                    {p.deleted ? null : (
+                      <div className="row-badges">
+                        {p.speaker_details_complete === false ? <DetailsMissing /> : null}
+                        <DocumentBadges p={p} mode={project.consent_mode} />
                       </div>
-                    ) : null}
+                    )}
                   </td>
                   <td>
                     {p.phone ?? (p.has_phone ? <span className="muted">Hidden</span> : "None")}
@@ -338,7 +343,12 @@ export function ParticipantsTab() {
                     ) : null}
                     {canManage ? (
                       <>
-                        {p.has_email && p.consent_status !== "GIVEN" ? (
+                        <IconButton
+                          icon="fileText"
+                          label="Documents"
+                          onClick={() => windows.open({ kind: "documents", participant: p })}
+                        />
+                        {online && p.has_email && p.consent_status !== "GIVEN" ? (
                           <IconButton
                             icon="mail"
                             label="Email consent form again"

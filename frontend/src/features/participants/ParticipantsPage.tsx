@@ -1,7 +1,8 @@
 // Participants section (D-073): everyone in a project in one place, with the work done on many at
 // once - add from a file, assign to another project, remove - and each participant's own answer
 // on the consent form. The form is emailed by itself to everyone who joins a project and an
-// answer counts at once (D-129); "Email consent form again" is for an email that was lost.
+// answer counts at once (D-129); "Email consent form again" is for an email that was lost. In a
+// project that takes signed forms nothing is emailed: staff upload the scan (D-144).
 import { useState } from "react";
 
 import { getProject, listProjects } from "../../api/projects";
@@ -19,8 +20,9 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
-import { consentAnswer } from "../../lib/labels";
+import { consentAnswer, FORM_MISSING } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
+import { DocumentBadges } from "./Documents";
 import { DetailsMissing } from "./ParticipantDetails";
 import { useParticipantWindows } from "./ParticipantEditor";
 
@@ -177,9 +179,16 @@ export function ParticipantsPage() {
   );
   const languages =
     detail.state.status === "loaded" && detail.state.data ? detail.state.data.languages : [];
+  // Consent online (emailed) or a signed form uploaded by staff (D-144).
+  const mode =
+    detail.state.status === "loaded" && detail.state.data
+      ? detail.state.data.consent_mode
+      : undefined;
+  const online = mode !== "UPLOAD";
   const windows = useParticipantWindows({
     projectId,
     languages,
+    consentMode: mode,
     onSaved: (text) => {
       setMessage(text);
       list.reload();
@@ -336,15 +345,17 @@ export function ParticipantsPage() {
           >
             Add to that project
           </Button>
-          <Button
-            variant="secondary"
-            icon="mail"
-            busy={busy === "bulk-consent"}
-            disabled={busy !== null}
-            onClick={resendSelected}
-          >
-            Email consent form again
-          </Button>
+          {online ? (
+            <Button
+              variant="secondary"
+              icon="mail"
+              busy={busy === "bulk-consent"}
+              disabled={busy !== null}
+              onClick={resendSelected}
+            >
+              Email consent form again
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             icon="trash"
@@ -396,7 +407,7 @@ export function ParticipantsPage() {
             </thead>
             <tbody>
               {rows.map((p) => {
-                const answer = consentAnswer(p.consent_status);
+                const answer = consentAnswer(p.consent_status, mode);
                 return (
                   <tr key={p.id}>
                     <td>
@@ -412,11 +423,17 @@ export function ParticipantsPage() {
                     <td className="mono">{p.participant_code}</td>
                     <td>
                       {p.display_label ?? <span className="muted">Hidden</span>}
-                      {!p.deleted && p.speaker_details_complete === false ? (
-                        <div>
-                          <DetailsMissing />
+                      {p.deleted ? null : (
+                        <div className="row-badges">
+                          {p.speaker_details_complete === false ? <DetailsMissing /> : null}
+                          {/* The consent chip may already say the form is missing (D-144). */}
+                          <DocumentBadges
+                            p={p}
+                            mode={mode}
+                            consent={answer.label !== FORM_MISSING.label}
+                          />
                         </div>
-                      ) : null}
+                      )}
                     </td>
                     <td>
                       {p.phone ?? (p.has_phone ? "Phone on file" : "")}
@@ -446,7 +463,12 @@ export function ParticipantsPage() {
                             label="Consent history"
                             onClick={() => windows.open({ kind: "history", participant: p })}
                           />
-                          {p.has_email && p.consent_status !== "GIVEN" ? (
+                          <IconButton
+                            icon="fileText"
+                            label="Documents"
+                            onClick={() => windows.open({ kind: "documents", participant: p })}
+                          />
+                          {online && p.has_email && p.consent_status !== "GIVEN" ? (
                             <IconButton
                               icon="mail"
                               label="Email consent form again"

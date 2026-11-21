@@ -206,3 +206,21 @@ The native district is the existing `district`. State names are checked by the a
 `projects.max_conversations_per_speaker` (integer, default 3, null = no limit, check at least 1)
 and `projects.unique_pairs` (boolean, default true): the task rules in `tasks/pairing.py`. Nothing
 new is stored per task; the counts come from the tasks that are not CANCELLED or REJECTED.
+
+## Consent by upload and participant documents (migration 0034, D-144)
+
+`projects.consent_mode` (text, default `ONLINE`, check `ONLINE` or `UPLOAD`): how participants give
+consent in the project. Every project made before is `ONLINE`.
+
+`participant_documents`: one row per uploaded file. `participant_id`; `project_id` (set for a
+consent form, empty for an address proof - a check keeps them so); `kind` (check `CONSENT_FORM`,
+`ADDRESS_PROOF`); `storage_key` (unique; the file is in the private object storage); `file_name`
+(as uploaded, at most 200 characters); `content_type` (check `application/pdf`, `image/jpeg`,
+`image/png`, found from the file's first bytes); `size_bytes` (check above 0; the application
+takes at most 10 MB); `sha256`; `uploaded_by`, `uploaded_at`; `replaced_at`, `replaced_by` (set
+when a newer upload of the same kind took its place; the row stays as history); `removed_at` (set
+when the file was deleted because the participant was removed: address proofs only). Two partial
+unique indexes keep one current document (`replaced_at` and `removed_at` empty) per participant
+and project for consent forms, and per participant for address proofs; an index on
+`(participant_id, kind)` serves the history. Which documents count is decided in
+`participants/consent.py` (a consent form counts as consent only while its project is `UPLOAD`).

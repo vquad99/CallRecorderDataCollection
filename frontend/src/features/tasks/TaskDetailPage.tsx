@@ -32,6 +32,8 @@ import {
 } from "../../lib/labels";
 import { AudioQcPanel } from "./AudioQcPanel";
 import { PhoneCalls } from "./CallCard";
+import { openDocument, sendDocument, UploadButton, uploadedText } from "../participants/Documents";
+import "../participants/participants.css";
 import { ListenLatest, Player } from "./Listen";
 import "./tasks.css";
 
@@ -339,22 +341,105 @@ function Assignment({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   );
 }
 
-/** Consent comes from each participant's own consent form (D-127): nobody ticks it here. Tasks
- * are made only for people who agreed (D-129), so this card shows for older tasks only: it says
- * who has not agreed, and people who manage participants can email them the form again. Calling
- * and recording wait until both have agreed (D-119). */
-function ConsentStatus({ task }: { task: work.TaskDetail }) {
+/** Uploading a participant's signed consent form from the task page, and opening one (D-144):
+ * the task is loaded again after an upload, so its consent and buttons follow at once. */
+function useSignedForms(task: work.TaskDetail, onChange: OnTaskChange) {
+  const action = useAction();
+  const upload = (p: work.Party) => (file: File) =>
+    void action.run(async () => {
+      await sendDocument(task.project_id, p.id, "CONSENT_FORM", file);
+      onChange(
+        await work.getTask(task.id),
+        `Signed consent form of ${p.participant_code} uploaded.`,
+      );
+    }, `upload-${p.id}`);
+  const view = (p: work.Party, doc: work.ParticipantDocument) =>
+    void action.run(() => openDocument(task.project_id, p.id, doc), `view-${doc.id}`);
+  return { ...action, upload, view };
+}
+
+/** The two participants' signed consent forms, where the project takes them (D-144): the project's
+ * admins, the moderator and the QC Executive of the task open them here; the admins and the
+ * moderator of the open task upload or replace one (for example a better scan). */
+function SignedForms({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
+  const { busy, error, message, upload, view } = useSignedForms(task, onChange);
+  const parties = [task.participant_a, task.participant_b];
+  const shown = parties.some((p) => p.consent_form || p.can_upload_consent_form);
+  if (task.consent_mode !== "UPLOAD" || !shown) return null;
+  return (
+    <section className="card consent" aria-labelledby="signed-forms-title">
+      <h2 id="signed-forms-title">
+        <Icon name="fileText" size={20} />
+        Signed consent forms
+      </h2>
+      <ul className="consent__rows">
+        {parties.map((p, i) => {
+          const doc = p.consent_form ?? null;
+          return (
+            <li key={p.id} className="consent__row signed-forms__row">
+              <span className="consent__who">
+                <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
+                <PartyName party={p} />
+              </span>
+              {doc ? (
+                <span className="docs__file">
+                  <span className="docs__name">{doc.file_name}</span>
+                  <span className="muted">{uploadedText(doc)}</span>
+                </span>
+              ) : (
+                <StatusBadge tone="warning" label="Consent form missing" />
+              )}
+              <span className="actions">
+                {doc ? (
+                  <Button
+                    variant="secondary"
+                    icon="eye"
+                    busy={busy === `view-${doc.id}`}
+                    disabled={busy !== null}
+                    aria-label={`View the signed consent form of ${p.participant_code}`}
+                    onClick={() => view(p, doc)}
+                  >
+                    View
+                  </Button>
+                ) : null}
+                {p.can_upload_consent_form ? (
+                  <UploadButton
+                    label={`${doc ? "Replace" : "Upload"} consent form of ${p.participant_code}`}
+                    busy={busy === `upload-${p.id}`}
+                    disabled={busy !== null}
+                    onFile={upload(p)}
+                  />
+                ) : null}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+    </section>
+  );
+}
+
+/** Consent comes from each participant's own consent form (D-127): nobody ticks it here, or from
+ * their signed form uploaded by staff where the project takes them (D-144). Tasks are made only
+ * for people who agreed (D-129), so this card shows for older tasks only: it says who has not
+ * agreed, and people who manage participants can email them the form again (or upload the signed
+ * form). Calling and recording wait until both have agreed (D-119). */
+function ConsentStatus({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
   const { can } = useAuth();
   const canSend = can("participants.manage");
-  const { busy, error, message, run } = useAction();
+  const uploads = task.consent_mode === "UPLOAD";
+  const { busy, error, message, run, upload } = useSignedForms(task, onChange);
   const send = (p: work.Party) => void run(() => work.emailConsentForm(task.project_id, p), p.id);
   const parties = [task.participant_a, task.participant_b];
   return (
     <section className="card consent" aria-labelledby="consent-title">
       <h2 id="consent-title">Waiting for consent</h2>
       <p className="muted">
-        Consent is taken from each person&apos;s consent form. Calling and recording start only when
-        both have agreed.
+        {uploads
+          ? "Consent is each person's signed consent form, uploaded by staff (or their online agreement). Calling and recording start only when both have one."
+          : "Consent is taken from each person's consent form. Calling and recording start only when both have agreed."}
       </p>
       <ul className="consent__rows">
         {parties.map((p, i) =>
@@ -364,8 +449,19 @@ function ConsentStatus({ task }: { task: work.TaskDetail }) {
                 <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
                 <PartyName party={p} />
               </span>
-              <ConsentChip party={p} />
-              {canSend && !p.has_email ? (
+              <ConsentChip party={p} mode={task.consent_mode} />
+              {uploads ? (
+                p.can_upload_consent_form ? (
+                  <UploadButton
+                    label={`Upload consent form of ${p.participant_code}`}
+                    busy={busy === `upload-${p.id}`}
+                    disabled={busy !== null}
+                    onFile={upload(p)}
+                  />
+                ) : (
+                  <span className="muted">Ask your admin to upload their signed consent form.</span>
+                )
+              ) : canSend && !p.has_email ? (
                 <span className="muted">
                   No email address. Add one with Edit on the Participants page.
                 </span>
@@ -402,9 +498,10 @@ function PartyName({ party }: { party: work.Party }) {
   );
 }
 
-/** A participant's answer on the consent form as a coloured chip, as the server counts it. */
-function ConsentChip({ party }: { party: work.Party }) {
-  const { label, tone } = consentAnswer(party.consent_status);
+/** A participant's consent as a coloured chip, as the server counts it: their answer, or "Form
+ * uploaded" / "Consent form missing" where the project takes signed forms (D-144). */
+function ConsentChip({ party, mode }: { party: work.Party; mode: string | undefined }) {
+  const { label, tone } = consentAnswer(party.consent_status, mode);
   return <StatusBadge tone={tone} label={label} />;
 }
 
@@ -595,7 +692,7 @@ export function TaskDetailPage() {
   };
   const waitingConsent =
     task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
-  const consent = waitingConsent ? <ConsentStatus task={task} /> : null;
+  const consent = waitingConsent ? <ConsentStatus task={task} onChange={onChange} /> : null;
   const onPath = FLOW.includes(task.status) ? task.status : (task.held_from ?? "DRAFT");
   return (
     <section aria-labelledby="task-title" className="stack">
@@ -639,7 +736,7 @@ export function TaskDetailPage() {
               <span className="party__name">{p.display_label ?? p.participant_code}</span>
               <span className="party__meta">
                 {p.display_label ? <span className="code-tag">{p.participant_code}</span> : null}
-                <ConsentChip party={p} />
+                <ConsentChip party={p} mode={task.consent_mode} />
               </span>
             </dd>
           </div>
@@ -651,6 +748,7 @@ export function TaskDetailPage() {
           </div>
         ) : null}
       </dl>
+      <SignedForms task={task} onChange={onChange} />
       {task.can_reassign ? <Assignment task={task} onChange={onChange} /> : null}
       {task.recording_mode === "TELEPHONY" ? (
         <PhoneCalls

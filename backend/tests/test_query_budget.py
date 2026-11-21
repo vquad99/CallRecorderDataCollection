@@ -69,8 +69,9 @@ MAX_QUERIES = 10
 ALLOWED = {
     # D-095: the minutes columns (recorded, approved, payable) are one query for the whole page,
     # sent only to people who may export the project; D-143: who each one is paired with, one
-    # query for the whole page, sent only to people who make tasks.
-    ("sa", "/api/v1/projects/{project}/participants?page_size=100"): MAX_QUERIES + 2,
+    # query for the whole page, sent only to people who make tasks; D-144: which documents each
+    # one has uploaded, one query for the whole page.
+    ("sa", "/api/v1/projects/{project}/participants?page_size=100"): MAX_QUERIES + 3,
 }
 
 PAGES = [

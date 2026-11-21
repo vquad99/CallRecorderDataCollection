@@ -177,3 +177,73 @@
 .speaker-details .notice {
   margin: 0 0 12px;
 }
+
+/* Uploaded documents (D-144): one block per kind, then the earlier versions. */
+.docs__slot {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.docs__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.docs__head h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.95rem;
+}
+.docs__file {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.docs__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.docs__earlier h4 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+.docs__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+/* A file picker shown as a button: looks disabled while it may not be used. */
+.button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.button:focus-within {
+  box-shadow: var(--focus-ring);
+}
+/* A participant's row: what is still missing, side by side. */
+.row-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+/* The task's signed consent forms (D-144): one line per participant. */
+.signed-forms__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.signed-forms__row .docs__file {
+  flex: 1;
+  min-width: 200px;
+}

@@ -17,7 +17,8 @@ _NUM_OR_NULL = {"type": ["number", "null"]}
 _BOOL_OR_NULL = {"type": ["boolean", "null"]}
 _MODE = {"enum": ["FACE_TO_FACE", "TELEPHONY"]}
 _SHA = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-_CONSENT = {"enum": ["GIVEN", "REFUSED", "WITHDRAWN", None]}
+# UPLOADED: a signed consent form uploaded where the project takes uploads (D-144).
+_CONSENT = {"enum": ["GIVEN", "REFUSED", "WITHDRAWN", "UPLOADED", None]}
 
 
 def _object(properties: dict[str, Any], *, open_: bool = False) -> dict[str, Any]:

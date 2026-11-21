@@ -45,7 +45,14 @@ export const EMPTY_FIELDS: ProjectFields = {
   qc_final_approval: false,
   max_conversations_per_speaker: 3,
   unique_pairs: true,
+  consent_mode: "ONLINE",
 };
+
+/** The two ways participants give consent (D-144). */
+const CONSENT_MODES: readonly { value: ProjectFields["consent_mode"]; label: string }[] = [
+  { value: "ONLINE", label: "Online (participant agrees on their personal page)" },
+  { value: "UPLOAD", label: "Upload (scanned signed form)" },
+];
 
 export function ProjectForm({
   initial,
@@ -191,6 +198,27 @@ export function ProjectForm({
           <p id="unique-pairs-hint" className="field__hint">
             When ticked, two people who already share a task (not cancelled or rejected) cannot be
             put on another one together. Tasks made before stay as they are.
+          </p>
+        </fieldset>
+        {/* D-144: the consent form answered online, or a scanned signed form uploaded by staff. */}
+        <fieldset className="field" aria-describedby="consent-mode-hint">
+          <legend className="field__label">Consent</legend>
+          {CONSENT_MODES.map((m) => (
+            <label key={m.value} className="checkbox">
+              <input
+                type="radio"
+                name="consent_mode"
+                value={m.value}
+                checked={f.consent_mode === m.value}
+                onChange={() => set("consent_mode", m.value)}
+              />
+              {m.label}
+            </label>
+          ))}
+          <p id="consent-mode-hint" className="field__hint">
+            {f.consent_mode === "UPLOAD"
+              ? "No consent form is emailed. Staff upload each person's signed consent form when they add them, and a task needs it. A person who already agreed online still counts."
+              : "Everyone who joins the project is emailed the consent form below and agrees on their personal page."}
           </p>
         </fieldset>
         <TextField

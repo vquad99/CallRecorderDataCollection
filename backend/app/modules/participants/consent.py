@@ -1,10 +1,15 @@
 """Consent: the one place that reads consent records and decides what they mean (PART-006, D-119,
-D-129).
+D-129, D-144).
 
 A participant's consent in a project is their own answer on the project's consent form, given on
 their personal page (`ConsentRecord.is_own_answer`). It counts at once: there is no staff review,
 and once they agree they cannot withdraw (D-129). Someone who answered "I do not agree" may agree
 later. Tasks are made only for people who agreed, and calling and recording check it again.
+
+A project that takes consent by upload (`projects.consent_mode` UPLOAD, D-144) also counts a
+participant whose current signed consent form for it was uploaded by staff (`ParticipantDocument`
+CONSENT_FORM); their consent then reads UPLOADED. An online "I agree" still counts there too. A
+form counts only while the project takes uploads.
 
 Older records stay readable as history but decide nothing: consent a moderator noted for one task,
 and the staff review of an answer. One thing from that review still counts: an "agree" that staff
@@ -14,14 +19,27 @@ sent back (review REJECTED) is not agreed - the participant was asked to answer 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.modules.participants.models import ConsentRecord
+from app.core.errors import AppError
+from app.modules.participants.models import (
+    CONSENT_FORM,
+    ConsentRecord,
+    ParticipantDocument,
+    current_documents,
+)
+from app.modules.projects.models import Project
 from app.modules.tasks.models import Task
+
+UPLOAD = "UPLOAD"
+# A participant's consent when it is their signed form, uploaded in an Upload project (D-144).
+UPLOADED = "UPLOADED"
 
 
 def word(answer: ConsentRecord | None) -> str | None:
@@ -37,12 +55,79 @@ def agreed(answer: ConsentRecord | None) -> bool:
     return word(answer) == "GIVEN"
 
 
+def takes_uploads(project: Project) -> bool:
+    """The project takes a scanned signed consent form, uploaded by staff (D-144)."""
+    return project.consent_mode == UPLOAD
+
+
+# What staff are told instead of emailing the consent form in an Upload project (D-144).
+BY_UPLOAD = (
+    "This project takes a signed consent form uploaded by staff: no consent form is emailed. "
+    "Upload it with Documents."
+)
+
+
+def require_online(project: Project) -> None:
+    """The consent form is emailed only in a project that takes consent online (D-144): 409
+    CONSENT_BY_UPLOAD otherwise."""
+    if takes_uploads(project):
+        raise AppError(BY_UPLOAD, code="CONSENT_BY_UPLOAD", status_code=409)
+
+
+@dataclass(frozen=True)
+class Standing:
+    """A participant's consent in a project as it counts now: their latest own answer, and their
+    current signed form when the project takes uploads (None otherwise)."""
+
+    answer: ConsentRecord | None = None
+    form: ParticipantDocument | None = None
+
+    @property
+    def status(self) -> str | None:
+        """UPLOADED, else the answer's word (GIVEN, REFUSED, WITHDRAWN), else None."""
+        return UPLOADED if self.form is not None else word(self.answer)
+
+    @property
+    def consented(self) -> bool:
+        """The one rule: may be put on a task, called and recorded."""
+        return self.form is not None or agreed(self.answer)
+
+    @property
+    def at(self) -> datetime | None:
+        """When the consent that counts was given (the upload, or the answer)."""
+        if self.form is not None:
+            return self.form.uploaded_at
+        return self.answer.created_at if self.answer is not None and word(self.answer) else None
+
+
+def signed_forms(
+    db: Session, project_id: uuid.UUID, participant_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, ParticipantDocument]:
+    """Each participant's current signed consent form for the project, in one query."""
+    if not participant_ids:
+        return {}
+    rows = db.scalars(current_documents(project_id, participant_ids, (CONSENT_FORM,)))
+    return {d.participant_id: d for d in rows}
+
+
+def standings(
+    db: Session, project: Project, participant_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, Standing]:
+    """Each participant's consent in the project, in one query (two in an Upload project)."""
+    ids = list(participant_ids)
+    answers = latest_own_answers(db, project.id, ids)
+    forms = signed_forms(db, project.id, ids) if takes_uploads(project) else {}
+    return {pid: Standing(answers.get(pid), forms.get(pid)) for pid in ids}
+
+
 @dataclass
 class SideConsent:
     side: str  # "A" or "B"
     participant_id: uuid.UUID
     noted: list[ConsentRecord] = field(default_factory=list)  # for this task, oldest first
     own: list[ConsentRecord] = field(default_factory=list)  # own answers, oldest first
+    # The current signed form, in a project that takes uploads (D-144).
+    form: ParticipantDocument | None = None
 
     @property
     def latest_noted(self) -> ConsentRecord | None:
@@ -53,16 +138,21 @@ class SideConsent:
         return self.own[-1] if self.own else None
 
     @property
+    def standing(self) -> Standing:
+        return Standing(self.latest_own, self.form)
+
+    @property
     def status(self) -> str | None:
-        return word(self.latest_own)
+        return self.standing.status
 
     @property
     def may_record(self) -> bool:
-        return agreed(self.latest_own)
+        return self.standing.consented
 
 
 def for_task(db: Session, task: Task) -> list[SideConsent]:
-    """Both sides of a task with their consent records, in one query."""
+    """Both sides of a task with their consent records, in one query, and their signed forms in
+    one more when the project takes uploads."""
     sides = [
         SideConsent("A", task.participant_a_id),
         SideConsent("B", task.participant_b_id),
@@ -79,6 +169,9 @@ def for_task(db: Session, task: Task) -> list[SideConsent]:
     ):
         side = by_participant[record.participant_id]
         (side.own if record.is_own_answer else side.noted).append(record)
+    if takes_uploads(db.get_one(Project, task.project_id)):
+        for pid, form in signed_forms(db, task.project_id, list(by_participant)).items():
+            by_participant[pid].form = form
     return sides
 
 

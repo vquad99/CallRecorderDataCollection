@@ -23,6 +23,7 @@ from app.core.contact import clean_email, normalize_phone
 from app.core.csvio import read_rows
 from app.core.errors import AppError, not_found
 from app.core.permissions import Perm
+from app.core.storage import ObjectStorage
 from app.modules.auth.deps import Principal
 from app.modules.auth.security import FieldCipher
 from app.modules.participants import consent, service, speakers
@@ -149,6 +150,8 @@ def bulk(
     target_project_id: uuid.UUID | None,
     reason: str,
     ip: str | None,
+    *,
+    storage: ObjectStorage | None = None,
 ) -> tuple[Project | None, list[BulkResult]]:
     """Assign to another project, remove, or pick who gets this project's consent form again
     (D-139). Returns the project whose consent form goes out (the target when assigning, this
@@ -160,6 +163,7 @@ def bulk(
             raise AppError("Choose another project", code="TARGET_REQUIRED", status_code=422)
         target = get_manageable(db, principal, target_project_id, Perm.PARTICIPANTS_MANAGE)
     elif action == "send_consent":
+        consent.require_online(project)
         target = project
     elif not reason.strip():
         raise AppError("Give a reason for removing", code="REASON_REQUIRED", status_code=422)
@@ -176,7 +180,9 @@ def bulk(
                 service.link_existing(db, principal, target.id, code, ip)
                 message = "Assigned"
             else:
-                service.delete_participant(db, principal, project.id, pid, reason, ip)
+                service.delete_participant(
+                    db, principal, project.id, pid, reason, ip, storage=storage
+                )
                 message = "Removed"
             results.append(BulkResult(pid, code, True, message))
         except AppError as exc:
@@ -189,14 +195,14 @@ def _consent_again(db: Session, project: Project, ids: list[uuid.UUID]) -> list[
     """Who gets the project's consent form again (D-139): the chosen people in the project who
     have not agreed. Everyone is read at once and nothing is written."""
     found = service.in_project_by_id(db, project, ids)
-    answers = consent.latest_own_answers(db, project.id, ids)
+    standing = consent.standings(db, project, ids)
     missing = not_found("Participant").message
     results: list[BulkResult] = []
     for pid in ids:
         person = found.get(pid)
         if person is None:
             results.append(BulkResult(pid, "?", False, missing))
-        elif consent.agreed(answers.get(pid)):
+        elif standing[pid].consented:
             results.append(BulkResult(pid, person.participant_code, False, ALREADY_AGREED))
         else:
             results.append(BulkResult(pid, person.participant_code, True, ""))
@@ -206,9 +212,9 @@ def _consent_again(db: Session, project: Project, ids: list[uuid.UUID]) -> list[
 def consent_overview(
     db: Session, project: Project, participant_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, tuple[str, bool]]:
-    """Per participant: (consent answer as it counts now, or NONE; has a working link). Two
-    queries for a page."""
-    answers = consent.latest_own_answers(db, project.id, participant_ids)
+    """Per participant: (consent as it counts now - the answer's word or UPLOADED, D-144 - or
+    NONE; has a working link). Two queries for a page, three in a project that takes uploads."""
+    standing = consent.standings(db, project, participant_ids)
     linked = (
         set(
             db.scalars(
@@ -223,6 +229,4 @@ def consent_overview(
         if participant_ids
         else set()
     )
-    return {
-        pid: (consent.word(answers.get(pid)) or "NONE", pid in linked) for pid in participant_ids
-    }
+    return {pid: (standing[pid].status or "NONE", pid in linked) for pid in participant_ids}

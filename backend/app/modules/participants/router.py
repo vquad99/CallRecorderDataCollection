@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -19,8 +20,22 @@ from app.db.paging import Page, PageNumber, PageSize
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.security import FieldCipher
 from app.modules.exports import minutes as minutes_report
-from app.modules.participants import consent_view, details, manage, service, speakers
-from app.modules.participants.models import ConsentStatus, Participant
+from app.modules.participants import (
+    consent,
+    consent_view,
+    details,
+    documents,
+    manage,
+    service,
+    speakers,
+)
+from app.modules.participants.models import (
+    ADDRESS_PROOF,
+    CONSENT_FORM,
+    ConsentStatus,
+    Participant,
+    ParticipantDocument,
+)
 from app.modules.portal import service as portal
 from app.modules.projects.models import Project
 from app.modules.tasks import pairing
@@ -97,11 +112,16 @@ class ParticipantOut(BaseModel):
     phone_masked: bool
     email: str | None  # only for people who may see contact details
     has_email: bool
-    # The participant's own answer on the consent form in this project as it counts now (NONE:
-    # no answer yet), and whether they hold a working personal link. Empty when the caller may
-    # not see consent.
+    # The participant's consent in this project as it counts now: their own answer on the
+    # consent form (NONE: no answer yet), or UPLOADED when their signed form was uploaded in a
+    # project that takes uploads (D-144); and whether they hold a working personal link. Empty
+    # when the caller may not see consent.
     consent_status: str | None = None
     link_active: bool | None = None
+    # Whether the current signed consent form for this project and the person's address proof
+    # are uploaded (D-144): for people who manage participants, null for others.
+    has_consent_form: bool | None = None
+    has_address_proof: bool | None = None
     # Only for people who may export the project (the same people who get the minutes report).
     minutes: MinutesOut | None = None
     notes: str | None
@@ -118,8 +138,15 @@ def present(
     p: Participant,
     assigned_ids: set[uuid.UUID] | None = None,
     overview: dict[uuid.UUID, tuple[str, bool]] | None = None,
+    held: dict[uuid.UUID, set[str]] | None = None,
 ) -> ParticipantOut:
+    """One participant as this caller may see them. `held` (documents.held) says which documents
+    are uploaded for a whole list at once; without it, one query for this person."""
     v = service.visibility(db, principal, project, p.id, assigned_ids)
+    manager = principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id)
+    if manager and held is None:
+        held = documents.held(db, project, [p.id])
+    kinds = (held or {}).get(p.id, set())
     if p.phone_e164_enc is None or not (v.profile or v.contact):
         phone = None
     elif v.contact:
@@ -150,6 +177,8 @@ def present(
         ),
         consent_status=(overview or {}).get(p.id, (None, None))[0] if sees else None,
         link_active=(overview or {}).get(p.id, (None, None))[1] if sees else None,
+        has_consent_form=CONSENT_FORM in kinds if manager else None,
+        has_address_proof=ADDRESS_PROOF in kinds if manager else None,
         created_at=p.created_at,
     )
 
@@ -177,7 +206,8 @@ def list_participants(
         raise forbidden()
     assigned = service.assigned_participants(db, principal.user_id, project.id)
     overview = manage.consent_overview(db, project, [p.id for p in items])
-    shown = [present(db, principal, cipher, project, p, assigned, overview) for p in items]
+    held = documents.held(db, project, [p.id for p in items])
+    shown = [present(db, principal, cipher, project, p, assigned, overview, held) for p in items]
     if principal.can_in_project(Perm.EXPORTS_CREATE, project.id):
         totals = minutes_report.per_participant(db, project.id, [p.id for p in items])
         for out in shown:
@@ -258,6 +288,9 @@ def email_consent_forms(
     someone emailed it less than portal.EMAIL_AGAIN_AFTER ago."""
     if not participant_ids:
         return {}
+    if consent.takes_uploads(project):
+        # Staff upload the signed form instead (D-144): nothing is emailed.
+        return dict.fromkeys(participant_ids, consent.BY_UPLOAD)
     if not project.consent_text.strip():
         return dict.fromkeys(participant_ids, CONSENT_FORM_MISSING)
     reachable = set(
@@ -425,7 +458,13 @@ def delete_participant(
     cipher: Cipher,
 ) -> ParticipantOut:
     p = service.delete_participant(
-        db, principal, project_id, participant_id, body.reason, client_ip(request)
+        db,
+        principal,
+        project_id,
+        participant_id,
+        body.reason,
+        client_ip(request),
+        storage=request.app.state.storage,
     )
     project, _ = service.get_in_project(db, principal, project_id, p.id)
     return present(db, principal, cipher, project, p)
@@ -540,6 +579,7 @@ def bulk_action(
         body.target_project_id,
         body.reason,
         client_ip(request),
+        storage=request.app.state.storage,
     )
     if target is not None:
         # Assigned to another project: they get that project's consent form (D-129); or the
@@ -700,3 +740,127 @@ def participant_details(
         minutes=shown.minutes,
         calls=ParticipantCallsOut(**vars(d.calls)) if d.calls else None,
     )
+
+
+# ------------------------------------------------- uploaded documents (D-144)
+
+
+class DocumentOut(BaseModel):
+    id: uuid.UUID
+    kind: Literal["CONSENT_FORM", "ADDRESS_PROOF"]
+    file_name: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    uploaded_by: str | None
+    uploaded_at: datetime
+    # Set on an earlier version: when a newer upload took its place, and by whom.
+    replaced_by: str | None
+    replaced_at: datetime | None
+
+
+def document_out(d: ParticipantDocument, names: dict[uuid.UUID, str]) -> DocumentOut:
+    return DocumentOut.model_validate(
+        {
+            "id": d.id,
+            "kind": d.kind,
+            "file_name": d.file_name,
+            "content_type": d.content_type,
+            "size_bytes": d.size_bytes,
+            "sha256": d.sha256,
+            "uploaded_by": names.get(d.uploaded_by),
+            "uploaded_at": d.uploaded_at,
+            "replaced_by": names.get(d.replaced_by) if d.replaced_by else None,
+            "replaced_at": d.replaced_at,
+        }
+    )
+
+
+class DocumentsOut(BaseModel):
+    consent_mode: Literal["ONLINE", "UPLOAD"]
+    # The current ones; null when there is none or the caller may not see that kind.
+    consent_form: DocumentOut | None
+    address_proof: DocumentOut | None
+    # Replaced ones of the kinds the caller may see, newest first.
+    earlier: list[DocumentOut]
+    may_view_address_proof: bool
+    may_upload_consent_form: bool
+    may_upload_address_proof: bool
+    max_bytes: int
+
+
+@router.get("/{participant_id}/documents", response_model=DocumentsOut)
+def list_documents(
+    project_id: uuid.UUID, participant_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
+) -> DocumentsOut:
+    found = documents.listing(db, principal, project_id, participant_id)
+    current = {k: document_out(d, found.names) for k, d in found.current.items()}
+    return DocumentsOut.model_validate(
+        {
+            "consent_mode": found.project.consent_mode,
+            "consent_form": current.get(CONSENT_FORM),
+            "address_proof": current.get(ADDRESS_PROOF),
+            "earlier": [document_out(d, found.names) for d in found.earlier],
+            "may_view_address_proof": found.access.may_view(ADDRESS_PROOF),
+            "may_upload_consent_form": found.may_upload(CONSENT_FORM),
+            "may_upload_address_proof": found.may_upload(ADDRESS_PROOF),
+            "max_bytes": documents.MAX_DOCUMENT_BYTES,
+        }
+    )
+
+
+@router.post("/{participant_id}/documents/{kind}", response_model=DocumentOut, status_code=201)
+async def upload_document(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    kind: Literal["consent-form", "address-proof"],
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    x_file_name: Annotated[str | None, Header(max_length=2000)] = None,
+) -> DocumentOut:
+    """The file itself is the body (PDF, JPEG or PNG, at most documents.MAX_DOCUMENT_BYTES); its
+    name comes percent-encoded in X-File-Name."""
+    data = await request.body()
+    doc = await run_in_threadpool(
+        documents.upload,
+        db,
+        request.app.state.storage,
+        principal,
+        project_id,
+        participant_id,
+        documents.KIND_PATHS[kind],
+        data,
+        x_file_name,
+        client_ip(request),
+    )
+    return document_out(doc, {principal.user_id: principal.display_name})
+
+
+class DocumentLinkOut(BaseModel):
+    url: str
+    expires_in: int
+
+
+@router.post("/{participant_id}/documents/{document_id}/url", response_model=DocumentLinkOut)
+def document_link(
+    project_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    document_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+) -> DocumentLinkOut:
+    """A short-lived link that opens the file in the browser (audited)."""
+    url, seconds = documents.view_link(
+        db,
+        request.app.state.storage,
+        settings,
+        principal,
+        project_id,
+        participant_id,
+        document_id,
+        client_ip(request),
+    )
+    return DocumentLinkOut(url=url, expires_in=seconds)

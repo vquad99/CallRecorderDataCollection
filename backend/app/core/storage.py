@@ -225,8 +225,8 @@ def build_storage(settings: Settings) -> ObjectStorage | None:
     return S3Storage(settings) if settings.storage_configured else None
 
 
-def require_storage(request: Request) -> ObjectStorage:
-    storage: ObjectStorage | None = request.app.state.storage
+def configured(storage: ObjectStorage | None) -> ObjectStorage:
+    """The storage, or 503 NOT_CONFIGURED when the server has none."""
     if storage is None:
         raise AppError(
             "File storage is not configured on this server",
@@ -234,3 +234,7 @@ def require_storage(request: Request) -> ObjectStorage:
             status_code=503,
         )
     return storage
+
+
+def require_storage(request: Request) -> ObjectStorage:
+    return configured(request.app.state.storage)

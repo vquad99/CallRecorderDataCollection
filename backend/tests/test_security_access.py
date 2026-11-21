@@ -112,6 +112,7 @@ class Side:
     asset: str
     call: str  # a phone call on task_open, waiting for a person to pick its recording (D-101)
     export: str = ""  # an export bundle that is ready to download (D-105)
+    document: str = ""  # the participant's uploaded address proof (D-144)
 
     def object_ids(self) -> list[str]:
         return [
@@ -125,6 +126,7 @@ class Side:
             self.asset,
             self.call,
             self.export,
+            self.document,
         ]
 
 
@@ -140,9 +142,11 @@ class Estate:
 
 def _ghost() -> Side:
     """Identifiers that exist nowhere: the answer for these is what 'not found' looks like."""
-    ids = [str(uuid.uuid4()) for _ in range(10)]
+    ids = [str(uuid.uuid4()) for _ in range(11)]
     return Side(
-        ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7], ids[8], ids[9]
+        *(ids[0], ids[1], "P999999", ids[2], ids[3], ids[4], ids[5], ids[6], ids[7], ids[8]),
+        export=ids[9],
+        document=ids[10],
     )
 
 
@@ -231,6 +235,13 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         },
     ).scalar_one()
     db.commit()
+    proof = pa.post(
+        f"/api/v1/projects/{project_id}/participants/{a['id']}/documents/address-proof",
+        json=None,
+        content=b"%PDF-1.4 an address proof",
+        headers={"Content-Type": "application/pdf"},
+    )
+    assert proof.status_code == 201, proof.text
     return Side(
         project=str(project_id),
         participant=a["id"],
@@ -243,6 +254,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
         asset=asset,
         call=str(call),
         export=str(export),
+        document=proof.json()["id"],
     )
 
 
@@ -1015,6 +1027,35 @@ CASES: list[Case] = [
         TASK_VIEWERS,
         Perm.RECORDINGS_VIEW,
         lambda e, s, who: {"purpose": "play"},
+    ),
+    # Uploaded documents (D-144): the people who manage participants, and the moderator of an
+    # open task with the person (the signed consent form only; OWN takes consent online, so there
+    # is none to upload). The address proof is for the people who manage participants: an upload
+    # of `{}` gets through access control and is refused as not a PDF, JPEG or PNG (422).
+    case(
+        "GET",
+        PP + "/documents",
+        lambda e, s: f"/api/v1/projects/{s.project}/participants/{s.participant}/documents",
+        {SA, PA, MO},
+        Perm.PARTICIPANTS_VIEW,
+    ),
+    case(
+        "POST",
+        PP + "/documents/{kind}",
+        lambda e, s: (
+            f"/api/v1/projects/{s.project}/participants/{s.participant}/documents/address-proof"
+        ),
+        {SA, PA},
+        Perm.PARTICIPANTS_VIEW,
+    ),
+    case(
+        "POST",
+        PP + "/documents/{document_id}/url",
+        lambda e, s: (
+            f"/api/v1/projects/{s.project}/participants/{s.participant}/documents/{s.document}/url"
+        ),
+        {SA, PA},
+        Perm.PARTICIPANTS_VIEW,
     ),
     # Everything about one participant (D-104): the people who manage participants only.
     case(

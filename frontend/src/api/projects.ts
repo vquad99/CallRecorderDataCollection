@@ -2,6 +2,9 @@ import { apiRequest, query, type Page } from "./client";
 
 export type ProjectStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type Mode = "TELEPHONY" | "FACE_TO_FACE";
+/** How participants give consent (D-144): ONLINE on their personal page, or UPLOAD, a scanned
+ * signed form that staff upload. */
+export type ConsentMode = "ONLINE" | "UPLOAD";
 
 export interface AudioRule {
   mode: Mode;
@@ -45,6 +48,7 @@ export interface Project extends ProjectSummary {
   /** Task rules (D-143): null = no limit. */
   max_conversations_per_speaker: number | null;
   unique_pairs: boolean;
+  consent_mode: ConsentMode;
   status_reason: string | null;
   status_changed_at: string | null;
   languages: Language[];
@@ -69,6 +73,8 @@ export interface ProjectFields {
   max_conversations_per_speaker: number | null;
   /** The same two speakers never share a second task (D-143). */
   unique_pairs: boolean;
+  /** Consent online, or a scanned signed form uploaded by staff (D-144). */
+  consent_mode: ConsentMode;
 }
 
 export interface Member {

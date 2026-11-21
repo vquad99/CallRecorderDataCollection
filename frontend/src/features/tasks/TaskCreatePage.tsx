@@ -20,7 +20,7 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { DataTable } from "../../components/DataTable";
-import { MODE_LABELS, PRIORITY_LABELS } from "../../lib/labels";
+import { consentCounts, MODE_LABELS, PRIORITY_LABELS } from "../../lib/labels";
 
 const SAMPLE =
   "participant_a,participant_b,mode,priority,due_date,moderator\n" +
@@ -190,8 +190,9 @@ export function TaskCreatePage() {
       ]
     : [];
   const listed = people.state.status === "loaded" ? people.state.data : null;
-  // A task is only for people who agreed to the project's consent form (D-129).
-  const agreed = (listed?.items ?? []).filter((p) => p.consent_status === "GIVEN");
+  // A task is only for people who agreed to the project's consent form (D-129), or whose signed
+  // form was uploaded where the project takes uploads (D-144).
+  const agreed = (listed?.items ?? []).filter((p) => consentCounts(p.consent_status));
   // The project's pairing rules (D-143): who cannot be chosen is shown greyed out, with why. A is
   // chosen first; B's list also leaves out who already had a conversation with that A. The server
   // checks again when the task is made.
@@ -288,7 +289,9 @@ export function TaskCreatePage() {
           </p>
         ) : projectId && leftOut ? (
           <p className="notice notice--info" role="status">
-            Only people who agreed to the consent form can be chosen.
+            {detail?.consent_mode === "UPLOAD"
+              ? "Only people whose signed consent form is uploaded, or who agreed online, can be chosen."
+              : "Only people who agreed to the consent form can be chosen."}
             {agreed.length < 2
               ? ` ${agreed.length === 0 ? "Nobody here has" : "Only 1 person here has"} agreed yet, and a task needs two.`
               : ""}

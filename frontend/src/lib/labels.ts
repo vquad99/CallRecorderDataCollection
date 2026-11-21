@@ -71,13 +71,21 @@ export const CONSENT_METHOD_LABELS: Record<string, string> = {
   DIGITAL: "Agreed online",
 };
 
-/** A participant's consent answer. Withdrawn only on answers from before D-129. */
+/** A participant's consent: their answer (withdrawn only on answers from before D-129), or their
+ * signed form uploaded where the project takes uploads (D-144). */
 export const CONSENT_ANSWER: Record<string, { label: string; tone: Tone }> = {
   GIVEN: { label: "Agreed", tone: "success" },
+  UPLOADED: { label: "Form uploaded", tone: "success" },
   REFUSED: { label: "Did not agree", tone: "danger" },
   WITHDRAWN: { label: "Withdrawn", tone: "warning" },
   NONE: { label: "No answer yet", tone: "neutral" },
 };
+/** Nothing yet in a project that takes signed forms (D-144). */
+export const FORM_MISSING = { label: "Consent form missing", tone: "warning" } as const;
+
+/** The consent that lets a person be put on a task, called and recorded (D-129, D-144). */
+export const consentCounts = (status: string | null | undefined) =>
+  status === "GIVEN" || status === "UPLOADED";
 
 /** The words for a code, or the code in plain words when no label is known yet. */
 export function labelFor(labels: Record<string, string>, code: string | null | undefined): string {
@@ -88,9 +96,16 @@ export function labelFor(labels: Record<string, string>, code: string | null | u
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The answer chip for a consent status; null and unknown codes read "No answer yet". */
-export const consentAnswer = (status: string | null | undefined) =>
-  CONSENT_ANSWER[status ?? "NONE"] ?? (CONSENT_ANSWER.NONE as { label: string; tone: Tone });
+/** The chip for a consent status; null and unknown codes read "No answer yet", or "Consent form
+ * missing" in a project that takes signed forms (`mode` UPLOAD, D-144). */
+export function consentAnswer(
+  status: string | null | undefined,
+  mode?: string | null,
+): { label: string; tone: Tone } {
+  const known = CONSENT_ANSWER[status ?? "NONE"];
+  if (mode === "UPLOAD" && (!known || status === "NONE" || !status)) return FORM_MISSING;
+  return known ?? (CONSENT_ANSWER.NONE as { label: string; tone: Tone });
+}
 
 /** The server's reason codes for a choice list: code to words. */
 export const reasonChoices = (codes: readonly string[] | undefined): Record<string, string> =>

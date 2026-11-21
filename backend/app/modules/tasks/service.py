@@ -24,7 +24,7 @@ from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants import consent
 from app.modules.participants.models import ConsentRecord, Participant, ParticipantProjectLink
-from app.modules.projects.models import ProjectMembership
+from app.modules.projects.models import Project, ProjectMembership
 from app.modules.projects.service import ensure_accepts_new_work, get_manageable
 from app.modules.tasks import pairing, workflow
 from app.modules.tasks.models import Task, TaskAssignment, TaskComment, TaskStatusHistory
@@ -362,12 +362,18 @@ def require_agreed(
     db: Session, project_id: uuid.UUID, people: list[Participant], *, status_code: int
 ) -> None:
     """A task is made or given to a moderator only for people who agreed to the project's
-    consent form (D-129): CONSENT_REQUIRED naming the others."""
-    answers = consent.latest_own_answers(db, project_id, [p.id for p in people])
-    waiting = [p.participant_code for p in people if not consent.agreed(answers.get(p.id))]
+    consent form (D-129), or whose signed form was uploaded where the project takes uploads
+    (D-144): CONSENT_REQUIRED naming the others."""
+    project = db.get_one(Project, project_id)
+    standing = consent.standings(db, project, [p.id for p in people])
+    waiting = [p.participant_code for p in people if not standing[p.id].consented]
     if waiting:
+        one = len(waiting) == 1
         raise AppError(
-            f"{' and '.join(waiting)} {'has' if len(waiting) == 1 else 'have'} not agreed to "
+            f"{' and '.join(waiting)} {'has' if one else 'have'} no signed consent form "
+            "uploaded in this project yet."
+            if consent.takes_uploads(project)
+            else f"{' and '.join(waiting)} {'has' if one else 'have'} not agreed to "
             "this project's consent form yet.",
             code="CONSENT_REQUIRED",
             status_code=status_code,

@@ -81,7 +81,9 @@ def _limits(received: list[bytes]) -> RequestLimitsMiddleware:
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b""})
 
-    return RequestLimitsMiddleware(downstream, default_limit=10_000, chunk_limit=100_000)
+    return RequestLimitsMiddleware(
+        downstream, default_limit=10_000, chunk_limit=100_000, document_limit=50_000
+    )
 
 
 async def _acall(

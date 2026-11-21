@@ -6,6 +6,7 @@ import { clock, day, duration, when } from "./format";
 import {
   CONSENT_METHOD_LABELS,
   consentAnswer,
+  consentCounts,
   labelFor,
   PRIORITY_LABELS,
   REASON_LABELS,
@@ -25,6 +26,24 @@ describe("labels", () => {
   it("says the consent answer and its colour", () => {
     expect(consentAnswer("GIVEN")).toEqual({ label: "Agreed", tone: "success" });
     expect(consentAnswer(null)).toEqual({ label: "No answer yet", tone: "neutral" });
+  });
+
+  it("says a signed form was uploaded, or is missing where the project takes them (D-144)", () => {
+    expect(consentAnswer("UPLOADED")).toEqual({ label: "Form uploaded", tone: "success" });
+    expect(consentAnswer("NONE", "UPLOAD")).toEqual({
+      label: "Consent form missing",
+      tone: "warning",
+    });
+    expect(consentAnswer(null, "UPLOAD").label).toBe("Consent form missing");
+    expect(consentAnswer("GIVEN", "UPLOAD").label).toBe("Agreed");
+    expect(consentAnswer("NONE", "ONLINE").label).toBe("No answer yet");
+    expect(["GIVEN", "UPLOADED", "REFUSED", "NONE", null].map(consentCounts)).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 
   it("turns the server's reason codes into a choice list", () => {

@@ -3,6 +3,7 @@
 Requirements: FND-009, FND-026, DB-002, DB-003, DB-006
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -389,4 +390,72 @@ def test_speaker_details_and_pairing_rules_come_and_go(test_database_url: str) -
     assert {"age", "recording_pincode"}.isdisjoint(people)
     assert "district" in people
     assert {"max_conversations_per_speaker", "unique_pairs"}.isdisjoint(projects)
+    engine.dispose()
+
+
+def test_consent_mode_and_participant_documents_come_and_go(test_database_url: str) -> None:
+    """0034 (D-144): every existing project keeps taking consent online; documents keep one
+    current file per kind (per project for a consent form, none for an address proof), only PDF,
+    JPEG and PNG; going back removes the table and the option."""
+    from sqlalchemy.orm import Session
+
+    from tests.conftest import make_user
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0033")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+        person_id = _participant_row(conn, "P900001")
+    command.upgrade(cfg, "head")
+    with Session(engine) as db:
+        user_id = make_user(db, "up@example.org", ["PROJECT_ADMIN"]).id
+    insert = text(
+        "INSERT INTO participant_documents (participant_id, project_id, kind, storage_key, "
+        "file_name, content_type, size_bytes, sha256, uploaded_by, replaced_at) VALUES (:person, "
+        ":project, :kind, :key, 'f.pdf', :type, :size, 'x', :user, :replaced)"
+    )
+
+    def row(key: str, **changes: Any) -> dict[str, Any]:
+        values = {
+            "person": person_id,
+            "project": project_id,
+            "kind": "CONSENT_FORM",
+            "key": key,
+            "type": "application/pdf",
+            "size": 10,
+            "user": user_id,
+            "replaced": None,
+        }
+        return {**values, **changes}
+
+    with engine.begin() as conn:
+        mode = text("SELECT consent_mode FROM projects WHERE id = :p")
+        assert conn.execute(mode, {"p": project_id}).scalar_one() == "ONLINE"
+        conn.execute(text("UPDATE projects SET consent_mode = 'UPLOAD'"))
+        conn.execute(insert, row("a", replaced=datetime.now(UTC)))
+        conn.execute(insert, row("b"))
+        conn.execute(insert, row("c", kind="ADDRESS_PROOF", project=None, type="image/png"))
+    for match, values in (
+        ("uq_participant_documents_current_consent_form", row("d")),
+        (
+            "uq_participant_documents_current_address_proof",
+            row("e", kind="ADDRESS_PROOF", project=None),
+        ),
+        ("project_for_consent_form", row("f", project=None)),
+        ("project_for_consent_form", row("g", kind="ADDRESS_PROOF")),
+        ("content_type_allowed", row("h", type="text/html", replaced=datetime.now(UTC))),
+        ("kind_allowed", row("i", kind="PASSPORT", project=None)),
+        ("size_positive", row("j", size=0, replaced=datetime.now(UTC))),
+        ("storage_key", row("a", replaced=datetime.now(UTC))),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(insert, values)
+    with pytest.raises(Exception, match="consent_mode_allowed"), engine.begin() as conn:
+        conn.execute(text("UPDATE projects SET consent_mode = 'PAPER'"))
+    command.downgrade(cfg, "0033")
+    with engine.begin() as conn:
+        assert "participant_documents" not in inspect(conn).get_table_names()
+        assert "consent_mode" not in {c["name"] for c in inspect(conn).get_columns("projects")}
     engine.dispose()

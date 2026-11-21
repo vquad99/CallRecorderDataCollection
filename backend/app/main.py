@@ -29,6 +29,7 @@ from app.core.security import BACKGROUND_HEADER, CSRF_HEADER, SecurityHeadersMid
 from app.core.storage import build_storage
 from app.db.session import create_db_engine, make_session_factory
 from app.modules.auth.security import FieldCipher
+from app.modules.participants import documents
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -82,6 +83,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         RequestLimitsMiddleware,
         default_limit=settings.max_request_bytes,
         chunk_limit=settings.max_chunk_bytes,
+        document_limit=documents.MAX_DOCUMENT_BYTES,
+        document_too_large=documents.TOO_LARGE,
     )
     app.add_middleware(
         CORSMiddleware,

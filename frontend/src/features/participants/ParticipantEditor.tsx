@@ -1,10 +1,10 @@
 // Adding, editing and looking at one participant, the same on the Participants page and on a
-// project's Participants tab: the form, the consent history and the details open in a window next
-// to the row that was clicked (D-104).
+// project's Participants tab: the form, the consent history, the details and the documents open in
+// a window next to the row that was clicked (D-104, D-144).
 import { useState, type ReactNode } from "react";
 
 import type { ApiError } from "../../api/client";
-import type { Language } from "../../api/projects";
+import type { ConsentMode, Language } from "../../api/projects";
 import * as work from "../../api/work";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
@@ -14,7 +14,7 @@ import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
-import { useResource } from "../../hooks/useResource";
+import { toApiError, useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { CONSENT_METHOD_LABELS, consentAnswer, labelFor } from "../../lib/labels";
 import {
@@ -31,6 +31,7 @@ import {
   speakerDetailsOf,
 } from "../../lib/speakers";
 import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "../projects/choices";
+import { DOCUMENT_WORDS, DocumentsPanel, FileField, sendDocument } from "./Documents";
 import { ParticipantDetails } from "./ParticipantDetails";
 import "./participants.css";
 
@@ -48,6 +49,13 @@ export const EMPTY_PARTICIPANT: work.ParticipantFields = {
 /** Shown once a participant is added: the server says what happened to their consent form. */
 export const addedText = (p: work.AddedParticipant, where = "") =>
   `${p.participant_code} added${where}. ${p.consent_email}`;
+
+/** The scans chosen on the Add participant form, uploaded once the person is added (D-144). */
+export interface AddFiles {
+  consentForm: File | null;
+  addressProof: File | null;
+}
+const NO_FILES: AddFiles = { consentForm: null, addressProof: null };
 
 /** The form's starting values for an existing participant. A masked phone or a hidden email is
  * not sent back, so the stored one is kept. */
@@ -177,17 +185,27 @@ export function ParticipantForm({
   busy,
   error,
   isNew = false,
+  consentMode,
 }: {
   initial: work.ParticipantFields;
   languages: readonly Language[]; // the project's languages; empty means any
   submitLabel: string;
-  onSubmit: (f: work.ParticipantFields) => void;
+  onSubmit: (f: work.ParticipantFields, files: AddFiles) => void;
   busy: boolean;
   error: ApiError | null;
   /** A new participant needs every speaker detail (D-143). */
   isNew?: boolean;
+  /** Adding someone: the project's way of consent. Upload asks for the signed form (D-144). */
+  consentMode?: ConsentMode | undefined;
 }) {
   const [f, setF] = useState(initial);
+  const [files, setFiles] = useState<AddFiles>(NO_FILES);
+  const scans = isNew && consentMode !== undefined;
+  const needsForm = scans && consentMode === "UPLOAD";
+  const filesWrong =
+    Boolean(work.documentProblem(files.consentForm)) ||
+    Boolean(work.documentProblem(files.addressProof)) ||
+    (needsForm && !files.consentForm);
   const [phone, setPhone] = useState(() => splitPhone(initial.phone));
   const phoneError =
     phone.digits && phone.digits.length !== PHONE_DIGITS
@@ -203,11 +221,14 @@ export function ParticipantForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (phoneError) return;
-        onSubmit({
-          ...f,
-          phone: phone.digits ? `${phone.cc}${phone.digits}` : null,
-          email: f.email?.trim(),
-        });
+        onSubmit(
+          {
+            ...f,
+            phone: phone.digits ? `${phone.cc}${phone.digits}` : null,
+            email: f.email?.trim(),
+          },
+          files,
+        );
       }}
     >
       <TextField
@@ -264,6 +285,32 @@ export function ParticipantForm({
         onChange={(e) => setF({ ...f, notes: e.target.value })}
       />
       <SpeakerFields f={f} setF={setF} isNew={isNew} />
+      {scans ? (
+        <fieldset className="field">
+          <legend className="field__label">Documents</legend>
+          <p className="field__hint">
+            PDF, JPEG or PNG, at most {work.MAX_DOCUMENT_MB} MB each. They are uploaded as soon as
+            the participant is added.
+          </p>
+          <div className="form-grid">
+            {needsForm ? (
+              <FileField
+                label="Signed consent form (scan)"
+                hint="Their consent in this project: no consent form is emailed."
+                required
+                file={files.consentForm}
+                onChange={(file) => setFiles({ ...files, consentForm: file })}
+              />
+            ) : null}
+            <FileField
+              label="Address proof (optional now, needed before delivery)"
+              hint="One for the person, in every project."
+              file={files.addressProof}
+              onChange={(file) => setFiles({ ...files, addressProof: file })}
+            />
+          </div>
+        </fieldset>
+      ) : null}
       <ErrorNotice error={error} />
       <div className="dialog__actions">
         <Button
@@ -274,7 +321,8 @@ export function ParticipantForm({
             !f.language_code.trim() ||
             Boolean(phoneError) ||
             speakerWrong ||
-            speakerMissing
+            speakerMissing ||
+            filesWrong
           }
         >
           {submitLabel}
@@ -320,23 +368,65 @@ export function ConsentList({
 }
 
 type Opened =
-  { kind: "add" } | { kind: "edit" | "history" | "details"; participant: work.Participant };
+  | { kind: "add" }
+  | { kind: "edit" | "history" | "details"; participant: work.Participant }
+  /** `problem`: an upload that failed while adding them (D-144). */
+  | { kind: "documents"; participant: work.Participant; problem?: string };
+
+/** Uploads the scans chosen on the Add form for someone just added: what was uploaded, and what
+ * could not be (with the server's reason). */
+async function uploadChosen(projectId: string, participantId: string, files: AddFiles) {
+  const done: string[] = [];
+  const failed: string[] = [];
+  const chosen: [work.DocumentKind, File | null][] = [
+    ["CONSENT_FORM", files.consentForm],
+    ["ADDRESS_PROOF", files.addressProof],
+  ];
+  for (const [kind, file] of chosen) {
+    if (!file) continue;
+    try {
+      await sendDocument(projectId, participantId, kind, file);
+      done.push(`${DOCUMENT_WORDS[kind]} uploaded.`);
+    } catch (err) {
+      failed.push(`${DOCUMENT_WORDS[kind]}: ${toApiError(err).message}`);
+    }
+  }
+  return { done, failed };
+}
 
 /** The windows for one project's participants. `open(...)` shows one; render `dialog`. */
 export function useParticipantWindows({
   projectId,
   languages,
+  consentMode,
   onSaved,
 }: {
   projectId: string;
   languages: readonly Language[];
-  /** After an add or an edit, with what to tell the person ("P000003 added. Consent form
-   * emailed."). */
+  /** The project's way of consent (D-144): Upload asks for the signed form on Add. */
+  consentMode?: ConsentMode | undefined;
+  /** After an add, an edit or an upload, with what to tell the person ("P000003 added. Consent
+   * form emailed."). */
   onSaved: (message: string) => void;
 }) {
   const [opened, setOpened] = useState<Opened | null>(null);
   const { busy, error, run } = useAction();
   const close = () => setOpened(null);
+  const add = async (fields: work.ParticipantFields, files: AddFiles) => {
+    const added = await work.createParticipant(projectId, fields);
+    const { done, failed } = await uploadChosen(projectId, added.id, files);
+    // In a project that takes signed forms the server's word is about emails; the uploads say
+    // more.
+    const told = consentMode === "UPLOAD" && done.length > 0 ? "" : ` ${added.consent_email}`;
+    onSaved(`${added.participant_code} added.${told}${done.map((d) => ` ${d}`).join("")}`);
+    if (failed.length === 0) return close();
+    // The person stays added; their documents window says what failed, to upload it again.
+    setOpened({
+      kind: "documents",
+      participant: added,
+      problem: `${added.participant_code} was added, but this could not be uploaded: ${failed.join(" ")} Upload it here.`,
+    });
+  };
   let dialog: ReactNode = null;
   if (opened?.kind === "add" || opened?.kind === "edit") {
     const editing = opened.kind === "edit" ? opened.participant : null;
@@ -350,16 +440,16 @@ export function useParticipantWindows({
           initial={editing ? fieldsOf(editing) : EMPTY_PARTICIPANT}
           languages={languages}
           isNew={!editing}
+          consentMode={consentMode}
           submitLabel={editing ? "Save changes" : "Add participant"}
           busy={busy !== null}
           error={error}
-          onSubmit={(fields) =>
+          onSubmit={(fields, files) =>
             void run(async () => {
-              const text = editing
-                ? `${(await work.correctParticipant(projectId, editing.id, fields)).participant_code} saved.`
-                : addedText(await work.createParticipant(projectId, fields));
+              if (!editing) return add(fields, files);
+              const saved = await work.correctParticipant(projectId, editing.id, fields);
               close();
-              onSaved(text);
+              onSaved(`${saved.participant_code} saved.`);
             })
           }
         />
@@ -374,7 +464,22 @@ export function useParticipantWindows({
   } else if (opened?.kind === "details") {
     dialog = (
       <Modal title="Participant details" onClose={close} wide>
-        <ParticipantDetails projectId={projectId} participantId={opened.participant.id} />
+        <ParticipantDetails
+          projectId={projectId}
+          participantId={opened.participant.id}
+          consentMode={consentMode}
+        />
+      </Modal>
+    );
+  } else if (opened?.kind === "documents") {
+    dialog = (
+      <Modal title={`Documents of ${opened.participant.participant_code}`} onClose={close}>
+        <DocumentsPanel
+          projectId={projectId}
+          participantId={opened.participant.id}
+          problem={opened.problem ?? null}
+          onChanged={() => onSaved(`Documents of ${opened.participant.participant_code} updated.`)}
+        />
       </Modal>
     );
   }

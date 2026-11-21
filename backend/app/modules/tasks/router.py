@@ -16,12 +16,15 @@ from app.modules.audio_qc import service as audio_qc
 from app.modules.auth.deps import CurrentPrincipal, DbSession, Principal, client_ip, require
 from app.modules.auth.models import User
 from app.modules.participants import consent as consents
+from app.modules.participants import documents
 from app.modules.participants import service as participants
-from app.modules.participants.models import Participant
+from app.modules.participants.models import CONSENT_FORM, Participant
+from app.modules.participants.router import DocumentOut, document_out
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 from app.modules.tasks import bulk, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
+from app.modules.users.service import display_names
 
 router = APIRouter(
     prefix="/tasks", tags=["tasks"], dependencies=[Depends(require(Perm.TASKS_VIEW))]
@@ -60,10 +63,16 @@ class PartyOut(BaseModel):
     # The name, for people who may see the participant's profile (null otherwise, D-128).
     display_label: str | None = None
     has_email: bool = False
-    # The participant's answer on the project's consent form as it counts now (D-127, D-129).
+    # The participant's consent in the project as it counts now (D-127, D-129): their answer on
+    # the consent form, or UPLOADED for a signed form uploaded where the project takes uploads
+    # (D-144); and when it was given.
     consent_status: str | None
     consent_at: datetime | None
     may_record: bool = False
+    # Projects that take uploads (D-144): the current signed form, for people who may look at it
+    # (null otherwise or when there is none), and whether the caller may upload one now.
+    consent_form: DocumentOut | None = None
+    can_upload_consent_form: bool = False
 
 
 class TaskDetail(TaskSummary):
@@ -81,6 +90,8 @@ class TaskDetail(TaskSummary):
     is_moderator: bool
     # D-119: participants (A, B) without consent to record; recording is refused until empty.
     consent_missing: list[str]
+    # How participants give consent in the project: ONLINE or UPLOAD (D-144).
+    consent_mode: Literal["ONLINE", "UPLOAD"] = "ONLINE"
 
 
 def summary(t: Task) -> TaskSummary:
@@ -92,20 +103,28 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
     project = db.get_one(Project, t.project_id)
     moderator = service.active_assignee(db, t.id, Role.MODERATOR.value)
     actor = service.actor_from(principal, t, moderator)
+    uploads = consents.takes_uploads(project)
+    names = display_names(db, [s.form.uploaded_by for s in sides if s.form is not None])
 
     def party(side: consents.SideConsent) -> PartyOut:
         p = db.get_one(Participant, side.participant_id)
         seen = participants.visibility(db, principal, project, p.id)
-        answer = side.latest_own
-        return PartyOut(
+        out = PartyOut(
             id=p.id,
             participant_code=p.participant_code,
             display_label=p.display_label if seen.profile else None,
             has_email=p.email_enc is not None,
             consent_status=side.status,
-            consent_at=answer.created_at if answer and side.status else None,
+            consent_at=side.standing.at,
             may_record=side.may_record,
         )
+        if uploads:
+            # The documents' own rule (D-144): who may look at and upload the signed form.
+            rights = documents.access(db, principal, project, p.id)
+            if side.form is not None and rights.may_view(CONSENT_FORM):
+                out.consent_form = document_out(side.form, names)
+            out.can_upload_consent_form = rights.may_upload(CONSENT_FORM) and p.deleted_at is None
+        return out
 
     mod_name = (
         db.scalar(select(User.display_name).where(User.id == moderator.user_id))
@@ -126,6 +145,7 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         can_reassign=service.can_reassign(actor, t),
         is_moderator=actor.is_moderator,
         consent_missing=consents.missing(sides),
+        consent_mode=project.consent_mode,
     )
 
 

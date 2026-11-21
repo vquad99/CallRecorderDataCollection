@@ -206,7 +206,9 @@ def _can_manage(principal: Principal, task: Task) -> bool:
     return principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id)
 
 
-def _is_qc(db: Session, principal: Principal, task: Task) -> bool:
+def may_decide(db: Session, principal: Principal, task: Task) -> bool:
+    """The caller decides this task's audio QC: its assigned QC Executive (or a Super Admin).
+    Also who may look at the task's signed consent forms (D-144, participants/documents.py)."""
     if not principal.can(Perm.AUDIO_QC_REVIEW):
         return False
     if principal.is_super_admin:
@@ -225,7 +227,7 @@ def recheck(
     """Download the delivery file again and check it from its bytes (also recovers a task whose
     automatic check did not run)."""
     task = tasks.get_task(db, principal, task_id)
-    if not (_can_manage(principal, task) or _is_qc(db, principal, task)):
+    if not (_can_manage(principal, task) or may_decide(db, principal, task)):
         raise forbidden()
     if task.status not in ("RECORDED", "AUDIO_QC"):
         raise AppError(
@@ -324,7 +326,7 @@ def decide(
     approves it where QC pass is the final approval (D-138); FAIL rejects it (D-118: no return).
     Stored with reason, comment, time and reviewer; the task moves in the same commit."""
     task = tasks.get_task(db, principal, task_id)
-    if not _is_qc(db, principal, task):
+    if not may_decide(db, principal, task):
         raise forbidden()
     if task.status != "AUDIO_QC":
         raise AppError(
@@ -431,7 +433,7 @@ def view(db: Session, principal: Principal, task_id: uuid.UUID) -> dict[str, Any
         if results
         else {}
     )
-    is_qc = _is_qc(db, principal, task)
+    is_qc = may_decide(db, principal, task)
     can_manage = _can_manage(principal, task)
     project = db.get_one(Project, task.project_id)
     return {
@@ -528,9 +530,11 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
     people = []
     for side in consent.for_task(db, task):
         participant = db.get_one(Participant, side.participant_id)
-        # The consent that counts is the answer on the form (D-129); a session consent was noted
-        # by the moderator only before D-129.
+        # The consent that counts is the answer on the form (D-129), or UPLOADED for a signed
+        # form uploaded where the project takes uploads (D-144); a session consent was noted by
+        # the moderator only before D-129.
         session, own = side.latest_noted, side.latest_own
+        by_answer = side.form is None and side.status is not None
         people.append(
             {
                 "slot": side.side,
@@ -540,7 +544,7 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
                 "session_consent_at": _iso(session.created_at) if session else None,
                 "session_consent_method": session.method if session else None,
                 "consent_form_answer": side.status,
-                "consent_form_version": own.policy_version if own and side.status else None,
+                "consent_form_version": own.policy_version if own and by_answer else None,
             }
         )
     results = [r for r in results_for(db, task.id) if r.recording_id == rec.id]

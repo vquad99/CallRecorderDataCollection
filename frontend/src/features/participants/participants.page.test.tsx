@@ -363,9 +363,10 @@ describe("participants section", () => {
     expect(second).toHaveTextContent("Nobody yet");
     // Consent is the form's answer above, not a column per session (D-129).
     expect(within(sessions).queryByRole("columnheader", { name: /consent/i })).toBeNull();
-    // One request brings it all.
+    // One request brings it all, and one more the uploaded documents (D-144).
     expect(calls.filter((c) => c.path.includes("/participants/a1/")).map((c) => c.path)).toEqual([
       "/api/v1/projects/p1/participants/a1/details",
+      "/api/v1/projects/p1/participants/a1/documents",
     ]);
     await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog", { name: "Participant details" })).toBeNull();

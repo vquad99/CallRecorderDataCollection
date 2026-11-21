@@ -32,6 +32,7 @@ from app.core.storage import ListedObject, ObjectStorage
 from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
+from app.modules.participants.models import ParticipantDocument
 from app.modules.projects.models import Project, ProjectAudioRule, ProjectRetentionRule
 from app.modules.recordings import assets, media
 from app.modules.recordings.access import get_recording, readable
@@ -547,12 +548,19 @@ def storage_orphans(
     db: Session, storage: ObjectStorage, older_than: timedelta, now: datetime | None = None
 ) -> list[ListedObject]:
     """Objects no record points to (left by a process that stopped between upload and save),
-    older than `older_than` so nothing still being written is touched (O12). Backups are kept."""
+    older than `older_than` so nothing still being written is touched (O12). Backups are kept,
+    and so are participants' documents, replaced ones too, until the participant is removed
+    (D-144)."""
     now = now or datetime.now(UTC)
     known = set(db.scalars(select(AudioAsset.storage_key).where(AudioAsset.deleted_at.is_(None))))
     known |= set(
         db.scalars(
             select(RecordingChunk.storage_key).where(RecordingChunk.object_deleted.is_(False))
+        )
+    )
+    known |= set(
+        db.scalars(
+            select(ParticipantDocument.storage_key).where(ParticipantDocument.removed_at.is_(None))
         )
     )
     cutoff = now - older_than
