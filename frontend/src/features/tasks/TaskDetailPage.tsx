@@ -1,6 +1,6 @@
-// One task: participants and consent, moderator, the next step as one card with its buttons,
-// audio quality, recordings and the history (TASK-*). A consent form QC sent back has its own
-// card (D-146).
+// One task: participants and consent, moderator, the next step as one card with its buttons, the
+// speakers' device details (D-147), audio quality, recordings and the history (TASK-*). A consent
+// form QC sent back has its own card (D-146).
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 
@@ -33,6 +33,7 @@ import {
 } from "../../lib/labels";
 import { AudioQcPanel } from "./AudioQcPanel";
 import { PhoneCalls } from "./CallCard";
+import { DeviceDetailsCard, devicesWait } from "./DeviceDetails";
 import { openDocument, sendDocument, UploadButton, uploadedText } from "../participants/Documents";
 import "../participants/participants.css";
 import { ListenLatest, Player } from "./Listen";
@@ -160,6 +161,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   const review = task.status === "RECORDED" && task.allowed_transitions.includes("AUDIO_QC");
   if (!canStart && !recording && !review) return null;
   const waiting = task.consent_missing.length > 0;
+  const devices = devicesWait(task);
   const move = (to: work.TaskStatus, message: string) =>
     void run(async () => onChange(await work.transitionTask(task.id, to, "", ""), message), to);
   // The step in progress (1-based); while recording it is consent first, then the recorder.
@@ -189,7 +191,8 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
             <Button
               icon="send"
               busy={busy === "AUDIO_QC"}
-              disabled={busy !== null}
+              disabled={busy !== null || devices !== null}
+              aria-describedby={devices ? "record-qc-waits" : undefined}
               onClick={() => move("AUDIO_QC", "Sent to QC. A QC Executive checks it next.")}
             >
               Send to QC
@@ -203,6 +206,12 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
             >
               Record again
             </Button>
+            {/* D-147: the device details of both people come first. */}
+            {devices ? (
+              <p id="record-qc-waits" className="muted">
+                {devices}
+              </p>
+            ) : null}
           </>
         ) : recording ? (
           <>
@@ -671,6 +680,8 @@ const HAS_RECORDINGS: readonly string[] = [
   "APPROVED",
   "REJECTED",
 ];
+/** The device details card (D-147): filled while In progress or Recorded, read only after. */
+const SHOWS_DEVICES: readonly string[] = ["IN_PROGRESS", ...HAS_RECORDINGS];
 
 /** The task's finished recordings; a download brings the consent record with the audio. A
  * recording the moderator replaced with Record again is greyed and says so (D-135); the server
@@ -782,6 +793,10 @@ export function TaskDetailPage() {
   const waitingConsent =
     task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
   const consent = waitingConsent ? <ConsentStatus task={task} onChange={onChange} /> : null;
+  // D-147: once saved, the task is loaded again quietly, so Send to QC follows what is missing.
+  const devices = SHOWS_DEVICES.includes(task.status) ? (
+    <DeviceDetailsCard task={task} onSaved={() => void work.getTask(task.id).then(replace)} />
+  ) : null;
   const onPath = FLOW.includes(task.status)
     ? task.status
     : (WAITS_AT[task.status] ?? task.held_from ?? "DRAFT");
@@ -848,11 +863,13 @@ export function TaskDetailPage() {
           // Quietly: the page stays as it is until the new task arrives (no loading flash).
           onTaskStale={() => void work.getTask(task.id).then(replace)}
           consent={consent}
+          devices={devices}
         />
       ) : (
         <>
           {task.is_moderator ? <RecordCard task={task} onChange={onChange} /> : null}
           {consent}
+          {devices}
         </>
       )}
       <ConsentFixCard task={task} onChange={onChange} />

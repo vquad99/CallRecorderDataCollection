@@ -5,7 +5,9 @@
 // fetches the recording. Every state shown comes from the server; nothing is shown as connected
 // on its own (TEL-037). The provider's own answers are in a technical log for the Super Admin.
 // Start call waits for the moderator's phone line to be Ready (D-133), and the line is told when
-// a call opens and when it is over, so it is made Ready again for the next one.
+// a call opens and when it is over, so it is made Ready again for the next one. Before Start call
+// and on the call the project's reminders show (D-147); Send to QC waits for both speakers'
+// device details.
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import * as tel from "../../api/telephony";
@@ -25,7 +27,9 @@ import { labelFor } from "../../lib/labels";
 import { CallBadge } from "../calls/callUi";
 import { usePhoneLine, type PhoneLine } from "../phoneline/PhoneLine";
 import { seatLog } from "../phoneline/seatLink";
+import { devicesWait } from "./DeviceDetails";
 import { ListenLatest } from "./Listen";
+import { Reminders } from "./Reminders";
 import type { OnTaskChange } from "./TaskDetailPage";
 
 const REFRESH_MS = 5000;
@@ -362,6 +366,8 @@ function CallCard({
   );
 
   if (review) {
+    // D-147: the device details of both people come before QC.
+    const devices = devicesWait(task);
     title = "Check the call recording";
     body = (
       <div className="record-card__listen">
@@ -374,11 +380,17 @@ function CallCard({
         <Button
           icon="send"
           busy={busy === "AUDIO_QC"}
-          disabled={busy !== null}
+          disabled={busy !== null || devices !== null}
+          aria-describedby={devices ? "call-qc-waits" : undefined}
           onClick={() => move("AUDIO_QC", "Sent to QC. A QC Executive checks it next.")}
         >
           Send to QC
         </Button>
+        {devices ? (
+          <p id="call-qc-waits" className="muted">
+            {devices}
+          </p>
+        ) : null}
         <Button
           variant="secondary"
           icon="phone"
@@ -429,6 +441,7 @@ function CallCard({
               The last call could not be placed. {problem(latest)}
             </p>
           ) : null}
+          <Reminders task={task} inline />
         </>
       );
       go = (
@@ -443,7 +456,12 @@ function CallCard({
       );
     } else if (latest.state === "DIALLING") {
       title = "On the call";
-      body = <CallSteps call={latest} onChange={calls.refresh} />;
+      body = (
+        <>
+          <CallSteps call={latest} onChange={calls.refresh} />
+          <Reminders task={task} inline />
+        </>
+      );
       go = cancel(latest);
     } else if (latest.state === "WAITING_FOR_RECORDING") {
       title = "Fetching the recording";
@@ -581,19 +599,21 @@ function TechnicalLog({ call }: { call: tel.Call }) {
 }
 
 /** The phone-call part of a telephony task page: the moderator's card, the consent card right
- * under it (recording waits for consent, D-119), and the call history. They share one list of
- * calls. When a call's recording is stored, the server has moved the task to Recorded, so the
- * page is told to fetch the task again. */
+ * under it (recording waits for consent, D-119), the speakers' device details (D-147) and the call
+ * history. They share one list of calls. When a call's recording is stored, the server has moved
+ * the task to Recorded, so the page is told to fetch the task again. */
 export function PhoneCalls({
   task,
   onChange,
   onTaskStale,
   consent,
+  devices = null,
 }: {
   task: work.TaskDetail;
   onChange: OnTaskChange;
   onTaskStale: () => void;
   consent: ReactNode;
+  devices?: ReactNode;
 }) {
   const calls = useCalls(task.id);
   const latest = calls.state.status === "loaded" ? calls.state.data[0] : undefined;
@@ -609,6 +629,7 @@ export function PhoneCalls({
     <>
       {task.is_moderator ? <CallCard task={task} calls={calls} onChange={onChange} /> : null}
       {consent}
+      {devices}
       <CallHistory task={task} calls={calls} />
     </>
   );

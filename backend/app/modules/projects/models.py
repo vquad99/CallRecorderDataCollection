@@ -26,6 +26,7 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.modules.audio_qc.checklist import DEFAULT_QC_CHECKLIST
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.participants.speakers import FIELDS as SPEAKER_FIELDS
+from app.modules.projects.moderation import DEFAULT_DEVICE_FIELDS, DEFAULT_RECORDING_REMINDERS
 from app.modules.recordings.models import ASSET_KINDS
 
 PROJECT_STATUSES = ("DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED")
@@ -41,6 +42,11 @@ DEFAULT_REQUIRED_SPEAKER_DETAILS: tuple[str, ...] = tuple(SPEAKER_FIELDS)
 # The QC checklist (D-146, audio_qc/checklist.py) a project starts with, as the database writes it.
 DEFAULT_QC_CHECKLIST_SQL = (
     "'" + json.dumps(list(DEFAULT_QC_CHECKLIST)).replace("'", "''") + "'::jsonb"
+)
+# What a project asks of its moderators (D-147, projects/moderation.py), as the database writes it.
+DEFAULT_DEVICE_FIELDS_SQL = "'" + json.dumps(list(DEFAULT_DEVICE_FIELDS)) + "'::jsonb"
+DEFAULT_RECORDING_REMINDERS_SQL = (
+    "'" + json.dumps(DEFAULT_RECORDING_REMINDERS).replace("'", "''") + "'::jsonb"
 )
 
 
@@ -76,6 +82,10 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "jsonb_typeof(required_speaker_details) = 'array'", name="required_speaker_details_list"
         ),
         CheckConstraint("jsonb_typeof(qc_checklist) = 'array'", name="qc_checklist_list"),
+        CheckConstraint("jsonb_typeof(device_fields) = 'array'", name="device_fields_list"),
+        CheckConstraint(
+            "jsonb_typeof(recording_reminders) = 'object'", name="recording_reminders_object"
+        ),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -127,6 +137,15 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # each recording, checked when saved. A decision keeps the questions as they read then.
     qc_checklist: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, server_default=text(DEFAULT_QC_CHECKLIST_SQL)
+    )
+    # What the moderator fills for each speaker before a task goes to QC (D-147,
+    # projects/moderation.DEVICE_FIELDS, in its order), and the reminders they read before
+    # recording: {speaker_id, topics, avoid, face_to_face, telephony}.
+    device_fields: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text(DEFAULT_DEVICE_FIELDS_SQL)
+    )
+    recording_reminders: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text(DEFAULT_RECORDING_REMINDERS_SQL)
     )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

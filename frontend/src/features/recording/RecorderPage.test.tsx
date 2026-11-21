@@ -1,6 +1,6 @@
-// Requirements: FTF-001, FTF-002, FTF-006, FTF-009
+// Requirements: FTF-001, FTF-002, FTF-006, FTF-009, FTF-014
 // The recorder captures at the project's rate (16000 Hz) and never converts (owner 2026-11-17).
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,8 +20,21 @@ const task = {
   created_at: "",
   held_from: null,
   reason_code: null,
-  participant_a: { id: "a", participant_code: "P1", consent_status: "GIVEN", consent_at: null },
-  participant_b: { id: "b", participant_code: "P2", consent_status: "GIVEN", consent_at: null },
+  participant_a: {
+    id: "a",
+    participant_code: "P1",
+    display_label: "Asha Naik",
+    consent_status: "GIVEN",
+    consent_at: null,
+  },
+  // The moderator may not see this one's name.
+  participant_b: {
+    id: "b",
+    participant_code: "P2",
+    display_label: null,
+    consent_status: "GIVEN",
+    consent_at: null,
+  },
   moderator_id: "u1",
   moderator_name: "Mo",
   allowed_transitions: [],
@@ -30,6 +43,15 @@ const task = {
   can_reassign: false,
   is_moderator: true,
   consent_missing: [],
+  // The project's reminders for face-to-face (D-147).
+  reminders: {
+    speaker_id: true,
+    topics: ["weather", "food and cooking"],
+    avoid: ["politics", "personal information"],
+    tips: [
+      "Place the recording device between the two speakers, no more than 2.5 feet from each mouth, and do not move it.",
+    ],
+  },
 };
 const project = {
   id: "p1",
@@ -80,11 +102,47 @@ describe("RecorderPage", () => {
     });
     api([]);
     renderAt("/tasks/t1/record");
-    expect(
-      await screen.findByText(/Place the microphone between the two speakers/),
-    ).toHaveTextContent("At most 25% of the recording may be silence.");
+    const note = await screen.findByRole("note", { name: "Reminders" });
+    expect(note).toHaveTextContent(/Place the recording device between the two speakers/);
+    expect(note).toHaveTextContent("At most 25% of the recording may be silence.");
     await userEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
     expect(await screen.findByText(/Microphone permission was refused/)).toBeInTheDocument();
+  });
+
+  it("reminds the moderator before recording, with each speaker's code (D-147)", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn() } });
+    api([]);
+    renderAt("/tasks/t1/record");
+    const note = await screen.findByRole("note", { name: "Reminders" });
+    const lines = within(note)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    // The first name only, where the moderator may see it; the code always.
+    expect(lines).toContain("“I am Asha and speaker ID P1”");
+    expect(lines).toContain("“I am <their name> and speaker ID P2”");
+    expect(lines).toContain("Talk about: weather, food and cooking");
+    expect(lines).toContain("Avoid: politics, personal information");
+    expect(lines.at(-1)).toBe("At most 25% of the recording may be silence.");
+    // Before Start recording: the note comes before the microphone.
+    expect(
+      note.compareDocumentPosition(screen.getByRole("button", { name: "Allow microphone" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("leaves out the speaker-ID line when the project does not ask it (D-147)", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn() } });
+    api([], {
+      "GET /api/v1/tasks/t1": () => [
+        200,
+        { ...task, reminders: { speaker_id: false, topics: [], avoid: [], tips: ["Sit still."] } },
+      ],
+    });
+    renderAt("/tasks/t1/record");
+    const note = await screen.findByRole("note", { name: "Reminders" });
+    expect(note).toHaveTextContent("Sit still.");
+    expect(note).not.toHaveTextContent(/speaker ID/);
+    expect(note).not.toHaveTextContent(/Talk about/);
   });
 
   it("offers to keep the saved audio of an interrupted recording", async () => {
@@ -293,10 +351,13 @@ describe("recording at the project's rate, never converted (owner 2026-11-17)", 
 });
 
 describe("after a recording (D-120)", () => {
-  function show(onAgain = vi.fn()) {
+  function show(onAgain = vi.fn(), waits: string | null = null) {
     const router = createMemoryRouter(
       [
-        { path: "/tasks/t1/record", element: <AfterRecording taskId="t1" onAgain={onAgain} /> },
+        {
+          path: "/tasks/t1/record",
+          element: <AfterRecording taskId="t1" onAgain={onAgain} waits={waits} />,
+        },
         { path: "/tasks/t1", element: <p>Task page</p> },
       ],
       { initialEntries: ["/tasks/t1/record"] },
@@ -313,6 +374,19 @@ describe("after a recording (D-120)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send to QC" }));
     expect(await screen.findByText("Task page")).toBeInTheDocument();
     expect(calls[0]?.body).toMatchObject({ to: "AUDIO_QC" });
+  });
+
+  it("waits for the device details before Send to QC (D-147)", async () => {
+    const { calls } = fakeApi({});
+    show(vi.fn(), "Fill in the device details of P2 first (Device details card).");
+    const send = screen.getByRole("button", { name: "Send to QC" });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAccessibleDescription(
+      "Fill in the device details of P2 first (Device details card).",
+    );
+    // Recording again does not wait.
+    expect(screen.getByRole("button", { name: "Record again" })).toBeEnabled();
+    expect(calls).toHaveLength(0);
   });
 
   it("records again from the recorder", async () => {

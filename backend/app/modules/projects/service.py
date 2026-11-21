@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -19,6 +20,7 @@ from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants import speakers
+from app.modules.projects import moderation
 from app.modules.projects.models import (
     DEFAULT_REQUIRED_SPEAKER_DETAILS,
     DEFAULT_SPEAKER_MAX_AGE,
@@ -147,12 +149,28 @@ class ProjectInput:
     # The QC checklist (D-146): None keeps the project's own (a new project gets the first
     # client's list). Decisions already made keep the questions as they read then.
     qc_checklist: tuple[dict[str, Any], ...] | None = None
+    # What the moderator fills and reads (D-147): the device details asked for each speaker and
+    # the reminders shown before recording. None keeps the project's own (a new project gets the
+    # first client's); details already filled stay as they are.
+    device_fields: tuple[str, ...] | None = None
+    recording_reminders: dict[str, Any] | None = None
+
+
+# Settings a PATCH that leaves them out keeps (D-146, D-147), with how each is checked.
+_KEPT_WHEN_LEFT_OUT: dict[str, Callable[[Any], object]] = {
+    "qc_checklist": checklist.clean,
+    "device_fields": moderation.clean_device_fields,
+    "recording_reminders": moderation.clean_reminders,
+}
+# Long settings an audit entry carries only when they changed.
+_AUDITED_WHEN_CHANGED = ("qc_checklist", "recording_reminders")
 
 
 def _values(data: ProjectInput) -> dict[str, object]:
     """The project's columns from the input, checked (D-145): the youngest age is not above the
     oldest, and the required details are known ones, each once, in the form's order; the QC
-    checklist's items are well formed (D-146). A checklist left out is not among them."""
+    checklist's items are well formed (D-146), the device details known ones and the reminders
+    within their limits (D-147). A setting of _KEPT_WHEN_LEFT_OUT left out is not among them."""
     if data.speaker_min_age > data.speaker_max_age:
         raise AppError(
             f"The youngest speaker age ({data.speaker_min_age}) is above the oldest "
@@ -165,10 +183,12 @@ def _values(data: ProjectInput) -> dict[str, object]:
         **data.__dict__,
         "required_speaker_details": speakers.clean_required(data.required_speaker_details),
     }
-    if data.qc_checklist is None:
-        del values["qc_checklist"]
-    else:
-        values["qc_checklist"] = checklist.clean(data.qc_checklist)
+    for name, clean in _KEPT_WHEN_LEFT_OUT.items():
+        given = values[name]
+        if given is None:
+            del values[name]
+        else:
+            values[name] = clean(given)
     return values
 
 
@@ -206,6 +226,8 @@ def _snapshot(p: Project) -> dict[str, object]:
         "speaker_max_age": p.speaker_max_age,
         "required_speaker_details": list(p.required_speaker_details),
         "qc_checklist": list(p.qc_checklist),
+        "device_fields": list(p.device_fields),
+        "recording_reminders": dict(p.recording_reminders),
     }
 
 
@@ -247,7 +269,12 @@ def create_project(
             "A project with this code already exists", code="PROJECT_CODE_TAKEN", status_code=409
         )
     _check_modes(data)
-    values = {"qc_checklist": checklist.default_checklist(), **_values(data)}
+    values = {
+        "qc_checklist": checklist.default_checklist(),
+        "device_fields": list(moderation.DEFAULT_DEVICE_FIELDS),
+        "recording_reminders": moderation.default_reminders(),
+        **_values(data),
+    }
     project = Project(
         id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **values
     )
@@ -283,9 +310,10 @@ def update_project(
         setattr(project, key, value)
     _ensure_default_audio_rules(project)
     after = _snapshot(project)
-    if after["qc_checklist"] == before["qc_checklist"]:
-        # The checklist is long: the entry carries it only when it changed (D-146).
-        del after["qc_checklist"], before["qc_checklist"]
+    for name in _AUDITED_WHEN_CHANGED:
+        if after[name] == before[name]:
+            # Long: the entry carries it only when it changed (D-146, D-147).
+            del after[name], before[name]
     if after != before:
         audit.record(
             db,

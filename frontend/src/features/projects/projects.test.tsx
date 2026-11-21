@@ -1,4 +1,4 @@
-// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006, AQC-008
+// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006, AQC-008, PROJ-011
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { SPEAKER_FIELDS } from "../../lib/speakers";
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
 import { PROJECT } from "../../test/world";
 import { CLIENT_QC_CHECKLIST } from "./qcChecklist";
+import { CLIENT_REMINDERS } from "./reminders";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -60,6 +61,8 @@ const project = {
   speaker_max_age: 60,
   required_speaker_details: SPEAKER_FIELDS.map((f) => f.key),
   qc_checklist: PROJECT.qc_checklist,
+  device_fields: PROJECT.device_fields,
+  recording_reminders: PROJECT.recording_reminders,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -145,6 +148,8 @@ describe("project detail", () => {
         speaker_max_age: 60,
         required_speaker_details: project.required_speaker_details,
         qc_checklist: project.qc_checklist, // D-146: the checklist goes back as it is too
+        device_fields: project.device_fields, // D-147: and what the moderator fills and reads
+        recording_reminders: project.recording_reminders,
       }),
     );
   });
@@ -345,6 +350,114 @@ describe("project detail", () => {
       CLIENT_QC_CHECKLIST,
     );
   });
+
+  it("asks the device details ticked on the Rules tab (D-147)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1/rules");
+    const card = await screen.findByRole("region", { name: "Device details" });
+    const asked = within(card).getByRole("group", { name: "Asked for each speaker" });
+    expect(
+      within(asked)
+        .getAllByRole("checkbox")
+        .map((b) => [b.closest("label")?.textContent, (b as HTMLInputElement).checked]),
+    ).toEqual([
+      ["Device make", true],
+      ["Device model", true],
+      ["Bluetooth earphones used (Yes / No)", true],
+      ["Wired earphones used (Yes / No)", true],
+      ["Loudspeaker on (Yes / No)", true],
+    ]);
+    await userEvent.click(within(asked).getByRole("checkbox", { name: /^Wired earphones/ }));
+    await userEvent.click(within(asked).getByRole("checkbox", { name: "Device model" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    const patches = () => calls.filter((c) => c.method === "PATCH");
+    expect(patches()[0]?.body).toMatchObject({
+      name: "Hindi conversations",
+      device_fields: ["device_make", "bluetooth_earphones", "loudspeaker_on"],
+      recording_reminders: CLIENT_REMINDERS, // the other cards go back as they are
+    });
+    // None at all is allowed, and said.
+    for (const box of within(asked).getAllByRole("checkbox"))
+      if ((box as HTMLInputElement).checked) await userEvent.click(box);
+    expect(within(card).getByText(/no device details are asked/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(patches()).toHaveLength(2));
+    expect(patches()[1]?.body).toMatchObject({ device_fields: [] });
+  });
+
+  it(
+    "edits the moderator's reminders and puts back the client's text (D-147)",
+    { timeout: 15000 },
+    async () => {
+      const { calls } = fakeApi(
+        signedInAs(["projects.view", "projects.manage"], {
+          "GET /api/v1/projects/p1": () => [200, project],
+          "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
+        }),
+      );
+      renderAt("/projects/p1/rules");
+      const card = await screen.findByRole("region", { name: "Reminders for moderators" });
+      const topics = within(card).getByLabelText("Talk about");
+      const avoid = within(card).getByLabelText("Avoid");
+      const phone = within(card).getByLabelText("Phone call tips");
+      const speakerId = within(card).getByRole("checkbox", {
+        name: "Ask each speaker to start with their first name and speaker ID",
+      });
+      // One line per entry, as the project has them.
+      expect(topics).toHaveValue(CLIENT_REMINDERS.topics.join("\n"));
+      expect(within(card).getByLabelText("Face-to-face tips")).toHaveValue(
+        CLIENT_REMINDERS.face_to_face.join("\n"),
+      );
+      expect(speakerId).toBeChecked();
+
+      await userEvent.clear(topics);
+      await userEvent.type(topics, "cricket{Enter}{Enter}  monsoon   farming");
+      await userEvent.clear(phone);
+      await userEvent.type(phone, "Use a headset");
+      await userEvent.click(speakerId);
+      // A line that is too long holds the save.
+      await userEvent.click(avoid);
+      await userEvent.keyboard("{Control>}{End}{/Control}");
+      await userEvent.paste(`\n${"x".repeat(201)}`);
+      expect(avoid).toHaveAccessibleDescription(/Line 7 is longer than 200 characters\./);
+      expect(screen.getByRole("button", { name: "Save rules" })).toBeDisabled();
+      await userEvent.type(avoid, "{Backspace}");
+      expect(screen.getByRole("button", { name: "Save rules" })).toBeEnabled();
+      expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+
+      await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+      expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+      const patches = () => calls.filter((c) => c.method === "PATCH");
+      expect(patches()[0]?.body).toMatchObject({
+        device_fields: project.device_fields,
+        recording_reminders: {
+          speaker_id: false,
+          // Spaces tidied, empty lines dropped.
+          topics: ["cricket", "monsoon farming"],
+          avoid: [...CLIENT_REMINDERS.avoid, "x".repeat(200)],
+          face_to_face: CLIENT_REMINDERS.face_to_face,
+          telephony: ["Use a headset"],
+        },
+      });
+
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Reset to the client's text" }),
+      );
+      expect(topics).toHaveValue(CLIENT_REMINDERS.topics.join("\n"));
+      expect(speakerId).toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+      await waitFor(() => expect(patches()).toHaveLength(2));
+      expect((patches()[1]?.body as { recording_reminders: unknown }).recording_reminders).toEqual(
+        CLIENT_REMINDERS,
+      );
+    },
+  );
 
   it("keeps the Rules tab for project administrators, like the other tabs (D-104, D-145)", async () => {
     fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));

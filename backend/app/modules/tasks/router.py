@@ -20,9 +20,10 @@ from app.modules.participants import documents
 from app.modules.participants import service as participants
 from app.modules.participants.models import CONSENT_FORM, Participant
 from app.modules.participants.router import DocumentOut, document_out
+from app.modules.projects import moderation
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
-from app.modules.tasks import bulk, service, workflow
+from app.modules.tasks import bulk, devices, service, workflow
 from app.modules.tasks.models import TASK_STATUSES, Task
 from app.modules.users.service import display_names
 
@@ -97,6 +98,17 @@ class ConsentFixOut(BaseModel):
     can_send_back: bool
 
 
+class RemindersOut(BaseModel):
+    """What the moderator reads before recording or calling (D-147), for the task's mode: whether
+    to ask each speaker to start with their first name and speaker ID, what to talk about, what to
+    avoid, and the tips for this mode."""
+
+    speaker_id: bool
+    topics: list[str]
+    avoid: list[str]
+    tips: list[str]
+
+
 class TaskDetail(TaskSummary):
     held_from: str | None
     reason_code: str | None
@@ -116,6 +128,12 @@ class TaskDetail(TaskSummary):
     consent_mode: Literal["ONLINE", "UPLOAD"] = "ONLINE"
     # At CONSENT_FIX only (D-146): QC's comment, whose form, and who may send it back to QC.
     consent_fix: ConsentFixOut | None = None
+    # D-147: the device details the project asks for each speaker (empty: none), and while the
+    # task is In progress or Recorded the participants (codes) whose asked details are missing:
+    # Send to QC waits for them.
+    device_fields: list[str] = []
+    device_details_missing: list[str] = []
+    reminders: RemindersOut | None = None
 
 
 def summary(t: Task) -> TaskSummary:
@@ -171,6 +189,11 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         consent_missing=consents.missing(sides),
         consent_mode=project.consent_mode,
         consent_fix=audio_qc.consent_fix_view(db, principal, t),
+        device_fields=list(project.device_fields),
+        device_details_missing=devices.missing_codes(db, project, t),
+        reminders=RemindersOut(
+            **moderation.reminders_for(project.recording_reminders, t.recording_mode)
+        ),
     )
 
 
@@ -340,6 +363,8 @@ def transition(
             reason_code=body.reason_code,
             comment=body.comment,
         )
+        # Then the device details the project asks, for both people (D-147).
+        devices.ensure_complete(db, task)
         audio_qc.ensure_checked(db, task)
     service.transition(
         db,
@@ -370,6 +395,110 @@ def send_back_to_qc(
     once the consent forms QC found wrong were replaced (D-146)."""
     task = audio_qc.send_back_to_qc(db, principal, task_id, body.comment, client_ip(request))
     return detail(db, principal, task)
+
+
+DeviceText = Annotated[str | None, Field(max_length=moderation.MAX_DEVICE_TEXT)]
+
+
+class DeviceValuesIO(BaseModel):
+    """One speaker's device details (D-147); null = not answered."""
+
+    device_make: DeviceText = None
+    device_model: DeviceText = None
+    bluetooth_earphones: bool | None = None
+    wired_earphones: bool | None = None
+    loudspeaker_on: bool | None = None
+
+
+class DeviceEntryIn(DeviceValuesIO):
+    side: Literal["A", "B"]
+
+
+class DeviceDetailsBody(BaseModel):
+    """Both participants' device details at once, by side."""
+
+    participants: list[DeviceEntryIn] = Field(min_length=1, max_length=2)
+
+
+class DeviceLastTimeOut(DeviceValuesIO):
+    task_code: str
+    filled_at: datetime
+
+
+class DevicePartyOut(BaseModel):
+    side: Literal["A", "B"]
+    participant_id: uuid.UUID
+    participant_code: str
+    details: DeviceValuesIO
+    filled_by: str | None
+    filled_at: datetime | None
+    # The asked details not answered yet.
+    missing: list[str]
+    # Offered to whoever may fill them: the person's newest details on another task of the
+    # project ("Same as last time"); never filled in by itself.
+    last_time: DeviceLastTimeOut | None
+
+
+class DeviceDetailsOut(BaseModel):
+    # The details the project asks, in the form's order.
+    fields: list[str]
+    call_type: Literal["Telephonic", "Face-to-face"]
+    # The caller may change them now (the task's moderator or an admin, before QC).
+    editable: bool
+    complete: bool
+    participants: list[DevicePartyOut]
+
+
+def device_details_out(v: devices.View) -> DeviceDetailsOut:
+    return DeviceDetailsOut(
+        fields=v.fields,
+        call_type=v.call_type,
+        editable=v.editable,
+        complete=v.complete,
+        participants=[
+            DevicePartyOut(
+                side=p.side,
+                participant_id=p.participant_id,
+                participant_code=p.participant_code,
+                details=DeviceValuesIO(**p.values.as_dict()),
+                filled_by=p.filled_by,
+                filled_at=p.filled_at,
+                missing=p.missing,
+                last_time=DeviceLastTimeOut(
+                    **p.last_time.values.as_dict(),
+                    task_code=p.last_time.task_code,
+                    filled_at=p.last_time.filled_at,
+                )
+                if p.last_time
+                else None,
+            )
+            for p in v.participants
+        ],
+    )
+
+
+@router.get("/{task_id}/device-details", response_model=DeviceDetailsOut)
+def get_device_details(
+    task_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
+) -> DeviceDetailsOut:
+    """The device each speaker used (D-147), for everyone who may see the task."""
+    return device_details_out(devices.view(db, principal, task_id))
+
+
+@router.put("/{task_id}/device-details", response_model=DeviceDetailsOut)
+def put_device_details(
+    task_id: uuid.UUID,
+    body: DeviceDetailsBody,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+) -> DeviceDetailsOut:
+    """The task's moderator (or a project admin) saves both people's device details before the
+    task goes to QC (D-147)."""
+    entries = {e.side: e.model_dump(exclude={"side"}) for e in body.participants}
+    if len(entries) != len(body.participants):
+        entries = {}  # a side given twice: the service says both are needed, once each
+    return device_details_out(devices.save(db, principal, task_id, entries, client_ip(request)))
 
 
 class CommentBody(BaseModel):

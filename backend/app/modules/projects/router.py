@@ -89,6 +89,24 @@ class ChecklistItemIO(BaseModel):
     required: bool = True
 
 
+# A reminder line as sent; the service holds it to moderation.MAX_REMINDER_LINE (422
+# INVALID_REMINDERS), this only bounds the request.
+ReminderLine = Annotated[str, Field(max_length=1000)]
+ReminderLines = Annotated[list[ReminderLine], Field(max_length=100)]
+
+
+class RemindersIO(BaseModel):
+    """What the moderator reads before recording and calling (D-147, projects/moderation.py):
+    whether to ask each speaker to say their first name and speaker ID, what to talk about, what
+    to avoid, and the tips for face-to-face and for phone calls; one line per entry."""
+
+    speaker_id: bool = True
+    topics: ReminderLines = []
+    avoid: ReminderLines = []
+    face_to_face: ReminderLines = []
+    telephony: ReminderLines = []
+
+
 class ProjectSummary(BaseModel):
     id: uuid.UUID
     code: str
@@ -114,6 +132,8 @@ class ProjectDetail(ProjectSummary):
     speaker_max_age: int
     required_speaker_details: list[str]
     qc_checklist: list[ChecklistItemIO]
+    device_fields: list[str]
+    recording_reminders: RemindersIO
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -141,6 +161,8 @@ def detail(p: Project) -> ProjectDetail:
         speaker_max_age=p.speaker_max_age,
         required_speaker_details=list(p.required_speaker_details),
         qc_checklist=[ChecklistItemIO.model_validate(i) for i in p.qc_checklist],
+        device_fields=list(p.device_fields),
+        recording_reminders=RemindersIO.model_validate(p.recording_reminders),
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -202,12 +224,20 @@ class ProjectBody(BaseModel):
     # The QC checklist (D-146), set on the Rules tab. Left out: a new project gets the first
     # client's list, and a change keeps the project's own.
     qc_checklist: list[ChecklistItemIO] | None = Field(default=None, max_length=checklist.MAX_ITEMS)
+    # What the moderator fills and reads (D-147), set on the Rules tab: the device details asked
+    # for each speaker (names from projects/moderation.DEVICE_FIELDS) and the reminders. Left
+    # out: a new project gets the first client's, and a change keeps the project's own.
+    device_fields: list[Annotated[str, Field(max_length=40)]] | None = Field(
+        default=None, max_length=20
+    )
+    recording_reminders: RemindersIO | None = None
 
     def to_input(self) -> service.ProjectInput:
         values = self.model_dump()
         values["required_speaker_details"] = tuple(values["required_speaker_details"])
-        if values["qc_checklist"] is not None:
-            values["qc_checklist"] = tuple(values["qc_checklist"])
+        for name in ("qc_checklist", "device_fields"):
+            if values[name] is not None:
+                values[name] = tuple(values[name])
         return service.ProjectInput(**values)
 
 

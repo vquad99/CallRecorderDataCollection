@@ -12,6 +12,7 @@ import {
   agree,
   api,
   emailedLink,
+  fillDeviceDetails,
   fillSpeakerDetails,
   NEW_PASSWORD,
   playToEnd,
@@ -191,6 +192,11 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
 
   await test.step("the moderator records the conversation and plays it back", async () => {
     await moderator.getByRole("link", { name: "Open the recorder" }).click();
+    // Before Start recording: the project's reminders, with each speaker's own code (D-147).
+    const reminders = moderator.getByRole("note", { name: "Reminders" });
+    await expect(reminders).toContainText(/and speaker ID P\d{6}/);
+    await expect(reminders).toContainText("Talk about:");
+    await expect(reminders).toContainText("2.5 feet");
     await moderator.getByRole("button", { name: "Allow microphone" }).click();
     await moderator.getByRole("button", { name: "Start recording" }).click();
     await expect(moderator.getByText(/Recording 0:0[1-9]/)).toBeVisible();
@@ -210,6 +216,13 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     expect(played.ended).toBe(true);
     expect(played.duration).toBeGreaterThan(5);
     await expect(moderator.getByText("The task is now marked as recorded.")).toBeVisible();
+  });
+
+  await test.step("the moderator fills both speakers' device details beside Send to QC (D-147)", async () => {
+    // Send to QC waits for them; the task stays Recorded here (the steps below expect it).
+    await expect(moderator.getByRole("button", { name: "Send to QC" })).toBeDisabled();
+    await fillDeviceDetails(moderator);
+    await expect(moderator.getByRole("button", { name: "Send to QC" })).toBeEnabled();
   });
 
   await test.step("the task shows as recorded, with its history", async () => {
@@ -300,6 +313,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       "consent.self_recorded",
       "recording.started",
       "recording.completed",
+      "task.device_details_changed",
       "export.requested",
       "export.download_link",
     ]) {

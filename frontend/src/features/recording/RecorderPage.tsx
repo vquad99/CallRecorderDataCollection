@@ -1,7 +1,8 @@
 // Face-to-face recorder (FTF-001..015). Captures raw samples with an AudioWorklet at the project's
 // delivery rate (normally 16000 Hz, owner 2026-11-17: the file is kept as recorded, never
 // converted), uploads 5-second chunks as it goes, and never claims to keep recording after the tab
-// is closed or the device sleeps.
+// is closed or the device sleeps. The project's reminders show before recording; after it, the
+// speakers' device details are filled beside Send to QC (D-147).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
@@ -22,6 +23,8 @@ import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { clock } from "../../lib/format";
 import { labelFor, TASK_STATUS_LABELS } from "../../lib/labels";
+import { DeviceDetailsCard, devicesWait } from "../tasks/DeviceDetails";
+import { Reminders } from "../tasks/Reminders";
 import { ChunkUploader } from "./uploader";
 import "./recorder.css";
 
@@ -147,19 +150,34 @@ function Recovery({ open, onDone }: { open: rec.Recording; onDone: () => void })
 }
 
 /** Right after a good recording (D-120): listen above, then send it to QC or record again,
- * without going back to the task page. */
-export function AfterRecording({ taskId, onAgain }: { taskId: string; onAgain: () => void }) {
+ * without going back to the task page. `waits`: why Send to QC waits (the device details of
+ * both people come first, D-147). */
+export function AfterRecording({
+  taskId,
+  onAgain,
+  waits = null,
+}: {
+  taskId: string;
+  onAgain: () => void;
+  waits?: string | null;
+}) {
   const navigate = useNavigate();
   const { busy, error, run } = useAction();
   return (
     <section className="card stack" aria-labelledby="after-title">
       <h2 id="after-title">Listen, then send it to QC</h2>
       <p>Listen to the recording above. If it is good, send it to QC; if not, record it again.</p>
+      {waits ? (
+        <p id="after-qc-waits" className="muted">
+          {waits}
+        </p>
+      ) : null}
       <div className="actions">
         <Button
           icon="send"
           busy={busy === "AUDIO_QC"}
-          disabled={busy !== null}
+          disabled={busy !== null || waits !== null}
+          aria-describedby={waits ? "after-qc-waits" : undefined}
           onClick={() =>
             void run(async () => {
               await transitionTask(taskId, "AUDIO_QC", "", "");
@@ -585,11 +603,11 @@ export function RecorderPage() {
           message="Use the latest Chrome or Edge."
         />
       ) : null}
-      <p className="card callout">
-        <Icon name="info" size={18} />
-        Place the microphone between the two speakers, no more than 2.5 feet from each, and do not
-        move it. At most {Number(rules?.max_silence_pct ?? 25)}% of the recording may be silence.
-      </p>
+      {/* The project's reminders for face-to-face (D-147), with its silence limit. */}
+      <Reminders
+        task={t}
+        extra={`At most ${Number(rules?.max_silence_pct ?? 25)}% of the recording may be silence.`}
+      />
       {open && phase !== "recording" && phase !== "finishing" && recordingId.current !== open.id ? (
         <Recovery open={open} onDone={() => existing.reload()} />
       ) : null}
@@ -691,8 +709,11 @@ export function RecorderPage() {
       {phase === "done" && result?.state === "READY" ? (
         <>
           <SuccessNotice message="The task is now marked as recorded." />
+          {/* D-147: filled here, near Send to QC; the task is loaded again quietly once saved. */}
+          <DeviceDetailsCard task={t} onSaved={() => void getTask(taskId).then(task.replace)} />
           <AfterRecording
             taskId={t.id}
+            waits={devicesWait(t)}
             onAgain={() => {
               setResult(null);
               setPhaseBoth("idle");

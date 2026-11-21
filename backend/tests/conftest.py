@@ -256,9 +256,12 @@ def make_project(
     *,
     max_conversations_per_speaker: int | None = None,
     unique_pairs: bool = False,
+    device_fields: tuple[str, ...] = (),
 ) -> Any:
     """A project. Its pairing rules (D-143) are off unless asked for: many tests make several
-    tasks with the same two people; tests/test_pairing_rules.py turns them on."""
+    tasks with the same two people; tests/test_pairing_rules.py turns them on. It asks no device
+    details (D-147) unless given, so a recording goes to QC without them; tests/test_devices.py
+    asks them (a project made through the API asks all five, as a real one does)."""
     from app.modules.projects.models import Project
 
     project = Project(
@@ -269,6 +272,7 @@ def make_project(
         allows_face_to_face=True,
         max_conversations_per_speaker=max_conversations_per_speaker,
         unique_pairs=unique_pairs,
+        device_fields=list(device_fields),
     )
     db.add(project)
     db.commit()

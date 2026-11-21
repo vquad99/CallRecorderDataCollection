@@ -62,6 +62,20 @@ export interface ChecklistItem {
   required: boolean;
 }
 
+/** The device details a project may ask for each speaker (D-147). */
+export type DeviceField =
+  "device_make" | "device_model" | "bluetooth_earphones" | "wired_earphones" | "loudspeaker_on";
+
+/** What the moderator reads before recording and calling (D-147): whether each speaker starts
+ * with their first name and speaker ID, what to talk about and avoid, and tips per mode. */
+export interface Reminders {
+  speaker_id: boolean;
+  topics: string[];
+  avoid: string[];
+  face_to_face: string[];
+  telephony: string[];
+}
+
 /** What the project's Rules tab edits (D-145). Every client rule is the project's own setting;
  * a new project starts with the server's defaults. */
 export interface ProjectRules {
@@ -82,6 +96,10 @@ export interface ProjectRules {
   /** What the QC Executive answers Yes or No for each recording (D-146); the first client's list
    * at the start. */
   qc_checklist: ChecklistItem[];
+  /** What the moderator fills for each speaker before QC, and reads before recording (D-147);
+   * the first client's at the start. */
+  device_fields: DeviceField[];
+  recording_reminders: Reminders;
 }
 
 /** Everything the project's PATCH takes: a field left out would go back to its default, so the
@@ -118,6 +136,8 @@ export const projectRules = (p: Project): ProjectRules => ({
   consent_mode: p.consent_mode,
   qc_final_approval: p.qc_final_approval,
   qc_checklist: p.qc_checklist,
+  device_fields: p.device_fields,
+  recording_reminders: p.recording_reminders,
 });
 
 export interface Member {

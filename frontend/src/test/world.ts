@@ -1,6 +1,16 @@
 // Test-only: one consistent fake backend for every page (Option C). Each test starts from
 // worldHandlers() and replaces only what it is about.
+import { CLIENT_REMINDERS } from "../features/projects/reminders";
 import type { Handler } from "./fakeApi";
+
+/** The device details a new project asks for each speaker (D-147). */
+export const DEVICE_FIELDS = [
+  "device_make",
+  "device_model",
+  "bluetooth_earphones",
+  "wired_earphones",
+  "loudspeaker_on",
+] as const;
 
 export const PROJECT = {
   id: "p1",
@@ -56,6 +66,9 @@ export const PROJECT = {
       required: true,
     },
   ],
+  // What the moderator fills and reads (D-147), as a new project starts.
+  device_fields: [...DEVICE_FIELDS],
+  recording_reminders: CLIENT_REMINDERS,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -348,6 +361,42 @@ export const TASK = {
   can_reassign: true,
   is_moderator: true,
   consent_missing: [],
+  // D-147: asked as the project asks them; nothing missing until the session starts.
+  device_fields: [...DEVICE_FIELDS],
+  device_details_missing: [] as string[],
+  reminders: {
+    speaker_id: true,
+    topics: CLIENT_REMINDERS.topics,
+    avoid: CLIENT_REMINDERS.avoid,
+    tips: CLIENT_REMINDERS.face_to_face,
+  },
+};
+
+const noDevice = {
+  device_make: null,
+  device_model: null,
+  bluetooth_earphones: null,
+  wired_earphones: null,
+  loudspeaker_on: null,
+};
+const deviceParty = (side: "A" | "B", p: typeof PARTICIPANT) => ({
+  side,
+  participant_id: p.id,
+  participant_code: p.participant_code,
+  details: noDevice,
+  filled_by: null,
+  filled_at: null,
+  missing: [...DEVICE_FIELDS],
+  last_time: null,
+});
+
+/** The device details of task t1 before anyone filled them (D-147). */
+export const DEVICE_DETAILS = {
+  fields: [...DEVICE_FIELDS],
+  call_type: "Face-to-face",
+  editable: true,
+  complete: false,
+  participants: [deviceParty("A", PARTICIPANT), deviceParty("B", PARTICIPANT_B)],
 };
 
 /** The QC checklist of task t1 as its QC Executive sees it before ticking (D-146). */
@@ -572,6 +621,7 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/tasks/t1/recordings": ok([]),
     "GET /api/v1/tasks/t1/calls": ok([]),
     "GET /api/v1/tasks/t1/audio-qc/checklist": ok(QC_CHECKLIST),
+    "GET /api/v1/tasks/t1/device-details": ok(DEVICE_DETAILS),
     "PUT /api/v1/tasks/t1/audio-qc/draft": ok({
       answers: { conversation: {}, speakers: {}, consent: {} },
       saved_at: "2026-11-21T10:00:00Z",

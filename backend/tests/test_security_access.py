@@ -951,6 +951,23 @@ CASES: list[Case] = [
         Perm.TASKS_VIEW,
         lambda e, s, who: {"comment": "access check"},
     ),
+    # Device details per speaker (D-147): read by task viewers; saved by the task's moderator or
+    # an admin, and this task went to QC, so they are read only (409 after access).
+    case(
+        "GET",
+        "/api/v1/tasks/{task_id}/device-details",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/device-details",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+    ),
+    case(
+        "PUT",
+        "/api/v1/tasks/{task_id}/device-details",
+        lambda e, s: f"/api/v1/tasks/{s.task_done}/device-details",
+        TASK_VIEWERS,
+        Perm.TASKS_VIEW,
+        lambda e, s, who: {"participants": [{"side": "A"}, {"side": "B"}]},
+    ),
     case(
         "POST",
         "/api/v1/tasks/{task_id}/audio-qc/recheck",

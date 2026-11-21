@@ -1,12 +1,5 @@
-/* Face-to-face recorder: the audio rules note, the input level and the live recording card. */
-.callout {
-  display: flex;
-  gap: 10px;
-  color: var(--text-2);
-}
-.callout .icon {
-  margin-top: 1px;
-}
+/* Face-to-face recorder: the input level and the live recording card (the reminders' note is in
+   tasks/moderator.css, D-147). */
 meter {
   width: 100%;
   height: 14px;

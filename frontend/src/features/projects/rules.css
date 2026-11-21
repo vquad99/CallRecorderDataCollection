@@ -61,3 +61,13 @@
 .qc-rule .checkbox {
   margin-top: 4px;
 }
+/* The moderator's reminders (D-147): the four boxes two by two on a wide screen. */
+.rules-reminders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+  gap: 0 20px;
+  max-width: 900px;
+}
+.rules-reminders .field {
+  max-width: none;
+}

@@ -57,6 +57,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | task_assignments | task_id, user_id, role_code, active, assigned_by, reason, assigned_at, ended_at | partial unique (task_id, role_code) where active | restrict |
 | task_status_history | task_id, from_status, to_status, actor_id, reason_code, comment, at | index (task_id, at) | restrict |
 | task_comments | task_id, author_id, body, internal (bool) | index (task_id) | restrict |
+| task_device_details | see "Device details and reminders" below (D-147) | unique (task_id, participant_id); index participant_id | task cascade; participant, filled_by restrict |
 | provider_accounts | provider, label, region, concurrency_limit, credentials_ref (secret-manager reference only) | unique (provider, label) | restrict |
 | call_sessions | task_id, provider_account_id, conference_ref, state, started_at, ended_at, moderator_left_at, recording_state, failure_code, failure_detail_safe | unique conference_ref; index state | restrict |
 | call_participants | call_session_id, participant_id (null for moderator), leg_role (A, B, MODERATOR), provider_call_ref, joined_at, left_at | unique provider_call_ref | cascade |
@@ -263,3 +264,23 @@ audio fine but a signed consent form not; the moderator uploads a new one and se
 recording back to Audio QC. Going back to 0035 moves such tasks back to `AUDIO_QC` (a history
 entry by the platform), drops the drafts and the answers, and puts the old outcome check back as
 `NOT VALID`: decisions that sent a task back are kept.
+
+## Device details and reminders (migration 0037, D-147)
+
+`projects.device_fields` (JSONB list, a check keeps it a list): the device details the moderator
+fills for each speaker before a task goes to QC, names from `device_make`, `device_model`,
+`bluetooth_earphones`, `wired_earphones`, `loudspeaker_on` (`projects/moderation.py` checks them
+when saved). Every existing project asks all five (the first client's list, Konkani, NLTM), so the
+column's default is that list too; each project changes it on its **Rules** tab.
+
+`projects.recording_reminders` (JSONB object, a check keeps it an object): `{speaker_id, topics,
+avoid, face_to_face, telephony}`, what the moderator reads before recording and calling. Every
+existing project gets the first client's text, which is also the column's default.
+
+`task_device_details`: task_id (cascade), participant_id (restrict), device_make and device_model
+(varchar 60, empty = not answered), bluetooth_earphones, wired_earphones, loudspeaker_on (boolean,
+empty = not answered), filled_by (the user who saved a change last), filled_at; one row per task
+and participant (unique), indexed by participant for "Same as last time". The call type is the
+task's `recording_mode`, not stored again. Deleting a task (D-115) removes its rows; a participant
+is never deleted (removal keeps the row, D-143), so their rows stay. Going back to 0036 drops the
+table and the two project columns.

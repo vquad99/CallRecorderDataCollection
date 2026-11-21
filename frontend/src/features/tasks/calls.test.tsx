@@ -6,15 +6,16 @@
 // answers are in the Super Admin's technical log; recording waits for both people's consent.
 // The moderator's phone line (D-133) is signed in by the portal itself, Start call waits for it to
 // be Ready, it is Ready again after each call without a second sign-in, and it goes offline at
-// sign-out.
-// Requirements: TEL-002, TEL-004, TEL-018, TEL-036, TEL-037, GEN-004
+// sign-out. Before Start call the project's reminders show with the task's own speakers, and Send
+// to QC waits for both speakers' device details (D-147).
+// Requirements: TEL-002, TEL-004, TEL-018, TEL-036, TEL-037, GEN-004, FTF-014
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, ME, renderAt, signedInAs, type Handler } from "../../test/fakeApi";
 import { FakeAgentManager, FakeSocket } from "../../test/fakeWebSocket";
-import { ALL_PERMISSIONS, TASK, USER, worldHandlers } from "../../test/world";
+import { ALL_PERMISSIONS, DEVICE_DETAILS, TASK, USER, worldHandlers } from "../../test/world";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -367,6 +368,108 @@ describe("phone calls in plain words (UI review 2026-11-17)", () => {
     expect(at("Ready to call")).toBeLessThan(at("Waiting for consent"));
     expect(at("Waiting for consent")).toBeLessThan(at("Phone calls"));
   });
+
+  it("reminds the moderator before Start call, with each speaker's code (D-147)", async () => {
+    const reminders = {
+      speaker_id: true,
+      topics: ["weather", "travel"],
+      avoid: ["politics"],
+      tips: ["Hold the handset near the mouth and keep the loudspeaker off."],
+    };
+    fakeApi({
+      ...signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, { ...PHONE_TASK, reminders }],
+        "GET /api/v1/tasks/t1/calls": () => [200, []],
+      }),
+      "GET /api/v1/auth/me": () => [200, MODERATOR],
+    });
+    renderAt("/tasks/t1");
+    await screen.findByRole("button", { name: "Start call" }, { timeout: 5000 });
+    const card = screen.getByRole("region", { name: "Ready to call" });
+    const lines = within(within(card).getByRole("note", { name: "Reminders" }))
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(lines).toEqual([
+      "Ask each speaker to start with:“I am Asha and speaker ID P000001”“I am Bina and speaker ID P000002”",
+      "“I am Asha and speaker ID P000001”",
+      "“I am Bina and speaker ID P000002”",
+      "Talk about: weather, travel",
+      "Avoid: politics",
+      "Hold the handset near the mouth and keep the loudspeaker off.",
+    ]);
+  });
+
+  it(
+    "keeps Send to QC waiting for both speakers' device details (D-147)",
+    { timeout: 15000 },
+    async () => {
+      let task = {
+        ...PHONE_TASK,
+        status: "RECORDED",
+        allowed_transitions: ["AUDIO_QC", "IN_PROGRESS"],
+        device_details_missing: ["P000001", "P000002"],
+      };
+      const api = fakeApi({
+        ...signedInAs(ALL_PERMISSIONS, {
+          ...worldHandlers(),
+          "GET /api/v1/tasks/t1": () => [200, task],
+          "GET /api/v1/tasks/t1/calls": () => [200, [call("RECORDED", { recording_id: "r1" })]],
+          "GET /api/v1/tasks/t1/device-details": () => [
+            200,
+            { ...DEVICE_DETAILS, call_type: "Telephonic" },
+          ],
+          "PUT /api/v1/tasks/t1/device-details": () => {
+            task = { ...task, device_details_missing: [] };
+            return [200, { ...DEVICE_DETAILS, call_type: "Telephonic", complete: true }];
+          },
+          "GET /api/v1/tasks/t1/audio-qc": () => [
+            404,
+            { error: { code: "NOT_FOUND", message: "Not found" } },
+          ],
+          "POST /api/v1/tasks/t1/transition": () => [200, { ...task, status: "AUDIO_QC" }],
+        }),
+        "GET /api/v1/auth/me": () => [200, MODERATOR],
+      });
+      renderAt("/tasks/t1");
+      const send = await screen.findByRole("button", { name: "Send to QC" }, { timeout: 5000 });
+      expect(send).toBeDisabled();
+      expect(send).toHaveAccessibleDescription(
+        "Fill in the device details of P000001 and P000002 first (Device details card).",
+      );
+      // The card sits under the call card, before the call history.
+      const card = await screen.findByRole("region", { name: "Device details" });
+      expect(await within(card).findByText(/Call type: Telephonic/)).toBeInTheDocument();
+      const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+      expect(headings.indexOf("Device details")).toBeGreaterThan(
+        headings.indexOf("Check the call recording"),
+      );
+      expect(headings.indexOf("Device details")).toBeLessThan(headings.indexOf("Phone calls"));
+      for (const side of ["A", "B"]) {
+        const who = within(card).getByRole("group", { name: new RegExp(`^Participant ${side}`) });
+        await userEvent.type(within(who).getByLabelText("Device make"), "Nokia");
+        await userEvent.type(within(who).getByLabelText("Device model"), "105");
+        for (const question of [
+          "Bluetooth earphones used",
+          "Wired earphones used",
+          "Loudspeaker on",
+        ])
+          await userEvent.click(
+            within(within(who).getByRole("group", { name: question })).getByRole("radio", {
+              name: "No",
+            }),
+          );
+      }
+      await userEvent.click(within(card).getByRole("button", { name: "Save device details" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Send to QC" })).toBeEnabled());
+      await userEvent.click(screen.getByRole("button", { name: "Send to QC" }));
+      await waitFor(() =>
+        expect(api.calls.find((c) => c.path.endsWith("/transition"))?.body).toMatchObject({
+          to: "AUDIO_QC",
+        }),
+      );
+    },
+  );
 
   it("tells a moderator what went wrong in plain words, without the provider's answer", async () => {
     fakeApi({

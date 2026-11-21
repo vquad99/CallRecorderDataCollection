@@ -628,3 +628,61 @@ def test_the_qc_checklist_and_the_consent_fix_come_and_go(test_database_url: str
         )
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_device_details_and_reminders_come_and_go(test_database_url: str) -> None:
+    """0037 (D-147): every existing project asks all five device details and gets the first
+    client's reminders as its own; one row of device details per task and participant; going back
+    drops them."""
+    from app.modules.projects.moderation import DEFAULT_DEVICE_FIELDS, DEFAULT_RECORDING_REMINDERS
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0036")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+        a = _participant_row(conn, "P900001")
+        b = _participant_row(conn, "P900002")
+        task_id = conn.execute(
+            text(
+                "INSERT INTO tasks (task_code, project_id, recording_mode, status, priority, "
+                "participant_a_id, participant_b_id) VALUES ('T900001', :p, 'TELEPHONY', "
+                "'RECORDED', 'NORMAL', :a, :b) RETURNING id"
+            ),
+            {"p": project_id, "a": a, "b": b},
+        ).scalar_one()
+    command.upgrade(cfg, "head")
+    detail = text(
+        "INSERT INTO task_device_details (task_id, participant_id, device_make, loudspeaker_on) "
+        "VALUES (:t, :p, 'Samsung', false)"
+    )
+    with engine.begin() as conn:
+        fields, reminders = conn.execute(
+            text("SELECT device_fields, recording_reminders FROM projects WHERE id = :p"),
+            {"p": project_id},
+        ).one()
+        assert fields == list(DEFAULT_DEVICE_FIELDS)
+        assert reminders == DEFAULT_RECORDING_REMINDERS
+        assert reminders["speaker_id"] is True
+        conn.execute(detail, {"t": task_id, "p": a})
+        conn.execute(detail, {"t": task_id, "p": b})
+    for sql, match in (
+        ("UPDATE projects SET device_fields = '{}'::jsonb", "device_fields_list"),
+        ("UPDATE projects SET recording_reminders = '[]'::jsonb", "recording_reminders_object"),
+        (
+            "UPDATE task_device_details SET device_model = repeat('x', 61)",
+            "value too long",
+        ),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(text(sql))
+    with pytest.raises(Exception, match="uq_task_device_details_task_id"), engine.begin() as conn:
+        conn.execute(detail, {"t": task_id, "p": a})
+    command.downgrade(cfg, "0036")
+    with engine.begin() as conn:
+        assert "task_device_details" not in inspect(conn).get_table_names()
+        columns = {c["name"] for c in inspect(conn).get_columns("projects")}
+        assert {"device_fields", "recording_reminders"}.isdisjoint(columns)
+    command.upgrade(cfg, "head")
+    engine.dispose()

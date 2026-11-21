@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeApi, ME, renderAt, signedInAs, type Handler } from "../test/fakeApi";
 import {
   ALL_PERMISSIONS,
+  DEVICE_DETAILS,
   DOCUMENT,
   PROJECT,
   QC_CHECKLIST,
@@ -58,6 +59,9 @@ const tick =
   async () => {
     await userEvent.click(screen.getByRole("checkbox", { name: label }));
   };
+/** A field inside the group with this name: the device details ask the same of each speaker. */
+const inGroup = (group: RegExp, label: string) =>
+  within(screen.getByRole("group", { name: group })).getByLabelText(label) as HTMLInputElement;
 
 // A phone call in progress on task t1 (D-101).
 const LIVE_CALL = {
@@ -95,6 +99,7 @@ interface FormSpec {
   reply: [number, unknown];
   body?: Record<string, unknown>; // part of the request body that must match
   kept: string; // a text field whose value must survive an error
+  keptField?: () => HTMLInputElement; // that field, when its label is not unique on the page
   anonymous?: boolean;
   handlers?: Record<string, Handler>;
 }
@@ -535,6 +540,40 @@ const FORMS: Record<string, FormSpec> = {
     body: { moderator_rate: "3", participant_rate: null },
     kept: "Moderators (₹ per approved minute)",
   },
+  "device details": {
+    source: "src/features/tasks/DeviceDetails.tsx",
+    url: "/tasks/t1",
+    ready: /Still to fill/,
+    handlers: {
+      "GET /api/v1/tasks/t1": () => [
+        200,
+        { ...TASK, status: "IN_PROGRESS", device_details_missing: ["P000001", "P000002"] },
+      ],
+    },
+    fill: [
+      async () => {
+        await userEvent.type(inGroup(/^Participant A/, "Device make"), "Samsung");
+      },
+      async () => {
+        const wired = within(screen.getByRole("group", { name: /^Participant B/ })).getByRole(
+          "group",
+          { name: "Wired earphones used" },
+        );
+        await userEvent.click(within(wired).getByRole("radio", { name: "Yes" }));
+      },
+    ],
+    submit: "Save device details",
+    write: "PUT /api/v1/tasks/t1/device-details",
+    reply: [200, DEVICE_DETAILS],
+    body: {
+      participants: [
+        { ...DEVICE_DETAILS.participants[0]?.details, side: "A", device_make: "Samsung" },
+        { ...DEVICE_DETAILS.participants[1]?.details, side: "B", wired_earphones: true },
+      ],
+    },
+    kept: "Device make",
+    keptField: () => inGroup(/^Participant A/, "Device make"),
+  },
   "task comment": {
     source: "src/features/tasks/TaskDetailPage.tsx",
     url: "/tasks/t1",
@@ -661,7 +700,8 @@ describe.each(Object.entries(FORMS))("%s form", (_, spec) => {
   it("shows each kind of failure and keeps what was typed", async () => {
     let failure: Handler = () => [500, {}];
     const { writes, submit } = await openForm(spec, (b, u) => failure(b, u));
-    const typed = field(spec.kept).value;
+    const kept = () => spec.keptField?.() ?? field(spec.kept);
+    const typed = kept().value;
     for (const [kind, fail, says] of FAILURES) {
       failure = fail;
       const before = writes().length;
@@ -670,7 +710,7 @@ describe.each(Object.entries(FORMS))("%s form", (_, spec) => {
       await waitFor(() => expect(alertsText()).toMatch(says), { timeout: 2000 }).catch(() => {
         throw new Error(`${kind}: alerts read "${alertsText()}"`);
       });
-      expect(field(spec.kept).value).toBe(typed);
+      expect(kept().value).toBe(typed);
     }
   });
 });

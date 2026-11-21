@@ -1,7 +1,7 @@
 // Participants, tasks and audit-log API calls (Phase 3).
 import type { TaskStatus } from "../lib/labels";
 import { ApiError, apiRequest, query, type Page } from "./client";
-import type { ConsentMode } from "./projects";
+import type { ConsentMode, DeviceField } from "./projects";
 
 export type { TaskStatus };
 
@@ -165,6 +165,22 @@ export interface TaskDetail extends TaskSummary {
   consent_mode?: ConsentMode;
   /** At CONSENT_FIX only (D-146). */
   consent_fix?: ConsentFix | null;
+  /** D-147: the device details the project asks for each speaker (empty: none), and while the
+   * task is In progress or Recorded the participant codes whose asked details are missing: Send
+   * to QC waits for them. */
+  device_fields?: DeviceField[];
+  device_details_missing?: string[];
+  /** What the moderator reads before recording or calling, for the task's mode (D-147). */
+  reminders?: TaskReminders | null;
+}
+
+/** The project's reminders for one task's mode (D-147). */
+export interface TaskReminders {
+  /** Ask each speaker to start with "I am <first name> and speaker ID <code>". */
+  speaker_id: boolean;
+  topics: string[];
+  avoid: string[];
+  tips: string[];
 }
 
 export interface TimelineEntry {

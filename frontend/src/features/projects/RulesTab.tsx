@@ -1,8 +1,10 @@
 // A project's rules (D-145): what it asks of its speakers, how consent is given, who gives the
-// final approval and what QC checks (D-146). Every rule a client sets is a project setting; the first client's numbers are
-// only what a new project starts with. One card per kind of rule (SECTIONS), all saved together
-// through the project's PATCH with "Save rules": a later kind of rule is one more card with its
-// fields in the draft. Everyone who sees the project may read them; project admins change them.
+// final approval, what QC checks (D-146), and what the moderator fills and reads (device details
+// and reminders, D-147). Every rule a client sets is a project setting; the first client's
+// numbers are only what a new project starts with. One card per kind of rule (SECTIONS), all
+// saved together through the project's PATCH with "Save rules": a later kind of rule is one more
+// card with its fields in the draft. Everyone who sees the project may read them; project admins
+// change them.
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import * as api from "../../api/projects";
@@ -14,6 +16,7 @@ import { IconTile, type IconName } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import { AGE_LIMITS, SPEAKER_FIELDS, SPEAKER_GROUPS, speakerLabel } from "../../lib/speakers";
+import { DEVICE_FIELDS } from "../tasks/deviceFields";
 import { useProject } from "./ProjectDetailPage";
 import {
   CLIENT_QC_CHECKLIST,
@@ -23,25 +26,60 @@ import {
   MAX_QUESTION,
   questionProblem,
 } from "./qcChecklist";
+import {
+  CLIENT_REMINDERS,
+  linesOf,
+  linesProblem,
+  MAX_LINE,
+  MAX_LINES,
+  REMINDER_LISTS,
+} from "./reminders";
 import "./rules.css";
 
-/** The rules as the form holds them: the ages as typed. */
-interface RulesDraft extends Omit<api.ProjectRules, "speaker_min_age" | "speaker_max_age"> {
+/** The reminders as the form holds them: each list as the text of its box, one line per entry. */
+type ReminderTexts = { speaker_id: boolean } & Record<ReminderList, string>;
+type ReminderList = (typeof REMINDER_LISTS)[number]["key"];
+
+/** The rules as the form holds them: the ages and the reminders as typed. */
+interface RulesDraft extends Omit<
+  api.ProjectRules,
+  "speaker_min_age" | "speaker_max_age" | "recording_reminders"
+> {
   speaker_min_age: string;
   speaker_max_age: string;
+  recording_reminders: ReminderTexts;
 }
+
+const textsOf = (r: api.Reminders): ReminderTexts => ({
+  speaker_id: r.speaker_id,
+  topics: r.topics.join("\n"),
+  avoid: r.avoid.join("\n"),
+  face_to_face: r.face_to_face.join("\n"),
+  telephony: r.telephony.join("\n"),
+});
 
 const draftOf = (rules: api.ProjectRules): RulesDraft => ({
   ...rules,
   speaker_min_age: String(rules.speaker_min_age),
   speaker_max_age: String(rules.speaker_max_age),
+  recording_reminders: textsOf(rules.recording_reminders),
 });
 
-const rulesOf = (draft: RulesDraft): api.ProjectRules => ({
-  ...draft,
-  speaker_min_age: Number(draft.speaker_min_age),
-  speaker_max_age: Number(draft.speaker_max_age),
-});
+const rulesOf = (draft: RulesDraft): api.ProjectRules => {
+  const texts = draft.recording_reminders;
+  return {
+    ...draft,
+    speaker_min_age: Number(draft.speaker_min_age),
+    speaker_max_age: Number(draft.speaker_max_age),
+    recording_reminders: {
+      speaker_id: texts.speaker_id,
+      topics: linesOf(texts.topics),
+      avoid: linesOf(texts.avoid),
+      face_to_face: linesOf(texts.face_to_face),
+      telephony: linesOf(texts.telephony),
+    },
+  };
+};
 
 /** What is wrong with the typed ages, by box (the server checks again). */
 function ageErrors(draft: RulesDraft): { min?: string; max?: string } {
@@ -449,12 +487,144 @@ function QcChecklistRules({ draft, change }: SectionProps) {
   );
 }
 
+/** What the moderator fills for each speaker before sending a recording to QC (D-147). */
+function DeviceRules({ draft, change }: SectionProps) {
+  const asked = new Set(draft.device_fields);
+  const toggle = (key: api.DeviceField, on: boolean) =>
+    change({
+      device_fields: DEVICE_FIELDS.map((f) => f.key).filter((k) => (k === key ? on : asked.has(k))),
+    });
+  return (
+    <RulesCard icon="phone" title="Device details">
+      <p className="field__hint rules__note">
+        The moderator fills these for each speaker of every conversation; a recording goes to QC
+        only when the ticked ones are filled. The call type (Telephonic or Face-to-face) comes from
+        the task.
+      </p>
+      <fieldset className="field">
+        <legend className="field__label">Asked for each speaker</legend>
+        {DEVICE_FIELDS.map((f) => (
+          <label key={f.key} className="checkbox">
+            <input
+              type="checkbox"
+              checked={asked.has(f.key)}
+              onChange={(e) => toggle(f.key, e.target.checked)}
+            />
+            {f.label}
+            {f.yesNo ? " (Yes / No)" : ""}
+          </label>
+        ))}
+      </fieldset>
+      {asked.size === 0 ? (
+        <p className="muted">Nothing ticked: no device details are asked.</p>
+      ) : null}
+    </RulesCard>
+  );
+}
+
+/** What is wrong with each reminder box, by list (the server checks again). */
+function reminderErrors(draft: RulesDraft): Partial<Record<ReminderList, string>> {
+  const errors: Partial<Record<ReminderList, string>> = {};
+  for (const { key } of REMINDER_LISTS) {
+    const problem = linesProblem(draft.recording_reminders[key]);
+    if (problem) errors[key] = problem;
+  }
+  return errors;
+}
+
+/** One box of lines, one entry per line. */
+function LinesBox({
+  label,
+  hint,
+  value,
+  error,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  error: string | undefined;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className={`field${error ? " field--invalid" : ""}`}>
+      <label htmlFor={id} className="field__label">
+        {label}
+      </label>
+      <p id={`${id}-hint`} className="field__hint">
+        {hint}
+      </p>
+      <textarea
+        id={id}
+        className="field__input"
+        rows={Math.min(8, Math.max(3, value.split("\n").length))}
+        value={value}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error ? (
+        <p id={`${id}-error`} className="field__error">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** What the moderator reads before recording and calling (D-147). */
+function ReminderRules({ draft, change }: SectionProps) {
+  const texts = draft.recording_reminders;
+  const errors = reminderErrors(draft);
+  const set = (patch: Partial<ReminderTexts>) =>
+    change({ recording_reminders: { ...texts, ...patch } });
+  return (
+    <RulesCard icon="mic" title="Reminders for moderators">
+      <p className="field__hint rules__note">
+        Shown on the recorder before Start recording and on the call card before Start call, with
+        the task&apos;s own speakers. At most {MAX_LINES} lines per box, {MAX_LINE} characters per
+        line.
+      </p>
+      <Tick
+        label="Ask each speaker to start with their first name and speaker ID"
+        hint="“I am <first name> and speaker ID <code>”, with each speaker's code (their name only for people who may see it)."
+        checked={texts.speaker_id}
+        onChange={(on) => set({ speaker_id: on })}
+      />
+      <div className="rules-reminders">
+        {REMINDER_LISTS.map(({ key, label, hint }) => (
+          <LinesBox
+            key={key}
+            label={label}
+            hint={hint}
+            value={texts[key]}
+            error={errors[key]}
+            onChange={(value) => set({ [key]: value })}
+          />
+        ))}
+      </div>
+      <div className="actions">
+        <Button
+          variant="secondary"
+          icon="history"
+          onClick={() => change({ recording_reminders: textsOf(CLIENT_REMINDERS) })}
+        >
+          Reset to the client&apos;s text
+        </Button>
+      </div>
+    </RulesCard>
+  );
+}
+
 /** The cards, in order: a later kind of rule is one more entry. */
 const SECTIONS: readonly { key: string; Section: (props: SectionProps) => ReactNode }[] = [
   { key: "speakers", Section: SpeakerRules },
   { key: "consent", Section: ConsentRules },
   { key: "approval", Section: ApprovalRules },
   { key: "qc-checklist", Section: QcChecklistRules },
+  { key: "devices", Section: DeviceRules },
+  { key: "reminders", Section: ReminderRules },
 ];
 
 export function RulesTab() {
@@ -466,7 +636,9 @@ export function RulesTab() {
   const { busy, error, message, run } = useAction();
   const change = (patch: Partial<RulesDraft>) => setDraft({ ...draft, ...patch });
   const wrong =
-    Object.keys(ageErrors(draft)).length > 0 || Object.keys(checklistErrors(draft)).length > 0;
+    Object.keys(ageErrors(draft)).length > 0 ||
+    Object.keys(checklistErrors(draft)).length > 0 ||
+    Object.keys(reminderErrors(draft)).length > 0;
 
   return (
     <form

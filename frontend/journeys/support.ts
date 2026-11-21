@@ -176,6 +176,25 @@ export async function fillSpeakerDetails(form: Locator): Promise<void> {
   await box("Medium of education").selectOption(d.education_medium);
 }
 
+/** Fills both speakers' device details in the Device details card and saves them, as the
+ * moderator does before Send to QC (D-147; a project made through the API asks all five). */
+export async function fillDeviceDetails(page: Page): Promise<void> {
+  const card = page.getByRole("region", { name: "Device details" });
+  for (const side of ["A", "B"]) {
+    const speaker = card.getByRole("group", { name: new RegExp(`^Participant ${side}`) });
+    await speaker.getByLabel("Device make").fill("Samsung");
+    await speaker.getByLabel("Device model").fill("Galaxy A14");
+    for (const question of ["Bluetooth earphones used", "Wired earphones used", "Loudspeaker on"]) {
+      await speaker
+        .getByRole("group", { name: question })
+        .getByRole("radio", { name: "No" })
+        .check();
+    }
+  }
+  await card.getByRole("button", { name: "Save device details" }).click();
+  await expect(card.getByText("Device details saved.")).toBeVisible();
+}
+
 /** The participant agrees to the project's consent form the real way (D-129: tasks are made only
  * for people who agreed): with the personal link emailed to them when they joined the project,
  * the answer goes in through the personal page's API with the link's secret, as the page itself

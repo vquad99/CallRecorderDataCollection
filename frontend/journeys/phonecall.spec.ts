@@ -12,6 +12,7 @@ import {
   ADMIN_EMAIL,
   agree,
   api,
+  fillDeviceDetails,
   playToEnd,
   requireSetup,
   runCode,
@@ -162,6 +163,11 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     await moderator.goto(`/tasks/${main.id}`);
     await expect(line("Phone line: Ready")).toBeVisible();
     await moderator.getByRole("button", { name: "Start session" }).click();
+    // Before Start call, the project's reminders with the task's own speakers (D-147).
+    const reminders = moderator.getByRole("note", { name: "Reminders" });
+    await expect(reminders).toContainText(`I am Asha and speaker ID ${asha.participant_code}`);
+    await expect(reminders).toContainText(`I am Bina and speaker ID ${bina.participant_code}`);
+    await expect(reminders).toContainText("keep the loudspeaker off");
     await moderator.getByRole("button", { name: "Start call" }).click();
     await expect(moderator.getByRole("heading", { name: "On the call" })).toBeVisible();
     await expect(line("Phone line: On a call")).toBeVisible();
@@ -209,6 +215,10 @@ test("a moderator calls, confirms both people, closes the call and sends the rec
     // The phone rule expects stereo: the automatic check does not fail it (D-134).
     await expect(moderator.getByRole("heading", { name: "Audio quality" })).toBeVisible();
     await expect(moderator.getByText("Failed", { exact: true })).toHaveCount(0);
+    // D-147: Send to QC waits for both speakers' device details; the moderator fills them here.
+    await expect(moderator.getByRole("button", { name: "Send to QC" })).toBeDisabled();
+    await fillDeviceDetails(moderator);
+    await expect(moderator.getByRole("button", { name: "Send to QC" })).toBeEnabled();
     await moderator.getByRole("button", { name: "Send to QC" }).click();
     await expect(moderator.locator(".page-header .badge").first()).toHaveText("Audio QC");
     await expect(moderator.getByRole("button", { name: "Send to QC" })).toHaveCount(0);

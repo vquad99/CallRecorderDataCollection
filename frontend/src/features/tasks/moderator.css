@@ -1,0 +1,80 @@
+/* The moderator's reminders and the device details card (D-147), on the recorder and the task
+   page. Loaded with those pages, not with the first screen. */
+
+/* A note with its icon at the left (the recorder's reminders; D-141 callout style). */
+.callout {
+  display: flex;
+  gap: 10px;
+  color: var(--text-2);
+}
+.callout .icon {
+  flex: none;
+  margin-top: 1px;
+}
+.reminders__title {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+.reminders ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.reminders li + li,
+.reminders li ul {
+  margin-top: 3px;
+}
+/* Inside the call card: a quiet box under the card's words. */
+.record-card .reminders {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+
+/* Device details: one block per speaker, side by side on a wide screen. */
+.devices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 16px;
+  max-width: 1100px;
+}
+.device {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 14px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.device__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0 4px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.device .form-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+}
+.device__yesno {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 28px;
+}
+.device__choices {
+  display: flex;
+  gap: 18px;
+}
+.device__last {
+  margin-bottom: 12px;
+}
+.device .checks {
+  margin: 0 0 8px;
+}
+.devices__hint {
+  margin: -6px 0 14px;
+}

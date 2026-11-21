@@ -192,8 +192,9 @@ confirm; archiving or reopening also needs a reason.
 Project tabs:
 
 - **Overview**: the project settings and its status.
-- **Rules**: what the project asks of its speakers, how consent is given and who gives the final
-  approval (below). Everyone in the project can read them; only admins change them.
+- **Rules**: what the project asks of its speakers, how consent is given, who gives the final
+  approval, what QC checks, and what the moderator fills and reads (below). Everyone in the
+  project can read them; only admins change them.
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
   person the right role under Users first.
 - **Participants**: the project's participants (section 5).
@@ -252,6 +253,25 @@ the Rules tab have them too. Every change is saved in the audit log with the pro
   click **Add question** (it starts as a conversation question that fails on No; change it in its
   block). **Reset to the client's list** puts the 28 questions back. At most 60 questions. The
   list is saved with **Save rules**; answers already given keep the questions as they read then.
+- **Device details**: what the moderator fills for each speaker of every conversation before
+  **Send to QC** (sections 7 and 7a). Under **Asked for each speaker**, a box for **Device make**,
+  **Device model**, **Bluetooth earphones used (Yes / No)**, **Wired earphones used (Yes / No)**
+  and **Loudspeaker on (Yes / No)**. All five are ticked at the start. A recording goes to QC only
+  when the ticked ones are filled for both people; untick them all to ask none. The call type
+  (Telephonic or Face-to-face) comes from the task.
+- **Reminders for moderators**: the short note the moderator reads on the recorder before
+  **Start recording** and on the call card before **Start call**.
+  - **Ask each speaker to start with their first name and speaker ID** (ticked at the start):
+    the note shows "I am <first name> and speaker ID P000123" for each of the task's two people.
+  - **Talk about**, **Avoid**, **Face-to-face tips**, **Phone call tips**: one entry per line (at
+    most 20 lines, 200 characters each). They start with the client's text: talk about daily
+    activities, education, agriculture, food and cooking, travel, shopping, health and fitness in
+    general, weather, work and hobbies; avoid politics, religion, obscene talk, hate or killing,
+    other sensitive topics and personal information; face-to-face: a quiet place, both stay in
+    one place, the recording device between the two speakers no more than 2.5 feet from each
+    mouth; phone: a quiet place, the handset near the mouth with the loudspeaker off, no
+    ringtones or notification sounds.
+  - **Reset to the client's text** puts that text back.
 
 Tasks made before a change stay as they are.
 
@@ -535,17 +555,28 @@ payments. QC Executives see only the newest one.
 5. Click **Allow microphone** and allow it in the browser. Choose the **Microphone** if you have
    more than one, and watch the **Input level**.
 6. Optional: **Test (5 s, then play back)** to hear yourself.
-7. Place the microphone between the two speakers, no more than 2.5 feet from each, and do not move
-   it.
+7. Read the **Reminders** note near the top to the speakers: each starts with "I am <first name>
+   and speaker ID P000123" (their own code is in the note), what to talk about and avoid, and the
+   tips (for example: place the recording device between the two speakers, no more than 2.5 feet
+   from each mouth, and do not move it). The project sets these on its **Rules** tab.
 8. Click **Start recording**. Talk. Keep the tab open and the computer awake. The audio uploads in
    small parts while you record.
 9. Click **Stop and save**. Wait for **Recording saved**.
-10. On the same screen, click **Listen**. If it is good, click **Send to QC**; if not, click
-    **Record again** and record it once more. (The same buttons are also on the task page.)
-    After **Send to QC** the task page says **Sent to QC. A QC Executive checks it next.**
+10. On the same screen, fill the **Device details** card for both speakers: **Device make** and
+    **Device model** (for example Samsung, Galaxy A14) and **Yes** or **No** for **Bluetooth
+    earphones used**, **Wired earphones used** and **Loudspeaker on** (only what the project
+    asks). If a person was recorded before in this project, **Same as last time (T000012)** fills
+    their last answers in; check them, then click **Save device details**. "Still to fill" says
+    what is missing.
+11. Click **Listen**. If it is good, click **Send to QC**; if not, click **Record again** and
+    record it once more. (The same buttons, and the **Device details** card, are also on the task
+    page.) **Send to QC** stays grey ("Fill in the device details of P000123 first") until both
+    people's details are saved. After **Send to QC** the task page says **Sent to QC. A QC
+    Executive checks it next.**
 
 The platform checks the sound within about a minute of saving; **Send to QC** works once that
-check is done.
+check is done. Once the task is with QC the device details are read only (QC and admins see them,
+with who filled them in and when).
 
 **Consent form to fix.** In a project whose **Consent** is **Upload**, QC may find the recording
 fine but a signed consent form not (for example not signed, or someone else's form). The task
@@ -592,7 +623,10 @@ yet? The call card says **Ask your admin to save your phone seat password.**
 1. Open **Tasks** and click your **Phone call** task.
 2. Click **Start session**. The card says **Ready to call**. **Start call** stays grey until
    both participants have agreed on their consent form (see section 7, step 3) and the top of
-   the page says **Phone line: Ready**.
+   the page says **Phone line: Ready**. The card's **Reminders** note (also shown during the
+   call) has what to tell the speakers: each starts with "I am <first name> and speaker ID
+   P000123", what to talk about and avoid, and the phone tips (handset near the mouth,
+   loudspeaker off, no ringtones or notifications).
 3. Click **Start call**. The phone system rings participant A. The card shows **On the call**,
    with one button at a time; if the call could not be placed, the card says why.
 4. When A answers, click **A answered – call B**: the phone system rings B into the same call. If
@@ -605,8 +639,10 @@ yet? The call card says **Ask your admin to save your phone seat password.**
 8. The card shows **Fetching the recording**. The platform fetches the call's recording from the
     phone system, usually within a few minutes. The page updates on its own. You can still cancel
     the call while it is being fetched.
-9. When it arrives, the task moves to **Recorded**. Click **Listen**; if it is good, **Send to
-    QC**; if not, **Call again**.
+9. When it arrives, the task moves to **Recorded**. Fill the **Device details** card under the
+    call card for both speakers (their phones: make, model, earphones, loudspeaker; see section 7,
+    step 10) and click **Save device details**. Click **Listen**; if it is good, **Send to QC**
+    (grey until the device details are saved); if not, **Call again**.
 
 If the call did not work (no answer, wrong number, dropped), click **Cancel this call** and choose
 the **Reason**. You can then start a new call. A task can be called at most 6 times in an hour.
@@ -657,7 +693,8 @@ in the project's metadata export) carries the same history in its **call** secti
    **Listen and decide** or **Failed**. Only the checks that need attention are listed; **Show
    all checks (n)** shows every check (format, length, silence, clipping, loudness, duplicates and
    more).
-3. Click **Listen** to hear the recording.
+3. Click **Listen** to hear the recording. The **Device details** card shows what the moderator
+   filled for each speaker (device, earphones, loudspeaker), read only.
 4. Under **QC checklist**, click **Yes** or **No** for every question: those under **The
    conversation** once, those under **Participant A** and **Participant B** (code and name) for
    each person. An answer that fails the recording shows **Fails**. Questions marked
@@ -868,6 +905,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | New task: a participant is greyed out | The reason is after their name: **details missing** (add them with **Edit**), **3 conversations already**, or **already paired with the chosen A**. See section 6. |
 | "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
 | "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |
+| **Send to QC** is grey: "Fill in the device details of P000123 first" | Moderator: fill the **Device details** card for both speakers (only the boxes shown) and click **Save device details**. After **Send to QC** they cannot be changed. |
 | "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
 | No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. For a consent form, click **Email consent form again**. |

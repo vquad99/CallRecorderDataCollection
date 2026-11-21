@@ -5,7 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -103,6 +113,31 @@ class TaskStatusHistory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     reason_code: Mapped[str | None] = mapped_column(String(50))
     comment: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
+
+class TaskDeviceDetail(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The device a speaker used in a conversation (D-147, tasks/devices.py): one row per task and
+    participant, filled by the task's moderator (or a project admin) before the task goes to QC.
+    Empty = not answered yet; which details are needed is the project's `device_fields`. The call
+    type is the task's recording mode, not stored again."""
+
+    __tablename__ = "task_device_details"
+    __table_args__ = (UniqueConstraint("task_id", "participant_id"),)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    # "Same as last time": a person's newest details in the project are looked up by participant.
+    participant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    device_make: Mapped[str | None] = mapped_column(String(60))
+    device_model: Mapped[str | None] = mapped_column(String(60))
+    bluetooth_earphones: Mapped[bool | None] = mapped_column(Boolean)
+    wired_earphones: Mapped[bool | None] = mapped_column(Boolean)
+    loudspeaker_on: Mapped[bool | None] = mapped_column(Boolean)
+    # Who saved a change last, and when.
+    filled_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TaskComment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
