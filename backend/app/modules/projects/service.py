@@ -20,7 +20,7 @@ from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants import speakers
-from app.modules.projects import moderation
+from app.modules.projects import moderation, targets
 from app.modules.projects.models import (
     DEFAULT_REQUIRED_SPEAKER_DETAILS,
     DEFAULT_SPEAKER_MAX_AGE,
@@ -154,23 +154,47 @@ class ProjectInput:
     # first client's); details already filled stay as they are.
     device_fields: tuple[str, ...] | None = None
     recording_reminders: dict[str, Any] | None = None
+    # Audio and progress (D-148, projects/targets.py): the pause limit, whether long pauses ask QC
+    # for a listen, and what counts as completed minutes (EFFECTIVE or FULL).
+    pause_limit_seconds: int = targets.DEFAULT_PAUSE_LIMIT_SECONDS
+    long_pauses_need_review: bool = False
+    progress_counts: str = targets.DEFAULT_PROGRESS_COUNTS
+    # Targets (D-148): None = no target. The shares are kept when left out, like the checklist (a
+    # new project gets the first client's).
+    target_hours: Decimal | None = None
+    target_speakers: int | None = targets.DEFAULT_TARGET_SPEAKERS
+    target_conversations: int | None = targets.DEFAULT_TARGET_CONVERSATIONS
+    target_age_bands: tuple[dict[str, Any], ...] | None = None
+    target_gender: dict[str, Any] | None = None
+    target_modes: dict[str, Any] | None = None
+    target_districts: tuple[dict[str, Any], ...] | None = None
 
 
-# Settings a PATCH that leaves them out keeps (D-146, D-147), with how each is checked.
+# Settings a PATCH that leaves them out keeps (D-146, D-147, D-148), with how each is checked.
 _KEPT_WHEN_LEFT_OUT: dict[str, Callable[[Any], object]] = {
     "qc_checklist": checklist.clean,
     "device_fields": moderation.clean_device_fields,
     "recording_reminders": moderation.clean_reminders,
+    "target_age_bands": targets.clean_age_bands,
+    "target_gender": targets.clean_gender,
+    "target_modes": targets.clean_modes,
+    "target_districts": targets.clean_districts,
 }
 # Long settings an audit entry carries only when they changed.
-_AUDITED_WHEN_CHANGED = ("qc_checklist", "recording_reminders")
+_AUDITED_WHEN_CHANGED = (
+    "qc_checklist",
+    "recording_reminders",
+    "target_age_bands",
+    "target_districts",
+)
 
 
 def _values(data: ProjectInput) -> dict[str, object]:
     """The project's columns from the input, checked (D-145): the youngest age is not above the
     oldest, and the required details are known ones, each once, in the form's order; the QC
     checklist's items are well formed (D-146), the device details known ones and the reminders
-    within their limits (D-147). A setting of _KEPT_WHEN_LEFT_OUT left out is not among them."""
+    within their limits (D-147), the targets' shares add up (D-148). A setting of
+    _KEPT_WHEN_LEFT_OUT left out is not among them."""
     if data.speaker_min_age > data.speaker_max_age:
         raise AppError(
             f"The youngest speaker age ({data.speaker_min_age}) is above the oldest "
@@ -228,6 +252,16 @@ def _snapshot(p: Project) -> dict[str, object]:
         "qc_checklist": list(p.qc_checklist),
         "device_fields": list(p.device_fields),
         "recording_reminders": dict(p.recording_reminders),
+        "pause_limit_seconds": p.pause_limit_seconds,
+        "long_pauses_need_review": p.long_pauses_need_review,
+        "progress_counts": p.progress_counts,
+        "target_hours": None if p.target_hours is None else str(p.target_hours),
+        "target_speakers": p.target_speakers,
+        "target_conversations": p.target_conversations,
+        "target_age_bands": list(p.target_age_bands),
+        "target_gender": dict(p.target_gender),
+        "target_modes": dict(p.target_modes),
+        "target_districts": list(p.target_districts),
     }
 
 
@@ -273,6 +307,10 @@ def create_project(
         "qc_checklist": checklist.default_checklist(),
         "device_fields": list(moderation.DEFAULT_DEVICE_FIELDS),
         "recording_reminders": moderation.default_reminders(),
+        "target_age_bands": targets.default_age_bands(),
+        "target_gender": dict(targets.DEFAULT_TARGET_GENDER),
+        "target_modes": dict(targets.DEFAULT_TARGET_MODES),
+        "target_districts": [],
         **_values(data),
     }
     project = Project(

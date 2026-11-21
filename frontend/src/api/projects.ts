@@ -76,6 +76,24 @@ export interface Reminders {
   telephony: string[];
 }
 
+/** What counts as completed minutes (D-148): the effective speech of approved conversations, or
+ * their full length. */
+export type ProgressCounts = "EFFECTIVE" | "FULL";
+
+/** An age band of the targets (D-148): ages from `from` up to, but not including, `to` (the band
+ * that ends highest also takes `to`), and the percent of speakers wanted in it. */
+export interface AgeBand {
+  from: number;
+  to: number;
+  percent: number;
+}
+
+/** A district the speakers should come from (D-148); each listed one expects an equal share. */
+export interface TargetDistrict {
+  state: string;
+  district: string;
+}
+
 /** What the project's Rules tab edits (D-145). Every client rule is the project's own setting;
  * a new project starts with the server's defaults. */
 export interface ProjectRules {
@@ -100,6 +118,22 @@ export interface ProjectRules {
    * the first client's at the start. */
   device_fields: DeviceField[];
   recording_reminders: Reminders;
+  /** Audio and progress (D-148): a silent stretch inside the speech longer than this is a long
+   * pause (1 to 30, 3 at the start); long pauses ask QC for a listen; what completed minutes
+   * count on the Progress tab and the dashboard. */
+  pause_limit_seconds: number;
+  long_pauses_need_review: boolean;
+  progress_counts: ProgressCounts;
+  /** Targets (D-148); null or empty = no target. Hours count as `progress_counts` says. */
+  target_hours: string | null;
+  target_speakers: number | null;
+  target_conversations: number | null;
+  target_age_bands: AgeBand[];
+  /** Percents for MALE and FEMALE, or {} for none. */
+  target_gender: Partial<Record<"MALE" | "FEMALE", number>>;
+  /** Percents for FACE_TO_FACE and TELEPHONY, or {} for none. */
+  target_modes: Partial<Record<Mode, number>>;
+  target_districts: TargetDistrict[];
 }
 
 /** Everything the project's PATCH takes: a field left out would go back to its default, so the
@@ -138,6 +172,16 @@ export const projectRules = (p: Project): ProjectRules => ({
   qc_checklist: p.qc_checklist,
   device_fields: p.device_fields,
   recording_reminders: p.recording_reminders,
+  pause_limit_seconds: p.pause_limit_seconds,
+  long_pauses_need_review: p.long_pauses_need_review,
+  progress_counts: p.progress_counts,
+  target_hours: p.target_hours,
+  target_speakers: p.target_speakers,
+  target_conversations: p.target_conversations,
+  target_age_bands: p.target_age_bands,
+  target_gender: p.target_gender,
+  target_modes: p.target_modes,
+  target_districts: p.target_districts,
 });
 
 export interface Member {

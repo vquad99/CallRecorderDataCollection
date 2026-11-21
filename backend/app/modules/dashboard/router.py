@@ -27,6 +27,11 @@ class ModeOut(BaseModel):
     mode: str
     recorded_hours: float
     approved_hours: float
+    # D-148: effective speech of what was recorded and approved, and the completed hours (each
+    # project's own `progress_counts`: effective speech or the full length of approved recordings).
+    effective_hours: float
+    approved_effective_hours: float
+    completed_hours: float
     recordings: int
     target_hours_per_day: float
 
@@ -35,6 +40,7 @@ class DayOut(BaseModel):
     day: date
     recorded_hours: float
     approved_hours: float
+    completed_hours: float
 
 
 class TeamRow(BaseModel):
@@ -50,6 +56,11 @@ class DashboardOut(BaseModel):
     projects: list[ProjectRef]
     recorded_hours: float
     approved_hours: float
+    effective_hours: float
+    approved_effective_hours: float
+    completed_hours: float
+    # Recordings whose effective speech is not measured yet (counted as none until it is).
+    effective_pending: int
     recordings: int
     target_hours_per_day: float
     today_hours: float

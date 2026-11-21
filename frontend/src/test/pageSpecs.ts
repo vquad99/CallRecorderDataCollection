@@ -47,6 +47,11 @@ export const PAGES: Record<string, PageSpec> = {
     shows: /HINDI · Hindi conversations/,
     data: "GET /api/v1/projects/p1",
   },
+  "/projects/:projectId/progress": {
+    url: "/projects/p1/progress",
+    shows: /How these are counted/,
+    data: "GET /api/v1/projects/p1/progress",
+  },
   "/projects/:projectId/team": {
     url: "/projects/p1/team",
     shows: /mona@example\.org/,

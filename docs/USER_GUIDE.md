@@ -192,9 +192,10 @@ confirm; archiving or reopening also needs a reason.
 Project tabs:
 
 - **Overview**: the project settings and its status.
+- **Progress**: what was collected against the project's targets (below, **Progress**).
 - **Rules**: what the project asks of its speakers, how consent is given, who gives the final
-  approval, what QC checks, and what the moderator fills and reads (below). Everyone in the
-  project can read them; only admins change them.
+  approval, what QC checks, what the moderator fills and reads, long pauses and the targets
+  (below). Everyone in the project can read them; only admins change them.
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
   person the right role under Users first.
 - **Participants**: the project's participants (section 5).
@@ -272,8 +273,64 @@ the Rules tab have them too. Every change is saved in the audit log with the pro
     mouth; phone: a quiet place, the handset near the mouth with the loudspeaker off, no
     ringtones or notification sounds.
   - **Reset to the client's text** puts that text back.
+- **Audio and progress**:
+  - **Long pause (seconds)** (3 at the start; 1 to 30): a silence inside the conversation longer
+    than this is a long pause. The automatic check counts them (**Long pauses**, section 8).
+  - **Long pauses need a listen** (not ticked at the start): when ticked, a recording with a long
+    pause is marked **Listen and decide**; otherwise the pauses are only shown.
+  - **Completed minutes count**: **Effective speech (the time someone speaks)** (at the start) or
+    **Full length of the recordings**: what the **Progress** tab and the dashboard count as
+    completed for approved conversations. Payments always count the full length.
+  The longest recording allowed stays on the **Audio rules** tab.
+- **Targets**: what the **Progress** tab compares the project with. An empty box is no target.
+  - **Hours completed** (empty at the start), counted as **Completed minutes count** says;
+    **Speakers** (500) and **Conversations** (600).
+  - **Age bands (percent of speakers)**: a line per band with **From age**, **To age** and
+    **Percent**; the client's bands at the start: 20-30 40 %, 30-40 30 %, 40-50 20 %, 50-60
+    10 %. A band takes the ages from its first age up to, but not including, its last; the band
+    that ends highest also takes its last age (a speaker of 30 is in 30-40, one of 60 in 50-60).
+    The percents must add up to 100. **Add age band**, the bin to remove one, **Reset to the
+    client's age bands**.
+  - **Gender (percent of speakers)**: **Male (%)** and **Female (%)**, 50 and 50 at the start;
+    both empty for no gender target.
+  - **Face-to-face and phone (percent of approved conversations)**: 50 and 50 at the start.
+  - **Districts (by native district)**: a line per district with its **State**. None at the start;
+    **Use the client's Konkani districts** fills in North Goa and South Goa (Goa), Uttara
+    Kannada, Udupi and Dakshina Kannada (Karnataka), Sindhudurg, Ratnagiri and Raigad
+    (Maharashtra). Each listed district is expected to give an equal share of the speakers
+    (12.5 % each for 8). **Add district** adds one; the bin removes one.
+  The line under a wrong list says what is wrong (for example "The percents add up to 90, not
+  100."), and **Save rules** waits until it is right.
 
 Tasks made before a change stay as they are.
+
+### Progress (project admins)
+
+Open the project and click **Progress** (right after **Overview**). Only the people who run the
+project see it. It shows:
+
+- **Completed**: the approved conversations' effective speech (or their full length, as the
+  project's **Completed minutes count** says) against **Hours completed**, with a bar; below,
+  their full length and effective speech, how many are not measured yet, and what is recorded but
+  not yet approved. **Effective speech** at the top: how much of the recorded audio is speech.
+- **Conversations**: approved against the target; waiting for QC or approval, in progress, not
+  started, rejected, cancelled.
+- **Speakers**: people with at least one approved conversation against the target; people
+  registered in the project; how many reached the **Conversations per speaker** limit.
+- **Age bands**, **Gender**, **Face-to-face and phone**, **Districts**: for each group the
+  count, the actual percent (with a thin bar and a tick at the target), the target percent and
+  the **Variance**: actual minus target, "+4 %" above, "−6 %" below. Age, gender and districts
+  are shares of the speakers with an approved conversation, each counted once, with their details
+  as they are now (district: native district); people without that detail are under **Not
+  given**. Face-to-face and phone are shares of the approved conversations.
+- **How these are counted** at the bottom repeats these definitions.
+
+**Effective speech** is the time someone speaks: the recording without its silences (quieter than
+−50 dBFS on every channel; on a phone call, speech on either side counts once). Gaps under 0.3 s
+between words count as speech, and a click under 0.1 s on its own does not. It is measured by
+level, so a loud background noise counts as speech; QC listens for noise. Recordings made before
+this measurement are measured in the background shortly after the update; until then they count
+as no effective speech and the page says how many.
 
 ### Settings, System status, Audit log
 
@@ -692,7 +749,11 @@ in the project's metadata export) carries the same history in its **call** secti
 2. Open the task. The **Audio quality** card shows the automatic check: overall **Passed**,
    **Listen and decide** or **Failed**. Only the checks that need attention are listed; **Show
    all checks (n)** shows every check (format, length, silence, clipping, loudness, duplicates and
-   more).
+   more). **Long pauses** says how many silences inside the conversation are longer than the
+   project's limit and the longest ("3 over 3 s, longest 7.2 s"), with the effective speech
+   under it; it asks for a listen only where the project's rules say so. The **Recordings** card
+   shows the same under each recording's length: "Effective speech 6 min 12 s · 3 pauses over
+   3 s".
 3. Click **Listen** to hear the recording. The **Device details** card shows what the moderator
    filled for each speaker (device, earphones, loudspeaker), read only.
 4. Under **QC checklist**, click **Yes** or **No** for every question: those under **The
@@ -834,8 +895,10 @@ Moderators, QC Executives and Client Viewers do not see payments.
 
 ## 9. Client Viewer: progress
 
-The **Dashboard** (**Collection progress**) shows recorded and approved hours, today's hours
-against the daily target, and an hours-per-day chart. Choose a **Project** and a **Period** (last 7,
+The **Dashboard** (**Collection progress**) shows recorded and approved hours, the effective
+speech in them, **Completed** hours (approved, counted as each project's rules say: effective
+speech or the full length; several projects add up their own), today's hours against the daily
+target, and an hours-per-day chart. Choose a **Project** and a **Period** (last 7,
 30 or 90 days, or **Choose dates (from – to)**). You can narrow it by **Recording
 type**, **Language** (and **Dialect**, when the project has any) and **District**. Days are counted in India
 Standard Time.

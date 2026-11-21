@@ -71,3 +71,10 @@ a.queue:hover {
 .queue--active .queue__value {
   color: var(--warn);
 }
+
+/* Five key figures (D-148: completed hours beside recorded and approved). */
+@media (min-width: 1101px) {
+  .stats--five {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}

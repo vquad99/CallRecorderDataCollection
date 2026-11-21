@@ -1,0 +1,79 @@
+/* A project's Progress tab (D-148). Loaded with the tab, not with the first screen. */
+.progress-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.progress-line progress {
+  flex: 1 1 240px;
+  max-width: 520px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  accent-color: var(--primary);
+  overflow: hidden;
+  appearance: none;
+}
+.progress-line progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.progress-line progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--primary);
+}
+.progress-line progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--primary);
+}
+/* The actual share as a thin bar, with a tick where the target is. */
+.share-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.share-bar__track {
+  position: relative;
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.share-bar__track > span:first-child {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--series-approved, var(--primary));
+}
+.share-bar__target {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  background: var(--text);
+}
+.variance {
+  font-variant-numeric: tabular-nums;
+}
+.variance--below {
+  color: var(--danger);
+}
+.definitions {
+  display: grid;
+  gap: 4px 0;
+  margin: 0;
+  max-width: 900px;
+}
+.definitions dt {
+  margin-top: 6px;
+  font-weight: 600;
+}
+.definitions dd {
+  margin: 0;
+  color: var(--text-2);
+}

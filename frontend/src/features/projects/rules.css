@@ -71,3 +71,37 @@
 .rules-reminders .field {
   max-width: none;
 }
+/* The targets (D-148): one line per age band or district, its boxes side by side, removal at the
+   end; on a phone the boxes wrap. */
+.target-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 720px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.target-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 0 12px;
+}
+.target-row--district {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+.target-row .field {
+  max-width: none;
+  margin-bottom: 8px;
+}
+.target-row > .icon-button,
+.target-row > button {
+  margin-bottom: 12px;
+}
+@media (max-width: 560px) {
+  .target-row,
+  .target-row--district {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

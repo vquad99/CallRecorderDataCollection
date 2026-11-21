@@ -3,7 +3,15 @@ import { apiRequest, query } from "./client";
 
 export type DashboardView = "client" | "worker" | "manager";
 
-export interface ModeTotals {
+/** Effective speech (D-148): the time someone speaks in those recordings. Completed: approved
+ * recordings counted as each project's rules say (effective speech or the full length). */
+interface Effective {
+  effective_hours: number;
+  approved_effective_hours: number;
+  completed_hours: number;
+}
+
+export interface ModeTotals extends Effective {
   mode: "FACE_TO_FACE" | "TELEPHONY";
   recorded_hours: number;
   approved_hours: number;
@@ -15,15 +23,18 @@ export interface DayTotals {
   day: string;
   recorded_hours: number;
   approved_hours: number;
+  completed_hours: number;
 }
 
-export interface Dashboard {
+export interface Dashboard extends Effective {
   view: DashboardView;
   timezone: string;
   project_id: string | null;
   projects: { id: string; code: string; name: string }[];
   recorded_hours: number;
   approved_hours: number;
+  /** Recordings whose effective speech is not measured yet (counted as none until it is). */
+  effective_pending: number;
   recordings: number;
   target_hours_per_day: number;
   today_hours: number;

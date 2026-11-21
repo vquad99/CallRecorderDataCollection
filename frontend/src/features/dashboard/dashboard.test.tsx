@@ -114,6 +114,25 @@ describe("dashboard filters", () => {
     );
   });
 
+  it("shows effective speech and the completed hours each project counts (D-148)", async () => {
+    open(() => ({ ...DASHBOARD, effective_pending: 2 }));
+    renderAt("/dashboard");
+    const completed = (
+      await screen.findByText("Completed", { selector: ".stat__label" }, wait)
+    ).closest(".stat") as HTMLElement;
+    expect(completed).toHaveTextContent("6.0 h");
+    expect(completed).toHaveTextContent("approved, as each project counts it");
+    expect(screen.getByText("30 recordings, 9.4 h effective speech")).toBeInTheDocument();
+    const face = (screen.getByRole("heading", { name: "Face-to-face" }) as HTMLElement).closest(
+      ".card",
+    ) as HTMLElement;
+    expect(face).toHaveTextContent("Effective speech5.6 h");
+    expect(face).toHaveTextContent("Completed3.7 h");
+    expect(
+      screen.getByText(/2 recordings are still being measured and count no effective speech yet/),
+    ).toBeInTheDocument();
+  });
+
   it("gives a client viewer the filters that are about the recordings only", async () => {
     open(() => ({
       ...DASHBOARD,

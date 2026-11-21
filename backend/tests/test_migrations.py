@@ -686,3 +686,66 @@ def test_device_details_and_reminders_come_and_go(test_database_url: str) -> Non
         assert {"device_fields", "recording_reminders"}.isdisjoint(columns)
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_effective_speech_and_the_project_targets_come_and_go(test_database_url: str) -> None:
+    """0038 (D-148): files made before have no effective speech yet (the backfill measures them);
+    every existing project gets the pause limit of 3 s shown only, completed minutes counted as
+    effective speech and the first client's targets; going back drops them."""
+    from app.modules.projects import targets
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0037")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT pause_limit_seconds, long_pauses_need_review, progress_counts,"
+                " target_hours, target_speakers, target_conversations, target_age_bands,"
+                " target_gender, target_modes, target_districts FROM projects WHERE id = :p"
+            ),
+            {"p": project_id},
+        ).one()
+        assert tuple(row) == (
+            3,
+            False,
+            "EFFECTIVE",
+            None,
+            500,
+            600,
+            list(targets.DEFAULT_TARGET_AGE_BANDS),
+            targets.DEFAULT_TARGET_GENDER,
+            targets.DEFAULT_TARGET_MODES,
+            [],
+        )
+        columns = {c["name"]: c for c in inspect(conn).get_columns("audio_assets")}
+        for name in ("effective_ms", "longest_pause_ms", "pauses_ms", "speech_error"):
+            assert columns[name]["nullable"], name
+        indexes = {i["name"] for i in inspect(conn).get_indexes("audio_assets")}
+        assert "ix_audio_assets_speech_missing" in indexes
+    for sql, match in (
+        ("UPDATE projects SET pause_limit_seconds = 0", "pause_limit_range"),
+        ("UPDATE projects SET pause_limit_seconds = 31", "pause_limit_range"),
+        ("UPDATE projects SET progress_counts = 'SOME'", "progress_counts_allowed"),
+        ("UPDATE projects SET target_speakers = 0", "targets_positive"),
+        ("UPDATE projects SET target_age_bands = '{}'::jsonb", "target_age_bands_list"),
+        ("UPDATE projects SET target_gender = '[]'::jsonb", "target_gender_object"),
+        ("UPDATE projects SET target_modes = '[]'::jsonb", "target_modes_object"),
+        ("UPDATE projects SET target_districts = '{}'::jsonb", "target_districts_list"),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(text(sql))
+    command.downgrade(cfg, "0037")
+    with engine.begin() as conn:
+        project_columns = {c["name"] for c in inspect(conn).get_columns("projects")}
+        assert {"pause_limit_seconds", "target_age_bands", "progress_counts"}.isdisjoint(
+            project_columns
+        )
+        asset_columns = {c["name"] for c in inspect(conn).get_columns("audio_assets")}
+        assert {"effective_ms", "pauses_ms", "speech_error"}.isdisjoint(asset_columns)
+    command.upgrade(cfg, "head")
+    engine.dispose()

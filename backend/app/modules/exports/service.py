@@ -124,6 +124,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
         "qc_executive",
         "finished_recordings",
         "latest_recording_minutes",
+        "effective_speech_minutes",
         "automatic_check",
         "qc_decision",
         "approved_at",
@@ -172,22 +173,23 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
     }
     latest_ids = list(latest.values())
     delivery_ms: dict[uuid.UUID, int] = {}
+    effective_ms: dict[uuid.UUID, int | None] = {}
     automatic: dict[uuid.UUID, str] = {}
     decision: dict[uuid.UUID, str] = {}
     if latest_ids:
-        delivery_ms = {
-            rid: int(ms or 0)
-            for rid, ms in db.execute(
-                select(AudioAsset.recording_id, AudioAsset.duration_ms)
-                .where(
-                    AudioAsset.recording_id.in_(latest_ids),
-                    AudioAsset.kind.in_(DELIVERY_KINDS),
-                    AudioAsset.deleted_at.is_(None),
-                )
-                .ext(distinct_on(AudioAsset.recording_id))
-                .order_by(AudioAsset.recording_id, AudioAsset.version.desc())
+        delivery = db.execute(
+            select(AudioAsset.recording_id, AudioAsset.duration_ms, AudioAsset.effective_ms)
+            .where(
+                AudioAsset.recording_id.in_(latest_ids),
+                AudioAsset.kind.in_(DELIVERY_KINDS),
+                AudioAsset.deleted_at.is_(None),
             )
-        }
+            .ext(distinct_on(AudioAsset.recording_id))
+            .order_by(AudioAsset.recording_id, AudioAsset.version.desc())
+        ).all()
+        delivery_ms = {rid: int(ms or 0) for rid, ms, _ in delivery}
+        # Effective speech (D-148); empty until the file is measured.
+        effective_ms = {rid: eff for rid, _, eff in delivery}
         # Newest first: the first result seen of each kind is the one that counts.
         for rid, automated, outcome in db.execute(
             select(AudioQcResult.recording_id, AudioQcResult.automated, AudioQcResult.outcome)
@@ -219,6 +221,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
         b_code, b_language = people.get(task.participant_b_id, ("", ""))
         newest = latest.get(task.id)
         ms = delivery_ms.get(newest) if newest else None
+        effective = effective_ms.get(newest) if newest else None
         rows.append(
             [
                 task.task_code,
@@ -235,6 +238,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
                 assignees.get((task.id, Role.QC_EXECUTIVE.value), ""),
                 finished.get(task.id, 0),
                 round(ms / 60000, 2) if ms is not None else "",
+                round(effective / 60000, 2) if effective is not None else "",
                 automatic.get(newest, "") if newest else "",
                 decision.get(newest, "") if newest else "",
                 _iso(approved_at.get(task.id)) if task.status == "APPROVED" else "",

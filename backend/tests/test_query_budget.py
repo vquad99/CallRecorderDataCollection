@@ -82,6 +82,8 @@ PAGES = [
     ("sa", "/api/v1/projects/{project}/member-candidates"),
     ("sa", "/api/v1/projects/{project}/participants?page_size=100"),
     ("sa", "/api/v1/projects/{project}/participants/export"),
+    # D-148: the Progress tab, a few set-based queries over the project's tasks.
+    ("sa", "/api/v1/projects/{project}/progress"),
     ("sa", "/api/v1/tasks?page_size=100"),
     ("mod", "/api/v1/tasks?page_size=100"),
     ("sa", "/api/v1/tasks/{task}/timeline"),

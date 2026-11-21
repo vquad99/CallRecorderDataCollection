@@ -16,7 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
-from app.modules.projects.models import ProjectAudioRule
+from app.modules.projects.models import Project, ProjectAudioRule
+from app.modules.projects.targets import DEFAULT_PAUSE_LIMIT_SECONDS
 from app.modules.recordings import media
 from app.modules.recordings.models import AudioAsset
 
@@ -47,6 +48,18 @@ class Measured:
     content_fingerprint: str | None
     channel_correlation: float | None = None
     levels_measured: bool = True
+    # Effective speech and pauses (D-148); None for a file made before them, not measured yet.
+    speech: media.Speech | None = None
+
+
+@dataclass(frozen=True)
+class Pauses:
+    """The project's pause rule (D-148, projects/targets.py): a silent stretch inside the speech
+    longer than `limit_seconds` is a long pause; with `needs_review` long pauses ask for a listen,
+    otherwise they are shown only."""
+
+    limit_seconds: int = DEFAULT_PAUSE_LIMIT_SECONDS
+    needs_review: bool = False
 
 
 @dataclass(frozen=True)
@@ -105,7 +118,23 @@ def from_asset(asset: AudioAsset) -> Measured:
         silence_pct=asset.silence_pct,
         dynamic_range_db=asset.dynamic_range_db,
         content_fingerprint=asset.content_fingerprint,
+        speech=speech_of_asset(asset),
     )
+
+
+def speech_of_asset(asset: AudioAsset) -> media.Speech | None:
+    """The effective speech kept with a file's record (D-148); None until it is measured."""
+    if asset.effective_ms is None:
+        return None
+    return media.Speech(
+        effective_ms=int(asset.effective_ms),
+        longest_pause_ms=int(asset.longest_pause_ms or 0),
+        pauses_ms=tuple(asset.pauses_ms or ()),
+    )
+
+
+def pauses_of(project: Project) -> Pauses:
+    return Pauses(project.pause_limit_seconds, project.long_pauses_need_review)
 
 
 def _channel_correlation(path: Path, info: media.WavInfo) -> float | None:
@@ -170,6 +199,7 @@ def analyze_file(path: Path) -> tuple[Measured | None, str | None]:
             content_fingerprint=levels.content_fingerprint,
             channel_correlation=correlation,
             levels_measured=measurable,
+            speech=levels.speech,
         ),
         None,
     )
@@ -179,6 +209,45 @@ def _seconds(ms: int) -> str:
     return f"{ms / 1000:.1f} s"
 
 
+def spoken(ms: int) -> str:
+    """A length as people read it: "6 min 12 s", "45 s"."""
+    seconds = round(ms / 1000)
+    minutes, rest = divmod(seconds, 60)
+    return f"{minutes} min {rest} s" if minutes else f"{rest} s"
+
+
+def _pauses(m: Measured, rule: Pauses) -> Check:
+    """Long pauses (D-148): how many silent stretches inside the speech are longer than the
+    project's limit, and the longest. Shown only, or a listen where the project asks for it."""
+    limit = rule.limit_seconds
+    if m.speech is None:
+        return Check(
+            "PAUSES",
+            "INFO",
+            "Not measured yet",
+            f"Pauses over {limit} s",
+            "Effective speech and pauses are measured shortly for files made before this check",
+        )
+    count = m.speech.long_pauses(limit * 1000)
+    longest = _seconds(m.speech.longest_pause_ms)
+    measured = (
+        f"{count} over {limit} s, longest {longest}"
+        if count
+        else f"None over {limit} s (longest {longest})"
+    )
+    speech = f"Effective speech {spoken(m.speech.effective_ms)} of {spoken(m.duration_ms)}"
+    if not rule.needs_review:
+        return Check("PAUSES", "INFO", measured, "Shown, not judged", speech)
+    return Check(
+        "PAUSES",
+        "REVIEW" if count else "PASS",
+        measured,
+        f"No pause over {limit} s",
+        f"{speech}; listen to the long pauses" if count else speech,
+        "LONG_PAUSES" if count else None,
+    )
+
+
 def evaluate(
     measured: Measured | None,
     limits: Limits | None,
@@ -186,8 +255,10 @@ def evaluate(
     decode_error: str | None = None,
     duplicate: Duplicate | None = None,
     expected_sha256: str | None = None,
+    pauses: Pauses | None = None,
 ) -> list[Check]:
-    """Every check, in a fixed order. Pure: the same inputs always give the same list."""
+    """Every check, in a fixed order. Pure: the same inputs always give the same list. `pauses`:
+    the project's pause rule (D-148); the first client's (3 s, shown only) when not given."""
     if decode_error is not None:
         return [
             Check(
@@ -348,7 +419,7 @@ def evaluate(
         else:
             out.append(Check("DURATION", "PASS", _seconds(m.duration_ms), expected))
     if not m.levels_measured:
-        for code in ("SILENCE", "CLIPPING", "LEVELS", "DYNAMIC_RANGE"):
+        for code in ("SILENCE", "CLIPPING", "LEVELS", "DYNAMIC_RANGE", "PAUSES"):
             out.append(
                 Check(code, "INFO", "Not measured", "", f"Levels are not measured for {m.codec}")
             )
@@ -413,6 +484,7 @@ def evaluate(
                 "Shown, not judged",
             )
         )
+        out.append(_pauses(m, pauses or Pauses()))
     out.append(
         Check(
             "SNR",

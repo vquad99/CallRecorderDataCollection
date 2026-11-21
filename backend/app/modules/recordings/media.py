@@ -29,6 +29,24 @@ FRAME_SECONDS = 0.02
 MEASURABLE_CODECS = ("pcm_s16le", "pcm_f32le")
 SOXR_VERSION = getattr(soxr, "__version__", "unknown")
 
+# Effective speech and pauses (D-148), measured on the same 20 ms windows as the silence. Every
+# number the measurement uses is here.
+# - A window is speech when any channel is at SPEECH_DBFS or louder (the silence threshold): a phone
+#   call keeps one speaker per channel, so either side talking counts, and both at once count once.
+# - A quiet gap shorter than SPEECH_BRIDGE_MS between speech is part of the speech: the breaks
+#   between syllables and words are not silence.
+# - A sound shorter than SPEECH_MIN_MS on its own (after the gaps are bridged) is a click or a tap,
+#   not speech.
+# - A pause is a silent stretch between the first and the last speech; silence before the first
+#   word and after the last is not a pause. The pauses of PAUSE_KEEP_MS or longer are kept with the
+#   file (the shortest limit a project may set), so a changed limit needs no new measurement.
+# Measured by level only: a background noise as loud as speech counts as speech; the QC
+# Executive's ear stays the judge of noise.
+SPEECH_DBFS = SILENCE_DBFS
+SPEECH_BRIDGE_MS = 300
+SPEECH_MIN_MS = 100
+PAUSE_KEEP_MS = 1000
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -306,6 +324,58 @@ def inspect_wav(path: Path) -> WavInfo:
 
 
 @dataclass(frozen=True)
+class Speech:
+    """Effective speech and the pauses inside it (D-148), in milliseconds."""
+
+    effective_ms: int
+    longest_pause_ms: int  # 0 when the speech has no pause
+    pauses_ms: tuple[int, ...]  # every pause of PAUSE_KEEP_MS or longer, in order
+
+    def long_pauses(self, limit_ms: int) -> int:
+        """How many pauses are longer than `limit_ms` (at least PAUSE_KEEP_MS)."""
+        return sum(1 for p in self.pauses_ms if p > limit_ms)
+
+
+def _runs(flags: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(starts, lengths) of the runs of equal values in a boolean array."""
+    if len(flags) == 0:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    starts = np.concatenate(([0], np.flatnonzero(np.diff(flags.astype(np.int8))) + 1))
+    return starts, np.diff(np.concatenate((starts, [len(flags)])))
+
+
+def speech_of(windows: np.ndarray, window_ms: float) -> Speech:
+    """Effective speech from one flag per window (True: speech at SPEECH_DBFS or louder): short
+    gaps inside speech bridged, lone short sounds dropped, pauses between the first and the last
+    speech (the rules above SPEECH_DBFS)."""
+    flags = np.array(windows, dtype=bool)
+    starts, lengths = _runs(flags)
+    for start, length in zip(starts, lengths, strict=True):
+        inside = start > 0 and start + length < len(flags)
+        if not flags[start] and inside and length * window_ms < SPEECH_BRIDGE_MS:
+            flags[start : start + length] = True
+    starts, lengths = _runs(flags)
+    for start, length in zip(starts, lengths, strict=True):
+        if flags[start] and length * window_ms < SPEECH_MIN_MS:
+            flags[start : start + length] = False
+    starts, lengths = _runs(flags)
+    spoken = np.flatnonzero(flags)
+    pauses: list[int] = []
+    if len(spoken):
+        first, last = spoken[0], spoken[-1]
+        pauses = [
+            round(length * window_ms)
+            for start, length in zip(starts, lengths, strict=True)
+            if not flags[start] and first < start < last
+        ]
+    return Speech(
+        effective_ms=round(len(spoken) * window_ms),
+        longest_pause_ms=max(pauses, default=0),
+        pauses_ms=tuple(p for p in pauses if p >= PAUSE_KEEP_MS),
+    )
+
+
+@dataclass(frozen=True)
 class Levels:
     peak_dbfs: float | None
     rms_dbfs: float | None
@@ -318,6 +388,8 @@ class Levels:
     # SHA-256 of the per-second level pattern (whole dB): the same conversation stored twice gives
     # the same value even when the files' bytes differ (AQC-007). None for an empty file.
     content_fingerprint: str | None = None
+    # Effective speech and pauses (D-148). None where levels are not measured.
+    speech: Speech | None = None
 
 
 def _db(value: float) -> float | None:
@@ -325,7 +397,8 @@ def _db(value: float) -> float | None:
 
 
 def measure(path: Path) -> Levels:
-    """Peak, RMS, clipping and silence over the whole file; read-only (AUDIO-018)."""
+    """Peak, RMS, clipping, silence, and effective speech with its pauses (D-148) over the whole
+    file; read-only (AUDIO-018)."""
     info = inspect_wav(path)
     if info.codec not in MEASURABLE_CODECS:
         raise ValueError(f"levels cannot be measured for {info.codec}")
@@ -340,12 +413,15 @@ def measure(path: Path) -> Levels:
         shape=(info.data_bytes // np.dtype(dtype).itemsize,),
     )
     # A 20 ms window spans every channel's samples for the same 20 ms (interleaved data).
-    frame = max(1, int(info.sample_rate * FRAME_SECONDS)) * info.channels
+    window = max(1, int(info.sample_rate * FRAME_SECONDS))
+    frame = window * info.channels
+    speech_level = 10 ** (SPEECH_DBFS / 20)
     peak = 0.0
     sum_sq = 0.0
     clips = 0
     silent = frames = 0
     window_levels: list[np.ndarray] = []
+    speaking: list[np.ndarray] = []  # per window: some channel at the speech level (D-148)
     step = BLOCK - BLOCK % frame  # blocks hold whole windows, so no window is split
     for start in range(0, len(data), step):
         block = np.asarray(data[start : start + step], dtype=np.float64) / scale
@@ -364,8 +440,16 @@ def measure(path: Path) -> Levels:
             silent += int(np.count_nonzero(rms < 10 ** (SILENCE_DBFS / 20)))
             frames += len(rms)
             window_levels.append(20 * np.log10(np.maximum(rms, 1e-5)))  # floor -100 dBFS
+            per_channel = np.sqrt(
+                np.mean(block[:usable].reshape(-1, window, info.channels) ** 2, axis=1)
+            )
+            speaking.append(np.any(per_channel >= speech_level, axis=1))
     total = len(data)
     del data
+    speech = speech_of(
+        np.concatenate(speaking) if speaking else np.zeros(0, dtype=bool),
+        1000 * window / info.sample_rate,
+    )
     dynamic_range = fingerprint = None
     if window_levels:
         levels_db = np.concatenate(window_levels)
@@ -384,4 +468,5 @@ def measure(path: Path) -> Levels:
         silence_pct=round(100 * silent / frames, 2) if frames else 100.0,
         dynamic_range_db=dynamic_range,
         content_fingerprint=fingerprint,
+        speech=speech,
     )

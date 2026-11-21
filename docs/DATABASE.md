@@ -66,7 +66,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | recordings | task_id, mode, state (RECORDING, INTERRUPTED, UPLOADED, PROCESSING, READY, FAILED, DISCARDED), created_by, native_sample_rate, channel_count (channels captured = original file's channels), device_channel_count (browser-reported, nullable), channel_handling (server-set), echo_cancellation, noise_suppression, auto_gain_control, device_label, user_agent, chunks_received, frames_received (per channel; was samples_received until migration 0005), interrupted, interruption_reason, started_at, ended_at, failure_reason (call_session_id arrives in Phase 6) | index task_id; at most one open recording per task | restrict |
 | recording_chunks | recording_id, seq, sha256, size_bytes, storage_key, object_deleted | unique (recording_id, seq) | restrict |
 | recording_channels | recording_id, channel_index (0 left, 1 right), participant_id, source_asset_id, verified_separate, verification_note | unique (recording_id, channel_index) | cascade |
-| audio_assets | recording_id, kind, parent_asset_id, storage_key, version, container, codec, sample_format, sample_rate, bit_depth, channels, duration_ms, size_bytes, sha256, peak_dbfs, clip_count, clip_pct, silence_pct, rms_dbfs, provider_codec, provider_recording_spec | unique (storage_key, version); index sha256 | retention workflow |
+| audio_assets | recording_id, kind, parent_asset_id, storage_key, version, container, codec, sample_format, sample_rate, bit_depth, channels, duration_ms, size_bytes, sha256, peak_dbfs, clip_count, clip_pct, silence_pct, rms_dbfs, provider_codec, provider_recording_spec, effective_ms, longest_pause_ms, pauses_ms, speech_error (D-148) | unique (storage_key, version); index sha256 | retention workflow |
 | asset_processing_steps | asset_id, seq, tool, tool_version, parameters, input_asset_id, output_sha256 | unique (asset_id, seq) | cascade |
 | audio_qc_results, audio_qc_checks | see "Audio quality check" below (built, D-079) | index recording_id, task_id, project_id | restrict; checks cascade |
 | audio_qc_drafts | see "QC checklist and the consent fix" below (D-146) | unique task_id | task cascade |
@@ -284,3 +284,33 @@ and participant (unique), indexed by participant for "Same as last time". The ca
 task's `recording_mode`, not stored again. Deleting a task (D-115) removes its rows; a participant
 is never deleted (removal keeps the row, D-143), so their rows stay. Going back to 0036 drops the
 table and the two project columns.
+
+## Effective speech, progress settings and targets (migration 0038, D-148)
+
+`audio_assets.effective_ms` (bigint), `longest_pause_ms` (integer) and `pauses_ms` (integer
+array): the time someone speaks in the file, the longest silence inside the speech, and every such
+silence of a second or longer (the shortest pause limit a project may set), in milliseconds, so a
+project's limit can change without measuring the file again. Measured with the file's other levels
+when it is made (`recordings/media.speech_of`: 20 ms windows, speech at -50 dBFS on any channel,
+gaps under 300 ms bridged, lone sounds under 100 ms dropped); a phone call cut to its marks
+(D-113) is measured on the delivered, cut file. All empty for files made before: the backfill
+(`audio_qc/speech.py`, a few files per recovery sweep, or `python -m app.cli
+backfill-effective-speech`) reads each final file from storage, checks its SHA-256 and fills them;
+`speech_error` (varchar 200) says why a file could not be measured (gone from storage, changed,
+unreadable) so it is not tried again. The partial index `ix_audio_assets_speech_missing`
+(created_at, final kinds with `effective_ms` and `speech_error` empty and the file not deleted)
+finds the files still to measure. The minutes helpers read `effective_ms` with the length
+(`final_length_subquery`: the largest per recording, as for `duration_ms`); a value stays after
+retention deletes the file.
+
+`projects`: `pause_limit_seconds` (integer, 1 to 30 by check, default 3), `long_pauses_need_review`
+(boolean, default false), `progress_counts` (`EFFECTIVE`, default, or `FULL`, by check);
+`target_hours` (numeric 10,2, empty = none), `target_speakers` (default 500) and
+`target_conversations` (default 600) (integers, empty = none; a check keeps the targets at least 0
+and 1); `target_age_bands` (JSONB list `[{from, to, percent}]`, default the first client's four
+bands), `target_gender` (JSONB object `{MALE, FEMALE}`, default 50 / 50), `target_modes` (JSONB
+object `{FACE_TO_FACE, TELEPHONY}`, default 50 / 50) and `target_districts` (JSONB list `[{state,
+district}]`, default empty); checks keep their JSON types. What the values may be is checked when
+saved (`projects/targets.py`), not by the database: they are the client's numbers, project
+settings. Every existing project gets the defaults. Going back to 0037 drops the columns and the
+index.

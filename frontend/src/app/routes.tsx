@@ -94,6 +94,11 @@ export const routes: RouteObject[] = [
                 ),
                 children: [
                   { index: true, element: page(tabs, "OverviewTab") },
+                  {
+                    // Collected against the project's targets (D-148).
+                    path: "progress",
+                    element: page(() => import("../features/projects/ProgressTab"), "ProgressTab"),
+                  },
                   { path: "team", element: page(tabs, "TeamTab") },
                   {
                     path: "participants",

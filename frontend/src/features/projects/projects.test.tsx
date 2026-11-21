@@ -11,6 +11,20 @@ import { CLIENT_REMINDERS } from "./reminders";
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** Audio, progress and targets (D-148), as a new project starts. */
+const TARGETS = {
+  pause_limit_seconds: PROJECT.pause_limit_seconds,
+  long_pauses_need_review: PROJECT.long_pauses_need_review,
+  progress_counts: PROJECT.progress_counts,
+  target_hours: PROJECT.target_hours,
+  target_speakers: PROJECT.target_speakers,
+  target_conversations: PROJECT.target_conversations,
+  target_age_bands: PROJECT.target_age_bands,
+  target_gender: PROJECT.target_gender,
+  target_modes: PROJECT.target_modes,
+  target_districts: PROJECT.target_districts,
+};
+
 const SUMMARY = {
   recordings: 3,
   face_to_face: 2,
@@ -63,6 +77,7 @@ const project = {
   qc_checklist: PROJECT.qc_checklist,
   device_fields: PROJECT.device_fields,
   recording_reminders: PROJECT.recording_reminders,
+  ...TARGETS,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -150,6 +165,7 @@ describe("project detail", () => {
         qc_checklist: project.qc_checklist, // D-146: the checklist goes back as it is too
         device_fields: project.device_fields, // D-147: and what the moderator fills and reads
         recording_reminders: project.recording_reminders,
+        ...TARGETS, // D-148: and the audio, progress and target settings
       }),
     );
   });

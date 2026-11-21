@@ -168,6 +168,8 @@ _ASSET = _object(
         "silence_pct": _NUM_OR_NULL,
         "dynamic_range_db": _NUM_OR_NULL,
         "content_fingerprint": _STR_OR_NULL,
+        "effective_ms": _INT_OR_NULL,
+        "longest_pause_ms": _INT_OR_NULL,
         "created_at": _STR_OR_NULL,
         "processing": {"type": "array", "items": _STEP},
     }

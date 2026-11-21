@@ -58,9 +58,10 @@ def share(ms: int | None) -> int:
 
 def conversations(tasks: Select[uuid.UUID]) -> Select[*tuple[Any, ...]]:
     """One row per task of `tasks` (a query of task ids) with a finished recording: (task_id,
-    project_id, status, participant_a_id, participant_b_id, recorded_by, ms), from the task's
-    current recording, who made it and its length. Only these tasks' recordings are read, so the
-    cost follows the tasks asked about, not the whole database."""
+    project_id, status, mode, participant_a_id, participant_b_id, recorded_by, ms, effective_ms),
+    from the task's current recording, who made it, its length and its effective speech (D-148;
+    null until measured). Only these tasks' recordings are read, so the cost follows the tasks
+    asked about, not the whole database. Payments count `ms`, the full length (D-137)."""
     current = current_recordings(tasks)
     length = final_length_subquery(tasks)
     return (
@@ -68,10 +69,12 @@ def conversations(tasks: Select[uuid.UUID]) -> Select[*tuple[Any, ...]]:
             Task.id.label("task_id"),
             Task.project_id,
             Task.status,
+            Task.recording_mode.label("mode"),
             Task.participant_a_id,
             Task.participant_b_id,
             Recording.created_by.label("recorded_by"),
             length.c.ms,
+            length.c.effective_ms,
         )
         .join(current, current.c.task_id == Task.id)
         .join(Recording, Recording.id == current.c.recording_id)

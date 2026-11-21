@@ -24,7 +24,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects.postgresql import distinct_on
+from sqlalchemy.dialects.postgresql import ARRAY, distinct_on
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -141,6 +141,15 @@ class AudioAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "created_at",
             postgresql_where=text("deleted_at IS NULL"),
         ),
+        # The effective-speech backfill (D-148) reads only the final files not measured yet.
+        Index(
+            "ix_audio_assets_speech_missing",
+            "created_at",
+            postgresql_where=text(
+                f"kind IN {FINAL_KINDS} AND effective_ms IS NULL AND speech_error IS NULL"
+                " AND deleted_at IS NULL"
+            ),
+        ),
     )
     recording_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("recordings.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -171,6 +180,14 @@ class AudioAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     silence_pct: Mapped[float] = mapped_column(Float, nullable=False)
     dynamic_range_db: Mapped[float | None] = mapped_column(Float)
     content_fingerprint: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Effective speech (D-148, media.speech_of): the time someone speaks, the longest pause inside
+    # the speech, and every pause of a second or longer, in ms. Empty until measured: files made
+    # before D-148 are measured by the backfill (audio_qc/speech.py), which notes in
+    # speech_error why a file could not be measured instead of trying it again and again.
+    effective_ms: Mapped[int | None] = mapped_column(BigInteger)
+    longest_pause_ms: Mapped[int | None] = mapped_column(Integer)
+    pauses_ms: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
+    speech_error: Mapped[str | None] = mapped_column(String(200))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -195,11 +212,14 @@ TaskIds = Select[uuid.UUID] | Collection[uuid.UUID]
 
 
 def final_length_subquery(tasks: TaskIds | None = None) -> Subquery:
-    """(recording_id, ms): the length of each recording of `tasks` (of every task when None),
-    from its final file. Lengths stay counted after retention deletes the file."""
-    query = select(AudioAsset.recording_id, func.max(AudioAsset.duration_ms).label("ms")).where(
-        AudioAsset.kind.in_(FINAL_KINDS)
-    )
+    """(recording_id, ms, effective_ms): the length of each recording of `tasks` (of every task
+    when None) from its final file, and its effective speech (D-148; null until measured). Both
+    stay counted after retention deletes the file."""
+    query = select(
+        AudioAsset.recording_id,
+        func.max(AudioAsset.duration_ms).label("ms"),
+        func.max(AudioAsset.effective_ms).label("effective_ms"),
+    ).where(AudioAsset.kind.in_(FINAL_KINDS))
     if tasks is not None:
         query = query.where(
             AudioAsset.recording_id.in_(select(Recording.id).where(Recording.task_id.in_(tasks)))

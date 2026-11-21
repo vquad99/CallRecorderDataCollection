@@ -10,15 +10,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Request, 
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api.deps import AppSettings, Storage
 from app.core.permissions import Perm
 from app.core.storage import require_storage
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
+from app.modules.projects.models import Project
 from app.modules.recordings import access, consent_form, service
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import dispatch_processing
 from app.modules.tasks import service as tasks
+from app.modules.tasks.models import Task
 
 router = APIRouter(tags=["recordings"], dependencies=[Depends(require(Perm.RECORDINGS_VIEW))])
 usage_router = APIRouter(tags=["storage"], dependencies=[Depends(require(Perm.DASHBOARD_VIEW))])
@@ -44,6 +47,13 @@ class AssetOut(BaseModel):
     clip_count: int
     clip_pct: float
     silence_pct: float
+    # Effective speech (D-148): the time someone speaks, the longest pause inside the speech, and
+    # how many pauses are longer than the project's limit (pause_limit_seconds). Null until the
+    # file is measured; the count also where the project is not known to the route.
+    effective_ms: int | None = None
+    longest_pause_ms: int | None = None
+    long_pauses: int | None = None
+    pause_limit_seconds: int | None = None
     created_at: datetime
 
 
@@ -72,8 +82,21 @@ class RecordingOut(BaseModel):
     assets: list[AssetOut] = []
 
 
+def asset_out(asset: AudioAsset, pause_limit_seconds: int | None = None) -> AssetOut:
+    """A file's record; with the project's pause limit, how many pauses are over it (D-148)."""
+    item = AssetOut.model_validate(asset, from_attributes=True)
+    if pause_limit_seconds is not None and asset.effective_ms is not None:
+        item.pause_limit_seconds = pause_limit_seconds
+        item.long_pauses = sum(1 for p in asset.pauses_ms or () if p > pause_limit_seconds * 1000)
+    return item
+
+
 def out(
-    rec: Recording, assets: list[AudioAsset] | None = None, *, current: bool = False
+    rec: Recording,
+    assets: list[AudioAsset] | None = None,
+    *,
+    current: bool = False,
+    pause_limit_seconds: int | None = None,
 ) -> RecordingOut:
     base = RecordingOut.model_validate(
         {
@@ -87,7 +110,7 @@ def out(
             "assets": [],
         }
     )
-    base.assets = [AssetOut.model_validate(a, from_attributes=True) for a in assets or []]
+    base.assets = [asset_out(a, pause_limit_seconds) for a in assets or []]
     return base
 
 
@@ -142,7 +165,13 @@ def task_recordings(
             .order_by(AudioAsset.kind, AudioAsset.version)
         ):
             files[asset.recording_id].append(asset)
-    return [out(r, files[r.id], current=r.id == current) for r in recs]
+    limit = _pause_limit(db, task.project_id)
+    return [out(r, files[r.id], current=r.id == current, pause_limit_seconds=limit) for r in recs]
+
+
+def _pause_limit(db: Session, project_id: uuid.UUID) -> int | None:
+    """The project's pause limit (D-148), for the long pauses of its files."""
+    return db.scalar(select(Project.pause_limit_seconds).where(Project.id == project_id))
 
 
 @router.get("/recordings/{recording_id}", response_model=RecordingOut)
@@ -150,7 +179,13 @@ def get_recording(
     recording_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> RecordingOut:
     rec, assets = service.assets_for(db, principal, recording_id)
-    return out(rec, assets, current=access.current_id(db, rec.task_id) == rec.id)
+    project_id = db.scalar(select(Task.project_id).where(Task.id == rec.task_id))
+    return out(
+        rec,
+        assets,
+        current=access.current_id(db, rec.task_id) == rec.id,
+        pause_limit_seconds=_pause_limit(db, project_id) if project_id else None,
+    )
 
 
 class ChunkOut(BaseModel):

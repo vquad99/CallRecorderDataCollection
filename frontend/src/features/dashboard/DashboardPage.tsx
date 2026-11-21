@@ -149,12 +149,12 @@ function Body({ data }: { data: Dashboard }) {
   );
   return (
     <>
-      <div className="stats">
+      <div className="stats stats--five">
         <Stat
           icon="mic"
           label="Recorded"
           value={hours(data.recorded_hours)}
-          note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}`}
+          note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}, ${hours(data.effective_hours)} effective speech`}
           spark={data.daily.map((d) => d.recorded_hours)}
         />
         <Stat
@@ -163,6 +163,14 @@ function Body({ data }: { data: Dashboard }) {
           value={hours(data.approved_hours)}
           note={`${percent(data.approved_hours, data.recorded_hours)}% of recorded hours`}
           spark={data.daily.map((d) => d.approved_hours)}
+        />
+        {/* D-148: approved recordings counted as each project's rules say. */}
+        <Stat
+          icon="ok"
+          label="Completed"
+          value={hours(data.completed_hours)}
+          note={`approved, as each project counts it (effective speech ${hours(data.approved_effective_hours)})`}
+          spark={data.daily.map((d) => d.completed_hours)}
         />
         <Stat
           icon="clock"
@@ -222,6 +230,14 @@ function Body({ data }: { data: Dashboard }) {
               <div className="checks__row">
                 <dt>Approved</dt>
                 <dd>{hours(m.approved_hours)}</dd>
+              </div>
+              <div className="checks__row">
+                <dt>Effective speech</dt>
+                <dd>{hours(m.effective_hours)}</dd>
+              </div>
+              <div className="checks__row">
+                <dt>Completed</dt>
+                <dd>{hours(m.completed_hours)}</dd>
               </div>
               {data.view === "worker" ? null : (
                 <div className="checks__row">
@@ -366,6 +382,14 @@ function Body({ data }: { data: Dashboard }) {
           </section>
         </div>
       ) : null}
+      <p className="muted">
+        Effective speech is the time someone speaks (silences left out). Completed counts each
+        project&apos;s approved recordings as its rules say: effective speech or the full length;
+        several projects add up their own.
+        {data.effective_pending > 0
+          ? ` ${data.effective_pending} recording${data.effective_pending === 1 ? " is" : "s are"} still being measured and count${data.effective_pending === 1 ? "s" : ""} no effective speech yet.`
+          : ""}
+      </p>
       <p className="muted">
         Days are counted in{" "}
         {data.timezone === "Asia/Kolkata"

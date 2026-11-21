@@ -39,12 +39,14 @@ from app.modules.audio_qc.rules import (
     Duplicate,
     Limits,
     Measured,
+    Pauses,
     analyze_file,
     comparable,
     evaluate,
     from_asset,
     limits_of,
     outcome_of,
+    pauses_of,
     summary,
 )
 from app.modules.audit import service as audit
@@ -139,6 +141,11 @@ def _limits_for(db: Session, task: Task) -> Limits | None:
     return limits_of(rule) if rule is not None else None
 
 
+def _pauses_for(db: Session, task: Task) -> Pauses:
+    """The project's pause rule (D-148), as it is now."""
+    return pauses_of(db.get_one(Project, task.project_id))
+
+
 def _store(
     db: Session,
     rec: Recording,
@@ -204,7 +211,9 @@ def run_automatic(db: Session, recording_id: uuid.UUID) -> AudioQcResult:
     asset = delivery_asset(db, rec.id)
     measured = from_asset(asset) if asset is not None else None
     duplicate = find_duplicate(db, task.project_id, rec.id, measured) if measured else None
-    checks = evaluate(measured, _limits_for(db, task), duplicate=duplicate)
+    checks = evaluate(
+        measured, _limits_for(db, task), duplicate=duplicate, pauses=_pauses_for(db, task)
+    )
     result = _store(db, rec, task, asset, checks, measured, duplicate, requested_by=None)
     # The task stays with the moderator after the check (D-092): they listen and send it on.
     db.commit()
@@ -275,6 +284,7 @@ def recheck(
         decode_error=decode_error,
         duplicate=duplicate,
         expected_sha256=asset.sha256 if asset else None,
+        pauses=_pauses_for(db, task),
     )
     result = _store(
         db, rec, task, asset, checks, measured, duplicate, requested_by=principal.user_id
@@ -950,6 +960,9 @@ def metadata_body(db: Session, rec: Recording, task: Task, project: Project) -> 
                 "silence_pct": a.silence_pct,
                 "dynamic_range_db": a.dynamic_range_db,
                 "content_fingerprint": a.content_fingerprint,
+                # Effective speech and the longest pause inside it (D-148); null until measured.
+                "effective_ms": a.effective_ms,
+                "longest_pause_ms": a.longest_pause_ms,
                 "created_at": _iso(a.created_at),
                 "processing": [
                     {

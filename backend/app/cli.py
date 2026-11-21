@@ -330,6 +330,22 @@ def run_storage_orphans(settings: Settings, hours: int, delete: bool) -> int:
     return 0
 
 
+def run_backfill_effective_speech(settings: Settings, limit: int | None) -> int:
+    """Measure the effective speech of final files made before D-148 (audio_qc/speech.py)."""
+    from app.modules.audio_qc import speech
+
+    storage, engine, db = _storage_and_db(settings)
+    with db:
+        done = speech.backfill(db, storage, settings, limit)
+        left = speech.missing_count(db)
+    engine.dispose()
+    print(
+        f"backfill-effective-speech: {done.measured} file(s) measured, {done.failed} could not "
+        f"be measured (reason kept on the file), {left} left"
+    )
+    return 0
+
+
 BACKUP_PREFIX = "backups/db/"
 
 
@@ -456,6 +472,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     orphans.add_argument("--older-than-hours", type=int, default=24)
     orphans.add_argument("--delete", action="store_true")
+    speech_fill = sub.add_parser(
+        "backfill-effective-speech",
+        help="measure effective speech and pauses of recordings made before they were measured",
+    )
+    speech_fill.add_argument(
+        "--limit", type=int, default=None, help="measure at most N files (default: all)"
+    )
     up = sub.add_parser("backup-upload", help="store a database dump read from standard input")
     up.add_argument("--name", default=None)
     down = sub.add_parser("backup-download", help="write a stored backup to standard output")
@@ -500,6 +523,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_verify_assets(settings, args.deep)
         elif args.command == "storage-orphans":
             return run_storage_orphans(settings, args.older_than_hours, args.delete)
+        elif args.command == "backfill-effective-speech":
+            return run_backfill_effective_speech(settings, args.limit)
         elif args.command == "backup-upload":
             print(f"backup-upload: {run_backup_upload(settings, args.name, sys.stdin.buffer)}")
         elif args.command == "backup-download":

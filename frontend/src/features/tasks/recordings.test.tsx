@@ -86,6 +86,54 @@ describe("recordings on the task page", () => {
     expect(screen.getByText("Recording 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download with consent form" })).toBeNull();
   });
+
+  it("says the effective speech and the long pauses under the length (D-148)", async () => {
+    const measured = {
+      ...RECORDING,
+      assets: [
+        RECORDING.assets[0],
+        {
+          ...RECORDING.assets[1],
+          duration_ms: 600_000,
+          effective_ms: 372_000,
+          longest_pause_ms: 7_200,
+          long_pauses: 3,
+          pause_limit_seconds: 3,
+        },
+      ],
+    };
+    open(ALL_PERMISSIONS, "RECORDED", [measured]);
+    renderAt("/tasks/t1");
+    const line = await screen.findByText(
+      "Effective speech 6 min 12 s · 3 pauses over 3 s",
+      {},
+      { timeout: 5000 },
+    );
+    expect(line.closest("td")).toHaveTextContent("10 min");
+  });
+
+  it("says nothing of effective speech before the file is measured, and 'no pauses'", async () => {
+    const one = {
+      ...RECORDING,
+      assets: [
+        RECORDING.assets[0],
+        {
+          ...RECORDING.assets[1],
+          duration_ms: 45_000,
+          effective_ms: 40_000,
+          longest_pause_ms: 900,
+          long_pauses: 0,
+          pause_limit_seconds: 3,
+        },
+      ],
+    };
+    open(ALL_PERMISSIONS, "RECORDED", [one, { ...RECORDING, id: "r2", current: false }]);
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByText("Effective speech 40 s · no pauses over 3 s", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/^Effective speech/)).toHaveLength(1);
+  });
 });
 
 describe("replaced recordings and the task's files", () => {

@@ -15,6 +15,12 @@ export interface Asset {
   rms_dbfs: number | null;
   clip_pct: number;
   silence_pct: number;
+  /** Effective speech (D-148): the time someone speaks, the longest pause inside the speech, and
+   * how many pauses are longer than the project's limit. Null until the file is measured. */
+  effective_ms?: number | null;
+  longest_pause_ms?: number | null;
+  long_pauses?: number | null;
+  pause_limit_seconds?: number | null;
 }
 
 export interface Recording {
@@ -143,6 +149,22 @@ export const formatLabel = (asset: Asset): string =>
 /** A recording's length for people: seconds under a minute, minutes after. */
 export const lengthLabel = (seconds: number): string =>
   seconds < 60 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
+
+/** A file's effective speech and long pauses (D-148): "Effective speech 6 min 12 s · 3 pauses
+ * over 3 s"; null until the file is measured. */
+export function speechLabel(asset: Asset): string | null {
+  if (asset.effective_ms === null || asset.effective_ms === undefined) return null;
+  const seconds = Math.round(asset.effective_ms / 1000);
+  const length =
+    seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+  const n = asset.long_pauses;
+  const limit = asset.pause_limit_seconds;
+  const pauses =
+    n === null || n === undefined || !limit
+      ? ""
+      : ` · ${n === 0 ? "no" : n} pause${n === 1 ? "" : "s"} over ${limit} s`;
+  return `Effective speech ${length}${pauses}`;
+}
 
 /** Saves the delivery file and, with it, the consent record (D-068) and the details file with
  * every measurement and the audio check (D-079). */

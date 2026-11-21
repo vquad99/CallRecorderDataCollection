@@ -142,6 +142,8 @@ export const CHECK_LABELS: Record<string, string> = {
   CLIPPING: "Clipping",
   LEVELS: "Loudness",
   DYNAMIC_RANGE: "Dynamic range",
+  // D-148: silences inside the speech longer than the project's limit.
+  PAUSES: "Long pauses",
   SNR: "Signal to noise",
   CHANNEL_LEAKAGE: "Channel separation",
   DUPLICATE: "Duplicate",

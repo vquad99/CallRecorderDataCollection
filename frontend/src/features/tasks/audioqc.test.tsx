@@ -50,6 +50,13 @@ const AUTO = {
       expected: "",
       message: "No validated method",
     },
+    {
+      code: "PAUSES",
+      state: "INFO",
+      measured: "2 over 3 s, longest 4.0 s",
+      expected: "Shown, not judged",
+      message: "Effective speech 6 s of 14 s",
+    },
   ],
 };
 
@@ -131,9 +138,14 @@ describe("audio quality card", () => {
     expect(within(table).getByText("3.0 s")).toBeInTheDocument();
     expect(within(table).getByText("10 s or more")).toBeInTheDocument();
     expect(within(table).queryByText("Signal to noise")).toBeNull();
-    await userEvent.click(within(card).getByRole("button", { name: "Show all checks (3)" }));
+    await userEvent.click(within(card).getByRole("button", { name: "Show all checks (4)" }));
     const all = within(card).getByRole("table", { name: "All automatic checks" });
     expect(within(all).getByText("Signal to noise")).toBeInTheDocument();
+    // D-148: the long pauses, with the effective speech under the check's name.
+    const pauses = within(all).getByText("Long pauses").closest("tr");
+    expect(pauses).toHaveTextContent("2 over 3 s, longest 4.0 s");
+    expect(pauses).toHaveTextContent("Effective speech 6 s of 14 s");
+    expect(pauses).toHaveTextContent("Shown");
     expect(within(card).queryByRole("button", { name: "Pass" })).toBeNull();
   });
 

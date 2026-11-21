@@ -1251,6 +1251,34 @@ def test_the_delivery_file_is_cut_to_the_marks_and_the_original_kept_whole(
     assert any("cut to the moderator's recording marks: 0.0 s to 3.5 s" in t for t in texts)
 
 
+def test_effective_speech_is_measured_on_the_cut_file(world: dict[str, Any]) -> None:
+    """D-148: the delivered file is the one measured. The provider's file talks for 3 s; Stop
+    comes 0.5 s after Start, so with the 1-second margins the delivery file holds 0 s to 2.5 s:
+    2.5 s of speech, where the provider's whole file has 3 s."""
+    w = world
+    _, call = started_and_closed(w)
+    db = w["db"]
+    row = db.get(Call, call["id"])
+    begin = row.record_started_at
+    row.record_stopped_at = begin + timedelta(seconds=0.5)
+    db.commit()
+    w["provider"].listed = [session("CUT2", begin - timedelta(seconds=1))]
+    due_now(w, call["id"])
+    sweep(w)
+    db.expire_all()
+    row = db.get(Call, call["id"])
+    assert row.state == "RECORDED", row.failure_detail
+    assets = {
+        a.kind: a
+        for a in db.scalars(select(AudioAsset).where(AudioAsset.recording_id == row.recording_id))
+    }
+    assert assets["PROVIDER_ORIGINAL_MIXED"].effective_ms == 3000
+    delivered = assets["TELEPHONY_DERIVED_PCM"]
+    assert abs(delivered.duration_ms - 2500) <= 5
+    assert delivered.effective_ms == 2500
+    assert (delivered.longest_pause_ms, delivered.pauses_ms) == (0, [])
+
+
 def test_the_window_is_found_or_the_whole_call_kept_with_the_reason() -> None:
     begin = datetime(2026, 11, 16, 10, 0, 0, tzinfo=UTC)
 

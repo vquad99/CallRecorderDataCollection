@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -26,6 +27,7 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.modules.audio_qc.checklist import DEFAULT_QC_CHECKLIST
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.participants.speakers import FIELDS as SPEAKER_FIELDS
+from app.modules.projects import targets
 from app.modules.projects.moderation import DEFAULT_DEVICE_FIELDS, DEFAULT_RECORDING_REMINDERS
 from app.modules.recordings.models import ASSET_KINDS
 
@@ -48,6 +50,10 @@ DEFAULT_DEVICE_FIELDS_SQL = "'" + json.dumps(list(DEFAULT_DEVICE_FIELDS)) + "'::
 DEFAULT_RECORDING_REMINDERS_SQL = (
     "'" + json.dumps(DEFAULT_RECORDING_REMINDERS).replace("'", "''") + "'::jsonb"
 )
+
+
+def _jsonb(value: object) -> str:
+    return "'" + json.dumps(value).replace("'", "''") + "'::jsonb"
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -86,6 +92,24 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "jsonb_typeof(recording_reminders) = 'object'", name="recording_reminders_object"
         ),
+        # D-148: audio and progress settings, and the targets.
+        CheckConstraint(
+            "pause_limit_seconds BETWEEN {} AND {}".format(*targets.PAUSE_LIMIT_RANGE),
+            name="pause_limit_range",
+        ),
+        CheckConstraint(
+            _in("progress_counts", targets.PROGRESS_COUNTS), name="progress_counts_allowed"
+        ),
+        CheckConstraint(
+            "(target_hours IS NULL OR target_hours >= 0)"
+            " AND (target_speakers IS NULL OR target_speakers >= 1)"
+            " AND (target_conversations IS NULL OR target_conversations >= 1)",
+            name="targets_positive",
+        ),
+        CheckConstraint("jsonb_typeof(target_age_bands) = 'array'", name="target_age_bands_list"),
+        CheckConstraint("jsonb_typeof(target_gender) = 'object'", name="target_gender_object"),
+        CheckConstraint("jsonb_typeof(target_modes) = 'object'", name="target_modes_object"),
+        CheckConstraint("jsonb_typeof(target_districts) = 'array'", name="target_districts_list"),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -146,6 +170,40 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     recording_reminders: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text(DEFAULT_RECORDING_REMINDERS_SQL)
+    )
+    # Audio and progress (D-148, projects/targets.py): a silent stretch inside the speech longer
+    # than this is a long pause; whether long pauses ask QC for a listen; and what counts as
+    # completed minutes (EFFECTIVE speech or the FULL length of approved conversations).
+    pause_limit_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=str(targets.DEFAULT_PAUSE_LIMIT_SECONDS)
+    )
+    long_pauses_need_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    progress_counts: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=targets.DEFAULT_PROGRESS_COUNTS
+    )
+    # Targets (D-148), shown on the Progress tab: empty = no target. Age bands
+    # [{from, to, percent}], gender {MALE, FEMALE} and modes {FACE_TO_FACE, TELEPHONY} percents,
+    # districts [{state, district}] with an equal share each.
+    target_hours: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    target_speakers: Mapped[int | None] = mapped_column(
+        Integer, server_default=str(targets.DEFAULT_TARGET_SPEAKERS)
+    )
+    target_conversations: Mapped[int | None] = mapped_column(
+        Integer, server_default=str(targets.DEFAULT_TARGET_CONVERSATIONS)
+    )
+    target_age_bands: Mapped[list[dict[str, int]]] = mapped_column(
+        JSONB, nullable=False, server_default=text(_jsonb(list(targets.DEFAULT_TARGET_AGE_BANDS)))
+    )
+    target_gender: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False, server_default=text(_jsonb(targets.DEFAULT_TARGET_GENDER))
+    )
+    target_modes: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False, server_default=text(_jsonb(targets.DEFAULT_TARGET_MODES))
+    )
+    target_districts: Mapped[list[dict[str, str]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

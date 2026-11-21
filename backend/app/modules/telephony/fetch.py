@@ -580,6 +580,7 @@ def _store_recording(
                 silence_pct=levels.silence_pct,
                 dynamic_range_db=levels.dynamic_range_db,
                 content_fingerprint=levels.content_fingerprint,
+                **assets.speech_columns(levels.speech),
             )
             stored.append(original.storage_key)
             assets.store_asset(

@@ -744,8 +744,14 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                       <StatusBadge tone="neutral" label="Rejected by moderator – recorded again" />
                     )}
                   </td>
-                  {/* The delivered file's length: a phone call is cut to its recording marks. */}
-                  <td>{rec.lengthLabel(file ? file.duration_ms / 1000 : r.saved_seconds)}</td>
+                  {/* The delivered file's length: a phone call is cut to its recording marks;
+                      its effective speech and long pauses under it (D-148). */}
+                  <td>
+                    {rec.lengthLabel(file ? file.duration_ms / 1000 : r.saved_seconds)}
+                    {file && rec.speechLabel(file) ? (
+                      <div className="muted">{rec.speechLabel(file)}</div>
+                    ) : null}
+                  </td>
                   <td>{file ? <Player assetId={file.id} /> : "-"}</td>
                   {can("recordings.download") ? (
                     <td>

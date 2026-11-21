@@ -537,6 +537,14 @@ CASES: list[Case] = [
         foreign=False,
     ),
     case("GET", P, lambda e, s: f"/api/v1/projects/{s.project}", EVERY_MEMBER, Perm.PROJECTS_VIEW),
+    # The Progress tab is for the people who run the project, like the other tabs (D-104, D-148).
+    case(
+        "GET",
+        P + "/progress",
+        lambda e, s: f"/api/v1/projects/{s.project}/progress",
+        {SA, PA},
+        Perm.PROJECTS_VIEW,
+    ),
     case(
         "PATCH",
         P,

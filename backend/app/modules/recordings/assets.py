@@ -74,7 +74,20 @@ def wav_asset(
         silence_pct=levels.silence_pct,
         dynamic_range_db=levels.dynamic_range_db,
         content_fingerprint=levels.content_fingerprint,
+        **speech_columns(levels.speech),
     )
+
+
+def speech_columns(speech: media.Speech | None) -> dict[str, object]:
+    """An audio file's effective speech as its record keeps it (D-148)."""
+    if speech is None:
+        return {}
+    return {
+        "effective_ms": speech.effective_ms,
+        "longest_pause_ms": speech.longest_pause_ms,
+        "pauses_ms": list(speech.pauses_ms),
+        "speech_error": None,
+    }
 
 
 @dataclass(frozen=True)

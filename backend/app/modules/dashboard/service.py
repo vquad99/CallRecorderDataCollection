@@ -20,6 +20,11 @@ Scope is the caller's projects (all for a Super Admin); a project the caller can
 exactly like a project that does not exist. Hours come from each ready recording's final file (the
 mono face-to-face WAV or the stereo telephony WAV), counted once per recording, and stay counted
 after retention deletes the file. Days are calendar days in REPORT_TIMEZONE (IST by default).
+
+Effective speech (D-148) is shown next to the hours: the time someone speaks in those recordings.
+Completed hours follow each project's `progress_counts`: the approved recordings' effective speech
+(EFFECTIVE) or their full length (FULL); over several projects, each adds its own. A recording
+whose effective speech is not measured yet counts as none (`effective_pending` says how many).
 """
 
 from __future__ import annotations
@@ -73,8 +78,12 @@ class ModeTotals:
     mode: str
     recorded_hours: float = 0.0
     approved_hours: float = 0.0
+    effective_hours: float = 0.0
+    approved_effective_hours: float = 0.0
+    completed_hours: float = 0.0
     recordings: int = 0
     target_hours_per_day: float = 0.0
+    effective_pending: int = 0
 
 
 @dataclass
@@ -82,6 +91,7 @@ class Day:
     day: date
     recorded_hours: float = 0.0
     approved_hours: float = 0.0
+    completed_hours: float = 0.0
 
 
 @dataclass
@@ -92,6 +102,10 @@ class Summary:
     projects: list[dict[str, Any]]
     recorded_hours: float
     approved_hours: float
+    effective_hours: float
+    approved_effective_hours: float
+    completed_hours: float
+    effective_pending: int
     recordings: int
     target_hours_per_day: float
     today_hours: float
@@ -220,19 +234,28 @@ def summary(
         return query
 
     # Lengths of the recordings of the tasks in view only (every task's for a Super Admin's
-    # unfiltered view).
+    # unfiltered view), with their effective speech (D-148).
     final = final_length_subquery(select(Task.id).where(*on_task) if on_task else None)
     approved = Task.status == "APPROVED"
+    # Completed (D-148): each project counts its approved recordings as its `progress_counts`
+    # says, effective speech or the full length; a total over several projects adds each
+    # project's own completed hours. Effective speech not measured yet counts as none.
+    counted = case((Project.progress_counts == "FULL", final.c.ms), else_=final.c.effective_ms)
     day = func.date(func.timezone(timezone, Recording.started_at)).label("day")
     base = (
         select(
             Recording.mode,
             func.sum(final.c.ms).label("ms"),
             func.sum(case((approved, final.c.ms), else_=0)).label("approved_ms"),
+            func.sum(final.c.effective_ms).label("effective_ms"),
+            func.sum(case((approved, final.c.effective_ms), else_=0)).label("approved_eff_ms"),
+            func.sum(case((approved, counted), else_=0)).label("completed_ms"),
+            func.count().filter(final.c.effective_ms.is_(None)).label("pending"),
             func.count().label("n"),
         )
         .join(final, final.c.recording_id == Recording.id)
         .join(Task, Task.id == Recording.task_id)
+        .join(Project, Project.id == Task.project_id)
         .where(Recording.state == "READY")
     )
     by_mode = {m: ModeTotals(m) for m in MODES}
@@ -243,6 +266,10 @@ def summary(
             _hours(row.approved_ms),
             int(row.n),
         )
+        t.effective_hours = _hours(row.effective_ms)
+        t.approved_effective_hours = _hours(row.approved_eff_ms)
+        t.completed_hours = _hours(row.completed_ms)
+        t.effective_pending = int(row.pending)
     series = {
         first_day + timedelta(days=i): Day(first_day + timedelta(days=i)) for i in range(days)
     }
@@ -259,6 +286,9 @@ def summary(
             )
             series[row.day].approved_hours = round(
                 series[row.day].approved_hours + _hours(row.approved_ms), 2
+            )
+            series[row.day].completed_hours = round(
+                series[row.day].completed_hours + _hours(row.completed_ms), 2
             )
 
     # Daily targets: the projects' own targets for the modes they allow.
@@ -301,6 +331,12 @@ def summary(
         projects=projects,
         recorded_hours=round(sum(t.recorded_hours for t in by_mode.values()), 2),
         approved_hours=round(sum(t.approved_hours for t in by_mode.values()), 2),
+        effective_hours=round(sum(t.effective_hours for t in by_mode.values()), 2),
+        approved_effective_hours=round(
+            sum(t.approved_effective_hours for t in by_mode.values()), 2
+        ),
+        completed_hours=round(sum(t.completed_hours for t in by_mode.values()), 2),
+        effective_pending=sum(t.effective_pending for t in by_mode.values()),
         recordings=sum(t.recordings for t in by_mode.values()),
         target_hours_per_day=sum(t.target_hours_per_day for t in by_mode.values()),
         today_hours=series[today].recorded_hours if today in series else 0.0,

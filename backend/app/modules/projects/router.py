@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.core.errors import forbidden
 from app.core.permissions import Perm
@@ -16,7 +16,7 @@ from app.db.paging import Page, PageNumber, PageSize
 from app.modules.audio_qc import checklist
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
 from app.modules.participants.models import MAX_AGE, MIN_AGE
-from app.modules.projects import service
+from app.modules.projects import progress, service, targets
 from app.modules.projects.models import (
     DEFAULT_REQUIRED_SPEAKER_DETAILS,
     DEFAULT_SPEAKER_MAX_AGE,
@@ -107,6 +107,30 @@ class RemindersIO(BaseModel):
     telephony: ReminderLines = []
 
 
+class AgeBandIO(BaseModel):
+    """One age band of the targets (D-148): ages from `from` up to, but not including, `to` (the
+    band that ends highest also takes `to`), and the percent of speakers wanted in it."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: int = Field(alias="from", ge=MIN_AGE, le=MAX_AGE)
+    to: int = Field(ge=MIN_AGE, le=MAX_AGE)
+    percent: int = Field(ge=0, le=100)
+
+
+class DistrictIO(BaseModel):
+    """A district the speakers should come from (D-148): a state of India and a district."""
+
+    state: str = Field(min_length=1, max_length=60)
+    district: str = Field(min_length=1, max_length=200)
+
+
+# Percents by gender (MALE, FEMALE) or by recording type (FACE_TO_FACE, TELEPHONY); {} = no
+# target. The service checks the keys and that they add up to 100 (422 INVALID_TARGETS).
+Shares = Annotated[dict[Annotated[str, Field(max_length=20)], int], Field(max_length=10)]
+ProgressCounts = Literal["EFFECTIVE", "FULL"]
+
+
 class ProjectSummary(BaseModel):
     id: uuid.UUID
     code: str
@@ -134,6 +158,16 @@ class ProjectDetail(ProjectSummary):
     qc_checklist: list[ChecklistItemIO]
     device_fields: list[str]
     recording_reminders: RemindersIO
+    pause_limit_seconds: int
+    long_pauses_need_review: bool
+    progress_counts: ProgressCounts
+    target_hours: TwoPlaces | None
+    target_speakers: int | None
+    target_conversations: int | None
+    target_age_bands: list[AgeBandIO]
+    target_gender: dict[str, int]
+    target_modes: dict[str, int]
+    target_districts: list[DistrictIO]
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -163,6 +197,16 @@ def detail(p: Project) -> ProjectDetail:
         qc_checklist=[ChecklistItemIO.model_validate(i) for i in p.qc_checklist],
         device_fields=list(p.device_fields),
         recording_reminders=RemindersIO.model_validate(p.recording_reminders),
+        pause_limit_seconds=p.pause_limit_seconds,
+        long_pauses_need_review=p.long_pauses_need_review,
+        progress_counts=p.progress_counts,
+        target_hours=p.target_hours,
+        target_speakers=p.target_speakers,
+        target_conversations=p.target_conversations,
+        target_age_bands=[AgeBandIO.model_validate(b) for b in p.target_age_bands],
+        target_gender=dict(p.target_gender),
+        target_modes=dict(p.target_modes),
+        target_districts=[DistrictIO.model_validate(d) for d in p.target_districts],
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -231,13 +275,41 @@ class ProjectBody(BaseModel):
         default=None, max_length=20
     )
     recording_reminders: RemindersIO | None = None
+    # Audio and progress (D-148), set on the Rules tab: a silent stretch inside the speech longer
+    # than this is a long pause; long pauses ask QC for a listen; what completed minutes count.
+    pause_limit_seconds: int = Field(
+        default=targets.DEFAULT_PAUSE_LIMIT_SECONDS,
+        ge=targets.PAUSE_LIMIT_RANGE[0],
+        le=targets.PAUSE_LIMIT_RANGE[1],
+    )
+    long_pauses_need_review: bool = False
+    progress_counts: ProgressCounts = "EFFECTIVE"
+    # Targets (D-148), set on the Rules tab; null = no target. The shares left out: a new project
+    # gets the first client's, and a change keeps the project's own.
+    target_hours: Decimal | None = Field(default=None, ge=0, le=1_000_000, decimal_places=2)
+    target_speakers: int | None = Field(
+        default=targets.DEFAULT_TARGET_SPEAKERS, ge=1, le=10_000_000
+    )
+    target_conversations: int | None = Field(
+        default=targets.DEFAULT_TARGET_CONVERSATIONS, ge=1, le=10_000_000
+    )
+    target_age_bands: list[AgeBandIO] | None = Field(default=None, max_length=targets.MAX_BANDS)
+    target_gender: Shares | None = None
+    target_modes: Shares | None = None
+    target_districts: list[DistrictIO] | None = Field(
+        default=None, max_length=targets.MAX_DISTRICTS
+    )
 
     def to_input(self) -> service.ProjectInput:
         values = self.model_dump()
         values["required_speaker_details"] = tuple(values["required_speaker_details"])
-        for name in ("qc_checklist", "device_fields"):
+        for name in ("qc_checklist", "device_fields", "target_districts"):
             if values[name] is not None:
                 values[name] = tuple(values[name])
+        if self.target_age_bands is not None:
+            values["target_age_bands"] = tuple(
+                b.model_dump(by_alias=True) for b in self.target_age_bands
+            )
         return service.ProjectInput(**values)
 
 
@@ -259,6 +331,15 @@ def create_project(
 @router.get("/{project_id}", response_model=ProjectDetail)
 def get_project(project_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession) -> ProjectDetail:
     return detail(service.get_visible(db, principal, project_id))
+
+
+@router.get("/{project_id}/progress", response_model=progress.Progress)
+def project_progress(
+    project_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
+) -> progress.Progress:
+    """The Progress tab (D-148): completed minutes, conversations and speakers against the
+    project's targets; for the people who manage the project (others 403, D-104)."""
+    return progress.progress(db, principal, project_id)
 
 
 @router.patch("/{project_id}", response_model=ProjectDetail)

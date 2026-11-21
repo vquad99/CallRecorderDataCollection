@@ -1,6 +1,7 @@
 // Test-only: one consistent fake backend for every page (Option C). Each test starts from
 // worldHandlers() and replaces only what it is about.
 import { CLIENT_REMINDERS } from "../features/projects/reminders";
+import { CLIENT_AGE_BANDS } from "../features/projects/targets";
 import type { Handler } from "./fakeApi";
 
 /** The device details a new project asks for each speaker (D-147). */
@@ -69,6 +70,17 @@ export const PROJECT = {
   // What the moderator fills and reads (D-147), as a new project starts.
   device_fields: [...DEVICE_FIELDS],
   recording_reminders: CLIENT_REMINDERS,
+  // Audio, progress and targets (D-148), as a new project starts.
+  pause_limit_seconds: 3,
+  long_pauses_need_review: false,
+  progress_counts: "EFFECTIVE",
+  target_hours: null as string | null,
+  target_speakers: 500,
+  target_conversations: 600,
+  target_age_bands: [...CLIENT_AGE_BANDS],
+  target_gender: { MALE: 50, FEMALE: 50 },
+  target_modes: { FACE_TO_FACE: 50, TELEPHONY: 50 },
+  target_districts: [] as { state: string; district: string }[],
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -488,6 +500,11 @@ export const DASHBOARD = {
   projects: [{ id: "p1", code: "HINDI", name: "Hindi conversations" }],
   recorded_hours: 12.5,
   approved_hours: 8,
+  // Effective speech and completed hours (D-148).
+  effective_hours: 9.4,
+  approved_effective_hours: 6,
+  completed_hours: 6,
+  effective_pending: 0,
   recordings: 30,
   target_hours_per_day: 4,
   today_hours: 1.5,
@@ -496,6 +513,9 @@ export const DASHBOARD = {
       mode: "FACE_TO_FACE",
       recorded_hours: 7.5,
       approved_hours: 5,
+      effective_hours: 5.6,
+      approved_effective_hours: 3.7,
+      completed_hours: 3.7,
       recordings: 18,
       target_hours_per_day: 2,
     },
@@ -503,6 +523,9 @@ export const DASHBOARD = {
       mode: "TELEPHONY",
       recorded_hours: 5,
       approved_hours: 3,
+      effective_hours: 3.8,
+      approved_effective_hours: 2.3,
+      completed_hours: 2.3,
       recordings: 12,
       target_hours_per_day: 2,
     },
@@ -511,6 +534,7 @@ export const DASHBOARD = {
     day: `2026-10-${String(i + 1).padStart(2, "0")}`,
     recorded_hours: (i % 5) * 0.4,
     approved_hours: (i % 5) * 0.25,
+    completed_hours: (i % 5) * 0.2,
   })),
   tasks_total: 40,
   tasks_approved: 22,
@@ -542,6 +566,101 @@ export const DASHBOARD = {
   },
   date_from: null,
   date_to: null,
+};
+
+const shareRow = (
+  key: string,
+  label: string,
+  count: number,
+  percent: number,
+  target: number | null,
+) => ({
+  key,
+  label,
+  count,
+  percent,
+  target_percent: target,
+  variance: target === null ? null : Math.round((percent - target) * 10) / 10,
+});
+
+/** A project's Progress tab (D-148): 3 approved conversations of 5 speakers, one of them without
+ * a gender, one conversation not measured yet. */
+export const PROGRESS = {
+  project_id: "p1",
+  pause_limit_seconds: 3,
+  completed: {
+    counts: "EFFECTIVE",
+    completed_ms: 660_000,
+    target_hours: 1,
+    percent_of_target: 18.3,
+    approved_conversations: 3,
+    approved_ms: 1_020_000,
+    approved_effective_ms: 660_000,
+    not_measured: 1,
+    recorded_conversations: 1,
+    recorded_ms: 60_000,
+    recorded_effective_ms: 30_000,
+    effective_share_pct: 71.9,
+  },
+  conversations: {
+    approved: 3,
+    target: 600,
+    percent_of_target: 0.5,
+    not_started: 0,
+    in_progress: 1,
+    waiting_qc: 1,
+    rejected: 1,
+    cancelled: 1,
+    by_status: { APPROVED: 3, AUDIO_QC: 1, IN_PROGRESS: 1, REJECTED: 1, CANCELLED: 1 },
+  },
+  speakers: {
+    with_approved: 5,
+    target: 500,
+    percent_of_target: 1,
+    registered: 6,
+    limit: 2,
+    at_limit: 4,
+  },
+  age_bands: {
+    basis: "speakers",
+    total: 5,
+    has_target: true,
+    rows: [
+      shareRow("20-30", "20-30", 2, 40, 40),
+      shareRow("30-40", "30-40", 1, 20, 30),
+      shareRow("40-50", "40-50", 1, 20, 20),
+      shareRow("50-60", "50-60", 1, 20, 10),
+    ],
+  },
+  gender: {
+    basis: "speakers",
+    total: 5,
+    has_target: true,
+    rows: [
+      shareRow("MALE", "Male", 2, 40, 50),
+      shareRow("FEMALE", "Female", 2, 40, 50),
+      shareRow("NOT_GIVEN", "Not given", 1, 20, null),
+    ],
+  },
+  modes: {
+    basis: "conversations",
+    total: 3,
+    has_target: true,
+    rows: [
+      shareRow("FACE_TO_FACE", "Face-to-face", 2, 66.7, 50),
+      shareRow("TELEPHONY", "Phone call", 1, 33.3, 50),
+    ],
+  },
+  districts: {
+    basis: "speakers",
+    total: 5,
+    has_target: true,
+    rows: [
+      shareRow("Goa|North Goa", "North Goa (Goa)", 2, 40, 12.5),
+      shareRow("Goa|South Goa", "South Goa (Goa)", 1, 20, 12.5),
+      shareRow("OTHER", "Other districts", 1, 20, null),
+    ],
+  },
 };
 
 export const ALL_PERMISSIONS = [
@@ -599,6 +718,7 @@ export function worldHandlers(): Record<string, Handler> {
       { user_id: "u3", email: "tara@example.org", display_name: "Tara", roles: ["QC_EXECUTIVE"] },
     ]),
     "GET /api/v1/projects/p1/participants": ok(page([PARTICIPANT, PARTICIPANT_B])),
+    "GET /api/v1/projects/p1/progress": ok(PROGRESS),
     "GET /api/v1/projects/p1/participants/a1/consent": ok([]),
     "GET /api/v1/projects/p1/participants/a1/documents": ok(NO_DOCUMENTS),
     "GET /api/v1/tasks": ok(page([TASK])),

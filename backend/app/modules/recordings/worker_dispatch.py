@@ -70,8 +70,26 @@ def recover(app: FastAPI) -> int:
     check_pending_audio(app)
     fetch_call_recordings(app)
     sweep_exports(app)
+    fill_effective_speech(app)
     check_operations(app)
     return len(stalled)
+
+
+def fill_effective_speech(app: FastAPI) -> int:
+    """Measure the effective speech of a few files made before D-148 (audio_qc/speech.py)."""
+    from app.modules.audio_qc import speech
+
+    try:
+        with app.state.session_factory() as db:
+            done = speech.backfill(db, app.state.storage, app.state.settings, speech.SWEEP_BATCH)
+    except Exception:
+        logger.exception("effective_speech_backfill_failed")
+        return 0
+    if done.done:
+        logger.info(
+            "effective_speech_backfilled", extra={"measured": done.measured, "failed": done.failed}
+        )
+    return done.done
 
 
 def fetch_call_recordings(app: FastAPI) -> int:
