@@ -57,9 +57,16 @@ def test_a_project_exports_its_recordings_and_a_progress_report(world: dict[str,
     assert rows[0]["approved_at"]
 
     # Who may export: the project's admin and client viewer; not its moderator; no other project.
+    # The client's delivery format holds speaker details, which a client viewer does not see
+    # (D-143): they export in the platform's layout only (D-149).
     assert world["mod"].get(f"{base}/export/summary").status_code == 403
     make_user(world["db"], "cv@example.org", ["CLIENT_VIEWER"], projects=[world["project"]])
     client = world["api"]("cv@example.org")
+    refused = client.get(f"{base}/export/summary")
+    assert refused.status_code == 403
+    assert "client's delivery format" in refused.json()["error"]["message"]
+    world["project"].export_layout = "PLATFORM"
+    world["db"].commit()
     assert client.get(f"{base}/export/summary").json()["recordings"] == 1
     make_user(world["db"], "pa.other@example.org", ["PROJECT_ADMIN"])
     outsider = world["api"]("pa.other@example.org")

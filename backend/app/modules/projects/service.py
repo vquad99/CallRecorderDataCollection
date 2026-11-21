@@ -20,7 +20,7 @@ from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import RoleRecord, User, UserRole
 from app.modules.participants import speakers
-from app.modules.projects import moderation, targets
+from app.modules.projects import delivery, moderation, targets
 from app.modules.projects.models import (
     DEFAULT_REQUIRED_SPEAKER_DETAILS,
     DEFAULT_SPEAKER_MAX_AGE,
@@ -168,9 +168,29 @@ class ProjectInput:
     target_gender: dict[str, Any] | None = None
     target_modes: dict[str, Any] | None = None
     target_districts: tuple[dict[str, Any], ...] | None = None
+    # How exports are laid out and named (D-149, projects/delivery.py): None keeps the project's
+    # own (a new project gets the client's delivery format). Exports already made stay as made.
+    export_layout: str | None = None
+    speaker_id_style: str | None = None
+    conversation_id_style: str | None = None
+    audio_name_pattern: str | None = None
 
 
-# Settings a PATCH that leaves them out keeps (D-146, D-147, D-148), with how each is checked.
+def _one_of(choices: tuple[str, ...]) -> Callable[[Any], object]:
+    """A choice the API has already held to these values (a Literal), kept as it is."""
+
+    def clean(value: Any) -> object:
+        if value not in choices:
+            raise AppError(
+                f"Choose one of: {', '.join(choices)}", code="VALIDATION_ERROR", status_code=422
+            )
+        return value
+
+    return clean
+
+
+# Settings a PATCH that leaves them out keeps (D-146, D-147, D-148, D-149), with how each is
+# checked.
 _KEPT_WHEN_LEFT_OUT: dict[str, Callable[[Any], object]] = {
     "qc_checklist": checklist.clean,
     "device_fields": moderation.clean_device_fields,
@@ -179,6 +199,10 @@ _KEPT_WHEN_LEFT_OUT: dict[str, Callable[[Any], object]] = {
     "target_gender": targets.clean_gender,
     "target_modes": targets.clean_modes,
     "target_districts": targets.clean_districts,
+    "export_layout": _one_of(delivery.EXPORT_LAYOUTS),
+    "speaker_id_style": _one_of(delivery.SPEAKER_ID_STYLES),
+    "conversation_id_style": _one_of(delivery.CONVERSATION_ID_STYLES),
+    "audio_name_pattern": delivery.clean_audio_name_pattern,
 }
 # Long settings an audit entry carries only when they changed.
 _AUDITED_WHEN_CHANGED = (
@@ -193,8 +217,8 @@ def _values(data: ProjectInput) -> dict[str, object]:
     """The project's columns from the input, checked (D-145): the youngest age is not above the
     oldest, and the required details are known ones, each once, in the form's order; the QC
     checklist's items are well formed (D-146), the device details known ones and the reminders
-    within their limits (D-147), the targets' shares add up (D-148). A setting of
-    _KEPT_WHEN_LEFT_OUT left out is not among them."""
+    within their limits (D-147), the targets' shares add up (D-148), the audio file name is made of
+    known tokens (D-149). A setting of _KEPT_WHEN_LEFT_OUT left out is not among them."""
     if data.speaker_min_age > data.speaker_max_age:
         raise AppError(
             f"The youngest speaker age ({data.speaker_min_age}) is above the oldest "
@@ -262,6 +286,10 @@ def _snapshot(p: Project) -> dict[str, object]:
         "target_gender": dict(p.target_gender),
         "target_modes": dict(p.target_modes),
         "target_districts": list(p.target_districts),
+        "export_layout": p.export_layout,
+        "speaker_id_style": p.speaker_id_style,
+        "conversation_id_style": p.conversation_id_style,
+        "audio_name_pattern": p.audio_name_pattern,
     }
 
 
@@ -311,6 +339,10 @@ def create_project(
         "target_gender": dict(targets.DEFAULT_TARGET_GENDER),
         "target_modes": dict(targets.DEFAULT_TARGET_MODES),
         "target_districts": [],
+        "export_layout": delivery.DEFAULT_EXPORT_LAYOUT,
+        "speaker_id_style": delivery.DEFAULT_SPEAKER_ID_STYLE,
+        "conversation_id_style": delivery.DEFAULT_CONVERSATION_ID_STYLE,
+        "audio_name_pattern": delivery.DEFAULT_AUDIO_NAME_PATTERN,
         **_values(data),
     }
     project = Project(

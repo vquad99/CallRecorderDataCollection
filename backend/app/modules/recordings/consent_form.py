@@ -164,4 +164,38 @@ def render(db: Session, rec: Recording, task: Task, project: Project) -> str:
     return html
 
 
-__all__ = ["build", "render"]
+def render_speaker(
+    db: Session, project: Project, participant_id: uuid.UUID, speaker_id: str, code: str
+) -> str | None:
+    """One speaker's online consent record in the project (D-149, the client's delivery format):
+    their own answers on the project's consent form, each with the form text, its version and the
+    time. None when they have no answer on record. By speaker ID and code only."""
+    answers = list(
+        db.scalars(
+            select(ConsentRecord)
+            .where(
+                ConsentRecord.project_id == project.id,
+                ConsentRecord.participant_id == participant_id,
+                ConsentRecord.is_own_answer,
+            )
+            .order_by(ConsentRecord.created_at)
+        )
+    )
+    if not answers:
+        return None
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f"<title>Consent record of speaker {escape(speaker_id)}</title><style>{CSS}</style>"
+        f"</head><body><h1>Consent record of speaker {escape(speaker_id)}</h1><table>"
+        + _row("Project", f"{project.code} - {project.name}")
+        + _row("Speaker ID", speaker_id)
+        + _row("Participant", code)
+        + _row("Current form version", project.consent_policy_version)
+        + "</table><h2>The speaker's own answers on the consent form</h2>"
+        + _events(answers, own=True)
+        + f'<p class="foot">Generated {_when(datetime.now(UTC))} from the consent records held by '
+        "Conversation Collection. The speaker is shown by ID and code only.</p></body></html>"
+    )
+
+
+__all__ = ["build", "render", "render_speaker"]

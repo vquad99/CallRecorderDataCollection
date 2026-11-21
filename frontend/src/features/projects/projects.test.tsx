@@ -25,12 +25,22 @@ const TARGETS = {
   target_districts: PROJECT.target_districts,
 };
 
+/** How exports are laid out and named (D-149), as a new project starts. */
+const DELIVERY = {
+  export_layout: PROJECT.export_layout,
+  speaker_id_style: PROJECT.speaker_id_style,
+  conversation_id_style: PROJECT.conversation_id_style,
+  audio_name_pattern: PROJECT.audio_name_pattern,
+};
+
 const SUMMARY = {
   recordings: 3,
   face_to_face: 2,
   telephony: 1,
   audio_bytes: 240_000_000,
   file_name: "audio_HINDI_20261111_0900.zip",
+  layout: "CLIENT",
+  missing: 0,
 };
 const JOB = {
   id: "x1",
@@ -42,6 +52,7 @@ const JOB = {
   file_name: "audio_HINDI_20261111_0900.zip",
   recordings: 3,
   files: 12,
+  missing: 0,
   size_bytes: 240_000_000,
   sha256: "ab".repeat(32),
   error: null,
@@ -78,6 +89,7 @@ const project = {
   device_fields: PROJECT.device_fields,
   recording_reminders: PROJECT.recording_reminders,
   ...TARGETS,
+  ...DELIVERY,
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "Awadhi" }],
@@ -166,6 +178,7 @@ describe("project detail", () => {
         device_fields: project.device_fields, // D-147: and what the moderator fills and reads
         recording_reminders: project.recording_reminders,
         ...TARGETS, // D-148: and the audio, progress and target settings
+        ...DELIVERY, // D-149: and how exports are laid out and named
       }),
     );
   });

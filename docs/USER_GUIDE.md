@@ -301,6 +301,21 @@ the Rules tab have them too. Every change is saved in the audit log with the pro
     (12.5 % each for 8). **Add district** adds one; the bin removes one.
   The line under a wrong list says what is wrong (for example "The percents add up to 90, not
   100."), and **Save rules** waits until it is right.
+- **Export**: how the project's exports are laid out and named (see **Export a project**).
+  - **Layout of an export**: **The client's delivery format** (at the start, for every project)
+    or **The platform's own layout** (a folder per kind of recording with each recording's details
+    file and consent record, as before).
+  - **Speaker IDs**: **Number (P000123 is 123)** (at the start; at least 3 digits, so P000007 is
+    007) or **Participant code (P000123)**.
+  - **Conversation IDs**: **CON and number (T000045 is CON045)** (at the start) or **Task code
+    (T000045)**.
+  - **Audio file name**: made of `{a}` and `{b}` (the two speakers' IDs), `{a_pin}` and
+    `{b_pin}` (their native PIN codes) and `{conversation}` (the conversation ID), with letters,
+    digits, `_` and `-` between them. It starts as the client's
+    `{a}_{b}_{a_pin}_{b_pin}_{conversation}`. It must hold `{conversation}`, so every name is
+    unique. The line under it shows an example, such as "e.g. 001_002_570001_576101_CON001.wav".
+  - **Reset to the client's format** puts all four back.
+  Exports already prepared keep the layout they were made in.
 
 Tasks made before a change stay as they are.
 
@@ -815,7 +830,10 @@ page). A bar appears with:
 
 Open the project and click the **Export** tab (Super Admin and Project Admin).
 
-**Recordings** are exported as one ZIP, prepared in the background:
+**Recordings** are exported as one ZIP, prepared in the background. Under **Recordings** the page
+says which layout the ZIP takes: **the client's delivery format** (every project starts with it)
+or **the platform's own layout**, with an example audio file name and a link to change it on the
+**Rules** tab (card **Export**).
 
 1. Choose **What to export**: **Audio + metadata**, **Audio only** or **Metadata only**.
 2. Choose **Which recordings**: **Approved tasks only** (the delivery) or **Every finished
@@ -825,16 +843,39 @@ Open the project and click the **Export** tab (Super Admin and Project Admin).
 4. Optional: **Also include the original recordings** (as recorded, before any processing; much
    larger). Super Admin only: **Also include names, phone numbers and email addresses**. Without
    it, participants appear by code only.
-5. The page shows how many recordings fit and how much audio. Click **Prepare export**.
+5. The page shows how many recordings fit and how much audio, and in the client's format how
+   many values and files are not on file ("3 items missing", or "Nothing missing"). Click
+   **Prepare export**. A missing piece never stops the export; the list is in `MISSING.csv`.
 6. The export appears under **Prepared exports**: **Waiting**, **Being prepared**, then **Ready**.
    The page checks by itself; you can leave it and come back.
 7. Click **Download**. The link works for 5 minutes; click again for a new one. A prepared
    export is kept for 24 hours, then removed. **Remove** takes it away sooner.
 
 If an export shows **Failed**, the reason is written under its name. Prepare it again; if it
-fails again, tell the Super Admin.
+fails again, tell the Super Admin. A prepared export in the client's format also shows how many
+items it is missing, under the number of recordings.
 
-What is in the ZIP:
+**What is in the ZIP in the client's delivery format** (the example: speakers P000001 and
+P000002 with native PIN codes 570001 and 576101, tasks T000001 by phone and T000002 face to face):
+
+| Folder or file | What it is |
+|---|---|
+| `face_to_face/audio/`, `telephonic/audio/` | The 16 kHz WAV of each recording, named as the **Audio file name** says: `001_002_570001_576101_CON002.wav`. `originals/` beside it, if asked for |
+| `face_to_face/metadata/`, `telephonic/metadata/` | One file per speaker of each conversation, `001_CON002_570001_METADATA.json`: speaker ID, device make and model, call type (Telephonic or Face-to-face), Bluetooth earphones, wired earphones, loudspeaker (Yes or No), then that speaker's QC answers (Yes or No) under the checklist keys, from the newest QC decision |
+| `speakers/` | Once per speaker: `001_570001_METADATA.json` (age, gender, where they live, native state, district, language and PIN code, education and its medium, where they were recorded), `001_consent.pdf` (the signed consent form as uploaded; a scan uploaded as a photo stays `.jpg` or `.png`; in an Online project, or without a signed form, the speaker's online consent record, `001_consent.html`), `001_speaker_proof.pdf` (the address proof as uploaded) |
+| `SPEAKER_METADATA_README.json` | What each key of the metadata files means |
+| `MISSING.csv` | Everything not on file, a line each: speaker ID, participant code, conversation ID, task code, what is missing and why (for example "No address proof uploaded", "Not filled" for device details, "No QC decision with checklist answers yet") |
+| `recordings.csv` or `.tsv`, `recordings.json` | One row per recording, with its conversation ID, both speaker IDs and their files |
+| `participants.csv` or `.tsv` | The speakers, by code and speaker ID, with their files |
+| `manifest.json`, `manifest.csv`, `SHA256SUMS`, `schema/`, `README.txt` | As below |
+
+**Audio only** holds the audio folders and the tables; **Metadata only** has no audio. In the
+JSON files a value not on file is empty (`""`), and a native PIN code not on file is `000000` in
+file names; both are listed in `MISSING.csv`. The client's files hold no names, phone numbers or
+email addresses. They do hold the speakers' age, gender and PIN codes, so only the project's
+admins prepare and download an export in this format (a Client Viewer cannot).
+
+**What is in the ZIP in the platform's own layout:**
 
 | Folder or file | What it is |
 |---|---|

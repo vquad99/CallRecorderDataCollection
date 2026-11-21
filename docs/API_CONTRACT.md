@@ -80,7 +80,7 @@ code in each phase; this file lists the planned surface so the traceability tabl
 |---|---|---|
 | GET | /projects | member. Newest first (D-105) |
 | POST | /projects | `projects.create` |
-| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138). Includes `max_conversations_per_speaker` (1 to 1000, default 3, null = no limit) and `unique_pairs` (default true); POST and PATCH take them (D-143). Includes `consent_mode` (`ONLINE`, default, or `UPLOAD`); POST and PATCH take it, audited with the project (D-144). Includes `speaker_min_age`, `speaker_max_age` (1 to 120, defaults 20 and 60) and `required_speaker_details` (default every speaker detail); POST and PATCH take them (D-145, below). Includes `qc_checklist`, the QC checklist (D-146, below; a PATCH that leaves it out keeps it). Includes `device_fields` and `recording_reminders`, what the moderator fills and reads (D-147, below; a PATCH that leaves them out keeps them). Includes the audio and progress settings and the targets (D-148, below) |
+| GET, PATCH | /projects/{id} | member / `projects.manage`. Includes `qc_final_approval` (default false; PATCH takes it): a QC pass approves the task with no admin review (D-138). Includes `max_conversations_per_speaker` (1 to 1000, default 3, null = no limit) and `unique_pairs` (default true); POST and PATCH take them (D-143). Includes `consent_mode` (`ONLINE`, default, or `UPLOAD`); POST and PATCH take it, audited with the project (D-144). Includes `speaker_min_age`, `speaker_max_age` (1 to 120, defaults 20 and 60) and `required_speaker_details` (default every speaker detail); POST and PATCH take them (D-145, below). Includes `qc_checklist`, the QC checklist (D-146, below; a PATCH that leaves it out keeps it). Includes `device_fields` and `recording_reminders`, what the moderator fills and reads (D-147, below; a PATCH that leaves them out keeps them). Includes the audio and progress settings and the targets (D-148, below). Includes `export_layout`, `speaker_id_style`, `conversation_id_style` and `audio_name_pattern`: how exports are laid out and named (D-149, below; a PATCH that leaves them out keeps them) |
 | GET | /projects/{id}/progress | `projects.manage` in the project (others 403; a project the caller cannot see 404). The Progress tab (D-148, below) |
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062) |
@@ -213,15 +213,15 @@ reports are one table each.
 
 | Method | Path | What |
 |---|---|---|
-| GET | /projects/{id}/export/summary | `?content=audio/metadata/both&scope=approved/finished&mode&language&recorded_from&recorded_to&originals`: `{recordings, face_to_face, telephony, audio_bytes, file_name}` for that choice. 422 for a choice that makes no sense (unknown language, days the wrong way round, originals with metadata only) |
+| GET | /projects/{id}/export/summary | `?content=audio/metadata/both&scope=approved/finished&mode&language&recorded_from&recorded_to&originals`: `{recordings, face_to_face, telephony, audio_bytes, file_name, layout, missing}` for that choice: `layout` is the project's (`CLIENT` or `PLATFORM`, D-149) and `missing` how many values and files a bundle in the client's format would not have (its `MISSING.csv` rows; 0 in the platform's layout). 422 for a choice that makes no sense (unknown language, days the wrong way round, originals with metadata only) |
 | GET | /projects/{id}/export | `?content=progress/participants&format=csv/tsv`: one report as a table, as an attachment. Audited as `project.exported` |
-| POST | /projects/{id}/exports | `{content, scope, table_format, mode?, language?, recorded_from?, recorded_to?, originals?, contact?}`: 202 with the job (`QUEUED`). `originals` needs `projects.manage` and `contact` needs `participants.export` (403). 422 `NOTHING_TO_EXPORT`, `TOO_LARGE` (more than 5000 recordings); 409 `TOO_MANY_EXPORTS` (3 open per project). Audited as `export.requested` |
+| POST | /projects/{id}/exports | `{content, scope, table_format, mode?, language?, recorded_from?, recorded_to?, originals?, contact?}`: 202 with the job (`QUEUED`). `originals` needs `projects.manage` and `contact` needs `participants.export` (403). 422 `NOTHING_TO_EXPORT`, `TOO_LARGE` (more than 5000 recordings); 409 `TOO_MANY_EXPORTS` (3 open per project). The bundle takes the project's layout (D-149), kept in the job's `filters.layout`; in the client's format it needs `participants.manage` too (403, below). Audited as `export.requested` (with `missing`) |
 | GET | /projects/{id}/exports | `?page&page_size` (max 50), newest first |
-| GET | /projects/{id}/exports/{job_id} | The job: `state` (QUEUED, RUNNING, READY, FAILED, EXPIRED), `recordings`, `files`, `size_bytes`, `sha256`, `error`, `expires_at`, `downloads`, `requested_by` |
+| GET | /projects/{id}/exports/{job_id} | The job: `state` (QUEUED, RUNNING, READY, FAILED, EXPIRED), `recordings`, `files`, `missing` (D-149: counted when asked for, again when made), `size_bytes`, `sha256`, `error`, `expires_at`, `downloads`, `requested_by` |
 | POST | /projects/{id}/exports/{job_id}/download-link | `{url, valid_seconds, file_name, sha256}`: a link that works for `SIGNED_URL_SECONDS` (300). The caller must be allowed to ask for the job's own choice (403). 409 `EXPORT_NOT_READY`, `EXPORT_EXPIRED`. Audited as `export.download_link` |
 | DELETE | /projects/{id}/exports/{job_id} | Takes a READY bundle out of storage now, or withdraws a QUEUED one (state `EXPIRED`); 409 while it is being made. Audited as `export.removed` |
 
-A bundle holds `face_to_face/` and `telephony/` (each with `audio/`, `originals/` when asked for,
+In the platform's layout (`PLATFORM`; the client's format is D-149's, below) a bundle holds `face_to_face/` and `telephony/` (each with `audio/`, `originals/` when asked for,
 `metadata/`, `consent/`), `recordings.csv` or `.tsv`, `recordings.json`, `participants.csv` or
 `.tsv`, `schema/` (JSON Schemas: `ccp.export-recordings/1`, `ccp.export-manifest/1`,
 `ccp.recording-metadata/1`), `README.txt`, `manifest.json`, `manifest.csv` and `SHA256SUMS`.
@@ -232,7 +232,44 @@ One task's bundle (D-136):
 
 | Method | Path | What |
 |---|---|---|
-| GET | /tasks/{id}/export | `exports.create` in the task's project and the task visible (Super Admin, Project Admin). A ZIP attachment made at once: the same folders and tables as a bundle above, for this task's current recording only (audio + metadata, approved tasks, CSV); name `both_<project>_<task>_<YYYYMMDD_HHMM>.zip`. 409 `TASK_NOT_APPROVED` before the task is approved, `NOTHING_TO_EXPORT` without a finished recording, `EXPORT_FAILED` when a stored file no longer matches its checksum; 503 without storage, and 503 `BUSY` when two are already being made in this server process (D-142). Audited as `task.exported` |
+| GET | /tasks/{id}/export | `exports.create` in the task's project and the task visible (Super Admin, Project Admin). A ZIP attachment made at once: the same folders and tables as a bundle above, in the project's layout (D-149), for this task's current recording only (audio + metadata, approved tasks, CSV); name `both_<project>_<task>_<YYYYMMDD_HHMM>.zip`. 409 `TASK_NOT_APPROVED` before the task is approved, `NOTHING_TO_EXPORT` without a finished recording, `EXPORT_FAILED` when a stored file no longer matches its checksum; 503 without storage, and 503 `BUSY` when two are already being made in this server process (D-142). Audited as `task.exported` |
+
+## The client's delivery format (D-149)
+
+How a project's exports are laid out and named, on `GET`, `POST` and `PATCH /projects/{id}`, audited with the project (`project.updated`). The Rules tab's card **Export** edits them. Like `qc_checklist`, a PATCH that leaves one out (or sends null) keeps the project's own; a new project, and every project at migration 0039, gets the client's.
+
+| Field | Value |
+|---|---|
+| `export_layout` | `CLIENT` (default): the client's delivery format below; `PLATFORM`: the platform's layout above (D-105), unchanged |
+| `speaker_id_style` | `NUMBER` (default): the participant code's number, at least 3 digits (P000123 is `123`, P000007 is `007`); `CODE`: the code (`P000123`) |
+| `conversation_id_style` | `CON_NUMBER` (default): `CON` and the task code's number, at least 3 digits (T000045 is `CON045`); `CODE`: the task code |
+| `audio_name_pattern` | default `{a}_{b}_{a_pin}_{b_pin}_{conversation}`: the two speakers' IDs (A, B), their native PIN codes and the conversation ID; `.wav` is added. Only those tokens, letters, digits, `_` and `-` between them, at most 100 characters, and it must hold `{conversation}` (every name unique), else 422 `INVALID_AUDIO_NAME_PATTERN` ("The audio file name needs {conversation}, so that every name is unique", `details[0].field`); spaces around it are dropped. A wrong layout or style: 422 `VALIDATION_ERROR` |
+
+A bundle (any content) and one task's ZIP in the client's format hold:
+
+```
+face_to_face/audio/001_002_570001_576101_CON002.wav     the delivery WAV, named by audio_name_pattern
+face_to_face/originals/...                              when asked for (projects.manage)
+face_to_face/metadata/001_CON002_570001_METADATA.json   per speaker of each conversation
+telephonic/audio/, telephonic/originals/, telephonic/metadata/   the same for phone calls
+speakers/001_570001_METADATA.json                       per speaker: <speaker ID>_<native PIN>_METADATA.json
+speakers/001_consent.pdf                                the signed form as uploaded (.pdf, .jpg, .png), or
+speakers/002_consent.html                               the speaker's online consent record
+speakers/001_speaker_proof.jpg                          the address proof as uploaded (.pdf, .jpg, .png)
+SPEAKER_METADATA_README.json                            each key's meaning
+MISSING.csv                                             what is not on file
+recordings.csv (.tsv), recordings.json, participants.csv (.tsv), schema/, README.txt,
+manifest.json, manifest.csv, SHA256SUMS
+```
+
+`audio` has no metadata files, `speakers/` or `SPEAKER_METADATA_README.json`; `metadata` has no audio. No transcript folders. JSON files are UTF-8 with lowercase keys and text values (`""` when not on file):
+
+- speaker file (`ccp.speaker-metadata/1`): `speaker_id`, `age` ("29"), `gender` ("male", "female"), `current_residing_district`, `current_residing_state`, `current_residing_pincode`, `native_state`, `native_district`, `native_language`, `native_pincode`, `educational_background` ("Primary School", "Secondary School", "Higher Secondary", "Diploma", "Bachelor's Degree", "Master's Degree", "PhD", "Other"), `medium_of_education` ("English", "Non-English"), `speaker_state_during_recording`, `speaker_district_during_recording`, `speaker_pincode_during_recording`;
+- speaker of a conversation (`ccp.speaker-conversation-metadata/1`): `speaker_id`, `device_make`, `device_model`, `call_type` ("Telephonic", "Face-to-face"), `is_bluetooth_earphones_used`, `if_wired_earphones_used`, `is_loudspeaker_switched_on` ("Yes", "No"), then the speaker's QC answers ("Yes", "No") under the checklist keys of the recording's newest QC decision with answers (its snapshot, D-146; without one, the project's speaker questions, empty).
+
+A consent form: in an `UPLOAD` project the current signed form as uploaded; otherwise, or without one, the speaker's own answers on the project's consent form as an HTML record (by speaker ID and code). Documents keep their real extension (no image-to-PDF conversion) and are checked against their SHA-256 like audio. A native PIN code not on file is `000000` in file names. `MISSING.csv` (`speaker_id, participant_code, conversation_id, task_code, item, detail`) lists every value and file not on file; `item` is the client's key or `consent`, `speaker_proof`, `device_details`, `qc_answers`, `audio`. `recordings` rows carry `conversation_id`, `speaker_a_id`, `speaker_b_id`, `speaker_a_metadata_file`, `speaker_b_metadata_file` instead of `metadata_file` and `consent_file` (`ccp.export-recordings-client/1`); `participants` rows carry `speaker_id`, `metadata_file`, `consent_file`, `proof_file`; the manifest's `counts.missing` and `selection.layout`. No name, phone number or email address in the client's files.
+
+**Who.** The format holds speaker details, which only people with `participants.manage` in the project see (D-143). In a `CLIENT` project `GET .../export/summary`, `POST .../exports` and `GET /tasks/{id}/export` answer 403 to anyone else with `exports.create` (a Client Viewer): "This project's exports use the client's delivery format, which holds speaker details (age, gender, PIN codes). Only people who may see speaker details (the project's admins) can prepare or download them." The download link of a job made in the client's format (`filters.layout` `CLIENT`) is refused the same way, whatever the project's layout now. Listing, reading and removing jobs are as before.
 
 ## Payments (D-137)
 

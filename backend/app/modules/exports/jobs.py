@@ -62,6 +62,7 @@ def create(
     ip: str | None,
 ) -> ExportJob:
     project = _project(db, principal, project_id)
+    sel = bundle.for_project(sel, project)  # laid out as the project says (D-149)
     bundle.check(db, principal, project, sel)
     entries = bundle.select_entries(db, project, sel, settings.report_timezone)
     if not entries:
@@ -90,6 +91,7 @@ def create(
         state="QUEUED",
         file_name=bundle.file_name(project, sel),
         recordings=len(entries),
+        missing=bundle.missing_count(db, project, sel, entries),
     )
     db.add(job)
     db.flush()
@@ -101,7 +103,7 @@ def create(
         project_id=project.id,
         actor_id=principal.user_id,
         ip=ip,
-        after={**sel.as_filters(), "recordings": len(entries)},
+        after={**sel.as_filters(), "recordings": len(entries), "missing": job.missing},
     )
     db.commit()
     return job
@@ -304,6 +306,7 @@ def run(
     done.size_bytes = size
     done.recordings = made.recordings
     done.files = len(made.written) + 1  # and SHA256SUMS
+    done.missing = made.missing
     done.finished_at = finished
     done.expires_at = finished + timedelta(hours=settings.export_bundle_hours)
     db.commit()

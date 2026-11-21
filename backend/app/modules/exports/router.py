@@ -45,6 +45,10 @@ class ExportSummary(BaseModel):
     telephony: int
     audio_bytes: int
     file_name: str
+    # The project's layout (D-149): CLIENT (the client's delivery format) or PLATFORM; in the
+    # client's format, how many values and files are not on file (the rows of MISSING.csv).
+    layout: str
+    missing: int
 
 
 class ExportRequest(BaseModel):
@@ -72,6 +76,7 @@ class ExportJobOut(BaseModel):
     file_name: str
     recordings: int
     files: int
+    missing: int
     size_bytes: int
     sha256: str | None
     error: str | None
@@ -105,6 +110,7 @@ def _out(job: ExportJob, requested_by: str | None) -> ExportJobOut:
         file_name=job.file_name,
         recordings=job.recordings,
         files=job.files,
+        missing=job.missing,
         size_bytes=job.size_bytes,
         sha256=job.sha256,
         error=job.error,
@@ -131,7 +137,8 @@ def summary(
     recorded_to: date | None = None,
     originals: bool = False,
 ) -> ExportSummary:
-    """What a bundle would hold, before asking for it."""
+    """What a bundle would hold, before asking for it: in the project's layout (D-149), with what
+    a bundle in the client's format would miss."""
     project = get_visible_project(db, principal, project_id)
     sel = bundle.Selection(
         content=content,
@@ -141,6 +148,7 @@ def summary(
         recorded_from=recorded_from,
         recorded_to=recorded_to,
         originals=originals,
+        layout=project.export_layout,
     )
     bundle.check(db, principal, project, sel)
     entries = bundle.select_entries(db, project, sel, settings.report_timezone)
@@ -150,6 +158,8 @@ def summary(
         telephony=sum(1 for e in entries if e.mode == "TELEPHONY"),
         audio_bytes=bundle.audio_bytes(sel, entries),
         file_name=bundle.file_name(project, sel),
+        layout=sel.layout,
+        missing=bundle.missing_count(db, project, sel, entries),
     )
 
 

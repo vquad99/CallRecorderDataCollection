@@ -27,7 +27,7 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.modules.audio_qc.checklist import DEFAULT_QC_CHECKLIST
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.participants.speakers import FIELDS as SPEAKER_FIELDS
-from app.modules.projects import targets
+from app.modules.projects import delivery, targets
 from app.modules.projects.moderation import DEFAULT_DEVICE_FIELDS, DEFAULT_RECORDING_REMINDERS
 from app.modules.recordings.models import ASSET_KINDS
 
@@ -110,6 +110,17 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("jsonb_typeof(target_gender) = 'object'", name="target_gender_object"),
         CheckConstraint("jsonb_typeof(target_modes) = 'object'", name="target_modes_object"),
         CheckConstraint("jsonb_typeof(target_districts) = 'array'", name="target_districts_list"),
+        # D-149: how exports are laid out and named.
+        CheckConstraint(
+            _in("export_layout", delivery.EXPORT_LAYOUTS), name="export_layout_allowed"
+        ),
+        CheckConstraint(
+            _in("speaker_id_style", delivery.SPEAKER_ID_STYLES), name="speaker_id_style_allowed"
+        ),
+        CheckConstraint(
+            _in("conversation_id_style", delivery.CONVERSATION_ID_STYLES),
+            name="conversation_id_style_allowed",
+        ),
     )
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -204,6 +215,23 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     target_districts: Mapped[list[dict[str, str]]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    # How exports are laid out and named (D-149, projects/delivery.py): the client's delivery
+    # format (CLIENT) or the platform's own (PLATFORM); speaker and conversation IDs as numbers
+    # (001, CON045) or as codes; and the audio file name, made of tokens.
+    export_layout: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=delivery.DEFAULT_EXPORT_LAYOUT
+    )
+    speaker_id_style: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=delivery.DEFAULT_SPEAKER_ID_STYLE
+    )
+    conversation_id_style: Mapped[str] = mapped_column(
+        String(12), nullable=False, server_default=delivery.DEFAULT_CONVERSATION_ID_STYLE
+    )
+    audio_name_pattern: Mapped[str] = mapped_column(
+        String(delivery.MAX_AUDIO_NAME_PATTERN),
+        nullable=False,
+        server_default=delivery.DEFAULT_AUDIO_NAME_PATTERN,
     )
     status_reason: Mapped[str | None] = mapped_column(Text)
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,7 +1,9 @@
 // A project's Export tab (D-094, D-105): reports as one table (CSV or TSV), and recordings as a
 // bundle that is prepared in the background, listed here with its state, and downloaded through a
-// link that works for a few minutes.
+// link that works for a few minutes. A bundle is laid out as the project's Rules tab says (D-149):
+// the client's delivery format, with what is not on file counted, or the platform's own layout.
 import { useState } from "react";
+import { Link } from "react-router";
 
 import { apiBase } from "../../api/client";
 import * as api from "../../api/projects";
@@ -21,6 +23,7 @@ import { useResource } from "../../hooks/useResource";
 import { plural, when } from "../../lib/format";
 import { labelFor, MODE_LABELS } from "../../lib/labels";
 import { languageLabel } from "./choices";
+import { exampleAudioName } from "./delivery";
 import { useProject } from "./ProjectDetailPage";
 import "./export.css";
 
@@ -74,6 +77,9 @@ const CONTENT_WORDS: Record<string, string> = {
 };
 const POLL_MS = 3000;
 
+/** "3 items missing" in the client's delivery format (the rows of its MISSING.csv). */
+const missingWords = (n: number) => `${n} ${n === 1 ? "item" : "items"} missing`;
+
 const megabytes = (n: number) =>
   n >= 1e9
     ? `about ${(n / 1e9).toFixed(1)} GB`
@@ -85,6 +91,7 @@ const megabytes = (n: number) =>
 function chosen(job: api.ExportJob): string {
   const f = job.filters;
   return [
+    f.layout === "CLIENT" ? "Client's format" : null,
     CONTENT_WORDS[job.content] ?? job.content,
     job.scope === "approved" ? "approved tasks" : "every finished recording",
     f.mode ? labelFor(MODE_LABELS, f.mode) : null,
@@ -132,6 +139,39 @@ function Reports({ projectId }: { projectId: string }) {
   );
 }
 
+/** Which layout a bundle of this project takes (D-149), with the way to change it. */
+function LayoutNote() {
+  const { project } = useProject();
+  const client = project.export_layout === "CLIENT";
+  const example = exampleAudioName(
+    project.audio_name_pattern,
+    project.speaker_id_style,
+    project.conversation_id_style,
+  );
+  return (
+    <p className="export__layout">
+      <Icon name="info" size={18} />
+      <span>
+        {client ? (
+          <>
+            Laid out in the <strong>client&apos;s delivery format</strong>: face_to_face/ and
+            telephonic/ audio named like <span className="mono">{example}</span>, a metadata file
+            per speaker and per speaker of each conversation, consent forms and address proofs under
+            speakers/, and MISSING.csv listing what is not on file.
+          </>
+        ) : (
+          <>
+            Laid out in the <strong>platform&apos;s own layout</strong>: a folder for face-to-face
+            recordings and one for phone calls, with each recording&apos;s details file and consent
+            record.
+          </>
+        )}{" "}
+        <Link to={`/projects/${project.id}/rules`}>Change it on the Rules tab</Link>.
+      </span>
+    </p>
+  );
+}
+
 const START: api.ExportChoice = {
   content: "both",
   scope: "approved",
@@ -175,6 +215,7 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
           One ZIP with a folder for face-to-face recordings and one for phone calls, a table of the
           recordings, and a list of every file with its checksum.
         </p>
+        <LayoutNote />
       </div>
       <fieldset className="export__choices">
         <legend className="field__label">What to export</legend>
@@ -298,6 +339,11 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
                     : ""}
                 </span>
               ) : null}
+              {ready.recordings > 0 && ready.layout === "CLIENT" ? (
+                <span className={ready.missing > 0 ? "export__missing" : "muted"}>
+                  {ready.missing > 0 ? missingWords(ready.missing) : "Nothing missing"}
+                </span>
+              ) : null}
             </p>
           ) : null}
           {empty ? (
@@ -398,7 +444,12 @@ function ExportList({
                   <td>
                     <StatusBadge status={tone} label={label} />
                   </td>
-                  <td>{job.recordings}</td>
+                  <td>
+                    {job.recordings}
+                    {job.missing > 0 ? (
+                      <div className="export__missing">{missingWords(job.missing)}</div>
+                    ) : null}
+                  </td>
                   <td>{job.state === "READY" ? megabytes(job.size_bytes) : "-"}</td>
                   <td>
                     {job.state === "READY" ? when(job.expires_at) : "-"}

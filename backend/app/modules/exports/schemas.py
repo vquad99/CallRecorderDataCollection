@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.modules.exports import client
+
 DRAFT = "https://json-schema.org/draft/2020-12/schema"
 _STR = {"type": "string"}
 _STR_OR_NULL = {"type": ["string", "null"]}
@@ -72,17 +74,108 @@ RECORDINGS: dict[str, Any] = {
     "items": RECORDING_ROW,
 }
 
+
+def _client_row() -> dict[str, Any]:
+    """A row in the client's delivery format (D-149): the conversation ID after the task code,
+    each speaker's ID after their code, and each speaker's file of the conversation; no details
+    file or consent record per recording (the speaker files take their place)."""
+    properties: dict[str, Any] = {}
+    for key, value in RECORDING_ROW["properties"].items():
+        if key in ("metadata_file", "consent_file"):
+            continue
+        properties[key] = value
+        if key == "task_code":
+            properties["conversation_id"] = _STR
+        elif key in ("participant_a", "participant_b"):
+            properties[f"speaker_{key[-1]}_id"] = _STR
+    properties["speaker_a_metadata_file"] = _STR_OR_NULL
+    properties["speaker_b_metadata_file"] = _STR_OR_NULL
+    return _object(properties)
+
+
+CLIENT_RECORDING_ROW: dict[str, Any] = _client_row()
+CLIENT_RECORDING_COLUMNS: tuple[str, ...] = tuple(CLIENT_RECORDING_ROW["properties"])
+CLIENT_RECORDINGS: dict[str, Any] = {
+    "$schema": DRAFT,
+    "$id": "ccp.export-recordings-client/1",
+    "title": "Recordings in an export in the client's delivery format",
+    "type": "array",
+    "items": CLIENT_RECORDING_ROW,
+}
+
+_PINCODE_OR_EMPTY = {"type": "string", "pattern": "^([1-9][0-9]{5})?$"}
+_YES_NO_OR_EMPTY = {"enum": ["Yes", "No", ""]}
+# One speaker's details in the client's format (exports/client.SPEAKER_KEYS): text; "" when not
+# on file.
+SPEAKER_METADATA: dict[str, Any] = {
+    "$schema": DRAFT,
+    "$id": "ccp.speaker-metadata/1",
+    "title": "One speaker's details, in the client's delivery format",
+    **_object(
+        {key: _PINCODE_OR_EMPTY if "pincode" in key else _STR for key in client.SPEAKER_KEYS}
+        | {
+            "age": {"type": "string", "pattern": "^([0-9]{1,3})?$"},
+            "gender": {"enum": [*client.GENDER_WORDS.values(), ""]},
+        }
+    ),
+}
+# One speaker in one conversation (exports/client.CONVERSATION_KEYS), then the QC answers about
+# the speaker by checklist key, each Yes, No or "".
+SPEAKER_CONVERSATION_METADATA: dict[str, Any] = {
+    "$schema": DRAFT,
+    "$id": "ccp.speaker-conversation-metadata/1",
+    "title": "One speaker in one conversation, in the client's delivery format",
+    "type": "object",
+    "properties": {
+        "speaker_id": _STR,
+        "device_make": _STR,
+        "device_model": _STR,
+        "call_type": {"enum": ["Telephonic", "Face-to-face"]},
+        "is_bluetooth_earphones_used": _YES_NO_OR_EMPTY,
+        "if_wired_earphones_used": _YES_NO_OR_EMPTY,
+        "is_loudspeaker_switched_on": _YES_NO_OR_EMPTY,
+    },
+    "required": list(client.CONVERSATION_KEYS),
+    "additionalProperties": _YES_NO_OR_EMPTY,
+}
+
 _FILE = _object(
     {
         "path": _STR,
         "bytes": {"type": "integer", "minimum": 0},
         "sha256": _SHA,
-        "kind": {"enum": ["audio", "original", "metadata", "consent", "table", "schema", "readme"]},
+        # speaker and proof: a speaker's details and address proof (the client's format, D-149).
+        "kind": {
+            "enum": [
+                "audio",
+                "original",
+                "metadata",
+                "consent",
+                "speaker",
+                "proof",
+                "table",
+                "schema",
+                "readme",
+            ]
+        },
         "mode": {"anyOf": [_MODE, {"type": "null"}]},
         "task_code": _STR_OR_NULL,
         "recording_id": _STR_OR_NULL,
     }
 )
+
+# `missing`: the rows of MISSING.csv, in the client's format only (D-149).
+_COUNTS = _object(
+    {
+        "recordings": _INT,
+        "face_to_face": _INT,
+        "telephony": _INT,
+        "files": _INT,
+        "bytes": _INT,
+        "missing": _INT,
+    }
+)
+_COUNTS["required"].remove("missing")
 
 MANIFEST: dict[str, Any] = {
     "$schema": DRAFT,
@@ -106,17 +199,11 @@ MANIFEST: dict[str, Any] = {
                     "recorded_to": _STR_OR_NULL,
                     "originals": {"type": "boolean"},
                     "contact": {"type": "boolean"},
+                    # The project's layout when the export was asked for (D-149).
+                    "layout": {"enum": ["CLIENT", "PLATFORM"]},
                 }
             ),
-            "counts": _object(
-                {
-                    "recordings": _INT,
-                    "face_to_face": _INT,
-                    "telephony": _INT,
-                    "files": _INT,
-                    "bytes": _INT,
-                }
-            ),
+            "counts": _COUNTS,
             "transcripts": _STR,
             "files": {"type": "array", "items": _FILE},
         }
@@ -256,9 +343,16 @@ RECORDING_METADATA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-# File name in the bundle -> schema.
+# File name in the bundle -> schema: the platform's layout.
 FILES: dict[str, dict[str, Any]] = {
     "schema/recordings.schema.json": RECORDINGS,
     "schema/manifest.schema.json": MANIFEST,
     "schema/recording-metadata.schema.json": RECORDING_METADATA,
+}
+# The client's delivery format (D-149): no details file per recording; the speaker files instead.
+CLIENT_FILES: dict[str, dict[str, Any]] = {
+    "schema/recordings.schema.json": CLIENT_RECORDINGS,
+    "schema/manifest.schema.json": MANIFEST,
+    "schema/speaker-metadata.schema.json": SPEAKER_METADATA,
+    "schema/speaker-conversation-metadata.schema.json": SPEAKER_CONVERSATION_METADATA,
 }

@@ -87,3 +87,19 @@
   color: var(--danger, #9d0000);
   font-size: 0.8125rem;
 }
+/* The layout a bundle takes (D-149), and what the client's format is missing. */
+.export__layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+}
+.export__layout .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.export__missing {
+  color: var(--warn);
+  font-size: 0.8125rem;
+}

@@ -749,3 +749,61 @@ def test_effective_speech_and_the_project_targets_come_and_go(test_database_url:
         assert {"effective_ms", "pauses_ms", "speech_error"}.isdisjoint(asset_columns)
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_the_client_delivery_format_comes_and_goes(test_database_url: str) -> None:
+    """0039 (D-149): every existing project exports in the client's delivery format (the owner's
+    rule for every project), speaker IDs as numbers, conversation IDs as CON and a number, audio
+    named {a}_{b}_{a_pin}_{b_pin}_{conversation}; an export counts what it is missing; going back
+    drops them."""
+    from app.modules.projects import delivery
+
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "0038")
+    engine = create_engine(test_database_url)
+    with engine.begin() as conn:
+        project_id = _project_row(conn, "MIG")
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT export_layout, speaker_id_style, conversation_id_style, audio_name_pattern"
+                " FROM projects WHERE id = :p"
+            ),
+            {"p": project_id},
+        ).one()
+        assert tuple(row) == (
+            delivery.DEFAULT_EXPORT_LAYOUT,
+            delivery.DEFAULT_SPEAKER_ID_STYLE,
+            delivery.DEFAULT_CONVERSATION_ID_STYLE,
+            delivery.DEFAULT_AUDIO_NAME_PATTERN,
+        )
+        assert tuple(row) == (
+            "CLIENT",
+            "NUMBER",
+            "CON_NUMBER",
+            "{a}_{b}_{a_pin}_{b_pin}_{conversation}",
+        )
+        jobs = {c["name"]: c for c in inspect(conn).get_columns("export_jobs")}
+        assert not jobs["missing"]["nullable"]
+        assert "0" in str(jobs["missing"]["default"])
+    for sql, match in (
+        ("UPDATE projects SET export_layout = 'ZIP'", "export_layout_allowed"),
+        ("UPDATE projects SET speaker_id_style = 'NAME'", "speaker_id_style_allowed"),
+        ("UPDATE projects SET conversation_id_style = 'CON'", "conversation_id_style_allowed"),
+    ):
+        with pytest.raises(Exception, match=match), engine.begin() as conn:
+            conn.execute(text(sql))
+    command.downgrade(cfg, "0038")
+    with engine.begin() as conn:
+        project_columns = {c["name"] for c in inspect(conn).get_columns("projects")}
+        assert {
+            "export_layout",
+            "speaker_id_style",
+            "conversation_id_style",
+            "audio_name_pattern",
+        }.isdisjoint(project_columns)
+        assert "missing" not in {c["name"] for c in inspect(conn).get_columns("export_jobs")}
+    command.upgrade(cfg, "head")
+    engine.dispose()

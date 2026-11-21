@@ -94,6 +94,12 @@ export interface TargetDistrict {
   district: string;
 }
 
+/** How a project's exports are laid out (D-149): the client's delivery format or the platform's
+ * own; speaker and conversation IDs as numbers (001, CON045) or as codes. */
+export type ExportLayout = "CLIENT" | "PLATFORM";
+export type SpeakerIdStyle = "NUMBER" | "CODE";
+export type ConversationIdStyle = "CON_NUMBER" | "CODE";
+
 /** What the project's Rules tab edits (D-145). Every client rule is the project's own setting;
  * a new project starts with the server's defaults. */
 export interface ProjectRules {
@@ -134,6 +140,12 @@ export interface ProjectRules {
   /** Percents for FACE_TO_FACE and TELEPHONY, or {} for none. */
   target_modes: Partial<Record<Mode, number>>;
   target_districts: TargetDistrict[];
+  /** How exports are laid out and named (D-149); the client's delivery format at the start. The
+   * audio file name is made of {a}, {b}, {a_pin}, {b_pin} and {conversation}. */
+  export_layout: ExportLayout;
+  speaker_id_style: SpeakerIdStyle;
+  conversation_id_style: ConversationIdStyle;
+  audio_name_pattern: string;
 }
 
 /** Everything the project's PATCH takes: a field left out would go back to its default, so the
@@ -182,6 +194,10 @@ export const projectRules = (p: Project): ProjectRules => ({
   target_gender: p.target_gender,
   target_modes: p.target_modes,
   target_districts: p.target_districts,
+  export_layout: p.export_layout,
+  speaker_id_style: p.speaker_id_style,
+  conversation_id_style: p.conversation_id_style,
+  audio_name_pattern: p.audio_name_pattern,
 });
 
 export interface Member {
@@ -273,6 +289,10 @@ export interface ExportSummary {
   telephony: number;
   audio_bytes: number;
   file_name: string;
+  /** The project's layout (D-149), and in the client's format how many values and files are
+   * not on file (the rows of MISSING.csv). */
+  layout: ExportLayout;
+  missing: number;
 }
 export interface ExportJob {
   id: string;
@@ -280,10 +300,11 @@ export interface ExportJob {
   content: BundleContent;
   scope: ExportScope;
   table_format: TableFormat;
-  filters: Partial<ExportChoice>;
+  filters: Partial<ExportChoice> & { layout?: ExportLayout };
   file_name: string;
   recordings: number;
   files: number;
+  missing: number;
   size_bytes: number;
   sha256: string | null;
   error: string | null;

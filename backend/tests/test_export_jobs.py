@@ -34,9 +34,26 @@ audio = test_telephony.audio
 world = test_telephony.world
 
 
+def layout(w: dict[str, Any], export_layout: str) -> None:
+    """The project's exports laid out as given (D-149): PLATFORM here, CLIENT in
+    tests/test_client_delivery.py."""
+    w["db"].execute(
+        update(Project).where(Project.id == w["project_id"]).values(export_layout=export_layout)
+    )
+    w["db"].commit()
+
+
 @pytest.fixture
 def w(world: dict[str, Any]) -> dict[str, Any]:
-    """One phone recording and one face-to-face recording in the same project, both finished."""
+    """One phone recording and one face-to-face recording in the same project, both finished,
+    exported in the platform's own layout (D-105; the client's format is D-149's)."""
+    layout(world, "PLATFORM")
+    return recorded(world)
+
+
+def recorded(world: dict[str, Any]) -> dict[str, Any]:
+    """A phone call (the first task) and a face-to-face recording (the second), both finished,
+    with the same two people."""
     tid, call = started_and_closed(world)
     world["provider"].listed = [session("EX1", datetime.now(UTC))]
     due_now(world, call["id"])

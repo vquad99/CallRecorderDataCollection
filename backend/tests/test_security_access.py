@@ -654,11 +654,15 @@ CASES: list[Case] = [
         Perm.PARTICIPANTS_VIEW,
         lambda e, s, who: {"participant_code": s.participant_code},  # already linked: 409
     ),
+    # D-149: the project exports in the client's delivery format (every project's default), which
+    # holds speaker details; a Client Viewer sees none (D-143), so the summary and asking for a
+    # bundle are for the project's admins. In the platform's layout the Client Viewer may too
+    # (test_client_delivery.py); the export below was made before, in the platform's layout.
     case(
         "GET",
         P + "/export/summary",
         lambda e, s: f"/api/v1/projects/{s.project}/export/summary",
-        {SA, PA, CV},
+        {SA, PA},
         Perm.EXPORTS_CREATE,
     ),
     case(
@@ -674,7 +678,7 @@ CASES: list[Case] = [
         "POST",
         P + "/exports",
         lambda e, s: f"/api/v1/projects/{s.project}/exports",
-        {SA, PA, CV},
+        {SA, PA},
         Perm.EXPORTS_CREATE,
         lambda e, s, who: {"content": "metadata", "scope": "finished"},
     ),

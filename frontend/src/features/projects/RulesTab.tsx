@@ -1,7 +1,8 @@
 // A project's rules (D-145): what it asks of its speakers, how consent is given, who gives the
 // final approval, what QC checks (D-146), what the moderator fills and reads (device details
-// and reminders, D-147), and the audio, progress and target settings (D-148). Every rule a client
-// sets is a project setting; the first client's numbers are only what a new project starts with. One card per kind of rule (SECTIONS), all
+// and reminders, D-147), the audio, progress and target settings (D-148), and how exports are laid
+// out and named (D-149). Every rule a client sets is a project setting; the first client's numbers
+// are only what a new project starts with. One card per kind of rule (SECTIONS), all
 // saved together through the project's PATCH with "Save rules": a later kind of rule is one more
 // card with its fields in the draft. Everyone who sees the project may read them; project admins
 // change them.
@@ -23,6 +24,7 @@ import {
   speakerLabel,
 } from "../../lib/speakers";
 import { DEVICE_FIELDS } from "../tasks/deviceFields";
+import { audioNameProblem, CLIENT_AUDIO_NAME, exampleAudioName, MAX_AUDIO_NAME } from "./delivery";
 import { useProject } from "./ProjectDetailPage";
 import {
   CLIENT_QC_CHECKLIST,
@@ -1051,6 +1053,99 @@ function TargetRules({ draft, change }: SectionProps) {
   );
 }
 
+const LAYOUTS: readonly { value: api.ExportLayout; label: string }[] = [
+  { value: "CLIENT", label: "The client's delivery format" },
+  { value: "PLATFORM", label: "The platform's own layout" },
+];
+const SPEAKER_ID_STYLES: readonly { value: api.SpeakerIdStyle; label: string }[] = [
+  { value: "NUMBER", label: "Number (P000123 is 123)" },
+  { value: "CODE", label: "Participant code (P000123)" },
+];
+const CONVERSATION_ID_STYLES: readonly { value: api.ConversationIdStyle; label: string }[] = [
+  { value: "CON_NUMBER", label: "CON and number (T000045 is CON045)" },
+  { value: "CODE", label: "Task code (T000045)" },
+];
+
+/** How the project's exports are laid out and named (D-149). */
+function ExportRules({ draft, change }: SectionProps) {
+  const hintId = useId();
+  const problem = audioNameProblem(draft.audio_name_pattern);
+  return (
+    <RulesCard icon="fileZip" title="Export">
+      <fieldset className="field" aria-describedby={hintId}>
+        <legend className="field__label">Layout of an export</legend>
+        {LAYOUTS.map((l) => (
+          <label key={l.value} className="checkbox">
+            <input
+              type="radio"
+              name="export_layout"
+              value={l.value}
+              checked={draft.export_layout === l.value}
+              onChange={() => change({ export_layout: l.value })}
+            />
+            {l.label}
+          </label>
+        ))}
+        <p id={hintId} className="field__hint">
+          {draft.export_layout === "CLIENT"
+            ? "Face-to-face and phone audio in their own folders, named as below; a metadata file per speaker and per speaker of each conversation; consent forms and address proofs under speakers/; MISSING.csv lists what is not on file."
+            : "A folder for face-to-face recordings and one for phone calls, with each recording's details file and consent record."}
+        </p>
+      </fieldset>
+      <div className="form-grid">
+        <Select
+          label="Speaker IDs"
+          value={draft.speaker_id_style}
+          options={SPEAKER_ID_STYLES}
+          onChange={(e) => change({ speaker_id_style: e.target.value as api.SpeakerIdStyle })}
+        />
+        <Select
+          label="Conversation IDs"
+          value={draft.conversation_id_style}
+          options={CONVERSATION_ID_STYLES}
+          onChange={(e) =>
+            change({ conversation_id_style: e.target.value as api.ConversationIdStyle })
+          }
+        />
+      </div>
+      <TextField
+        label="Audio file name"
+        value={draft.audio_name_pattern}
+        maxLength={MAX_AUDIO_NAME}
+        hint="{a} and {b}: the two speakers' IDs; {a_pin} and {b_pin}: their native PIN codes (000000 when not given); {conversation}: the conversation ID. Letters, digits, _ and - between them."
+        {...(problem ? { error: problem } : {})}
+        onChange={(e) => change({ audio_name_pattern: e.target.value })}
+      />
+      {problem ? null : (
+        <p className="field__hint rules__note">
+          e.g.{" "}
+          {exampleAudioName(
+            draft.audio_name_pattern,
+            draft.speaker_id_style,
+            draft.conversation_id_style,
+          )}
+        </p>
+      )}
+      <div className="actions">
+        <Button
+          variant="secondary"
+          icon="history"
+          onClick={() =>
+            change({
+              export_layout: "CLIENT",
+              speaker_id_style: "NUMBER",
+              conversation_id_style: "CON_NUMBER",
+              audio_name_pattern: CLIENT_AUDIO_NAME,
+            })
+          }
+        >
+          Reset to the client&apos;s format
+        </Button>
+      </div>
+    </RulesCard>
+  );
+}
+
 /** The cards, in order: a later kind of rule is one more entry. */
 const SECTIONS: readonly { key: string; Section: (props: SectionProps) => ReactNode }[] = [
   { key: "speakers", Section: SpeakerRules },
@@ -1061,6 +1156,7 @@ const SECTIONS: readonly { key: string; Section: (props: SectionProps) => ReactN
   { key: "reminders", Section: ReminderRules },
   { key: "audio-progress", Section: AudioProgressRules },
   { key: "targets", Section: TargetRules },
+  { key: "export", Section: ExportRules },
 ];
 
 export function RulesTab() {
@@ -1075,7 +1171,8 @@ export function RulesTab() {
     Object.keys(ageErrors(draft)).length > 0 ||
     Object.keys(checklistErrors(draft)).length > 0 ||
     Object.keys(reminderErrors(draft)).length > 0 ||
-    Object.keys(targetErrors(draft)).length > 0;
+    Object.keys(targetErrors(draft)).length > 0 ||
+    audioNameProblem(draft.audio_name_pattern) !== null;
 
   return (
     <form

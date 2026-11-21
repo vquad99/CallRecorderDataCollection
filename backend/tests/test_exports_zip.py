@@ -52,12 +52,24 @@ def test_a_selection_is_stored_and_read_back_unchanged() -> None:
 
 
 def test_the_schemas_are_valid_and_name_every_column_once() -> None:
-    for schema in schemas.FILES.values():
+    for schema in [*schemas.FILES.values(), *schemas.CLIENT_FILES.values()]:
         jsonschema.Draft202012Validator.check_schema(schema)
     columns = schemas.RECORDING_COLUMNS
     assert columns[0] == "task_code"
     assert len(set(columns)) == len(columns)
     assert set(columns) == set(schemas.RECORDING_ROW["required"])
+    # The client's delivery format (D-149): its IDs and speaker files instead of the details file
+    # and consent record of each recording.
+    client = schemas.CLIENT_RECORDING_COLUMNS
+    assert client[:2] == ("task_code", "conversation_id")
+    assert len(set(client)) == len(client)
+    assert set(client) == set(columns) - {"metadata_file", "consent_file"} | {
+        "conversation_id",
+        "speaker_a_id",
+        "speaker_b_id",
+        "speaker_a_metadata_file",
+        "speaker_b_metadata_file",
+    }
 
 
 def test_parts_are_read_as_one_file_with_its_size_and_checksum() -> None:

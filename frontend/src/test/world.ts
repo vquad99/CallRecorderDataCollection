@@ -81,6 +81,11 @@ export const PROJECT = {
   target_gender: { MALE: 50, FEMALE: 50 },
   target_modes: { FACE_TO_FACE: 50, TELEPHONY: 50 },
   target_districts: [] as { state: string; district: string }[],
+  // How exports are laid out and named (D-149), as a new project starts.
+  export_layout: "CLIENT",
+  speaker_id_style: "NUMBER",
+  conversation_id_style: "CON_NUMBER",
+  audio_name_pattern: "{a}_{b}_{a_pin}_{b_pin}_{conversation}",
   status_reason: null,
   status_changed_at: null,
   languages: [{ language_code: "hi", dialect: "" }],
@@ -338,6 +343,7 @@ export const EXPORT_JOB = {
   file_name: "both_HINDI_20261111_0900.zip",
   recordings: 3,
   files: 20,
+  missing: 0,
   size_bytes: 240_000_000,
   sha256: "ab".repeat(32),
   error: null,
@@ -712,6 +718,8 @@ export function worldHandlers(): Record<string, Handler> {
       telephony: 0,
       audio_bytes: 1_000_000,
       file_name: "both_HINDI_20261111_0900.zip",
+      layout: "CLIENT",
+      missing: 0,
     }),
     "GET /api/v1/projects/p1/exports": ok(page([EXPORT_JOB])),
     "GET /api/v1/projects/p1/member-candidates": ok([

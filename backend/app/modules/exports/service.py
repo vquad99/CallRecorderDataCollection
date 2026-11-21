@@ -307,7 +307,8 @@ def task_bundle(
     start) and its size. Audited as task.exported."""
     task = tasks.get_task(db, principal, task_id)
     project = db.get_one(Project, task.project_id)
-    sel = bundle.Selection()  # audio and details, approved tasks, CSV tables
+    # Audio and details, approved tasks, CSV tables, in the project's layout (D-149).
+    sel = bundle.Selection(layout=project.export_layout)
     bundle.check(db, principal, project, sel)
     if task.status != "APPROVED":
         raise AppError(
@@ -362,6 +363,8 @@ def task_bundle(
             "file_name": name,
             "bytes": size,
             "sha256": digest.hexdigest(),
+            "layout": sel.layout,
+            "missing": made.missing,
         },
     )
     db.commit()

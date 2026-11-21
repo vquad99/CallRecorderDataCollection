@@ -69,6 +69,9 @@ class ExportJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     file_name: Mapped[str] = mapped_column(String(200), nullable=False)
     recordings: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     files: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    # In the client's delivery format (D-149): how many values and files are not on file (the
+    # rows of the bundle's MISSING.csv); counted when asked for, counted again when made.
+    missing: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     storage_key: Mapped[str | None] = mapped_column(String(500))
     sha256: Mapped[str | None] = mapped_column(String(64))

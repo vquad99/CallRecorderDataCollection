@@ -164,7 +164,7 @@ those still at 1 back to 2, as TxContact records calls in stereo (D-134).
 
 | Table | Key columns | Constraints / indexes | On delete |
 |---|---|---|---|
-| export_jobs | project_id, requested_by, content (audio / metadata / both), scope (approved / finished), table_format (csv / tsv), filters (JSON: what was chosen), state (QUEUED, RUNNING, READY, FAILED, EXPIRED), file_name, recordings, files, size_bytes, storage_key, sha256, error, attempts, claimed_at, finished_at, expires_at, downloads, last_downloaded_at | checks on state, content, scope, table_format; index (project_id, created_at); partial index on state for QUEUED / RUNNING / READY | restrict |
+| export_jobs | project_id, requested_by, content (audio / metadata / both), scope (approved / finished), table_format (csv / tsv), filters (JSON: what was chosen, and the layout, D-149), state (QUEUED, RUNNING, READY, FAILED, EXPIRED), file_name, recordings, files, missing (D-149), size_bytes, storage_key, sha256, error, attempts, claimed_at, finished_at, expires_at, downloads, last_downloaded_at | checks on state, content, scope, table_format; index (project_id, created_at); partial index on state for QUEUED / RUNNING / READY | restrict |
 
 The bundle itself is an object in storage under `exports/{project_id}/{job_id}.zip`; the row keeps
 its size and SHA-256. A bundle is removed from storage when it expires (`EXPORT_BUNDLE_HOURS`,
@@ -314,3 +314,19 @@ district}]`, default empty); checks keep their JSON types. What the values may b
 saved (`projects/targets.py`), not by the database: they are the client's numbers, project
 settings. Every existing project gets the defaults. Going back to 0037 drops the columns and the
 index.
+
+## The client's delivery format for exports (migration 0039, D-149)
+
+`projects`: how the project's exports are laid out and named (`projects/delivery.py`), each
+`varchar` and NOT NULL: `export_layout` (`CLIENT`, default, the client's delivery format, or
+`PLATFORM`, the layout of D-105; by check), `speaker_id_style` (`NUMBER`, default, the
+participant code's number padded to 3 digits, or `CODE`; by check), `conversation_id_style`
+(`CON_NUMBER`, default, `CON` and the task code's number, or `CODE`; by check) and
+`audio_name_pattern` (varchar 100, default `{a}_{b}_{a_pin}_{b_pin}_{conversation}`; its tokens
+and characters are checked when saved, not by the database). Every existing project gets the
+defaults: the client's format is the owner's rule for every project.
+
+`export_jobs.missing` (integer, default 0): in the client's format, how many values and files a
+bundle does not have (the rows of its `MISSING.csv`), counted when asked for and again when made.
+The layout a job was asked in is kept in its `filters` (`layout`; a job from before reads
+`PLATFORM`). Going back to 0038 drops the columns.

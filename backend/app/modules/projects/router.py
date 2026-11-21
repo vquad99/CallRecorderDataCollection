@@ -129,6 +129,10 @@ class DistrictIO(BaseModel):
 # target. The service checks the keys and that they add up to 100 (422 INVALID_TARGETS).
 Shares = Annotated[dict[Annotated[str, Field(max_length=20)], int], Field(max_length=10)]
 ProgressCounts = Literal["EFFECTIVE", "FULL"]
+# How exports are laid out and named (D-149, projects/delivery.py).
+ExportLayout = Literal["CLIENT", "PLATFORM"]
+SpeakerIdStyle = Literal["NUMBER", "CODE"]
+ConversationIdStyle = Literal["CON_NUMBER", "CODE"]
 
 
 class ProjectSummary(BaseModel):
@@ -168,6 +172,10 @@ class ProjectDetail(ProjectSummary):
     target_gender: dict[str, int]
     target_modes: dict[str, int]
     target_districts: list[DistrictIO]
+    export_layout: ExportLayout
+    speaker_id_style: SpeakerIdStyle
+    conversation_id_style: ConversationIdStyle
+    audio_name_pattern: str
     status_reason: str | None
     status_changed_at: datetime | None
     languages: list[LanguageOut]
@@ -207,6 +215,10 @@ def detail(p: Project) -> ProjectDetail:
         target_gender=dict(p.target_gender),
         target_modes=dict(p.target_modes),
         target_districts=[DistrictIO.model_validate(d) for d in p.target_districts],
+        export_layout=p.export_layout,
+        speaker_id_style=p.speaker_id_style,
+        conversation_id_style=p.conversation_id_style,
+        audio_name_pattern=p.audio_name_pattern,
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
         languages=[
@@ -299,6 +311,13 @@ class ProjectBody(BaseModel):
     target_districts: list[DistrictIO] | None = Field(
         default=None, max_length=targets.MAX_DISTRICTS
     )
+    # How exports are laid out and named (D-149), set on the Rules tab. Left out: a new project
+    # gets the client's delivery format, and a change keeps the project's own. The service checks
+    # the audio file name's tokens (422 INVALID_AUDIO_NAME_PATTERN); this only bounds the request.
+    export_layout: ExportLayout | None = None
+    speaker_id_style: SpeakerIdStyle | None = None
+    conversation_id_style: ConversationIdStyle | None = None
+    audio_name_pattern: str | None = Field(default=None, max_length=200)
 
     def to_input(self) -> service.ProjectInput:
         values = self.model_dump()
