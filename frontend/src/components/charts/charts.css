@@ -557,6 +557,16 @@
 .chart {
   margin: 0;
 }
+/* A chart that opens its section (Hours per day, Calls per day): its caption is the section's
+   title bar, as every other section's title (D-157). */
+.panel > .chart:first-child > .chart__head {
+  min-height: 22px;
+  margin: 0 calc(-1 * var(--card-px)) 10px;
+  padding: 11px var(--card-px);
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: #fafbfd;
+}
 .chart__head {
   display: flex;
   flex-wrap: wrap;
@@ -668,9 +678,7 @@
   cursor: pointer;
 }
 .chart__table .table-wrap {
-  max-height: 260px;
   margin-top: 8px;
-  overflow-y: auto;
 }
 
 /* Collapsed notes under a dashboard: how the figures are counted. */

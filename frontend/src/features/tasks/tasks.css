@@ -106,19 +106,13 @@
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
+/* The side column moves with the page (D-157): one scroll bar, no box that scrolls on its own. */
 .task-side {
-  position: sticky;
-  top: calc(var(--topbar-h) + 12px);
   display: flex;
   grid-area: side;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  /* Short enough that at the page's end the column is not pushed up under the top bar. */
-  max-height: calc(100vh - var(--topbar-h) - 60px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 @media (max-width: 1100px) {
   .task-layout {
@@ -133,11 +127,6 @@
       "rest";
     grid-template-rows: auto;
     grid-template-columns: minmax(0, 1fr);
-  }
-  .task-side {
-    position: static;
-    max-height: none;
-    overflow: visible;
   }
   /* One column: the side's first section gets the line between sections too. */
   .task-work:not(:empty) ~ .task-side {

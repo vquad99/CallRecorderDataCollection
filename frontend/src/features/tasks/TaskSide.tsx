@@ -2,7 +2,8 @@
 // priority, moderator, QC), the two participants as one matrix (code, name, consent, signed form,
 // device details, speaker details) with uploading and opening the signed forms in its cells, and
 // the history with its comment box on top, the newest three entries first with "Show all". On a
-// wide screen it stays in view beside the work; on a phone it comes after the work.
+// wide screen it sits beside the work and moves with the page (D-157); on a phone it comes after
+// the work.
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
