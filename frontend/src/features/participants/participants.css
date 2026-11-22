@@ -1,6 +1,80 @@
-/* Participant details panel (D-104): a header, figures at a glance, then one block per subject. */
+/* Participant details window (D-104, D-152): a header, then two columns of key / value tables
+   (profile on the left; work, link, consent and documents on the right), the sessions under both. */
 .pd {
   scroll-margin-top: calc(var(--topbar-h) + 16px);
+}
+.pd-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 0 24px;
+}
+.pd-col {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .pd-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+/* A key / value table: label left, value right, a thin line between rows. */
+.pd-kv {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.8125rem;
+}
+.pd-kv__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 40%) minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.pd-kv__row:last-child {
+  border-bottom: 0;
+}
+.pd-kv dt,
+.pd-kv dd {
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+}
+.pd-kv dt {
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-weight: 500;
+}
+.pd-kv dd {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.pd-kv dd small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+/* Figures: the value right-aligned, like numbers in a table. */
+.pd-kv--figures dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+.pd-earlier {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pd-more > summary {
+  color: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.pd-more[open] > summary {
+  margin-bottom: 8px;
 }
 .pd-head {
   display: flex;
@@ -24,40 +98,17 @@
   gap: 6px;
   margin-top: 8px;
 }
-.pd-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  margin: 0;
-}
-.pd-tiles .checks__row {
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.pd-tiles .checks__row dd {
-  font-size: 1.2rem;
-  line-height: 1.3;
-}
-.pd-tiles .checks__row dd small {
-  display: block;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 400;
-}
 .pd-section {
   display: grid;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  gap: 8px;
+  min-width: 0;
 }
 .pd-section > h3 {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9375rem;
 }
 .pd-section > h4 {
   margin: 4px 0 0;
@@ -178,48 +229,66 @@
   margin: 0 0 12px;
 }
 
-/* Uploaded documents (D-144): one block per kind, then the earlier versions. */
-.docs__slot {
-  display: grid;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+/* Uploaded documents (D-144, D-152): one table row per kind (Document | File | Uploaded | View and
+   Upload as icons), then the earlier versions as a second table. */
+.docs {
+  gap: 10px;
 }
-.docs__head {
+.table.docs-table th,
+.table.docs-table td,
+.card .table-wrap .table.docs-table th,
+.card .table-wrap .table.docs-table td {
+  padding: 7px 10px;
+  vertical-align: middle;
+}
+.table.docs-table tbody th {
+  min-width: 120px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  white-space: normal;
+}
+.table.docs-table tbody th .badge {
+  margin-top: 4px;
+}
+.docs__kind {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
-.docs__head h4 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.docs__name,
+.table td.docs__name {
+  min-width: 110px;
+  font-weight: 500;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+.table td.docs__when,
+.table td.docs__note {
+  min-width: 120px;
+  color: var(--text-2);
+  white-space: normal;
+}
+.docs__actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.docs__hint {
   margin: 0;
-  font-size: 0.95rem;
-}
-.docs__file {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-}
-.docs__name {
-  font-weight: 600;
-  overflow-wrap: anywhere;
 }
 .docs__earlier h4 {
   margin: 0 0 6px;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
-.docs__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  overflow-wrap: anywhere;
+/* A file picker shown as an icon (a table row's action, D-141). */
+.upload-icon {
+  position: relative;
+  color: inherit;
+}
+.icon-button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 /* A file picker shown as a button: looks disabled while it may not be used. */
 .button.is-disabled {
@@ -235,15 +304,4 @@
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
-}
-/* The task's signed consent forms (D-144): one line per participant. */
-.signed-forms__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-.signed-forms__row .docs__file {
-  flex: 1;
-  min-width: 200px;
 }

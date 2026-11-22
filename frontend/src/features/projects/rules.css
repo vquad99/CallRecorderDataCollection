@@ -1,8 +1,36 @@
-/* A project's Rules tab (D-145). Loaded with the tab, not with the first screen. */
-.rules__note {
-  margin: -6px 0 16px;
+/* A project's Rules (D-145). Loaded with the page, not with the first screen. */
+/* One section of the rules on its own page (D-150): its title and Save at the top, kept in view
+   under the top bar while a long section scrolls. */
+.rules-card {
+  padding-top: 0;
 }
-/* The speaker details a task needs: one small group per subject, side by side as on the form. */
+.rules-card__head {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 calc(-1 * var(--space-5)) var(--space-4);
+  padding: 10px var(--space-5);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--surface);
+}
+.rules-card > .notice {
+  margin-bottom: var(--space-3);
+}
+.rules__note {
+  max-width: 900px;
+  margin: 0 0 var(--space-3);
+}
+/* The speaker details a task needs: one small group per subject, side by side as on the form (four
+   across on a wide screen). */
+.rules-card fieldset.field:has(> .rules-details) {
+  max-width: 900px;
+}
 .rules-details {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
@@ -22,44 +50,184 @@
   font-size: 0.8125rem;
   font-weight: 600;
 }
-/* The QC checklist (D-146): one bordered block per question, numbered, its tools at the right. */
+/* The QC checklist (D-146) as a matrix (D-150): one row per question under column titles that stay
+   in view under the card's title; each box keeps its own label for screen readers. In a narrow
+   frame (a phone) a row stacks: the question, then its choices with their labels. */
+.qc-matrix {
+  container-type: inline-size;
+  margin: 0 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.qc-matrix__head {
+  display: none;
+}
 .qc-rules {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 900px;
-  margin: 0 0 16px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
+.qc-rules > li + li {
+  border-top: 1px solid var(--border);
+}
+.qc-rules > li:hover {
+  background: var(--k-100);
+}
 .qc-rule {
   position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 6px 10px;
   min-width: 0;
-  max-width: 900px;
   margin: 0;
+  padding: 10px;
+  border: 0;
+}
+.qc-rule .field {
+  max-width: none;
+  margin: 0;
+}
+.qc-rule__number {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: right;
+}
+.qc-rule__question {
+  grid-row: 1;
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+.qc-rule__key {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 2px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-rule > :nth-child(4) {
+  grid-row: 2;
+  grid-column: 2;
+}
+.qc-rule > :nth-child(5) {
+  grid-row: 2;
+  grid-column: 3;
+}
+.qc-rule__required {
+  grid-row: 3;
+  grid-column: 2;
+}
+.qc-rule__tools {
+  display: flex;
+  grid-row: 3;
+  grid-column: 3;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.qc-rule__tools .icon-button {
+  width: 30px;
+  height: 30px;
+}
+/* The key above the box names it on screen; "Question" and the rest of "Required" are for screen
+   readers. */
+.qc-rule__question .field__label,
+.qc-rule__required-more {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+@container (min-width: 720px) {
+  .qc-matrix__head,
+  .qc-rule {
+    grid-template-columns: 24px minmax(0, 1fr) 164px 124px 60px 94px;
+    gap: 0 8px;
+    padding: 0 10px;
+  }
+  /* Compact boxes, like cells. */
+  .qc-rule .field__input {
+    min-height: 32px;
+    padding: 5px 10px;
+    font-size: 0.8125rem;
+  }
+  .qc-rule select.field__input {
+    padding-right: 28px;
+    background-position: right 8px center;
+  }
+  .qc-matrix__head {
+    position: sticky;
+    top: calc(var(--topbar-h) + 57px);
+    z-index: 4;
+    display: grid;
+    align-items: center;
+    min-height: 32px;
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: var(--k-200);
+    color: var(--text-2);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .qc-matrix__head > :first-child {
+    text-align: right;
+  }
+  .qc-matrix__head > :nth-child(5) {
+    text-align: center;
+  }
+  .qc-rule {
+    align-items: center;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+  .qc-rule__key {
+    margin-bottom: 1px;
+    font-size: 0.6875rem;
+  }
+  .qc-rule > *,
+  .qc-rule__question,
+  .qc-rule > :nth-child(4),
+  .qc-rule > :nth-child(5),
+  .qc-rule__required,
+  .qc-rule__tools {
+    grid-row: 1;
+    grid-column: auto;
+  }
+  .qc-rule__required {
+    justify-content: center;
+  }
+  /* The column titles say these on screen. */
+  .qc-rule .field__label,
+  .qc-rule__required-words {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+/* Adding a question: a block of its own under the matrix. */
+.qc-rule--new {
+  display: block;
+  max-width: 900px;
   padding: 6px 14px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+.qc-rule--new .field {
+  margin-bottom: var(--space-3);
+}
 .qc-rule__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 0 4px;
   font-weight: 600;
-}
-.qc-rule__number {
-  color: var(--muted);
-}
-.qc-rule__tools {
-  position: absolute;
-  top: 2px;
-  right: 8px;
-  display: flex;
-  gap: 2px;
-}
-.qc-rule .checkbox {
-  margin-top: 4px;
 }
 /* The moderator's reminders (D-147): the four boxes two by two on a wide screen. */
 .rules-reminders {

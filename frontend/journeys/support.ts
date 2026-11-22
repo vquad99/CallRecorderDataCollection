@@ -180,13 +180,14 @@ export async function fillSpeakerDetails(form: Locator): Promise<void> {
  * moderator does before Send to QC (D-147; a project made through the API asks all five). */
 export async function fillDeviceDetails(page: Page): Promise<void> {
   const card = page.getByRole("region", { name: "Device details" });
+  // D-152: one matrix, a row per detail and a column per speaker; each box and Yes / No switch
+  // is named "<detail> – Participant <side>".
   for (const side of ["A", "B"]) {
-    const speaker = card.getByRole("group", { name: new RegExp(`^Participant ${side}`) });
-    await speaker.getByLabel("Device make").fill("Samsung");
-    await speaker.getByLabel("Device model").fill("Galaxy A14");
+    await card.getByLabel(`Device make – Participant ${side}`, { exact: true }).fill("Samsung");
+    await card.getByLabel(`Device model – Participant ${side}`, { exact: true }).fill("Galaxy A14");
     for (const question of ["Bluetooth earphones used", "Wired earphones used", "Loudspeaker on"]) {
-      await speaker
-        .getByRole("group", { name: question })
+      await card
+        .getByRole("radiogroup", { name: `${question} – Participant ${side}`, exact: true })
         .getByRole("radio", { name: "No" })
         .check();
     }

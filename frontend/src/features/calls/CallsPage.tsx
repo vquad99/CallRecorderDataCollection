@@ -1,13 +1,24 @@
 // Phone calls (D-101, D-102, D-103): how calls are going, from the platform's own call records,
 // plus TxContact's own count of calls per hour; and, on its own tab, every call with a link to its
-// task. Moderators see a plain list of their own calls (D-104).
+// task. Moderators see a plain list of their own calls (D-104). The figures are one dashboard
+// (D-151): key figures in one strip, then charts and tables in a grid.
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { listProjects } from "../../api/projects";
 import * as tel from "../../api/telephony";
 import { useAuth } from "../../auth/AuthContext";
-import { Bars, DayChart, Stat } from "../../components/charts/Charts";
+import {
+  CellBar,
+  DayChart,
+  Donut,
+  Kpi,
+  KpiStrip,
+  MatrixTable,
+  Panel,
+  type MatrixSection,
+} from "../../components/charts/Charts";
+import { stageParts } from "../../components/charts/stages";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
@@ -19,20 +30,27 @@ import { useAction } from "../../hooks/useAction";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { duration, when } from "../../lib/format";
-import { labelFor, TASK_STATUS_LABELS } from "../../lib/labels";
+import { labelFor } from "../../lib/labels";
 import { CallBadge } from "./callUi";
 
 const minutes = (m: number | null) => duration(m === null ? null : m * 60);
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 /** Calls started in each hour of the day (one series: the title names it). */
-function CallsByHour({ hours, title }: { hours: number[]; title: string }) {
+function CallsByHour({
+  hours,
+  title,
+  className,
+}: {
+  hours: number[];
+  title: string;
+  className?: string | undefined;
+}) {
   const max = Math.max(1, ...hours);
   const busiest = hours.indexOf(Math.max(...hours));
   const hour = (h: number) => `${String(h).padStart(2, "0")}:00`;
   return (
-    <section className="card" aria-label={title}>
-      <h2>{title}</h2>
+    <Panel className={className} icon="clock" title={title}>
       {hours.every((n) => n === 0) ? (
         <p className="muted">No calls in this period yet.</p>
       ) : (
@@ -71,30 +89,86 @@ function CallsByHour({ hours, title }: { hours: number[]; title: string }) {
           </details>
         </>
       )}
-    </section>
+    </Panel>
   );
 }
 
-function Counts({
-  title,
-  counts,
-  labels,
-  empty = "None in this period.",
-}: {
-  title: string;
-  counts: Record<string, number>;
-  labels: Record<string, string>;
-  empty?: string;
-}) {
+/** The counted lists as two tables side by side: a section per kind, a row per reason with its
+ * count and a light bar for its share of the section's largest. */
+function Reasons({ data }: { data: tel.CallAnalytics }) {
+  type Row = { key: string; label: string; n: number; max: number };
+  const section = (
+    key: string,
+    title: string,
+    counts: Record<string, number>,
+    labels: Record<string, string>,
+    empty: string,
+  ): MatrixSection<Row> => {
+    const entries = Object.entries(counts);
+    const max = Math.max(0, ...entries.map(([, n]) => n));
+    return {
+      key,
+      title,
+      empty,
+      rows: entries.map(([k, n]) => ({ key: k, label: labelFor(labels, k), n, max })),
+    };
+  };
+  const table = (label: string, sections: MatrixSection<Row>[]) => (
+    <MatrixTable<Row>
+      label={label}
+      head="Reason"
+      columns={[
+        {
+          key: "n",
+          label: "Count",
+          num: true,
+          cell: (r) => (
+            <CellBar value={r.n} max={r.max}>
+              {r.n}
+            </CellBar>
+          ),
+        },
+      ]}
+      sections={sections}
+      rowKey={(r) => r.key}
+      rowLabel={(r) => r.label}
+    />
+  );
   return (
-    <section className="card" aria-label={title}>
-      <h2>{title}</h2>
-      <Bars
-        wide
-        rows={Object.entries(counts).map(([k, n]) => ({ key: k, label: labelFor(labels, k), n }))}
-        empty={empty}
-      />
-    </section>
+    <div className="reasons">
+      {table("Checks and QC decisions", [
+        section(
+          "checks",
+          "Automatic audio check of call recordings",
+          data.automatic_checks,
+          tel.AUTOMATIC_CHECK_LABELS,
+          "No call recording checked in this period.",
+        ),
+        section(
+          "qc",
+          "QC decisions on call recordings",
+          data.qc_decisions,
+          tel.QC_DECISION_LABELS,
+          "No QC decision in this period.",
+        ),
+      ])}
+      {table("Cancelled calls and recording problems", [
+        section(
+          "cancelled",
+          "Why calls were cancelled",
+          data.cancel_reasons,
+          tel.CANCEL_REASONS,
+          "None in this period.",
+        ),
+        section(
+          "problems",
+          "Problems getting the recording",
+          data.problems,
+          tel.FAILURE_LABELS,
+          "None in this period.",
+        ),
+      ])}
+    </div>
   );
 }
 
@@ -108,40 +182,65 @@ const FUNNEL: { key: keyof tel.CallFunnel; label: string }[] = [
 ];
 
 /** From dial to approval: where calls are lost on the way. */
-function Funnel({ funnel }: { funnel: tel.CallFunnel }) {
+function Funnel({ funnel, className }: { funnel: tel.CallFunnel; className: string }) {
   return (
-    <section className="card" aria-labelledby="funnel-title">
-      <h2 id="funnel-title">From call to approval</h2>
-      <Bars
-        wide
-        max={funnel.dialled}
-        rows={FUNNEL.map((f) => ({
-          key: f.key,
-          label: f.label,
-          n: funnel[f.key],
-          note: funnel.dialled > 0 ? `${pct(funnel[f.key], funnel.dialled)}%` : "",
-        }))}
-        empty="No calls in this period yet."
-      />
-    </section>
+    <Panel className={className} icon="target" title="From call to approval">
+      <DataTable label="From call to approval" className="funnel">
+        <thead>
+          <tr>
+            <th scope="col">Step</th>
+            <th scope="col" className="num">
+              Calls
+            </th>
+            <th scope="col" className="num">
+              Of started
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {FUNNEL.map((f) => (
+            <tr key={f.key}>
+              <th scope="row">{f.label}</th>
+              <td className="num">
+                <CellBar value={funnel[f.key]} max={funnel.dialled}>
+                  {funnel[f.key]}
+                </CellBar>
+              </td>
+              <td className="num">
+                {funnel.dialled > 0 ? `${pct(funnel[f.key], funnel.dialled)}%` : ""}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </Panel>
   );
 }
 
 /** TxContact's own hour-of-day counts: its answer's shape is not described, so a map or list of
  * numbers is drawn; anything else is only described, with the answer for the Super Admin. */
-function ProviderTraffic({ days }: { days: number }) {
+function ProviderTraffic({ days, className }: { days: number; className?: string | undefined }) {
   const superAdmin = Boolean(useAuth().user?.roles.includes("SUPER_ADMIN"));
   const { state, reload } = useResource(() => tel.providerTraffic(days), [days]);
-  if (state.status === "loading") return <LoadingState label="Asking TxContact" />;
-  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
-  const t = state.data;
   const title = "TxContact: calls per hour (its own count)";
+  if (state.status === "loading")
+    return (
+      <Panel className={className} icon="clock" title={title}>
+        <LoadingState label="Asking TxContact" />
+      </Panel>
+    );
+  if (state.status === "failed")
+    return (
+      <Panel className={className} icon="clock" title={title}>
+        <ErrorState error={state.error} onRetry={reload} />
+      </Panel>
+    );
+  const t = state.data;
   if (!t.available) {
     return (
-      <section className="card" aria-label={title}>
-        <h2>{title}</h2>
+      <Panel className={className} icon="clock" title={title}>
         <p className="muted">Not available: {t.message}.</p>
-      </section>
+      </Panel>
     );
   }
   const hours = Array.from({ length: 24 }, () => 0);
@@ -160,10 +259,9 @@ function ProviderTraffic({ days }: { days: number }) {
     }
   }
   return drawable ? (
-    <CallsByHour hours={hours} title={title} />
+    <CallsByHour hours={hours} title={title} className={className} />
   ) : (
-    <section className="card" aria-label={title}>
-      <h2>{title}</h2>
+    <Panel className={className} icon="clock" title={title}>
       <p className="muted">TxContact answered, but not with counts per hour that can be drawn.</p>
       {superAdmin ? (
         <details className="tech-log">
@@ -171,7 +269,7 @@ function ProviderTraffic({ days }: { days: number }) {
           <pre className="calls-raw">{JSON.stringify(source, null, 2)}</pre>
         </details>
       ) : null}
-    </section>
+    </Panel>
   );
 }
 
@@ -270,16 +368,16 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
   );
 }
 
-function ByModerator({ rows }: { rows: tel.ModeratorCalls[] }) {
+function ByModerator({ rows, className }: { rows: tel.ModeratorCalls[]; className: string }) {
   const { shown, more } = useFirstRows(rows);
+  const most = Math.max(0, ...rows.map((m) => m.calls));
   return (
-    <section className="card stack stack--tight" aria-labelledby="by-moderator">
-      <h2 id="by-moderator">By moderator</h2>
+    <Panel className={className} icon="people" title="By moderator">
       {rows.length === 0 ? (
         <p className="muted">No calls in this period yet.</p>
       ) : (
         <>
-          <DataTable>
+          <DataTable label="By moderator">
             <thead>
               <tr>
                 <th scope="col">Moderator</th>
@@ -303,8 +401,12 @@ function ByModerator({ rows }: { rows: tel.ModeratorCalls[] }) {
             <tbody>
               {shown.map((m) => (
                 <tr key={m.moderator_id}>
-                  <td>{m.name}</td>
-                  <td className="num">{m.calls}</td>
+                  <th scope="row">{m.name}</th>
+                  <td className="num">
+                    <CellBar value={m.calls} max={most}>
+                      {m.calls}
+                    </CellBar>
+                  </td>
                   <td className="num">{m.recorded}</td>
                   <td className="num">{m.failed}</td>
                   <td className="num">{minutes(m.recorded_minutes)}</td>
@@ -316,16 +418,16 @@ function ByModerator({ rows }: { rows: tel.ModeratorCalls[] }) {
           {more}
         </>
       )}
-    </section>
+    </Panel>
   );
 }
 
-function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
+function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: string }) {
   const { shown, more } = useFirstRows(rows);
+  const most = Math.max(0, ...rows.map((p) => p.calls));
   return (
-    <section className="card stack stack--tight" aria-labelledby="by-project">
-      <h2 id="by-project">By project</h2>
-      <DataTable>
+    <Panel className={className} icon="projects" title="By project">
+      <DataTable label="By project">
         <thead>
           <tr>
             <th scope="col">Project</th>
@@ -346,11 +448,15 @@ function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
         <tbody>
           {shown.map((p) => (
             <tr key={p.project_id}>
-              <td>
+              <th scope="row">
                 <Link to={`/projects/${p.project_id}`}>{p.code}</Link>{" "}
                 <span className="muted">{p.name}</span>
+              </th>
+              <td className="num">
+                <CellBar value={p.calls} max={most}>
+                  {p.calls}
+                </CellBar>
               </td>
-              <td className="num">{p.calls}</td>
               <td className="num">{p.recorded}</td>
               <td className="num">{p.failed}</td>
               <td className="num">{minutes(p.recorded_minutes)}</td>
@@ -359,61 +465,80 @@ function ByProject({ rows }: { rows: tel.ProjectCalls[] }) {
         </tbody>
       </DataTable>
       {more}
-    </section>
+    </Panel>
   );
 }
 
-function Figures({ data, allProjects }: { data: tel.CallAnalytics; allProjects: boolean }) {
+function Figures({
+  data,
+  allProjects,
+  traffic,
+}: {
+  data: tel.CallAnalytics;
+  allProjects: boolean;
+  /** TxContact's own count, loaded on its own. */
+  traffic: ReactNode;
+}) {
   const target = data.target_minutes_per_day;
+  const byProject = allProjects && data.by_project.length > 1;
   return (
-    <>
+    <div className="dash">
       {data.truncated ? (
         <p role="status" className="muted">
           This period has more calls than one page of figures can count: the newest 50,000 are
           shown. Choose a project or a shorter period.
         </p>
       ) : null}
-      <div className="stats">
-        <Stat
+      <KpiStrip label="Call figures">
+        <Kpi
           icon="phone"
           label="Calls"
           value={String(data.calls)}
           note={`${data.in_call} on a call now`}
         />
-        <Stat
+        <Kpi
           icon="verified"
           label="Recorded"
           value={String(data.recorded)}
           note={data.success_pct === null ? "No calls yet" : `${data.success_pct}% of calls`}
         />
-        <Stat
+        <Kpi
           icon="failed"
           label="Failed or cancelled"
           value={String(data.dial_failed + data.cancelled)}
           note={`${data.dial_failed} not placed · ${data.cancelled} cancelled`}
         />
-        <Stat
+        <Kpi
           icon="warning"
           label="Needs a person"
           value={String(data.needs_person)}
           note={`${data.stale_calls} left open · ${data.waiting_for_recording} being fetched`}
         />
-        <Stat
+        <Kpi
           icon="clock"
           label="Average call"
           value={minutes(data.avg_call_minutes)}
           note={data.calls_per_task === null ? "" : `${data.calls_per_task} call(s) for each task`}
         />
-        <Stat
+        <Kpi
           icon="waveform"
           label="Recorded audio"
           value={minutes(data.recorded_minutes)}
           note={`Arrives ${minutes(data.avg_fetch_minutes)} after closing, on average`}
         />
-        <Stat
+        <Kpi
           icon="target"
           label="Today"
           value={minutes(data.today_recorded_minutes)}
+          meter={
+            target !== null && target > 0
+              ? {
+                  percent: pct(data.today_recorded_minutes, target),
+                  label: "Recorded today of the daily target",
+                  text: `${pct(data.today_recorded_minutes, target)}%`,
+                }
+              : undefined
+          }
           note={
             target === null
               ? "Recorded today"
@@ -422,78 +547,55 @@ function Figures({ data, allProjects }: { data: tel.CallAnalytics; allProjects: 
                 : "No daily target set"
           }
         />
-        <Stat
+        <Kpi
           icon="tasks"
           label="Tasks not called yet"
           value={String(data.tasks_not_called)}
           note={`${data.tasks_called_again} task(s) called more than once`}
         />
-      </div>
-      <section className="card">
-        <DayChart
-          title="Calls per day"
-          wholeNumbers
-          days={data.by_day}
-          emptyText="No calls in this period yet."
-          series={[
-            { label: "Recorded", className: "series--recorded", value: (d) => d.recorded },
-            { label: "Still open", className: "series--open", value: (d) => d.open },
-            { label: "Failed or cancelled", className: "series--failed", value: (d) => d.failed },
-          ]}
-          columns={[
-            { label: "Calls", value: (d) => d.calls },
-            { label: "Recorded", value: (d) => d.recorded },
-            { label: "Recorded audio", value: (d) => minutes(d.recorded_minutes) },
-            { label: "Still open", value: (d) => d.open },
-            { label: "Failed or cancelled", value: (d) => d.failed },
-          ]}
-        />
-      </section>
-      <div className="split">
-        <Funnel funnel={data.funnel} />
-        <section className="card" aria-labelledby="phone-tasks">
-          <h2 id="phone-tasks">Phone tasks by status</h2>
-          <Bars
-            wide
-            rows={Object.entries(data.tasks_by_status).map(([status, n]) => ({
-              key: status,
-              label: labelFor(TASK_STATUS_LABELS, status),
-              n,
-            }))}
-            empty="No phone tasks yet."
+      </KpiStrip>
+      <div className="dash-grid">
+        <div className="panel g-8">
+          <DayChart
+            title="Calls per day"
+            wholeNumbers
+            height={196}
+            days={data.by_day}
+            emptyText="No calls in this period yet."
+            series={[
+              { label: "Recorded", className: "series--recorded", value: (d) => d.recorded },
+              { label: "Still open", className: "series--open", value: (d) => d.open },
+              { label: "Failed or cancelled", className: "series--failed", value: (d) => d.failed },
+            ]}
+            columns={[
+              { label: "Calls", value: (d) => d.calls },
+              { label: "Recorded", value: (d) => d.recorded },
+              { label: "Recorded audio", value: (d) => minutes(d.recorded_minutes) },
+              { label: "Still open", value: (d) => d.open },
+              { label: "Failed or cancelled", value: (d) => d.failed },
+            ]}
           />
-        </section>
+        </div>
+        <Funnel className="g-4" funnel={data.funnel} />
+        <ByModerator className="g-8" rows={data.by_moderator} />
+        <Panel className="g-4" icon="tasks" title="Phone tasks by status">
+          <Donut
+            label="Phone tasks by status"
+            unit="tasks"
+            emptyText="No phone tasks yet."
+            parts={stageParts(data.tasks_by_status)}
+          />
+        </Panel>
+        <Panel className="g-8" icon="warning" title="Checks, decisions and reasons">
+          <Reasons data={data} />
+        </Panel>
+        <div className="dash-col g-4">
+          <CallsByHour hours={data.by_hour} title="Calls by hour of the day" />
+          {traffic}
+        </div>
+        {byProject ? <ByProject className="" rows={data.by_project} /> : null}
       </div>
-      <CallsByHour hours={data.by_hour} title="Calls by hour of the day" />
-      <ByModerator rows={data.by_moderator} />
-      {allProjects && data.by_project.length > 1 ? <ByProject rows={data.by_project} /> : null}
-      <div className="split">
-        <Counts
-          title="Automatic audio check of call recordings"
-          counts={data.automatic_checks}
-          labels={tel.AUTOMATIC_CHECK_LABELS}
-          empty="No call recording checked in this period."
-        />
-        <Counts
-          title="QC decisions on call recordings"
-          counts={data.qc_decisions}
-          labels={tel.QC_DECISION_LABELS}
-          empty="No QC decision in this period."
-        />
-      </div>
-      <div className="split">
-        <Counts
-          title="Why calls were cancelled"
-          counts={data.cancel_reasons}
-          labels={tel.CANCEL_REASONS}
-        />
-        <Counts
-          title="Problems getting the recording"
-          counts={data.problems}
-          labels={tel.FAILURE_LABELS}
-        />
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -572,7 +674,7 @@ function CallFigures() {
     [projectId, days, view],
   );
   return (
-    <section aria-labelledby="calls-title" className="stack">
+    <section aria-labelledby="calls-title" className="stack stack--tight calls-page">
       <Header title="Phone calls" lead="Calls made through TxContact: how many and how they ended.">
         <ProjectSelect value={projectId} onChange={setProjectId} />
         <Select
@@ -624,9 +726,14 @@ function CallFigures() {
             {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}
             {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
             {state.status === "loaded" && state.data ? (
-              <Figures data={state.data} allProjects={projectId === ""} />
-            ) : null}
-            <ProviderTraffic days={days} />
+              <Figures
+                data={state.data}
+                allProjects={projectId === ""}
+                traffic={<ProviderTraffic days={days} />}
+              />
+            ) : (
+              <ProviderTraffic days={days} />
+            )}
           </>
         )}
       </div>

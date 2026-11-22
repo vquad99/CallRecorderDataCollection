@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { ALL_PERMISSIONS, TASK, worldHandlers } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -897,5 +898,84 @@ describe("task page in plain words (UI review 2026-11-17)", () => {
           c.path.includes("project_id=p1"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("one task on one screen (D-152)", () => {
+  const entry = (n: number, from: string, to: string) => ({
+    at: `2026-11-1${n}T00:00:00Z`,
+    kind: "status",
+    actor: "Ada",
+    text: "",
+    from_status: from,
+    to_status: to,
+    reason_code: null,
+    comment: null,
+  });
+  const history = [
+    entry(0, "", "DRAFT"),
+    entry(1, "DRAFT", "ASSIGNED"),
+    entry(2, "ASSIGNED", "ON_HOLD"),
+    entry(3, "ON_HOLD", "ASSIGNED"),
+    entry(4, "ASSIGNED", "ON_HOLD"),
+  ].map((e, i) => (i === 0 ? { ...e, from_status: null } : e));
+
+  it("shows the summary, both people as one matrix and the newest history beside the work", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1/timeline": () => [200, history],
+      }),
+    );
+    renderAt("/tasks/t1");
+    const side = await screen.findByRole("complementary", { name: "About this task" });
+    // Who acts next, where the work would be: nothing for this person to do now.
+    expect(screen.getByRole("region", { name: "Next step" })).toHaveTextContent(
+      "Waiting for Mona Moderator to start the session.",
+    );
+    const summary = within(side).getByRole("region", { name: "Summary" });
+    expect(summary).toHaveTextContent("ModeratorMona Moderator");
+    expect(summary).toHaveTextContent("Recording typeFace-to-face");
+    // A row per fact, a column per person.
+    const people = within(side).getByRole("table", { name: "Both participants" });
+    const rows = within(people)
+      .getAllByRole("row")
+      .map((row) => Array.from(row.children, (cell) => cell.textContent).join(" | "));
+    expect(rows).toEqual([
+      "Detail | Participant A | Participant B",
+      "Code | P000001 | P000002",
+      "Name | Asha | Bina",
+      "Consent | Agreed | Agreed",
+      "Device details | Not yet | Not yet",
+      "Speaker details | View | View",
+    ]);
+    expect(
+      within(people).getByRole("button", { name: "View the details of P000002" }),
+    ).toBeInTheDocument();
+    // The newest three entries first; the rest on request.
+    const log = within(side).getByRole("region", { name: "History" });
+    const titles = () =>
+      Array.from(log.querySelectorAll(".timeline__title"), (el) => el.textContent);
+    await within(log).findByText("On hold → Assigned");
+    expect(titles()).toEqual(["Assigned → On hold", "On hold → Assigned", "Assigned → On hold"]);
+    await userEvent.click(within(log).getByRole("button", { name: "Show all (5)" }));
+    expect(titles()).toHaveLength(5);
+    expect(titles()[4]).toBe("Created as Draft");
+  });
+
+  it("asks for a moderator in the work column while nobody is assigned", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [
+          200,
+          { ...TASK, status: "DRAFT", moderator_id: null, moderator_name: null },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(await screen.findByRole("heading", { name: "Assign moderator" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Next step" })).toBeNull();
+    expect(screen.queryByText("Reassign moderator")).toBeNull();
   });
 });

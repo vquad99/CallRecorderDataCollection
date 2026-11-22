@@ -1,76 +1,61 @@
-/* A project's Progress tab (D-148). Loaded with the tab, not with the first screen. */
-.progress-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-}
-.progress-line progress {
-  flex: 1 1 240px;
-  max-width: 520px;
-  height: 12px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-hover);
-  accent-color: var(--primary);
-  overflow: hidden;
-  appearance: none;
-}
-.progress-line progress::-webkit-progress-bar {
-  border-radius: 999px;
-  background: var(--surface-hover);
-}
-.progress-line progress::-webkit-progress-value {
-  border-radius: 999px;
-  background: var(--primary);
-}
-.progress-line progress::-moz-progress-bar {
-  border-radius: 999px;
-  background: var(--primary);
-}
-/* The actual share as a thin bar, with a tick where the target is. */
-.share-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-.share-bar__track {
-  position: relative;
-  display: inline-block;
-  width: 72px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--surface-hover);
-}
-.share-bar__track > span:first-child {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--series-approved, var(--primary));
-}
-.share-bar__target {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 12px;
-  margin-left: -1px;
-  background: var(--text);
-}
+/* A project's Progress tab (D-148, D-151). Loaded with the tab, not with the first screen. The
+   panels, key figures and tables are in components/charts. */
+
+/* The variance as a small signed pill: below the target red, above it green (text 5.3:1 and more
+   on its tint); the sign says the same as the colour. */
 .variance {
+  display: inline-block;
+  min-width: 58px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-slate);
+  color: var(--text-2);
+  font-weight: 600;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 .variance--below {
+  background: var(--tint-rose);
   color: var(--danger);
+}
+.variance--above {
+  background: var(--tint-green);
+  color: var(--text-green);
+}
+/* The balance table: tight columns so a district's name stays on one line. */
+.progress .panel .table.matrix th,
+.progress .panel .table.matrix td {
+  padding-right: 6px;
+  padding-left: 6px;
+}
+.progress .panel .table.matrix tbody th[scope="row"] {
+  min-width: 150px;
+  padding-left: 14px;
+}
+.progress .table.matrix td:has(> .tbar) {
+  width: 24%;
+}
+@container (max-width: 520px) {
+  .progress .panel .table.matrix tbody th[scope="row"] {
+    min-width: 112px;
+  }
+}
+.progress .table.matrix .tbar {
+  min-width: 64px;
+}
+.progress .panel > .button,
+.progress .panel > span:has(> .button) {
+  align-self: flex-start;
 }
 .definitions {
   display: grid;
-  gap: 4px 0;
-  margin: 0;
+  gap: 2px 0;
   max-width: 900px;
+  margin: 0;
 }
 .definitions dt {
   margin-top: 6px;
+  color: var(--text);
   font-weight: 600;
 }
 .definitions dd {

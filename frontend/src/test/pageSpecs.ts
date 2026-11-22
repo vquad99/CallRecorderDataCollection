@@ -68,9 +68,14 @@ export const PAGES: Record<string, PageSpec> = {
     data: "GET /api/v1/tasks",
   },
   "/projects/:projectId/audio": { url: "/projects/p1/audio", shows: /^Face-to-face$/ },
+  // The Rules page's own address opens its first section (D-150).
   "/projects/:projectId/rules": {
     url: "/projects/p1/rules",
     shows: /Speaker details needed before a task/,
+  },
+  "/projects/:projectId/rules/:section": {
+    url: "/projects/p1/rules/targets",
+    shows: /Age bands \(percent of speakers\)/,
   },
   "/projects/:projectId/languages": { url: "/projects/p1/languages", shows: /^Add language$/ },
   "/projects/:projectId/retention": {

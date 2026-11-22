@@ -445,20 +445,26 @@ describe("phone calls in plain words (UI review 2026-11-17)", () => {
         headings.indexOf("Check the call recording"),
       );
       expect(headings.indexOf("Device details")).toBeLessThan(headings.indexOf("Phone calls"));
+      // D-152: one matrix; each box and switch is named "<detail> – Participant <side>".
       for (const side of ["A", "B"]) {
-        const who = within(card).getByRole("group", { name: new RegExp(`^Participant ${side}`) });
-        await userEvent.type(within(who).getByLabelText("Device make"), "Nokia");
-        await userEvent.type(within(who).getByLabelText("Device model"), "105");
+        await userEvent.type(
+          within(card).getByLabelText(`Device make – Participant ${side}`),
+          "Nokia",
+        );
+        await userEvent.type(
+          within(card).getByLabelText(`Device model – Participant ${side}`),
+          "105",
+        );
         for (const question of [
           "Bluetooth earphones used",
           "Wired earphones used",
           "Loudspeaker on",
-        ])
-          await userEvent.click(
-            within(within(who).getByRole("group", { name: question })).getByRole("radio", {
-              name: "No",
-            }),
-          );
+        ]) {
+          const group = within(card).getByRole("radiogroup", {
+            name: `${question} – Participant ${side}`,
+          });
+          await userEvent.click(within(group).getByRole("radio", { name: "No" }));
+        }
       }
       await userEvent.click(within(card).getByRole("button", { name: "Save device details" }));
       await waitFor(() => expect(screen.getByRole("button", { name: "Send to QC" })).toBeEnabled());

@@ -1,6 +1,7 @@
 // Everything about one participant in one project (D-104), opened by "View": profile, who added
 // them, the projects they are in, their personal link, the consent form as they answered it, their
-// uploaded documents (D-144), minutes, phone calls, and every session they were part of.
+// uploaded documents (D-144), minutes, phone calls, and every session they were part of. Laid out
+// as key / value tables in two columns, the sessions as one table under them (D-152).
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -51,9 +52,10 @@ export function DetailsMissing() {
 const language = (p: work.Participant) =>
   `${languageLabel(p.language_code)}${p.dialect ? `, ${p.dialect}` : ""}`;
 
+/** One line of a key / value table (D-152): the label on the left, the value on the right. */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="checks__row">
+    <div className="pd-kv__row">
       <dt>{label}</dt>
       <dd>{children}</dd>
     </div>
@@ -78,7 +80,7 @@ function Work({ d }: { d: work.ParticipantDetails }) {
   const c = d.calls;
   return (
     <Block icon="chart" title="Work in this project">
-      <dl className="pd-tiles">
+      <dl className="pd-kv pd-kv--figures">
         <Fact label="Sessions">{d.sessions_total}</Fact>
         {m ? (
           <>
@@ -118,7 +120,7 @@ function Profile({ d, required }: { d: work.ParticipantDetails; required: readon
     .join(", ");
   return (
     <Block icon="id" title="Profile">
-      <dl className="checks">
+      <dl className="pd-kv">
         <Fact label="Code">
           <span className="mono">{p.participant_code}</span>
         </Fact>
@@ -166,7 +168,7 @@ function PersonalLink({ link }: { link: work.ParticipantDetails["link"] }) {
   return (
     <Block icon="mail" title="Personal link">
       {link ? (
-        <dl className="checks">
+        <dl className="pd-kv">
           <Fact label="State">{link.active ? "Working" : "Stopped or run out"}</Fact>
           <Fact label="Made on">{when(link.created_at)}</Fact>
           <Fact label="Made by">{link.created_by ?? "-"}</Fact>
@@ -185,27 +187,30 @@ function ConsentForm({ form }: { form: work.ConsentFormView }) {
   const now = form.current;
   return (
     <Block icon="verified" title="Consent form">
-      <dl className="checks">
+      <dl className="pd-kv">
         <Fact label="Answer">{now ? consentAnswer(now.status).label : "No answer yet"}</Fact>
         {now ? <Fact label="Answered on">{when(now.answered_at)}</Fact> : null}
         <Fact label="Form version">{form.form_version}</Fact>
+        {form.earlier.length > 0 ? (
+          <Fact label="Earlier answers">
+            <ul className="pd-earlier">
+              {form.earlier.map((a) => (
+                <li key={a.answered_at}>
+                  {when(a.answered_at)} · {consentAnswer(a.status).label} · version{" "}
+                  {a.policy_version}
+                </li>
+              ))}
+            </ul>
+          </Fact>
+        ) : null}
       </dl>
-      <h4>{form.answered ? "Form text they answered" : "Form text they will see"}</h4>
-      <div className="consent-doc">
-        {form.form_text.trim() || "No consent form has been written for this project."}
-      </div>
-      {form.earlier.length > 0 ? (
-        <>
-          <h4>Earlier answers</h4>
-          <ul className="list">
-            {form.earlier.map((a) => (
-              <li key={a.answered_at}>
-                {when(a.answered_at)} · {consentAnswer(a.status).label} · version {a.policy_version}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      {/* The form's text is long: closed until someone opens it (D-152). */}
+      <details className="pd-more">
+        <summary>{form.answered ? "Form text they answered" : "Form text they will see"}</summary>
+        <div className="consent-doc">
+          {form.form_text.trim() || "No consent form has been written for this project."}
+        </div>
+      </details>
     </Block>
   );
 }
@@ -372,14 +377,26 @@ export function ParticipantDetails({
         }
       />
       <ErrorNotice error={error} />
-      <Work d={d} />
-      <Profile d={d} required={required} />
-      <PersonalLink link={d.link} />
-      {form ? <ConsentForm form={form} /> : null}
-      {/* D-144: the signed consent form and the address proof, as in the Documents window. */}
-      <Block icon="fileText" title="Documents">
-        <DocumentsPanel projectId={projectId} participantId={participantId} onChanged={reload} />
-      </Block>
+      {/* D-152: two columns on a wide window, who they are on the left and their work, link,
+          consent and documents on the right; the sessions under both. One column on a phone. */}
+      <div className="pd-grid">
+        <div className="pd-col">
+          <Profile d={d} required={required} />
+        </div>
+        <div className="pd-col">
+          <Work d={d} />
+          <PersonalLink link={d.link} />
+          {form ? <ConsentForm form={form} /> : null}
+          {/* D-144: the signed consent form and the address proof, as in the Documents window. */}
+          <Block icon="fileText" title="Documents">
+            <DocumentsPanel
+              projectId={projectId}
+              participantId={participantId}
+              onChanged={reload}
+            />
+          </Block>
+        </div>
+      </div>
       <Sessions d={d} />
     </div>
   );

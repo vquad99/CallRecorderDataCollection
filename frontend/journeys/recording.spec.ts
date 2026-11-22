@@ -74,7 +74,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.getByRole("dialog").getByRole("button", { name: "Make active" }).click();
     await expect(admin.getByText("This project accepts new work.")).toBeVisible();
     await admin.getByRole("link", { name: "Languages" }).click();
-    await admin.getByLabel(/^Language/).selectOption("hi");
+    await admin.getByRole("combobox", { name: /^Language/ }).selectOption("hi");
     await admin.getByRole("button", { name: "Add language" }).click();
     await expect(admin.getByRole("listitem").filter({ hasText: /^Hindi \(hi\)/ })).toBeVisible();
   });

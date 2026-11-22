@@ -271,16 +271,20 @@ describe("signed consent forms and documents (D-144)", () => {
     const row = (await screen.findByText("P000001")).closest("tr") as HTMLElement;
     await userEvent.click(within(row).getByRole("button", { name: "Documents" }));
     const docs = within(await screen.findByRole("dialog", { name: "Documents of P000001" }));
-    const form = docs.getByRole("region", { name: "Signed consent form" });
-    expect(await within(form).findByText("asha-consent.pdf")).toBeInTheDocument();
-    expect(within(form).getByText(/by Ada Admin · 240 KB/)).toBeInTheDocument();
-    const address = docs.getByRole("region", { name: "Address proof" });
-    expect(within(address).getByText("aadhaar.png")).toBeInTheDocument();
+    // D-152: one table row per kind of document, View and Replace as icons in the row.
+    const current = within(docs.getByRole("table", { name: "Documents" }));
+    const form = within(current.getByRole("row", { name: /^Signed consent form/ }));
+    expect(form.getByText("asha-consent.pdf")).toBeInTheDocument();
+    expect(form.getByText(/by Ada Admin · 240 KB/)).toBeInTheDocument();
+    const address = within(current.getByRole("row", { name: /^Address proof/ }));
+    expect(address.getByText("aadhaar.png")).toBeInTheDocument();
     const history = docs.getByRole("region", { name: "Earlier versions" });
-    expect(history).toHaveTextContent("Signed consent form: first-scan.jpg");
+    expect(within(history).getByRole("row", { name: /first-scan.jpg/ })).toHaveTextContent(
+      /^Signed consent formfirst-scan.jpg/,
+    );
     expect(history).toHaveTextContent("by Mona Moderator");
     expect(history).toHaveTextContent("by Ada Admin");
-    await userEvent.click(within(form).getByRole("button", { name: "View" }));
+    await userEvent.click(form.getByRole("button", { name: "View asha-consent.pdf" }));
     expect(
       await docs.findByText("asha-consent.pdf opened in a new tab. The link works for 5 minutes."),
     ).toBeInTheDocument();
@@ -289,10 +293,7 @@ describe("signed consent forms and documents (D-144)", () => {
     ]);
     await userEvent.click(within(history).getByRole("button", { name: "View first-scan.jpg" }));
     await waitFor(() => expect(opened).toHaveLength(2));
-    await userEvent.upload(
-      within(form).getByLabelText("Replace signed consent form"),
-      pdf("better.pdf"),
-    );
+    await userEvent.upload(form.getByLabelText("Replace signed consent form"), pdf("better.pdf"));
     expect(await docs.findByText("better.pdf")).toBeInTheDocument();
     expect(sent(fetchMock, "/a1/documents/consent-form").headers["X-File-Name"]).toBe("better.pdf");
     // The list behind the window is loaded again, with a word for the person.
@@ -390,7 +391,8 @@ describe("signed consent forms on the task page (D-144)", () => {
     expect(within(waiting).getByText("Consent form missing")).toBeInTheDocument();
     // Nothing is emailed in an Upload project: the signed form is uploaded instead.
     expect(within(waiting).queryByRole("button", { name: /Email consent form/ })).toBeNull();
-    const forms = screen.getByRole("region", { name: "Signed consent forms" });
+    // D-152: the signed forms sit in the participants matrix, one cell per person.
+    const forms = screen.getByRole("region", { name: "Participants" });
     expect(within(forms).getByText("asha-consent.pdf")).toBeInTheDocument();
     expect(screen.getAllByText("Form uploaded").length).toBeGreaterThan(0);
     await userEvent.upload(
@@ -436,7 +438,7 @@ describe("signed consent forms on the task page (D-144)", () => {
       }),
     );
     renderAt("/tasks/t1");
-    const forms = await screen.findByRole("region", { name: "Signed consent forms" });
+    const forms = await screen.findByRole("region", { name: "Participants" });
     expect(within(forms).queryByLabelText(/Upload consent form/)).toBeNull();
     expect(within(forms).queryByLabelText(/Replace consent form/)).toBeNull();
     await userEvent.click(

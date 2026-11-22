@@ -1,5 +1,44 @@
-/* Phone calls page (D-102) and the call card on a task page (D-103). The day chart, figures and
-   bars are in components/charts. */
+/* Phone calls page (D-102, one dashboard in D-151) and the call card on a task page (D-103). The
+   panels, key figures, day chart and tables are in components/charts. */
+.calls-page .toolbar .field {
+  min-width: 180px;
+}
+.calls-page .toolbar .field__input {
+  min-height: 32px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 0.8125rem;
+}
+.calls-page .toolbar .field__label {
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+.calls-page .toolbar .field {
+  gap: 2px;
+}
+.calls-page .toolbar > .button {
+  min-height: 32px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.calls-page .panel .hours ~ p {
+  margin: 0;
+}
+.funnel tbody th {
+  white-space: nowrap;
+}
+/* The counted reasons: two tables side by side, one under the other in a narrow panel. */
+.reasons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px 16px;
+}
+@container (max-width: 560px) {
+  .reasons {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 /* Calls by hour of the day: 24 thin bars, one series. */
 .hours {
@@ -7,8 +46,8 @@
   grid-template-columns: repeat(24, minmax(0, 1fr));
   align-items: end;
   gap: 2px;
-  height: 140px;
-  margin: 8px 0;
+  height: 110px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }

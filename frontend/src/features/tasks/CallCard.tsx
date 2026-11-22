@@ -480,7 +480,7 @@ function CallCard({
   }
 
   return (
-    <section className="card record-card" aria-labelledby="call-card-title">
+    <section className="card record-card work-card" aria-labelledby="call-card-title">
       <div className="record-card__text">
         <h2 id="call-card-title">{title}</h2>
         {body}
@@ -529,20 +529,32 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
                   <CancelButton call={c} onChange={refresh} />
                 </div>
               ) : null}
-              <ol className="list timeline">
-                {c.events.flatMap((e, n) => {
-                  const words = EVENT_WORDS[e.kind];
-                  if (words === null) return [];
-                  return [
-                    <li key={`${e.at}-${n}`}>
-                      <span className="muted">
-                        {when(e.at)} · {e.actor ?? "Platform"}
-                      </span>
-                      <div>{words ? words(c) : e.text}</div>
-                    </li>,
-                  ];
-                })}
-              </ol>
+              {/* D-152: the call's steps as a compact table, one line each. */}
+              <DataTable
+                className="matrix call-events"
+                label={`Steps of call ${state.data.length - i}`}
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">When</th>
+                    <th scope="col">Who</th>
+                    <th scope="col">What happened</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.events.flatMap((e, n) => {
+                    const words = EVENT_WORDS[e.kind];
+                    if (words === null) return [];
+                    return [
+                      <tr key={`${e.at}-${n}`}>
+                        <td className="nowrap">{time(e.at)}</td>
+                        <td className="nowrap">{e.actor ?? "Platform"}</td>
+                        <td>{words ? words(c) : e.text}</td>
+                      </tr>,
+                    ];
+                  })}
+                </tbody>
+              </DataTable>
               {superAdmin ? <TechnicalLog call={c} /> : null}
             </details>
           ))
@@ -598,22 +610,20 @@ function TechnicalLog({ call }: { call: tel.Call }) {
   );
 }
 
-/** The phone-call part of a telephony task page: the moderator's card, the consent card right
- * under it (recording waits for consent, D-119), the speakers' device details (D-147) and the call
- * history. They share one list of calls. When a call's recording is stored, the server has moved
- * the task to Recorded, so the page is told to fetch the task again. */
+/** The phone-call part of a telephony task page: the moderator's card and the call history, which
+ * share one list of calls; `children` places them on the page (D-152: the card with the work at
+ * the top, the history with the task's other records). When a call's recording is stored, the
+ * server has moved the task to Recorded, so the page is told to fetch the task again. */
 export function PhoneCalls({
   task,
   onChange,
   onTaskStale,
-  consent,
-  devices = null,
+  children,
 }: {
   task: work.TaskDetail;
   onChange: OnTaskChange;
   onTaskStale: () => void;
-  consent: ReactNode;
-  devices?: ReactNode;
+  children: (card: ReactNode, history: ReactNode) => ReactNode;
 }) {
   const calls = useCalls(task.id);
   const latest = calls.state.status === "loaded" ? calls.state.data[0] : undefined;
@@ -625,12 +635,8 @@ export function PhoneCalls({
     seen.current = key;
     if (before !== null && before !== key && latest?.state === "RECORDED") onTaskStale();
   }, [key, latest?.state, onTaskStale]);
-  return (
-    <>
-      {task.is_moderator ? <CallCard task={task} calls={calls} onChange={onChange} /> : null}
-      {consent}
-      {devices}
-      <CallHistory task={task} calls={calls} />
-    </>
+  return children(
+    task.is_moderator ? <CallCard task={task} calls={calls} onChange={onChange} /> : null,
+    <CallHistory task={task} calls={calls} />,
   );
 }

@@ -1,23 +1,33 @@
 // Dashboard (DASH-001..006). One page, three views decided by the server: a client sees collection
 // progress only; moderators and QC see their own work; managers also see what needs attention.
-import { useMemo, useState } from "react";
+// Laid out as one screen (D-151): the key figures in one strip, then a grid of charts and tables.
 import { Link } from "react-router";
+import { useState } from "react";
 
 import { getDashboard, type Dashboard, type DashboardFilters } from "../../api/dashboard";
+import {
+  CellBar,
+  DayChart,
+  Donut,
+  KeyTable,
+  Kpi,
+  KpiStrip,
+  Panel,
+  SplitBar,
+} from "../../components/charts/Charts";
+import { stageParts } from "../../components/charts/stages";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Bars, DayChart, Stat } from "../../components/charts/Charts";
 import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { StatusBadge } from "../../components/StatusBadge";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { bytes, hours } from "../../lib/format";
 import { labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
 import "./dashboard.css";
-import { DataTable } from "../../components/DataTable";
 
 const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
   client: { title: "Collection progress", lead: "Hours collected and approved for your projects." },
@@ -27,53 +37,6 @@ const HEADINGS: Record<Dashboard["view"], { title: string; lead: string }> = {
 
 const percent = (part: number, whole: number) =>
   whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0;
-
-const DONUT: Record<string, string> = {
-  APPROVED: "var(--ok)",
-  AUDIO_QC: "var(--warn)",
-  CONSENT_FIX: "var(--amber)",
-  ADMIN_REVIEW: "var(--info)",
-  RECORDED: "var(--series-approved)",
-  IN_PROGRESS: "var(--primary)",
-  ASSIGNED: "var(--violet)",
-  DRAFT: "var(--border-strong)",
-  REJECTED: "var(--danger)",
-  ON_HOLD: "var(--amber)",
-  CANCELLED: "var(--muted)",
-};
-
-function Donut({ parts, total }: { parts: [string, number][]; total: number }) {
-  const r = 42;
-  const c = 2 * Math.PI * r;
-  const starts = parts.map((_, i) =>
-    parts.slice(0, i).reduce((sum, [, n]) => sum + (n / total) * c, 0),
-  );
-  return (
-    <svg className="donut" viewBox="0 0 110 110" aria-hidden="true">
-      <circle cx="55" cy="55" r={r} className="donut__track" />
-      {parts.map(([status, n], i) => (
-        <circle
-          key={status}
-          cx="55"
-          cy="55"
-          r={r}
-          fill="none"
-          strokeWidth="14"
-          stroke={DONUT[status] ?? "var(--muted)"}
-          strokeDasharray={`${Math.max(0, (n / total) * c - 2)} ${c}`}
-          strokeDashoffset={-(starts[i] ?? 0)}
-          transform="rotate(-90 55 55)"
-        />
-      ))}
-      <text x="55" y="53" textAnchor="middle" className="donut__total">
-        {total}
-      </text>
-      <text x="55" y="68" textAnchor="middle" className="donut__label">
-        tasks
-      </text>
-    </svg>
-  );
-}
 
 /** What needs someone. A queue of tasks in one status opens the task list filtered to it. */
 const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] = [
@@ -96,23 +59,146 @@ const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] 
 const tasksLink = (status: string, projectId: string | null) =>
   `/tasks?status=${status}${projectId ? `&project=${projectId}` : ""}`;
 
-/** What each moderator recorded: the first rows, and the rest on request. */
-function Team({ team }: { team: NonNullable<Dashboard["team"]> }) {
-  const { shown, more } = useFirstRows(team);
+/** Face-to-face beside phone, and both together: one row per figure. */
+function ByMode({ data }: { data: Dashboard }) {
+  const modes = data.by_mode;
+  const rows: { label: string; each: (m: Dashboard["by_mode"][number]) => string; all: string }[] =
+    [
+      { label: "Recordings", each: (m) => String(m.recordings), all: String(data.recordings) },
+      { label: "Recorded", each: (m) => hours(m.recorded_hours), all: hours(data.recorded_hours) },
+      {
+        label: "Effective speech",
+        each: (m) => hours(m.effective_hours),
+        all: hours(data.effective_hours),
+      },
+      { label: "Approved", each: (m) => hours(m.approved_hours), all: hours(data.approved_hours) },
+      {
+        label: "Completed",
+        each: (m) => hours(m.completed_hours),
+        all: hours(data.completed_hours),
+      },
+    ];
+  const target = (h: number) => (h > 0 ? `${h} h` : "Not set");
+  if (data.view !== "worker")
+    rows.push({
+      label: "Daily target",
+      each: (m) => target(m.target_hours_per_day),
+      all: target(data.target_hours_per_day),
+    });
   return (
-    <section className="card stack stack--tight" aria-labelledby="team-title">
-      <h2 id="team-title">Moderator output</h2>
+    <DataTable label="By recording type" className="by-mode">
+      <thead>
+        <tr>
+          <th scope="col">
+            <span className="sr-only">Figure</span>
+          </th>
+          {modes.map((m) => (
+            <th key={m.mode} scope="col" className="num">
+              <span className="cell-icon">
+                <Icon name={m.mode === "TELEPHONY" ? "phone" : "mic"} size={14} />
+                {labelFor(MODE_LABELS, m.mode)}
+              </span>
+            </th>
+          ))}
+          <th scope="col" className="num">
+            Total
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label}>
+            <th scope="row">{r.label}</th>
+            {modes.map((m) => (
+              <td key={m.mode} className="num">
+                {r.each(m)}
+              </td>
+            ))}
+            <td className="num by-mode__total">{r.all}</td>
+          </tr>
+        ))}
+      </tbody>
+    </DataTable>
+  );
+}
+
+/** Queues that need someone, with their counts; a queue of tasks opens the filtered task list. */
+function Attention({
+  queues,
+  projectId,
+}: {
+  queues: Record<string, number>;
+  projectId: string | null;
+}) {
+  return (
+    <DataTable label="Needs attention" className="attention">
+      <tbody>
+        {QUEUES.map((q) => {
+          const n = queues[q.key] ?? 0;
+          return (
+            <tr key={q.key} className={n > 0 ? "is-active" : undefined}>
+              <th scope="row">
+                <span className="cell-icon">
+                  <Icon name={q.icon} size={16} />
+                  {q.status ? <Link to={tasksLink(q.status, projectId)}>{q.label}</Link> : q.label}
+                </span>
+              </th>
+              <td className="num">
+                <span className="attention__n">{n}</span>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </DataTable>
+  );
+}
+
+const GOOD = "var(--icon-green)";
+const WAIT = "var(--series-waiting)";
+const BAD = "var(--icon-rose)";
+
+/** Audio QC: the decisions, and the automatic check of the recordings still waiting. */
+function AudioQc({ qc }: { qc: NonNullable<Dashboard["qc"]> }) {
+  return (
+    <>
+      <SplitBar
+        title="QC decisions"
+        parts={[
+          { key: "passed", label: "Passed", n: qc.passed, color: GOOD },
+          { key: "rejected", label: "Rejected", n: qc.rejected, color: BAD },
+          { key: "waiting", label: "Waiting", n: qc.waiting, color: WAIT },
+        ]}
+      />
+      <SplitBar
+        title="Automatic check of those waiting"
+        parts={[
+          { key: "pass", label: "All checks passed", n: qc.auto_pass, color: GOOD },
+          { key: "review", label: "Listen and decide", n: qc.auto_review, color: WAIT },
+          { key: "fail", label: "Failed a check", n: qc.auto_fail, color: BAD },
+        ]}
+      />
+    </>
+  );
+}
+
+/** What each moderator recorded: the first rows, and the rest on request. */
+function Team({ team, className }: { team: NonNullable<Dashboard["team"]>; className: string }) {
+  const { shown, more } = useFirstRows(team);
+  const most = Math.max(0, ...team.map((t) => t.recorded_hours));
+  return (
+    <Panel className={className} icon="people" title="Moderator output">
       {team.length === 0 ? (
         <p className="muted">No finished recordings yet.</p>
       ) : (
-        <DataTable>
+        <DataTable label="Moderator output">
           <thead>
             <tr>
               <th scope="col">Moderator</th>
               <th scope="col" className="num">
                 Recordings
               </th>
-              <th scope="col" className="num">
+              <th scope="col" className="num team__hours">
                 Hours
               </th>
             </tr>
@@ -120,44 +206,72 @@ function Team({ team }: { team: NonNullable<Dashboard["team"]> }) {
           <tbody>
             {shown.map((t) => (
               <tr key={t.name}>
-                <td>
+                <th scope="row">
                   <span className="cell-person">
                     <Avatar name={t.name} />
                     {t.name}
                   </span>
-                </td>
+                </th>
                 <td className="num">{t.recordings}</td>
-                <td className="num">{hours(t.recorded_hours)}</td>
+                <td className="num">
+                  <CellBar value={t.recorded_hours} max={most}>
+                    {hours(t.recorded_hours)}
+                  </CellBar>
+                </td>
               </tr>
             ))}
           </tbody>
         </DataTable>
       )}
       {more}
-    </section>
+    </Panel>
   );
 }
 
 function Body({ data }: { data: Dashboard }) {
-  const todayPct = percent(data.today_hours, data.target_hours_per_day);
-  const statuses = useMemo(
-    () =>
-      Object.entries(data.tasks_by_status ?? {})
-        .filter(([, n]) => n > 0)
-        .sort((a, b) => b[1] - a[1]),
-    [data.tasks_by_status],
+  const daily = data.target_hours_per_day;
+  const statuses = data.view === "client" ? [] : stageParts(data.tasks_by_status ?? {});
+  const showCalls =
+    data.calls !== null &&
+    (data.calls.placed > 0 ||
+      data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0));
+  // The third row holds what this view has: tasks by status, what needs attention, audio QC
+  // (widest first: the status legend, then the queues, then the two QC bars).
+  const third = [data.view !== "client", data.queues !== null, data.qc !== null].filter(
+    Boolean,
+  ).length;
+  const spans = third === 3 ? ["g-5", "g-4", "g-3"] : third === 2 ? ["g-6", "g-6"] : [""];
+  const [statusSpan, attentionSpan, qcSpan] = [
+    data.view !== "client" ? spans.shift() : "",
+    data.queues ? spans.shift() : "",
+    data.qc ? spans.shift() : "",
+  ];
+  const notes = (
+    <>
+      Effective speech is the time someone speaks (silences left out). Completed counts each
+      project&apos;s approved recordings as its rules say: effective speech or the full length;
+      several projects add up their own.
+      {data.effective_pending > 0
+        ? ` ${data.effective_pending} recording${data.effective_pending === 1 ? " is" : "s are"} still being measured and count${data.effective_pending === 1 ? "s" : ""} no effective speech yet.`
+        : ""}{" "}
+      Days are counted in{" "}
+      {data.timezone === "Asia/Kolkata"
+        ? "India Standard Time"
+        : `${data.timezone.replace("_", " ")} time`}
+      .
+    </>
   );
   return (
-    <>
-      <div className="stats stats--five">
-        <Stat
+    <div className="dash">
+      <KpiStrip label="Key figures">
+        <Kpi
           icon="mic"
           label="Recorded"
           value={hours(data.recorded_hours)}
           note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}, ${hours(data.effective_hours)} effective speech`}
           spark={data.daily.map((d) => d.recorded_hours)}
         />
-        <Stat
+        <Kpi
           icon="verified"
           label="Approved"
           value={hours(data.approved_hours)}
@@ -165,239 +279,136 @@ function Body({ data }: { data: Dashboard }) {
           spark={data.daily.map((d) => d.approved_hours)}
         />
         {/* D-148: approved recordings counted as each project's rules say. */}
-        <Stat
+        <Kpi
           icon="ok"
           label="Completed"
           value={hours(data.completed_hours)}
           note={`approved, as each project counts it (effective speech ${hours(data.approved_effective_hours)})`}
           spark={data.daily.map((d) => d.completed_hours)}
         />
-        <Stat
+        <Kpi
           icon="clock"
           label="Today"
           value={hours(data.today_hours)}
+          meter={
+            data.view !== "worker" && daily > 0
+              ? {
+                  percent: percent(data.today_hours, daily),
+                  label: "Today of the daily target",
+                  text: `${percent(data.today_hours, daily)}%`,
+                }
+              : undefined
+          }
           note={
             data.view === "worker"
               ? "recorded by you today"
-              : data.target_hours_per_day > 0
-                ? `of the ${data.target_hours_per_day} h daily target`
+              : daily > 0
+                ? `of the ${daily} h daily target`
                 : "No daily target set"
           }
-          ring={data.target_hours_per_day > 0 ? todayPct : undefined}
         />
-        <Stat
+        <Kpi
           icon="tasks"
           label="Tasks approved"
-          value={`${data.tasks_approved} / ${data.tasks_total}`}
+          value={String(data.tasks_approved)}
+          of={`/ ${data.tasks_total}`}
+          meter={{
+            percent: percent(data.tasks_approved, data.tasks_total),
+            label: "Tasks approved of all tasks",
+            text: `${percent(data.tasks_approved, data.tasks_total)}%`,
+          }}
           note="tasks complete"
-          ring={percent(data.tasks_approved, data.tasks_total)}
         />
-      </div>
+      </KpiStrip>
 
-      <div className="card">
-        <DayChart
-          title="Hours per day"
-          days={data.daily}
-          target={data.target_hours_per_day}
-          emptyText="No finished recordings in this period yet."
-          series={[
-            { label: "Approved", className: "series--approved", value: (d) => d.approved_hours },
-            {
-              label: "Recorded, not yet approved",
-              className: "series--waiting",
-              value: (d) => Math.max(0, d.recorded_hours - d.approved_hours),
-            },
-          ]}
-          columns={[
-            { label: "Recorded", value: (d) => hours(d.recorded_hours) },
-            { label: "Approved", value: (d) => hours(d.approved_hours) },
-          ]}
-        />
-      </div>
+      <div className="dash-grid">
+        <div className="panel g-7">
+          <DayChart
+            title="Hours per day"
+            height={196}
+            days={data.daily}
+            target={daily}
+            emptyText="No finished recordings in this period yet."
+            series={[
+              { label: "Approved", className: "series--approved", value: (d) => d.approved_hours },
+              {
+                label: "Recorded, not yet approved",
+                className: "series--waiting",
+                value: (d) => Math.max(0, d.recorded_hours - d.approved_hours),
+              },
+            ]}
+            columns={[
+              { label: "Recorded", value: (d) => hours(d.recorded_hours) },
+              { label: "Approved", value: (d) => hours(d.approved_hours) },
+            ]}
+          />
+        </div>
+        <Panel className="g-5" icon="mic" title="By recording type">
+          <ByMode data={data} />
+        </Panel>
 
-      <div className="split">
-        {data.by_mode.map((m) => (
-          <div key={m.mode} className="card mode">
-            <h2 className="with-icon">
-              <IconTile name={m.mode === "TELEPHONY" ? "phone" : "mic"} size={28} />
-              {labelFor(MODE_LABELS, m.mode)}
-            </h2>
-            <dl className="checks">
-              <div className="checks__row">
-                <dt>Recorded</dt>
-                <dd>{hours(m.recorded_hours)}</dd>
-              </div>
-              <div className="checks__row">
-                <dt>Approved</dt>
-                <dd>{hours(m.approved_hours)}</dd>
-              </div>
-              <div className="checks__row">
-                <dt>Effective speech</dt>
-                <dd>{hours(m.effective_hours)}</dd>
-              </div>
-              <div className="checks__row">
-                <dt>Completed</dt>
-                <dd>{hours(m.completed_hours)}</dd>
-              </div>
-              {data.view === "worker" ? null : (
-                <div className="checks__row">
-                  <dt>Daily target</dt>
-                  <dd>{m.target_hours_per_day > 0 ? `${m.target_hours_per_day} h` : "Not set"}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
-        ))}
-      </div>
+        {data.view !== "client" ? (
+          <Panel className={statusSpan} icon="tasks" title="Tasks by status">
+            <Donut
+              label="Tasks by status"
+              parts={statuses}
+              unit="tasks"
+              emptyText="No tasks yet."
+            />
+          </Panel>
+        ) : null}
+        {data.queues ? (
+          <Panel className={attentionSpan} icon="warning" title="Needs attention">
+            <Attention queues={data.queues} projectId={data.project_id} />
+          </Panel>
+        ) : null}
+        {data.qc ? (
+          <Panel className={qcSpan} icon="verified" title="Audio QC">
+            <AudioQc qc={data.qc} />
+          </Panel>
+        ) : null}
 
-      {data.view !== "client" ? (
-        <div className="split">
-          <section className="card" aria-labelledby="by-status">
-            <h2 id="by-status">Tasks by status</h2>
-            {statuses.length === 0 ? (
-              <p className="muted">No tasks yet.</p>
-            ) : (
-              <div className="status-split">
-                <Donut parts={statuses} total={statuses.reduce((n, [, v]) => n + v, 0)} />
-                <Bars
-                  empty="No tasks yet."
-                  rows={statuses.map(([s, n]) => ({
-                    key: s,
-                    label: <StatusBadge status={s} label={labelFor(TASK_STATUS_LABELS, s)} />,
-                    n,
-                    color: DONUT[s] ?? "var(--muted)",
-                  }))}
+        {data.team ? <Team team={data.team} className="g-8" /> : null}
+        {data.team || showCalls || data.storage_bytes !== null ? (
+          <div className={data.team ? "dash-col g-4" : "dash-col"}>
+            {data.calls && showCalls ? (
+              <Panel icon="phone" title="Phone calls">
+                <KeyTable
+                  label="Phone calls"
+                  rows={[
+                    { label: "Placed", value: data.calls.placed },
+                    { label: "Recorded", value: data.calls.recorded },
+                    { label: "Could not be placed", value: data.calls.could_not_be_placed },
+                    { label: "Waiting for a person", value: data.calls.needs_a_person },
+                    { label: "Still open", value: data.calls.open },
+                  ]}
                 />
-              </div>
-            )}
-          </section>
-          {data.qc ? (
-            <section className="card" aria-labelledby="qc-title">
-              <h2 id="qc-title">Audio QC</h2>
-              <dl className="checks">
-                <div className="checks__row">
-                  <dt>Passed</dt>
-                  <dd>{data.qc.passed}</dd>
-                </div>
-                <div className="checks__row">
-                  <dt>Rejected</dt>
-                  <dd>{data.qc.rejected}</dd>
-                </div>
-                <div className="checks__row">
-                  <dt>Waiting</dt>
-                  <dd>{data.qc.waiting}</dd>
-                </div>
-              </dl>
-              <h3>Automatic check of those waiting</h3>
-              <dl className="checks">
-                <div className="checks__row">
-                  <dt>All checks passed</dt>
-                  <dd>{data.qc.auto_pass}</dd>
-                </div>
-                <div className="checks__row">
-                  <dt>Listen and decide</dt>
-                  <dd>{data.qc.auto_review}</dd>
-                </div>
-                <div className="checks__row">
-                  <dt>Failed a check</dt>
-                  <dd>{data.qc.auto_fail}</dd>
-                </div>
-              </dl>
-            </section>
-          ) : null}
-        </div>
-      ) : null}
-
-      {data.queues ? (
-        <section aria-labelledby="attention" className="stack stack--tight">
-          <h2 id="attention">Needs attention</h2>
-          <div className="queues">
-            {QUEUES.map((q) => {
-              const n = data.queues?.[q.key] ?? 0;
-              const inner = (
-                <>
-                  <Icon name={q.icon} size={18} />
-                  <span className="queue__label">{q.label}</span>
-                  <span className="queue__value">{n}</span>
-                </>
-              );
-              const className = n > 0 ? "queue queue--active" : "queue";
-              return q.status ? (
-                <Link key={q.key} className={className} to={tasksLink(q.status, data.project_id)}>
-                  {inner}
-                </Link>
-              ) : (
-                <div key={q.key} className={className}>
-                  {inner}
-                </div>
-              );
-            })}
+                <p className="muted">
+                  More on the <Link to="/calls">Phone calls</Link> page.
+                </p>
+              </Panel>
+            ) : null}
+            {data.storage_bytes !== null ? (
+              <Panel
+                icon="archive"
+                title="Storage used"
+                action={<strong className="dash-storage">{bytes(data.storage_bytes)}</strong>}
+              >
+                <p className="muted">
+                  Files kept in private storage, before retention deletes them.
+                </p>
+              </Panel>
+            ) : null}
+            {data.team ? (
+              <Panel icon="info" title="How these are counted">
+                <p className="muted">{notes}</p>
+              </Panel>
+            ) : null}
           </div>
-        </section>
-      ) : null}
-
-      {data.calls &&
-      (data.calls.placed > 0 ||
-        data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0)) ? (
-        <section className="card" aria-labelledby="calls-title">
-          <h2 id="calls-title" className="with-icon">
-            <IconTile name="phone" size={28} />
-            Phone calls
-          </h2>
-          <dl className="checks">
-            <div className="checks__row">
-              <dt>Placed</dt>
-              <dd>{data.calls.placed}</dd>
-            </div>
-            <div className="checks__row">
-              <dt>Recorded</dt>
-              <dd>{data.calls.recorded}</dd>
-            </div>
-            <div className="checks__row">
-              <dt>Could not be placed</dt>
-              <dd>{data.calls.could_not_be_placed}</dd>
-            </div>
-            <div className="checks__row">
-              <dt>Waiting for a person</dt>
-              <dd>{data.calls.needs_a_person}</dd>
-            </div>
-            <div className="checks__row">
-              <dt>Still open</dt>
-              <dd>{data.calls.open}</dd>
-            </div>
-          </dl>
-          <p className="muted">
-            More on the <Link to="/calls">Phone calls</Link> page.
-          </p>
-        </section>
-      ) : null}
-
-      {data.team ? (
-        <div className="split split--wide">
-          <Team team={data.team} />
-          <section className="card card--top" aria-labelledby="storage-title">
-            <h2 id="storage-title">Storage used</h2>
-            <p className="stat__value">{bytes(data.storage_bytes ?? 0)}</p>
-            <p className="muted">Files kept in private storage, before retention deletes them.</p>
-          </section>
-        </div>
-      ) : null}
-      <p className="muted">
-        Effective speech is the time someone speaks (silences left out). Completed counts each
-        project&apos;s approved recordings as its rules say: effective speech or the full length;
-        several projects add up their own.
-        {data.effective_pending > 0
-          ? ` ${data.effective_pending} recording${data.effective_pending === 1 ? " is" : "s are"} still being measured and count${data.effective_pending === 1 ? "s" : ""} no effective speech yet.`
-          : ""}
-      </p>
-      <p className="muted">
-        Days are counted in{" "}
-        {data.timezone === "Asia/Kolkata"
-          ? "India Standard Time"
-          : `${data.timezone.replace("_", " ")} time`}
-        .
-      </p>
-    </>
+        ) : null}
+      </div>
+      {data.team ? null : <p className="muted dash-foot">{notes}</p>}
+    </div>
   );
 }
 
@@ -447,7 +458,7 @@ export function DashboardPage() {
   const narrowed = Object.values(filters).some(Boolean) || custom;
   const set = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
   return (
-    <section aria-labelledby="dash-title" className="stack">
+    <section aria-labelledby="dash-title" className="stack stack--tight dash-page">
       <div className="page-header">
         <div className="page-header__text">
           <h1 id="dash-title">
@@ -483,7 +494,7 @@ export function DashboardPage() {
           />
         </div>
       </div>
-      <div className="filters" role="group" aria-label="Filters">
+      <div className="filters dash-filters" role="group" aria-label="Filters">
         {custom ? (
           <>
             <TextField

@@ -1,5 +1,7 @@
-/* Task pages: the task list's priority marks, and on one task the facts, the moderator's next step
-   (D-091, D-092), the consent rows, the history and the audio player. */
+/* Task pages: the task list's priority marks, and on one task (D-152) a compact stepper, the work
+   and the task's records on the left, a summary, the participants matrix and the history on the
+   right; the next step as one card (D-091, D-092), the QC checklist as matrices (D-146) with its
+   decision bar, and the audio player. The matrices' own pieces are in moderator.css. */
 
 .priority {
   display: inline-flex;
@@ -15,31 +17,13 @@
   content: "";
 }
 .priority--high::before {
-  background: var(--amber);
+  background: var(--icon-amber);
 }
 .priority--urgent::before {
-  background: var(--danger);
+  background: var(--icon-rose);
 }
 .priority--normal::before {
-  background: var(--primary);
-}
-
-/* Facts in one row; a participant as code tag + consent chip. */
-.checks--facts {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-/* A participant in the task's facts: the name, then the code and the consent answer under it. */
-.party {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-.party__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  background: var(--icon-blue);
 }
 .code-tag {
   padding: 1px 8px;
@@ -49,14 +33,350 @@
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-/* The moderator's next step, in one card with one main button. */
+/* ---------- One task: the page's frame ---------- */
+.task-page {
+  gap: 12px;
+}
+.task-page > .page-header h1 {
+  font-size: 1.375rem;
+}
+/* The stepper, smaller than elsewhere: a strip under the title. */
+.task-steps {
+  padding: 8px 12px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.task-steps .stepper__step {
+  gap: 3px;
+  font-size: 0.6875rem;
+}
+.task-steps .stepper__dot {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+  font-size: 0.6875rem;
+}
+.task-steps .stepper__dot .icon {
+  width: 11px;
+  height: 11px;
+}
+.task-steps .stepper__step + .stepper__step::before {
+  top: 9px;
+  right: calc(50% + 14px);
+  left: calc(-50% + 14px);
+}
+.task-steps .stepper__step--now .stepper__dot,
+.task-steps .stepper__step--halted .stepper__dot {
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.task-steps .stepper__step--halted .stepper__dot {
+  box-shadow: 0 0 0 3px var(--warn-soft);
+}
+
+/* Work and records on the left, the side column on the right; on a phone the work comes first,
+   then the side, then the records. */
+.task-layout {
+  display: grid;
+  grid-template-areas:
+    "work side"
+    "rest side";
+  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  align-items: start;
+  gap: 14px 16px;
+}
+.task-work {
+  grid-area: work;
+  gap: 14px;
+  min-width: 0;
+}
+.task-rest {
+  grid-area: rest;
+  gap: 14px;
+  min-width: 0;
+}
+.task-work:empty {
+  display: none;
+}
+.task-side {
+  position: sticky;
+  top: calc(var(--topbar-h) + 12px);
+  display: flex;
+  grid-area: side;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-height: calc(100vh - var(--topbar-h) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+@media (max-width: 1100px) {
+  .task-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+@media (max-width: 900px) {
+  .task-layout {
+    grid-template-areas:
+      "work"
+      "side"
+      "rest";
+    grid-template-rows: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* The card with the person's next step: a coloured edge marks it as the work. */
+.work-card {
+  border-left: 3px solid var(--icon-blue);
+}
+.task-page .card {
+  padding: 14px 18px;
+}
+.task-page .card > h2,
+.task-page .card > h3 {
+  margin-bottom: 10px;
+}
+.task-page .card .card__head {
+  margin-bottom: 4px;
+}
+.assign-card .field {
+  max-width: 420px;
+}
+
+/* ---------- The side column ---------- */
+.task-page .side-card {
+  padding: 10px 12px 12px;
+}
+.side-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.side-card__head h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+/* The summary: label left, value right, one thin line between rows. */
+.facts {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.facts__row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.facts__row:last-child {
+  border-bottom: 0;
+}
+.facts dt {
+  color: var(--text-2);
+}
+.facts dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.side-more {
+  margin-top: 8px;
+}
+.side-more > summary {
+  color: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.side-more[open] > summary {
+  margin-bottom: 8px;
+}
+.task-side .field {
+  margin-bottom: 10px;
+}
+/* A small text button (Show all, View). */
+.linkish {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.linkish:hover {
+  background: var(--primary-soft);
+}
+.linkish:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+/* The participants matrix in the narrow column. */
+.table-wrap .table.people-matrix th,
+.table-wrap .table.people-matrix td {
+  padding: 6px 8px;
+}
+.table.people-matrix {
+  table-layout: fixed;
+}
+.table.people-matrix thead th:first-child,
+.table.people-matrix tbody th {
+  width: 112px;
+}
+.table.people-matrix .badge {
+  padding: 2px 7px;
+}
+.card .table-wrap .table.people-matrix tbody th {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.table.people-matrix tbody th {
+  white-space: normal;
+}
+.table.people-matrix td {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mx-name {
+  font-weight: 500;
+}
+.mx-file {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.mx-file__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.mx-file__open:hover:not(:disabled) {
+  background: var(--primary-soft);
+}
+.mx-file__open .icon {
+  flex: none;
+}
+.mx-file__name {
+  overflow-wrap: break-word;
+  text-align: left;
+}
+.mx-file .icon-button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+/* History: the newest first, a dot per entry on a thin line. */
+.timeline {
+  margin-bottom: 18px;
+}
+.timeline li {
+  position: relative;
+  padding: 0 0 16px 26px;
+  border-bottom: 0;
+}
+.timeline li::before {
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  content: "";
+}
+.timeline li::after {
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  background: var(--border-strong);
+  content: "";
+}
+.timeline li:last-child::after {
+  display: none;
+}
+.timeline--compact {
+  margin-bottom: 10px;
+  font-size: 0.8125rem;
+}
+.timeline--compact li {
+  padding: 0 0 10px 20px;
+}
+.timeline--compact li::before {
+  top: 4px;
+  width: 9px;
+  height: 9px;
+}
+.timeline--compact li::after {
+  top: 15px;
+  left: 4px;
+}
+.timeline__title {
+  color: var(--text);
+  font-weight: 500;
+}
+.timeline__detail {
+  color: var(--text-2);
+}
+.timeline--compact .muted {
+  font-size: 0.75rem;
+}
+.comment-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.task-side .comment-form .field {
+  flex: 1 1 160px;
+  margin: 0;
+}
+
+/* ---------- The next step, in one card with one main button ---------- */
 .record-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px 24px;
+  gap: 10px 24px;
 }
 .record-card .notice {
   grid-column: 1 / -1;
@@ -65,7 +385,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   color: var(--muted);
   font-size: 0.8125rem;
@@ -108,7 +428,10 @@
 }
 /* Listening and the actions in the moderator's and the admin's cards (D-092). */
 .record-card__listen {
-  margin-top: 12px;
+  margin-top: 10px;
+}
+.record-card__listen p {
+  margin: 0 0 8px;
 }
 .record-card__listen .player {
   width: min(100%, 420px);
@@ -118,49 +441,33 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+  max-width: 260px;
 }
 .record-card__go .button {
-  min-height: 42px;
-  padding: 9px 20px;
+  min-height: 40px;
+  padding: 8px 20px;
   font-size: 0.9375rem;
+}
+.record-card__go p {
+  margin: 0;
 }
 /* Two choices side by side (Approve, Reject). */
 .record-card__go--row {
   flex-direction: row;
   flex-wrap: wrap;
-}
-/* Steps written as sentences read top to bottom. */
-.record-card__steps--list {
-  flex-direction: column;
-  align-items: flex-start;
-}
-.record-card__steps--list li {
-  align-items: flex-start;
+  max-width: none;
 }
 
-/* Consent: one row per person, the answer as a two-way choice. */
+/* Waiting for consent: one row per person who has not agreed yet. */
 .consent {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
-.consent__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px 24px;
-}
-.consent__head h2 {
-  margin-bottom: 4px;
-}
-.consent__head p {
+.consent > h2 {
   margin: 0;
 }
-.consent__method {
-  min-width: 240px;
-}
-.consent__method .field {
+.consent > p {
   margin: 0;
 }
 .consent__rows {
@@ -168,15 +475,15 @@
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--surface);
   list-style: none;
 }
 .consent__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 16px;
-  padding: 12px 14px 12px 16px;
+  gap: 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 .consent__row:last-child {
@@ -193,40 +500,6 @@
   font-size: 0.8125rem;
   font-weight: 500;
 }
-.seg {
-  display: inline-flex;
-  padding: 3px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface);
-}
-.seg__option {
-  padding: 5px 14px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.seg__option:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-/* The chosen answer; whether it fails the recording is said in words beside it (D-146). */
-.seg__option[aria-pressed="true"] {
-  background: var(--primary);
-  color: #fff;
-}
-.seg__option:focus-visible {
-  box-shadow: var(--focus-ring);
-  outline: none;
-}
-.seg__option:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
 @media (max-width: 640px) {
   .record-card,
   .consent__row {
@@ -235,43 +508,9 @@
   .record-card__steps {
     flex-direction: column;
   }
-  .consent__method {
-    min-width: 0;
-    width: 100%;
+  .record-card__go {
+    max-width: none;
   }
-}
-
-/* History: a dot per entry on a thin line. */
-.timeline {
-  margin-bottom: 18px;
-}
-.timeline li {
-  position: relative;
-  padding: 0 0 16px 26px;
-  border-bottom: 0;
-}
-.timeline li::before {
-  position: absolute;
-  top: 5px;
-  left: 0;
-  width: 11px;
-  height: 11px;
-  border: 2px solid var(--primary);
-  border-radius: 50%;
-  background: var(--surface);
-  content: "";
-}
-.timeline li::after {
-  position: absolute;
-  top: 18px;
-  bottom: 0;
-  left: 5px;
-  width: 1px;
-  background: var(--border-strong);
-  content: "";
-}
-.timeline li:last-child::after {
-  display: none;
 }
 
 /* The audio player spans the card (D-079). */
@@ -280,7 +519,27 @@
   width: 100%;
   max-width: 560px;
 }
-/* The audio check's summary line with its "Show all checks" button. */
+
+/* ---------- Audio quality and the QC checklist (D-079, D-146) ---------- */
+.qc-head__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.qc-head .player {
+  width: 300px;
+  max-width: 100%;
+}
+.qc-auto__line {
+  margin: 0;
+}
+.qc-auto__label {
+  margin-right: 10px;
+  color: var(--text-2);
+  font-weight: 500;
+}
+/* The automatic check's summary line with its "Show all checks" button. */
 .qc__summary {
   display: flex;
   flex-wrap: wrap;
@@ -291,54 +550,266 @@
 .qc__summary p {
   margin: 0;
 }
-
-/* The QC checklist (D-146): a group per subject, one row per question with its Yes / No. */
-.qc-group {
-  min-width: 0;
+.table.qc-checks tr.is-fail td {
+  background: var(--tint-rose);
+}
+.qc-assign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.qc-assign .field {
+  flex: 1 1 220px;
   margin: 0;
-  padding: 0;
-  border: 0;
 }
-.qc-group legend {
-  margin-bottom: 6px;
-  padding: 0;
-  font-weight: 600;
+.qc-assign .notice {
+  flex-basis: 100%;
 }
-.qc-group > p {
-  margin: 0 0 8px;
+.qc-checklist__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
-.qc-list {
+.qc-checklist__head h3 {
   margin: 0;
-  padding: 0;
+}
+.qc-checklist__head p {
+  margin: 0;
+}
+/* "Answered 31 / 43 · 2 failing" and its bar. */
+.qc-progress {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  list-style: none;
+  background: var(--surface-2);
 }
-.qc-list__row {
+.qc-progress__text {
+  white-space: nowrap;
+}
+.qc-progress__fail {
+  color: var(--danger);
+  font-weight: 600;
+}
+.qc-progress__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--k-300);
+}
+.qc-progress__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--icon-blue);
+  transition: width 0.2s var(--ease);
+}
+.qc-progress__bar > span.is-done {
+  background: var(--icon-green);
+}
+.qc-progress__bar > span.is-fail {
+  background: var(--icon-rose);
+}
+.qc-progress__saved {
+  margin: 0;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .qc-progress {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .qc-progress__bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+/* The checklist's tables: side by side when the panel is wide enough. */
+.qc-matrix {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
   gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  container-type: inline-size;
 }
-.qc-list__row:last-child {
-  border-bottom: 0;
+.qc-matrix__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 16px;
 }
-.qc-list__question,
-.qc-list__answer {
+@container (min-width: 1000px) {
+  .qc-matrix__grid {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+  }
+}
+.qc-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.qc-block > h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.qc-block__note {
+  margin: 0;
+}
+.qc-recorded__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qc-recorded__head h3 {
+  margin: 0;
+}
+.stack--tight > p {
+  margin: 0;
+}
+
+/* The decision: stays at the bottom of the screen while the questions scroll (D-152). */
+.qc-decide {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 4px -18px -14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border-strong);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+  box-shadow: 0 -6px 16px rgb(30 33 42 / 0.08);
+}
+.qc-decide__text {
+  flex: 1 1 260px;
   min-width: 0;
 }
-.qc__hint {
+.qc-decide__buttons {
+  flex: none;
+}
+.qc-decide__text h3 {
   margin: 0;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.qc-decide__text p {
+  margin: 2px 0 0;
+}
+.qc-decide .notice {
+  flex-basis: 100%;
+}
+.qc__hint {
+  font-weight: 600;
+}
+.qc__hint.is-fail {
+  color: var(--danger);
+}
+.qc__hint.is-ok {
+  color: var(--ok);
+}
+/* Not followed by more of the card: no space under the bar. */
+.qc-panel > .qc-decide:last-child {
+  margin-bottom: -14px;
+}
+
+/* ---------- The task list: compact rows ---------- */
+.table.tasks-table th,
+.table.tasks-table td,
+.card .table-wrap .table.tasks-table th,
+.card .table-wrap .table.tasks-table td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.tasks-table .code {
+  font-family: var(--font-mono);
+}
+
+/* Who acts next, for someone with nothing to do on the task now. */
+.next-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface);
+}
+.next-step p {
+  margin: 0;
+  color: var(--text);
   font-weight: 500;
 }
+.next-step .icon {
+  flex: none;
+}
+
+/* The recordings: compact rows, the name on one line. */
+.table-wrap .table.rec-table th,
+.table-wrap .table.rec-table td {
+  padding: 7px 12px;
+}
+.table.rec-table td:first-child {
+  white-space: nowrap;
+}
+
+/* ---------- Phones: one column, tighter cards and matrices ---------- */
 @media (max-width: 640px) {
-  .qc-list__row {
-    grid-template-columns: minmax(0, 1fr);
+  .task-page .card {
+    padding: 12px;
   }
+  .qc-decide {
+    margin: 4px -12px -12px;
+    padding: 8px 12px;
+  }
+  .qc-decide__text h3 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .qc-decide__text p {
+    margin: 0;
+    font-size: 0.8125rem;
+  }
+  .qc-decide__buttons {
+    display: grid;
+    flex: 1 1 100%;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    min-width: 0;
+  }
+  .qc-decide__buttons .button {
+    justify-content: center;
+    min-height: 36px;
+    padding: 4px 8px;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    white-space: normal;
+  }
+  .qc-decide__buttons .notice {
+    grid-column: 1 / -1;
+  }
+}
+
+/* A call's steps (D-152): a compact table under its line in Phone calls. */
+.call > .table-wrap {
+  margin: 6px 0 10px;
+}
+.table.call-events td {
+  vertical-align: top;
 }

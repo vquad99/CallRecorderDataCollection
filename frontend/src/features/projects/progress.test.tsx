@@ -1,6 +1,6 @@
 // The project's audio, progress and target settings on the Rules tab, and the Progress tab
-// (D-148): completed minutes, conversations and speakers against the targets, and the shares with
-// their variance.
+// (D-148, one dashboard in D-151): completed minutes, conversations and speakers against the
+// targets, and the shares with their variance in one balance table.
 // Requirements: DASH-001, PROJ-001, PROJ-011
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,7 +29,7 @@ const patches = (calls: { method: string; body: unknown }[]) =>
 describe("audio and progress rules", () => {
   it("shows the client's defaults and saves the pause limit, the listen and what counts", async () => {
     const { calls } = rules();
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/audio-progress");
     const limit = await screen.findByRole("spinbutton", { name: "Long pause (seconds)" });
     const audio = card("Audio and progress");
     expect(limit).toHaveValue(3);
@@ -63,7 +63,7 @@ describe("audio and progress rules", () => {
 
   it("refuses a pause limit outside 1 to 30 seconds", async () => {
     const { calls } = rules();
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/audio-progress");
     const limit = await screen.findByRole("spinbutton", { name: "Long pause (seconds)" });
     await userEvent.clear(limit);
     await userEvent.type(limit, "31");
@@ -76,7 +76,7 @@ describe("audio and progress rules", () => {
 describe("targets", () => {
   it("edits every target and saves them with the rules", async () => {
     const { calls } = rules();
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/targets");
     const hours = await screen.findByRole("spinbutton", { name: "Hours completed" });
     const targets = card("Targets");
     expect(hours).toHaveAccessibleDescription(/counted as effective speech/);
@@ -111,7 +111,7 @@ describe("targets", () => {
     await userEvent.clear(within(targets).getByRole("spinbutton", { name: "Phone call (%)" }));
     // The client's eight districts, then one removed.
     expect(
-      within(targets).getByText(/the Progress tab shows the speakers' own districts/),
+      within(targets).getByText(/the Progress page shows the speakers' own districts/),
     ).toBeInTheDocument();
     await userEvent.click(
       within(targets).getByRole("button", { name: "Use the client's Konkani districts" }),
@@ -138,7 +138,7 @@ describe("targets", () => {
 
   it("says what is wrong with the shares and the districts", async () => {
     const { calls } = rules({ target_districts: [{ state: "Goa", district: "North Goa" }] });
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/targets");
     const targets = await screen.findByRole("region", { name: "Targets" });
     const male = within(targets).getByRole("spinbutton", { name: "Male (%)" });
     await userEvent.clear(male);
@@ -176,14 +176,22 @@ describe("targets", () => {
 
   it("keeps the targets read only in an archived project", async () => {
     rules({ status: "ARCHIVED" });
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/targets");
     const targets = await screen.findByRole("region", { name: "Targets" });
     expect(within(targets).getByRole("spinbutton", { name: "Speakers" })).toBeDisabled();
     expect(
       within(targets).getByRole("button", { name: "Use the client's Konkani districts" }),
     ).toBeDisabled();
+    await userEvent.click(
+      within(screen.getByRole("navigation", { name: "Project sections" })).getByRole("link", {
+        name: "Audio and progress",
+      }),
+    );
     expect(
-      within(card("Audio and progress")).getByRole("spinbutton", { name: "Long pause (seconds)" }),
+      within(await screen.findByRole("region", { name: "Audio and progress" })).getByRole(
+        "spinbutton",
+        { name: "Long pause (seconds)" },
+      ),
     ).toBeDisabled();
   });
 });
@@ -198,17 +206,17 @@ describe("the Progress tab", () => {
     );
   }
 
-  /** A card's rows of terms and values. */
-  const rows = (region: HTMLElement) =>
-    Object.fromEntries(
-      within(region)
-        .getAllByRole("term")
-        .map((t) => [t.textContent, t.nextElementSibling?.textContent]),
-    );
-
-  /** A share table's row, cell by cell. */
+  /** A table row's cells, as text. */
+  const cells = (row: Element | null) =>
+    Array.from((row as HTMLTableRowElement | null)?.cells ?? []).map((c) => c.textContent);
+  /** The row of a table (or of one of its sections) named by its first cell. */
   const line = (table: HTMLElement, label: string) =>
-    Array.from(within(table).getByText(label).closest("tr")?.cells ?? []).map((c) => c.textContent);
+    cells(within(table).getByRole("rowheader", { name: label }).closest("tr"));
+  /** One key figure of the strip at the top. */
+  const figure = (label: string) =>
+    within(screen.getByRole("group", { name: "Against the targets" }))
+      .getByText(label)
+      .closest(".kpi") as HTMLElement;
 
   it("comes right after the overview, for the people who manage the project", async () => {
     progress();
@@ -231,67 +239,127 @@ describe("the Progress tab", () => {
     expect(screen.queryByRole("navigation", { name: "Project sections" })).toBeNull();
   });
 
-  it("shows completed, conversations and speakers against the targets", async () => {
+  it("shows completed, conversations and speakers against the targets (D-151)", async () => {
     progress();
     renderAt("/projects/p1/progress");
     const done = await screen.findByRole("region", { name: "Completed" });
-    expect(within(done).getByText("11 min of 1 h (18.3 %)")).toBeInTheDocument();
+    // The key figures in one strip, each with a bar to its target.
+    expect(figure("Completed")).toHaveTextContent("11 min of 1 h");
+    expect(figure("Completed")).toHaveTextContent("18.3 %");
+    expect(figure("Completed")).toHaveTextContent("effective speech of approved conversations");
     expect(
-      within(done).getByRole("progressbar", { name: "Completed of the hours target" }),
-    ).toBeInTheDocument();
-    expect(rows(done)).toEqual({
-      "Approved conversations": "3",
-      "Their full length": "17 min",
-      "Their effective speech": "11 min",
-      "Effective speech not measured yet": "1 conversation",
-      "Recorded, not yet approved": "1 (1 min, 30 s effective)",
-    });
-    expect(done).toHaveTextContent(/counts as none until it is/);
-    expect(rows(screen.getByRole("region", { name: "Conversations" }))).toEqual({
-      Approved: "3 / 600",
-      "Waiting for QC or approval": "1",
-      "In progress": "1",
-      "Not started": "0",
-      Rejected: "1",
-      Cancelled: "1",
-    });
-    expect(rows(screen.getByRole("region", { name: "Speakers" }))).toEqual({
-      "With an approved conversation": "5 / 500",
-      "Registered in the project": "6",
-      "Reached the limit of 2 conversations": "4",
-    });
-    // Key figures, with the effective share of the recorded audio.
+      within(figure("Completed")).getByRole("progressbar", {
+        name: "Completed of the hours target",
+      }),
+    ).toHaveAttribute("aria-valuenow", "18");
+    expect(figure("Approved conversations")).toHaveTextContent("3 / 600");
+    expect(figure("Approved conversations")).toHaveTextContent("0.5 %");
+    expect(figure("Speakers")).toHaveTextContent("5 / 500");
     expect(screen.getByText("71.9 %")).toBeInTheDocument();
     expect(screen.getByText("of the recorded audio")).toBeInTheDocument();
+    // Completed: approved, and recorded but not yet approved, side by side in one table.
+    const approved = within(done).getByRole("rowgroup", { name: "Approved" });
+    expect(line(approved, "Conversations")).toEqual(["Conversations", "3"]);
+    expect(line(approved, "Full length")).toEqual(["Full length", "17 min"]);
+    expect(line(approved, "Effective speech")).toEqual(["Effective speech", "11 min"]);
+    const waiting = within(done).getByRole("rowgroup", { name: "Recorded, not yet approved" });
+    expect(line(waiting, "Conversations")).toEqual(["Conversations", "1"]);
+    expect(line(waiting, "Full length")).toEqual(["Full length", "1 min"]);
+    expect(line(waiting, "Effective speech")).toEqual(["Effective speech", "30 s"]);
+    expect(done).toHaveTextContent(
+      /1 approved conversation is not measured yet: each counts as none until it is/,
+    );
+    // The conversations by status: a ring, and its legend with every count and share.
+    const statuses = screen.getByRole("table", { name: "Conversations by status" });
+    expect(line(statuses, "Approved")).toEqual(["Approved", "3", "43%"]);
+    expect(line(statuses, "Waiting for QC or approval")).toEqual([
+      "Waiting for QC or approval",
+      "1",
+      "14%",
+    ]);
+    expect(line(statuses, "In progress")).toEqual(["In progress", "1", "14%"]);
+    expect(line(statuses, "Not started")).toEqual(["Not started", "0", "0%"]);
+    expect(line(statuses, "Rejected")).toEqual(["Rejected", "1", "14%"]);
+    expect(line(statuses, "Cancelled")).toEqual(["Cancelled", "1", "14%"]);
+    const speakers = screen.getByRole("table", { name: "Speakers" });
+    expect(line(speakers, "With an approved conversation")).toEqual([
+      "With an approved conversation",
+      "5 / 500",
+    ]);
+    expect(line(speakers, "Registered in the project")).toEqual(["Registered in the project", "6"]);
+    expect(line(speakers, "Reached the limit of 2 conversations")).toEqual([
+      "Reached the limit of 2 conversations",
+      "4",
+    ]);
   });
 
-  it("shows each share with its target and variance, people without a detail as Not given", async () => {
+  it("shows every share in one balance table, people without a detail as Not given", async () => {
     progress();
     renderAt("/projects/p1/progress");
-    const gender = await screen.findByRole("table", { name: "Gender" });
-    expect(line(gender, "Male")).toEqual(["Male", "2", "40 %", "50 %", "−10 %"]);
-    expect(line(gender, "Not given")).toEqual(["Not given", "1", "20 %", "-", "-"]);
-    const ages = screen.getByRole("table", { name: "Age bands" });
-    expect(line(ages, "50-60")).toEqual(["50-60", "1", "20 %", "10 %", "+10 %"]);
-    expect(line(ages, "20-30")).toEqual(["20-30", "2", "40 %", "40 %", "0 %"]);
-    const modes = screen.getByRole("table", { name: "Face-to-face and phone" });
-    expect(line(modes, "Face-to-face")).toEqual(["Face-to-face", "2", "66.7 %", "50 %", "+16.7 %"]);
-    const districts = screen.getByRole("table", { name: "Districts" });
-    expect(line(districts, "North Goa (Goa)")).toEqual([
+    const balance = await screen.findByRole("table", { name: "Balance against the targets" });
+    // Actual (count, percent, bar) and target (percent, variance) as column groups.
+    expect(within(balance).getByRole("columnheader", { name: "Actual" })).toHaveAttribute(
+      "colspan",
+      "3",
+    );
+    expect(within(balance).getByRole("columnheader", { name: "Target" })).toHaveAttribute(
+      "colspan",
+      "2",
+    );
+    const group = (name: string) => within(balance).getByRole("rowgroup", { name });
+    // Group, count, actual percent, the bar (drawing only), target percent, variance.
+    expect(line(group("Gender"), "Male")).toEqual(["Male", "2", "40 %", "", "50 %", "−10 %"]);
+    expect(line(group("Gender"), "Not given")).toEqual(["Not given", "1", "20 %", "", "-", "-"]);
+    expect(line(group("Age bands"), "50-60")).toEqual(["50-60", "1", "20 %", "", "10 %", "+10 %"]);
+    expect(line(group("Age bands"), "20-30")).toEqual(["20-30", "2", "40 %", "", "40 %", "0 %"]);
+    expect(line(group("Face-to-face and phone"), "Face-to-face")).toEqual([
+      "Face-to-face",
+      "2",
+      "66.7 %",
+      "",
+      "50 %",
+      "+16.7 %",
+    ]);
+    expect(line(group("Districts"), "North Goa (Goa)")).toEqual([
       "North Goa (Goa)",
       "2",
       "40 %",
+      "",
       "12.5 %",
       "+27.5 %",
     ]);
-    // What each share is of, and the definitions, on the page.
+    // Below the target red, above it green: the sign says the same.
+    for (const below of within(group("Gender")).getAllByText("−10 %")) {
+      expect(below).toHaveClass("variance--below");
+    }
+    expect(within(group("Districts")).getByText("+27.5 %")).toHaveClass("variance--above");
+    // What each section is of, and the definitions folded away under the table.
     expect(
       screen.getAllByText("Percent of the 5 speakers with an approved conversation."),
     ).toHaveLength(3);
     expect(screen.getByText("Percent of the 3 approved conversations.")).toBeInTheDocument();
-    const how = screen.getByRole("region", { name: "How these are counted" });
+    const how = screen.getByText("How these are counted").closest("details") as HTMLElement;
+    expect(how).not.toHaveAttribute("open");
     expect(within(how).getByText("Effective speech")).toBeInTheDocument();
     expect(how).toHaveTextContent("longer than 3 s");
+  });
+
+  it("shows the first ten districts and the rest on request", async () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      key: `D${i + 1}`,
+      label: `District ${i + 1}`,
+      count: 1,
+      percent: 8.3,
+      target_percent: null,
+      variance: null,
+    }));
+    progress({ ...PROGRESS, districts: { ...PROGRESS.districts, total: 12, rows } });
+    renderAt("/projects/p1/progress");
+    const balance = await screen.findByRole("table", { name: "Balance against the targets" });
+    const districts = within(balance).getByRole("rowgroup", { name: "Districts" });
+    expect(within(districts).queryByText("District 11")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show all (12)" }));
+    expect(within(districts).getByText("District 12")).toBeInTheDocument();
   });
 
   it("says when nothing is approved yet and when there is no target", async () => {
@@ -323,7 +391,14 @@ describe("the Progress tab", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("No hours target: set one on the Rules tab.")).toBeInTheDocument();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(
+      within(figure("Completed")).queryByRole("progressbar", {
+        name: "Completed of the hours target",
+      }),
+    ).toBeNull();
+    // The sections say why they are empty; no share rows.
+    const balance = screen.getByRole("table", { name: "Balance against the targets" });
+    expect(within(balance).queryByRole("rowheader", { name: "Male" })).toBeNull();
     expect(
       screen.getByText(
         "No approved conversations yet. No age bands set: add them on the Rules tab.",
@@ -332,6 +407,7 @@ describe("the Progress tab", () => {
     expect(
       within(screen.getByRole("region", { name: "Speakers" })).getByText("No limit"),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/not measured yet/)).toBeNull();
   });
 
   it("writes a variance with its sign", () => {

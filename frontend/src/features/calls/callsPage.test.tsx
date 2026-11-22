@@ -1,7 +1,7 @@
 // The phone-calls page (D-102, D-103): figures from the platform's own call records (calls, the
 // way from call to approval, today against the target, phone tasks, checks and QC, the checklist),
 // TxContact's own traffic count (or why it is not available), the calls as a spreadsheet, and
-// on its own tab every call linked to its task.
+// on its own tab every call linked to its task. One dashboard of figures and tables (D-151).
 // Requirements: TEL-018, DASH-001, GEN-004
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -28,6 +28,28 @@ describe("phone calls page", () => {
     expect(within(funnel).getByText("Recording stored")).toBeInTheDocument();
     expect(within(funnel).getByText("75%")).toBeInTheDocument();
     expect(within(funnel).getAllByText("50%")).toHaveLength(2);
+    expect(
+      within(funnel).getByRole("rowheader", { name: "Recording stored" }).closest("tr"),
+    ).toHaveTextContent("Recording stored250%");
+    // The key figures in one strip (D-151).
+    const figures = screen.getByRole("group", { name: "Call figures" });
+    expect(within(figures).getByText("Tasks not called yet")).toBeInTheDocument();
+    expect(
+      within(figures).getByRole("progressbar", { name: "Recorded today of the daily target" }),
+    ).toHaveAttribute("aria-valuenow", "4");
+    // The counted lists as tables with a section per kind and a row per reason.
+    const problems = screen.getByRole("rowgroup", { name: "Problems getting the recording" });
+    expect(
+      within(problems).getByRole("rowheader", { name: "TxContact refused the call" }).closest("tr"),
+    ).toHaveTextContent("TxContact refused the call1");
+    const cancelled = screen.getByRole("rowgroup", { name: "Why calls were cancelled" });
+    expect(within(cancelled).getByRole("rowheader", { name: "No answer" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("rowgroup", { name: "QC decisions on call recordings" })).getByRole(
+        "rowheader",
+        { name: "Passed" },
+      ),
+    ).toBeInTheDocument();
     // The phone tasks by status (the old call checklist is no longer shown, D-127).
     expect(screen.queryByText("I am muted and listening")).not.toBeInTheDocument();
     expect(

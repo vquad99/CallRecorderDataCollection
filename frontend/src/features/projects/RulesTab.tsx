@@ -2,18 +2,19 @@
 // final approval, what QC checks (D-146), what the moderator fills and reads (device details
 // and reminders, D-147), the audio, progress and target settings (D-148), and how exports are laid
 // out and named (D-149). Every rule a client sets is a project setting; the first client's numbers
-// are only what a new project starts with. One card per kind of rule (SECTIONS), all
-// saved together through the project's PATCH with "Save rules": a later kind of rule is one more
-// card with its fields in the draft. Everyone who sees the project may read them; project admins
-// change them.
+// are only what a new project starts with. One section per kind of rule (SECTIONS), each on its own
+// page under Rules in the project's menu with its own "Save rules" (D-150), saved through the
+// project's PATCH with everything else as it is: a later kind of rule is one more section with its
+// fields in the draft. Everyone who sees the project may read them; project admins change them.
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Navigate, useParams } from "react-router";
 
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { IconTile, type IconName } from "../../components/Icon";
+import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import {
@@ -25,7 +26,7 @@ import {
 } from "../../lib/speakers";
 import { DEVICE_FIELDS } from "../tasks/deviceFields";
 import { audioNameProblem, CLIENT_AUDIO_NAME, exampleAudioName, MAX_AUDIO_NAME } from "./delivery";
-import { useProject } from "./ProjectDetailPage";
+import { RULE_SECTIONS, useProject } from "./ProjectDetailPage";
 import {
   CLIENT_QC_CHECKLIST,
   keyProblem,
@@ -245,28 +246,6 @@ interface SectionProps {
   change: (patch: Partial<RulesDraft>) => void;
 }
 
-/** One kind of rule: a card with its heading. */
-function RulesCard({
-  icon,
-  title,
-  children,
-}: {
-  icon: IconName;
-  title: string;
-  children: ReactNode;
-}) {
-  const id = useId();
-  return (
-    <section className="card" aria-labelledby={id}>
-      <h2 id={id} className="with-icon">
-        <IconTile name={icon} size={28} />
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
 /** A checkbox with a line under it that says what it does. */
 function Tick({
   label,
@@ -321,7 +300,7 @@ function SpeakerRules({ draft, change }: SectionProps) {
     />
   );
   return (
-    <RulesCard icon="people" title="Speakers">
+    <>
       <div className="form-grid">
         {age("speaker_min_age", "Youngest speaker age", errors.min)}
         {age("speaker_max_age", "Oldest speaker age", errors.max)}
@@ -375,7 +354,7 @@ function SpeakerRules({ draft, change }: SectionProps) {
           ))}
         </div>
       </fieldset>
-    </RulesCard>
+    </>
   );
 }
 
@@ -388,7 +367,7 @@ const CONSENT_MODES: readonly { value: api.ConsentMode; label: string }[] = [
 function ConsentRules({ draft, change }: SectionProps) {
   const hintId = useId();
   return (
-    <RulesCard icon="verified" title="Consent">
+    <>
       <fieldset className="field" aria-describedby={hintId}>
         <legend className="field__label">How participants give consent</legend>
         {CONSENT_MODES.map((m) => (
@@ -406,23 +385,23 @@ function ConsentRules({ draft, change }: SectionProps) {
         <p id={hintId} className="field__hint">
           {draft.consent_mode === "UPLOAD"
             ? "No consent form is emailed. Staff upload each person's signed consent form when they add them, and a task needs it. A person who already agreed online still counts."
-            : "Everyone who joins the project is emailed the consent form (its text is on the Overview tab) and agrees on their personal page."}
+            : "Everyone who joins the project is emailed the consent form (its text is on the Overview page) and agrees on their personal page."}
         </p>
       </fieldset>
-    </RulesCard>
+    </>
   );
 }
 
 function ApprovalRules({ draft, change }: SectionProps) {
   return (
-    <RulesCard icon="ok" title="Approval">
+    <>
       <Tick
         label="QC pass is the final approval (no admin review)"
         hint="When ticked, a recording the QC Executive passes is approved at once. Tasks already waiting for admin review stay there."
         checked={draft.qc_final_approval}
         onChange={(on) => change({ qc_final_approval: on })}
       />
-    </RulesCard>
+    </>
   );
 }
 
@@ -437,16 +416,18 @@ function checklistErrors(draft: RulesDraft): Record<number, string> {
 }
 
 const SCOPES: readonly { value: api.ChecklistItem["scope"]; label: string }[] = [
-  { value: "conversation", label: "The conversation (answered once)" },
-  { value: "speaker", label: "Each speaker (answered for both)" },
+  { value: "conversation", label: "The conversation (once)" },
+  { value: "speaker", label: "Each speaker (both)" },
 ];
 const FAILS: readonly { value: string; label: string }[] = [
   { value: "no", label: "No" },
   { value: "yes", label: "Yes" },
-  { value: "", label: "Never (observation only)" },
+  { value: "", label: "Never (observation)" },
 ];
 
-/** One question of the checklist: its words, what it applies to, when it fails, required. */
+/** One question of the checklist as one row of the matrix (D-150): its key and words, what it
+ * applies to, when it fails, required, and moving or removing it. Each box keeps its own label
+ * for screen readers; the column titles above say the same on screen. */
 function ChecklistRow({
   item,
   index,
@@ -467,10 +448,54 @@ function ChecklistRow({
   return (
     <li>
       <fieldset className="qc-rule">
-        <legend className="qc-rule__head">
-          <span className="qc-rule__number">{index + 1}.</span>{" "}
-          <span className="code-tag">{item.key}</span>
+        <legend className="sr-only">
+          {index + 1}. {item.key}
         </legend>
+        <span className="qc-rule__number" aria-hidden="true">
+          {index + 1}
+        </span>
+        <div className="qc-rule__question">
+          <span className="qc-rule__key" aria-hidden="true">
+            {item.key}
+          </span>
+          <TextField
+            label="Question"
+            value={item.question}
+            title={item.question}
+            maxLength={MAX_QUESTION}
+            {...(error ? { error } : {})}
+            onChange={(e) => onChange({ ...item, question: e.target.value })}
+          />
+        </div>
+        <Select
+          label="Applies to"
+          value={item.scope}
+          options={SCOPES}
+          onChange={(e) =>
+            onChange({ ...item, scope: e.target.value as api.ChecklistItem["scope"] })
+          }
+        />
+        <Select
+          label="Fails when the answer is"
+          value={item.fails_on ?? ""}
+          options={FAILS}
+          onChange={(e) =>
+            onChange({
+              ...item,
+              fails_on: (e.target.value || null) as api.ChecklistItem["fails_on"],
+            })
+          }
+        />
+        <label className="checkbox qc-rule__required">
+          <input
+            type="checkbox"
+            checked={item.required}
+            onChange={(e) => onChange({ ...item, required: e.target.checked })}
+          />
+          <span className="qc-rule__required-words">
+            Required<span className="qc-rule__required-more"> (answered before Pass)</span>
+          </span>
+        </label>
         <span className="qc-rule__tools">
           <IconButton
             icon="up"
@@ -486,42 +511,6 @@ function ChecklistRow({
           />
           <IconButton icon="trash" label={`Remove ${item.key}`} onClick={onRemove} />
         </span>
-        <TextField
-          label="Question"
-          value={item.question}
-          maxLength={MAX_QUESTION}
-          {...(error ? { error } : {})}
-          onChange={(e) => onChange({ ...item, question: e.target.value })}
-        />
-        <div className="form-grid">
-          <Select
-            label="Applies to"
-            value={item.scope}
-            options={SCOPES}
-            onChange={(e) =>
-              onChange({ ...item, scope: e.target.value as api.ChecklistItem["scope"] })
-            }
-          />
-          <Select
-            label="The recording fails when the answer is"
-            value={item.fails_on ?? ""}
-            options={FAILS}
-            onChange={(e) =>
-              onChange({
-                ...item,
-                fails_on: (e.target.value || null) as api.ChecklistItem["fails_on"],
-              })
-            }
-          />
-        </div>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={item.required}
-            onChange={(e) => onChange({ ...item, required: e.target.checked })}
-          />
-          Required (answered before Pass)
-        </label>
       </fieldset>
     </li>
   );
@@ -563,7 +552,7 @@ function QcChecklistRules({ draft, change }: SectionProps) {
     }
   };
   return (
-    <RulesCard icon="tasks" title="QC checklist">
+    <>
       <p className="field__hint rules__note">
         The QC Executive answers Yes or No to each question for every recording: questions about the
         conversation once, questions about the speakers for each person. A recording passes only
@@ -574,20 +563,30 @@ function QcChecklistRules({ draft, change }: SectionProps) {
         {items.length === 1 ? "1 question" : `${items.length} questions`} (at most {MAX_ITEMS}).
       </p>
       {items.length > 0 ? (
-        <ol className="qc-rules">
-          {items.map((item, i) => (
-            <ChecklistRow
-              key={item.key}
-              item={item}
-              index={i}
-              count={items.length}
-              error={errors[i]}
-              onChange={(next) => set(items.map((x, j) => (j === i ? next : x)))}
-              onMove={(by) => move(i, by)}
-              onRemove={() => set(items.filter((_, j) => j !== i))}
-            />
-          ))}
-        </ol>
+        <div className="qc-matrix">
+          <div className="qc-matrix__head" aria-hidden="true">
+            <span>#</span>
+            <span>Key and question</span>
+            <span>Applies to</span>
+            <span>Fails on answer</span>
+            <span>Required</span>
+            <span />
+          </div>
+          <ol className="qc-rules">
+            {items.map((item, i) => (
+              <ChecklistRow
+                key={item.key}
+                item={item}
+                index={i}
+                count={items.length}
+                error={errors[i]}
+                onChange={(next) => set(items.map((x, j) => (j === i ? next : x)))}
+                onMove={(by) => move(i, by)}
+                onRemove={() => set(items.filter((_, j) => j !== i))}
+              />
+            ))}
+          </ol>
+        </div>
       ) : (
         <p className="muted">No questions: QC checks only the consent forms.</p>
       )}
@@ -626,7 +625,7 @@ function QcChecklistRules({ draft, change }: SectionProps) {
         </div>
         {full ? <p className="muted">The list is full ({MAX_ITEMS} questions).</p> : null}
       </fieldset>
-    </RulesCard>
+    </>
   );
 }
 
@@ -638,7 +637,7 @@ function DeviceRules({ draft, change }: SectionProps) {
       device_fields: DEVICE_FIELDS.map((f) => f.key).filter((k) => (k === key ? on : asked.has(k))),
     });
   return (
-    <RulesCard icon="phone" title="Device details">
+    <>
       <p className="field__hint rules__note">
         The moderator fills these for each speaker of every conversation; a recording goes to QC
         only when the ticked ones are filled. The call type (Telephonic or Face-to-face) comes from
@@ -661,7 +660,7 @@ function DeviceRules({ draft, change }: SectionProps) {
       {asked.size === 0 ? (
         <p className="muted">Nothing ticked: no device details are asked.</p>
       ) : null}
-    </RulesCard>
+    </>
   );
 }
 
@@ -723,7 +722,7 @@ function ReminderRules({ draft, change }: SectionProps) {
   const set = (patch: Partial<ReminderTexts>) =>
     change({ recording_reminders: { ...texts, ...patch } });
   return (
-    <RulesCard icon="mic" title="Reminders for moderators">
+    <>
       <p className="field__hint rules__note">
         Shown on the recorder before Start recording and on the call card before Start call, with
         the task&apos;s own speakers. At most {MAX_LINES} lines per box, {MAX_LINE} characters per
@@ -756,7 +755,7 @@ function ReminderRules({ draft, change }: SectionProps) {
           Reset to the client&apos;s text
         </Button>
       </div>
-    </RulesCard>
+    </>
   );
 }
 
@@ -767,12 +766,12 @@ const COUNTS: readonly { value: api.ProgressCounts; label: string }[] = [
 ];
 
 /** Long pauses and what completed minutes count (D-148). The length limits stay on the Audio
- * rules tab. */
+ * rules page. */
 function AudioProgressRules({ draft, change }: SectionProps) {
   const errors = targetErrors(draft);
   const hintId = useId();
   return (
-    <RulesCard icon="waveform" title="Audio and progress">
+    <>
       <p className="field__hint rules__note">
         Effective speech is the time someone speaks: the recording without its silences (gaps under
         0.3 s between words count as speech). A long pause is a silence inside the conversation
@@ -810,11 +809,11 @@ function AudioProgressRules({ draft, change }: SectionProps) {
           </label>
         ))}
         <p id={hintId} className="field__hint">
-          What the Progress tab and the dashboard count as completed for approved conversations.
+          What the Progress page and the dashboard count as completed for approved conversations.
           Payments always count the full length.
         </p>
       </fieldset>
-    </RulesCard>
+    </>
   );
 }
 
@@ -869,7 +868,7 @@ function PercentPair({
   );
 }
 
-/** The collection targets (D-148), shown against what was collected on the Progress tab. */
+/** The collection targets (D-148), shown against what was collected on the Progress page. */
 function TargetRules({ draft, change }: SectionProps) {
   const t = draft.targets;
   const errors = targetErrors(draft);
@@ -893,9 +892,9 @@ function TargetRules({ draft, change }: SectionProps) {
     />
   );
   return (
-    <RulesCard icon="target" title="Targets">
+    <>
       <p className="field__hint rules__note">
-        The Progress tab shows what was collected against these. Age, gender and districts are
+        The Progress page shows what was collected against these. Age, gender and districts are
         shares of the speakers with an approved conversation; face-to-face and phone are shares of
         the approved conversations. The first client&apos;s targets are where a project starts.
       </p>
@@ -1000,7 +999,7 @@ function TargetRules({ draft, change }: SectionProps) {
           Each listed district is expected to give an equal share of the speakers
           {t.districts.length > 0
             ? `: ${share} % each for ${t.districts.length}.`
-            : ". None listed: the Progress tab shows the speakers' own districts."}
+            : ". None listed: the Progress page shows the speakers' own districts."}
         </p>
         {t.districts.length > 0 ? (
           <ol className="target-rows">
@@ -1049,7 +1048,7 @@ function TargetRules({ draft, change }: SectionProps) {
           </Button>
         </div>
       </fieldset>
-    </RulesCard>
+    </>
   );
 }
 
@@ -1071,7 +1070,7 @@ function ExportRules({ draft, change }: SectionProps) {
   const hintId = useId();
   const problem = audioNameProblem(draft.audio_name_pattern);
   return (
-    <RulesCard icon="fileZip" title="Export">
+    <>
       <fieldset className="field" aria-describedby={hintId}>
         <legend className="field__label">Layout of an export</legend>
         {LAYOUTS.map((l) => (
@@ -1142,47 +1141,58 @@ function ExportRules({ draft, change }: SectionProps) {
           Reset to the client&apos;s format
         </Button>
       </div>
-    </RulesCard>
+    </>
   );
 }
 
-/** The cards, in order: a later kind of rule is one more entry. */
-const SECTIONS: readonly { key: string; Section: (props: SectionProps) => ReactNode }[] = [
-  { key: "speakers", Section: SpeakerRules },
-  { key: "consent", Section: ConsentRules },
-  { key: "approval", Section: ApprovalRules },
-  { key: "qc-checklist", Section: QcChecklistRules },
-  { key: "devices", Section: DeviceRules },
-  { key: "reminders", Section: ReminderRules },
-  { key: "audio-progress", Section: AudioProgressRules },
-  { key: "targets", Section: TargetRules },
-  { key: "export", Section: ExportRules },
-];
+const has = (errors: object) => Object.keys(errors).length > 0;
 
-export function RulesTab() {
+/** Each section's fields, and whether what is typed there holds its save, by RULE_SECTIONS key: a
+ * later kind of rule is one more entry. */
+const SECTIONS: Record<
+  string,
+  { Section: (props: SectionProps) => ReactNode; wrong: (draft: RulesDraft) => boolean }
+> = {
+  speakers: { Section: SpeakerRules, wrong: (d) => has(ageErrors(d)) },
+  consent: { Section: ConsentRules, wrong: () => false },
+  approval: { Section: ApprovalRules, wrong: () => false },
+  "qc-checklist": { Section: QcChecklistRules, wrong: (d) => has(checklistErrors(d)) },
+  devices: { Section: DeviceRules, wrong: () => false },
+  reminders: { Section: ReminderRules, wrong: (d) => has(reminderErrors(d)) },
+  "audio-progress": { Section: AudioProgressRules, wrong: (d) => !!targetErrors(d).pause },
+  targets: {
+    Section: TargetRules,
+    wrong: (d) => Object.keys(targetErrors(d)).some((k) => k !== "pause"),
+  },
+  export: { Section: ExportRules, wrong: (d) => audioNameProblem(d.audio_name_pattern) !== null },
+};
+
+/** One section of the rules: its card, with its title and Save at the top (kept in view while a
+ * long section scrolls), and its fields. The rest of the project goes back as it is. */
+function RulesSection({ sectionKey }: { sectionKey: string }) {
   const { project, replace } = useProject();
   const { can } = useAuth();
+  const titleId = useId();
   const canManage = can("projects.manage");
   const canEdit = canManage && project.status !== "ARCHIVED";
   const [draft, setDraft] = useState(() => draftOf(api.projectRules(project)));
   const { busy, error, message, run } = useAction();
+  const meta = RULE_SECTIONS.find((s) => s.key === sectionKey);
+  const entry = SECTIONS[sectionKey];
+  if (!meta || !entry) return null;
+  const { Section } = entry;
   const change = (patch: Partial<RulesDraft>) => setDraft({ ...draft, ...patch });
-  const wrong =
-    Object.keys(ageErrors(draft)).length > 0 ||
-    Object.keys(checklistErrors(draft)).length > 0 ||
-    Object.keys(reminderErrors(draft)).length > 0 ||
-    Object.keys(targetErrors(draft)).length > 0 ||
-    audioNameProblem(draft.audio_name_pattern) !== null;
+  const wrong = entry.wrong(draft);
 
   return (
     <form
-      className="stack"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
         if (wrong) return;
         void run(async () => {
-          // The Overview's settings go back as they are: the PATCH takes the whole project.
+          // The Overview's settings and the other sections go back as they are: the PATCH takes
+          // the whole project.
           const saved = await api.updateProject(project.id, {
             ...api.projectSettings(project),
             ...rulesOf(draft),
@@ -1193,25 +1203,40 @@ export function RulesTab() {
         });
       }}
     >
-      {!canManage ? (
-        <p className="notice notice--info">
-          Read only. Only a project administrator can change these rules.
-        </p>
-      ) : !canEdit ? (
-        <p className="notice notice--info">Read only. Reopen the project to change its rules.</p>
-      ) : null}
-      <fieldset disabled={!canEdit} className="plain-fieldset stack">
-        {SECTIONS.map(({ key, Section }) => (
-          <Section key={key} draft={draft} change={change} />
-        ))}
-      </fieldset>
-      {canEdit ? (
-        <Button type="submit" icon="check" busy={busy !== null} disabled={wrong}>
-          Save rules
-        </Button>
-      ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
+      <section className="card rules-card" aria-labelledby={titleId}>
+        <div className="rules-card__head">
+          <h2 id={titleId} className="with-icon">
+            <IconTile name={meta.icon} size={28} />
+            {meta.title}
+          </h2>
+          {canEdit ? (
+            <Button type="submit" icon="check" busy={busy !== null} disabled={wrong}>
+              Save rules
+            </Button>
+          ) : null}
+        </div>
+        {!canManage ? (
+          <p className="notice notice--info">
+            Read only. Only a project administrator can change these rules.
+          </p>
+        ) : !canEdit ? (
+          <p className="notice notice--info">Read only. Reopen the project to change its rules.</p>
+        ) : null}
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
+        <fieldset disabled={!canEdit} className="plain-fieldset rules-card__body">
+          <Section draft={draft} change={change} />
+        </fieldset>
+      </section>
     </form>
   );
+}
+
+export function RulesTab() {
+  const { section = "" } = useParams();
+  // An unknown section (an old or mistyped address) opens the first.
+  if (!RULE_SECTIONS.some((s) => s.key === section))
+    return <Navigate to={`../${RULE_SECTIONS[0]?.key ?? ""}`} replace />;
+  // Keyed: each section starts from the project as last saved.
+  return <RulesSection key={section} sectionKey={section} />;
 }

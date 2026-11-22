@@ -154,6 +154,44 @@ describe("account and sign-out", () => {
   });
 });
 
+describe("a project's menu (D-150)", () => {
+  it("lists the project's pages beside the side menu, marks the current one and opens each", async () => {
+    fakeApi(signedInAs([...ALL_PERMISSIONS, "exports.create"], worldHandlers()));
+    renderAt("/projects/p1");
+    const menu = within(await screen.findByRole("navigation", { name: "Project sections" }));
+    expect(menu.getAllByRole("link").map((a) => a.textContent)).toEqual([
+      "Overview",
+      "Progress",
+      "Team",
+      "Participants",
+      "Tasks",
+      "Audio rules",
+      "Rules",
+      "Languages",
+      "Retention",
+      "Export",
+    ]);
+    const current = () =>
+      menu
+        .getAllByRole("link")
+        .filter((a) => a.getAttribute("aria-current") === "page")
+        .map((a) => a.textContent);
+    expect(current()).toEqual(["Overview"]);
+    for (const page of ["Team", "Audio rules", "Languages", "Retention"]) {
+      await userEvent.click(menu.getByRole("link", { name: page }));
+      // Each page is titled with its own name.
+      expect(await screen.findByRole("heading", { level: 1, name: page })).toBeInTheDocument();
+      expect(current()).toEqual([page]);
+    }
+    // The side menu keeps Projects marked.
+    expect(
+      within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", {
+        name: "Projects",
+      }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+});
+
 /** The route a link opens, or "*" when only the not-found page matches. */
 function destination(href: string): string {
   const path = new URL(href, "http://app.test").pathname;
@@ -165,6 +203,7 @@ describe("links", () => {
   it("the dead-link check itself recognises a missing page", () => {
     expect(destination("/no/such/page")).toBe("*");
     expect(destination("/projects/p1/team")).toBe("team");
+    expect(destination("/projects/p1/rules/consent")).toBe(":section");
   });
 
   it.each(Object.entries(PAGES))("every link on %s leads to an existing page", async (_, spec) => {

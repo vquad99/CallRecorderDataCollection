@@ -108,22 +108,24 @@ const ALL_PASSING = {
 };
 const NONE = { conversation: {}, speakers: {}, consent: {} };
 
-const question = (name: string) => screen.getByRole("group", { name });
+// D-152: each answer is a Yes / No radio group, named by its question (and, for the speaker
+// questions, "– Participant A" or "– Participant B": one matrix row per question).
+const question = (name: string) => screen.getByRole("radiogroup", { name });
 const press = (group: HTMLElement, answer: "Yes" | "No") =>
-  userEvent.click(within(group).getByRole("button", { name: answer }));
+  userEvent.click(within(group).getByRole("radio", { name: answer }));
+const ECHO = /^Is echo present\? – Participant [AB]$/;
 
 /** Ticks every question so that the recording passes (D-146). */
 async function answerAll() {
   await press(
     await screen.findByRole(
-      "group",
+      "radiogroup",
       { name: "The conversation is between exactly two speakers" },
       { timeout: 5000 },
     ),
     "Yes",
   );
-  for (const group of screen.getAllByRole("group", { name: "Is echo present?" }))
-    await press(group, "No");
+  for (const group of screen.getAllByRole("radiogroup", { name: ECHO })) await press(group, "No");
 }
 
 describe("audio quality card", () => {
@@ -301,18 +303,18 @@ describe("the QC checklist (D-146)", () => {
     });
     renderAt("/tasks/t1");
     const two = await screen.findByRole(
-      "group",
+      "radiogroup",
       { name: "The conversation is between exactly two speakers" },
       { timeout: 5000 },
     );
-    expect(within(two).getByRole("button", { name: "Yes" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    // Speaker questions are asked for each person, by code and name.
-    const asha = screen.getByRole("group", { name: "Participant A · P000001 Asha" });
-    expect(screen.getByRole("group", { name: "Participant B · P000002 Bina" })).toBeInTheDocument();
-    await press(within(asha).getByRole("group", { name: "Is echo present?" }), "Yes");
+    expect(within(two).getByRole("radio", { name: "Yes" })).toBeChecked();
+    // Speaker questions: one row each, a column per person by code and name.
+    const speakers = screen.getByRole("table", { name: "Questions about each speaker" });
+    for (const name of ["Participant A P000001 Asha", "Participant B P000002 Bina"])
+      expect(within(speakers).getByRole("columnheader", { name })).toBeInTheDocument();
+    expect(within(speakers).getAllByRole("row")).toHaveLength(2); // the heading and one question
+    expect(screen.getByText("Answered 1 / 3")).toBeInTheDocument();
+    await press(question("Is echo present? – Participant A"), "Yes");
     await waitFor(() => expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1));
     expect(calls.find((c) => c.method === "PUT")?.path).toBe("/api/v1/tasks/t1/audio-qc/draft");
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
@@ -328,30 +330,63 @@ describe("the QC checklist (D-146)", () => {
     renderAt("/tasks/t1");
     const pass = await screen.findByRole("button", { name: "Pass" }, { timeout: 5000 });
     expect(pass).toBeDisabled();
+    // Why Pass waits is said beside it, and read with it.
     expect(screen.getByText("3 questions still to answer.")).toBeInTheDocument();
+    expect(pass).toHaveAccessibleDescription("3 questions still to answer.");
+    expect(screen.getByText("Answered 0 / 3")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Questions answered" })).toHaveAttribute(
+      "aria-valuenow",
+      "0",
+    );
     const two = question("The conversation is between exactly two speakers");
     await press(two, "No");
     expect(screen.getByText("Fails")).toBeInTheDocument();
+    expect(two.closest("td")).toHaveClass("is-fail");
+    expect(screen.getByText("· 1 failing", { exact: false })).toBeInTheDocument();
     expect(
       screen.getByText(
         "The recording fails the checklist (The conversation is between exactly two speakers): reject it.",
       ),
     ).toBeInTheDocument();
     // Observations never fail: "Yes, there is echo" is recorded, nothing more.
-    for (const group of screen.getAllByRole("group", { name: "Is echo present?" }))
+    for (const group of screen.getAllByRole("radiogroup", { name: ECHO }))
       await press(group, "Yes");
     expect(pass).toBeDisabled();
     await press(two, "Yes");
     expect(screen.queryByText("Fails")).toBeNull();
     expect(pass).toBeEnabled();
+    expect(pass).not.toHaveAccessibleDescription();
+    expect(screen.getByText("Answered 3 / 3")).toBeInTheDocument();
     expect(screen.getByText("Every answer lets the recording pass.")).toBeInTheDocument();
     // An Online project: the platform recorded each answer; nothing to tick, no send-back.
-    const consent = screen.getByRole("group", { name: "Consent" });
+    const consent = screen.getByRole("region", { name: "Consent" });
     expect(within(consent).getByText(/nothing to check here/)).toBeInTheDocument();
     expect(within(consent).getAllByText("Agreed")).toHaveLength(2);
-    expect(within(consent).queryByRole("button", { name: "Yes" })).toBeNull();
+    expect(within(consent).queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("button", { name: "Send back for consent" })).toBeNull();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+  });
+
+  it("answers from the keyboard: Space picks, arrows move between Yes and No (D-152)", async () => {
+    open(view({ can_decide: true }));
+    renderAt("/tasks/t1");
+    const echoA = await screen.findByRole(
+      "radiogroup",
+      { name: "Is echo present? – Participant A" },
+      { timeout: 5000 },
+    );
+    const yes = within(echoA).getByRole("radio", { name: "Yes" });
+    const no = within(echoA).getByRole("radio", { name: "No" });
+    yes.focus();
+    await userEvent.keyboard(" ");
+    expect(yes).toBeChecked();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(no).toBeChecked();
+    expect(yes).not.toBeChecked();
+    // Each person's answer is its own group.
+    const echoB = question("Is echo present? – Participant B");
+    expect(within(echoB).getByRole("radio", { name: "No" })).not.toBeChecked();
+    expect(screen.getByText("Answered 1 / 3")).toBeInTheDocument();
   });
 
   it("checks both signed forms where the project takes them, and sends a wrong one back", async () => {
@@ -376,7 +411,7 @@ describe("the QC checklist (D-146)", () => {
     );
     renderAt("/tasks/t1");
     await answerAll();
-    const forms = screen.getByRole("group", { name: "Signed consent forms" });
+    const forms = screen.getByRole("region", { name: "Signed consent forms" });
     expect(
       within(forms).getByRole("button", { name: "View the signed consent form of P000001" }),
     ).toBeInTheDocument();
@@ -469,12 +504,15 @@ describe("the QC checklist (D-146)", () => {
       within(card).getByText(/Failed · answered by Quinn QC · 20 Nov 2026/),
     ).toBeInTheDocument();
     expect(within(card).getByText("1 answer fails the recording.")).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "Yes" })).toBeNull();
+    expect(within(card).queryByRole("radio")).toBeNull();
     await userEvent.click(within(card).getByRole("button", { name: "Show every answer" }));
     const talk = within(card).getByRole("table", { name: "Answers about the conversation" });
     expect(talk).toHaveTextContent(/exactly two speakers\s*No\s*Fails/);
     const speakers = within(card).getByRole("table", { name: "Answers about each speaker" });
-    expect(within(speakers).getByRole("columnheader", { name: "P000002" })).toBeInTheDocument();
+    expect(
+      within(speakers).getByRole("columnheader", { name: "Participant B P000002" }),
+    ).toBeInTheDocument();
+    expect(within(talk).getByText("No").closest("td")).toHaveClass("is-fail");
     expect(speakers).toHaveTextContent(/Is echo present\?\s*Yes\s*Not answered/);
   });
 });

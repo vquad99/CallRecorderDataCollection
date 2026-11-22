@@ -1,13 +1,16 @@
-/* Figures and charts (dashboard, phone calls). Series colours: KoboToolbox blue and amber for
-   approved and waiting (D-099); blue, orange and red for the calls, checked with the dataviz
-   validator on #ffffff (lightness band, chroma, colour-vision separation, 3:1 contrast). The legend
-   and the table view carry the same information as the colours. */
+/* Figures and charts of the dashboard, the Phone calls page and the Progress tab (D-151): one
+   grid of panels, a strip of key figures, tables instead of stacks of cards. Series colours:
+   KoboToolbox blue and amber for approved and waiting (D-099); blue, orange and red for the calls;
+   the six task stages in stages.ts. Checked with the dataviz validator on #ffffff; the legend and
+   the table view carry the same information as the colours. Text stays in the text colours. */
 :root {
   --series-approved: #2095f3;
   --series-waiting: #f0a24a;
   --series-recorded: #2095f3;
   --series-open: #c47a12;
   --series-failed: #9d0000;
+  /* A darker step of the icon green for text on its tint (5.3:1). */
+  --text-green: #13703c;
 }
 .series--approved {
   fill: var(--series-approved);
@@ -30,58 +33,211 @@
   background: var(--series-failed);
 }
 
-/* Key figures */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-.stat {
+/* ---------- The page's grid of panels ---------- */
+/* The grid answers to its own width (the side menu may be open or not): 12 columns on a wide
+   screen, two on a middle one, one on a phone. */
+.dash {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 20px;
+}
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+}
+.dash-grid > * {
+  grid-column: span 12;
+  min-width: 0;
+}
+.dash-grid > .g-3 {
+  grid-column: span 3;
+}
+.dash-grid > .g-4 {
+  grid-column: span 4;
+}
+.dash-grid > .g-5 {
+  grid-column: span 5;
+}
+.dash-grid > .g-6 {
+  grid-column: span 6;
+}
+.dash-grid > .g-7 {
+  grid-column: span 7;
+}
+.dash-grid > .g-8 {
+  grid-column: span 8;
+}
+/* A column of panels inside one grid cell; its last panel reaches the bottom of the row. */
+.dash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dash-col > :last-child {
+  flex: 1 1 auto;
+}
+@container (max-width: 760px) {
+  .dash-grid > .g-3,
+  .dash-grid > .g-4,
+  .dash-grid > .g-5,
+  .dash-grid > .g-6,
+  .dash-grid > .g-7 {
+    grid-column: span 6;
+  }
+  .dash-grid > .g-8 {
+    grid-column: span 12;
+  }
+}
+@container (max-width: 560px) {
+  .dash-grid > .g-3,
+  .dash-grid > .g-4,
+  .dash-grid > .g-5,
+  .dash-grid > .g-6,
+  .dash-grid > .g-7,
+  .dash-grid > .g-8 {
+    grid-column: span 12;
+  }
+}
+
+/* A panel: white, a thin line, a small heading. Its content answers to the panel's own width. */
+.panel {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.stat__head {
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-height: 22px;
+}
+.panel__head h2,
+.panel .chart__head h2 {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
-.stat__label {
-  color: var(--text-2);
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.stat__body {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-.stat__body > div {
-  min-width: 0;
-}
-.stat__value {
-  margin: 0;
-  color: var(--text);
-  font-size: 1.75rem;
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.stat__note {
-  margin: 2px 0 0;
+.panel__action {
   color: var(--muted);
   font-size: 0.75rem;
 }
+.panel > .muted,
+.panel > p {
+  margin: 0;
+}
+
+/* ---------- Key figures ---------- */
+.kpis {
+  container-type: inline-size;
+}
+.kpis__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+@container (max-width: 960px) {
+  .kpis__grid {
+    grid-template-columns: repeat(var(--n-mid), minmax(0, 1fr));
+  }
+}
+@container (max-width: 520px) {
+  .kpis__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi {
+    padding: 9px 12px 10px;
+  }
+  .kpi__value {
+    font-size: 1.25rem;
+  }
+}
+/* A hairline on each figure's left and top; the frame hides the ones on its own edges. The four
+   parts of each figure share rows with its neighbours (subgrid), so values and bars line up even
+   when a label takes two lines. */
+.kpis__grid {
+  grid-auto-rows: auto;
+}
+.kpi {
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  row-gap: 4px;
+  align-content: start;
+  min-width: 0;
+  padding: 10px 14px 11px;
+  box-shadow:
+    -1px 0 0 var(--border),
+    0 -1px 0 var(--border);
+}
+.kpi__label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.kpi__body {
+  display: flex;
+  align-self: end;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* The value and its "of 400 h": the second goes under the first when the figure is narrow. */
+.kpi__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 4px;
+  margin: 0;
+  color: var(--text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.kpi__of {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.kpi__meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.kpi__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
 .spark {
   flex: none;
-  width: 96px;
-  height: 36px;
+  width: 64px;
+  height: 22px;
 }
 .spark polyline {
   fill: none;
@@ -92,58 +248,288 @@
 .spark polygon {
   fill: var(--primary-soft);
 }
-.ring {
-  width: 56px;
-  height: 56px;
+/* A share of a target: the track is a lighter step of the bar's own blue. */
+.meter {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 40px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tint-blue);
 }
-.ring__track,
-.ring__value {
-  fill: none;
-  stroke-width: 6;
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--icon-blue);
 }
-.ring__track {
-  stroke: var(--surface-hover);
+
+/* ---------- Tables in panels: compact rows, the grey heading row kept ---------- */
+/* A panel's table is short: it shows whole, without the long tables' own scroll frame. */
+.panel .table-wrap {
+  flex: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
 }
-.ring__value {
-  stroke: var(--primary);
-  stroke-linecap: round;
+.panel .table th,
+.panel .table td {
+  padding: 5px 10px;
 }
-.ring text {
-  fill: var(--text);
-  font-size: 11px;
+.panel .table thead th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 0.75rem;
+}
+.panel .table tbody th {
+  background: transparent;
+  color: var(--text);
+  font-weight: 400;
+  white-space: normal;
+}
+.panel .table .badge {
+  padding: 0 8px;
+}
+/* A narrow panel (a phone): tighter cells, so more of a table shows without scrolling. */
+@container (max-width: 380px) {
+  .panel .table th,
+  .panel .table td {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+}
+.panel .table tbody tr:last-child th,
+.panel .table tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* A number with a light bar behind it (its share of the column's largest). */
+.cellbar {
+  display: block;
+  min-width: 64px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tint-blue) var(--w), transparent var(--w));
+  font-variant-numeric: tabular-nums;
+}
+/* The actual share as a bar with a tick where the target is (a bullet bar). */
+.tbar {
+  position: relative;
+  display: block;
+  min-width: 90px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tint-blue);
+}
+.tbar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--icon-blue);
+}
+.tbar__mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+/* Name and value, one per row. */
+.key-table tbody th {
+  width: 100%;
+}
+.key-table tbody tr:last-child th,
+.key-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Rows in named sections, and column groups above the headings (D-151). */
+.matrix__groups td,
+.matrix__groups th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+  background: var(--surface);
+}
+.panel .table .matrix__band {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  border-left: 2px solid var(--surface);
+  background: var(--tint-slate);
+  color: var(--text-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.panel .table .matrix__band--blue {
+  background: var(--tint-blue);
+  color: var(--info);
+}
+.panel .table .matrix__band--teal {
+  background: var(--tint-teal);
+  color: var(--progress);
+}
+.panel .table .matrix__band--green {
+  background: var(--tint-green);
+  color: var(--text-green);
+}
+.panel .table .matrix__section th {
+  padding-top: 7px;
+  padding-bottom: 5px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
   font-weight: 600;
 }
-@media (max-width: 1100px) {
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.matrix tbody:first-of-type .matrix__section th {
+  border-top: 0;
 }
-@media (max-width: 560px) {
-  .stats {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.matrix__note {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.panel .table.matrix tbody th[scope="row"] {
+  padding-left: 18px;
+}
+/* Sectioned tables are the long ones: rows a little tighter. */
+.panel .table.matrix tbody th,
+.panel .table.matrix tbody td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.panel .table.key-table th,
+.panel .table.key-table td {
+  padding-right: 6px;
+  padding-left: 6px;
+}
+.matrix__empty td {
+  padding-left: 18px;
+  color: var(--muted);
 }
 
-/* Cards side by side, one column on a narrow screen. */
-.split {
+/* ---------- A whole in parts: ring and legend table ---------- */
+.donut {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-  gap: 16px;
+  grid-template-columns: 112px minmax(0, 520px);
+  align-items: center;
+  gap: 14px;
 }
-.split--wide {
-  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+.donut__ring {
+  width: 112px;
+  height: 112px;
 }
-/* A small card beside a tall one keeps its own height. */
-.card--top {
-  align-self: start;
+.donut__track {
+  fill: none;
+  stroke: var(--surface-hover);
+  stroke-width: 16;
 }
-@media (max-width: 900px) {
-  .split--wide {
+.donut__total {
+  fill: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+}
+.donut__unit {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.panel .table.legend-table th,
+.panel .table.legend-table td {
+  padding: 3px 6px;
+  border-bottom: 0;
+}
+.legend-table__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.legend-table__detail {
+  display: block;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+/* In a narrow panel the ring sits above its legend. */
+@container (max-width: 340px) {
+  .donut {
     grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 8px;
+  }
+  .donut .table-wrap {
+    width: 100%;
   }
 }
 
-/* Bars per day */
+/* ---------- A whole in a few parts as one thin bar, its parts listed under it ---------- */
+.splitbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.splitbar + .splitbar {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.splitbar__title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.splitbar__title span {
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.splitbar__bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.splitbar__bar span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+.splitbar__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+.splitbar__legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.splitbar__name {
+  flex: 1;
+  color: var(--text-2);
+}
+.splitbar__n {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Bars per day ---------- */
 .chart {
   margin: 0;
 }
@@ -152,13 +538,13 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 20px;
-  margin-bottom: 10px;
+  gap: 4px 16px;
+  margin-bottom: 6px;
 }
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: 4px 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -171,6 +557,7 @@
   gap: 6px;
 }
 .legend__swatch {
+  flex: none;
   width: 10px;
   height: 10px;
   border-radius: 2px;
@@ -179,7 +566,7 @@
   width: 16px;
   border-top: 2px dashed var(--text-2);
 }
-/* On a narrow screen the chart keeps a readable width and scrolls sideways inside its card. */
+/* The chart is drawn at its panel's width (Charts.tsx measures it). */
 .chart__plot {
   position: relative;
   overflow-x: auto;
@@ -189,11 +576,6 @@
   width: 100%;
   height: auto;
   overflow: visible;
-}
-@media (max-width: 640px) {
-  .chart__plot svg {
-    min-width: 560px;
-  }
 }
 .chart__grid {
   stroke: var(--border);
@@ -205,7 +587,7 @@
 }
 .chart__tick {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .chart__hit {
   fill: transparent;
@@ -253,7 +635,7 @@
   color: var(--text);
 }
 .chart__table {
-  margin-top: 10px;
+  margin-top: 4px;
 }
 .chart__table summary {
   color: var(--primary);
@@ -267,44 +649,20 @@
   overflow-y: auto;
 }
 
-/* Rows of label, thin bar, number. */
-.bars {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* Collapsed notes under a dashboard: how the figures are counted. */
+.dash-notes {
+  color: var(--text-2);
+  font-size: 0.8125rem;
 }
-.bars li {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 40px;
-  align-items: center;
-  gap: 12px;
+.dash-notes > summary {
+  color: var(--primary);
+  font-weight: 500;
+  cursor: pointer;
 }
-.bars--wide li {
-  grid-template-columns: minmax(120px, 1.2fr) minmax(0, 1fr) minmax(64px, auto);
+.dash-notes[open] > summary {
+  margin-bottom: 8px;
 }
-.bars__track {
-  overflow: hidden;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--surface-hover);
-}
-.bars__track span {
-  display: block;
-  height: 100%;
-  background: var(--primary);
-}
-.bars__value {
-  font-weight: 600;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.bars__note {
-  font-weight: 400;
-  font-size: 0.75rem;
-}
-.bars .badge {
-  justify-self: start;
+.dash-notes p {
+  max-width: 900px;
+  margin: 0 0 6px;
 }

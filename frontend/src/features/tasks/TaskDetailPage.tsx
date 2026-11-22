@@ -1,10 +1,12 @@
-// One task: participants and consent, moderator, the next step as one card with its buttons, the
-// speakers' device details (D-147), audio quality, recordings and the history (TASK-*). A consent
-// form QC sent back has its own card (D-146).
-import { useState } from "react";
+// One task (TASK-*), laid out so the status, both people and the next step show without scrolling
+// (D-152): a compact stepper on top, then the work on the left (the next step as one card with its
+// buttons, a consent form QC sent back (D-146), the QC checklist for the person who decides, the
+// speakers' device details while they are filled (D-147)) and the task's records under it (audio
+// quality, device details, recordings, phone calls); on the right a summary, both participants as
+// one matrix and the history (TaskSide). On a phone: one column, the work first.
+import { useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 
-import { listMembers } from "../../api/projects";
 import * as rec from "../../api/recordings";
 import * as work from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
@@ -12,8 +14,6 @@ import { BackLink } from "../../components/BackLink";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { Select } from "../../components/form/Select";
-import { TextField } from "../../components/form/TextField";
 import { Icon, IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -22,21 +22,14 @@ import { Stepper } from "../../components/Stepper";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
-import {
-  consentAnswer,
-  labelFor,
-  MODE_LABELS,
-  PRIORITY_LABELS,
-  REASON_LABELS,
-  reasonChoices,
-  TASK_STATUS_LABELS,
-} from "../../lib/labels";
-import { AudioQcPanel } from "./AudioQcPanel";
-import { PhoneCalls } from "./CallCard";
-import { DeviceDetailsCard, devicesWait } from "./DeviceDetails";
-import { openDocument, sendDocument, UploadButton, uploadedText } from "../participants/Documents";
+import { consentAnswer, labelFor, reasonChoices, TASK_STATUS_LABELS } from "../../lib/labels";
+import { UploadButton } from "../participants/Documents";
 import "../participants/participants.css";
+import { AudioQcPanel, useAudioQc } from "./AudioQcPanel";
+import { PhoneCalls } from "./CallCard";
+import { DeviceDetailsCard, devicesWait, useDeviceDetails } from "./DeviceDetails";
 import { ListenLatest, Player } from "./Listen";
+import { Assignment, ParticipantsMatrix, TaskSummary, Timeline, useSignedForms } from "./TaskSide";
 import "./tasks.css";
 
 const FLOW: readonly work.TaskStatus[] = [
@@ -167,7 +160,7 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   // The step in progress (1-based); while recording it is consent first, then the recorder.
   const step = review ? 4 : recording ? (waiting ? 2 : 3) : 1;
   return (
-    <section className="card record-card" aria-labelledby="record-card-title">
+    <section className="card record-card work-card" aria-labelledby="record-card-title">
       <div className="record-card__text">
         <h2 id="record-card-title">
           {review ? "Check your recording" : recording ? "Ready to record" : "Start the session"}
@@ -267,7 +260,7 @@ function AdminReviewCard({ task, onChange }: { task: work.TaskDetail; onChange: 
         ),
     });
   return (
-    <section className="card record-card" aria-labelledby="admin-review-title">
+    <section className="card record-card work-card" aria-labelledby="admin-review-title">
       <div className="record-card__text">
         <h2 id="admin-review-title">Final approval</h2>
         <p className="muted">QC passed this recording. Listen, then approve or reject it.</p>
@@ -301,59 +294,6 @@ function AdminReviewCard({ task, onChange }: { task: work.TaskDetail; onChange: 
   );
 }
 
-function Assignment({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
-  const members = useResource(() => listMembers(task.project_id), [task.project_id]);
-  const [userId, setUserId] = useState("");
-  const [reason, setReason] = useState("");
-  const { busy, error, run } = useAction();
-  const moderators =
-    members.state.status === "loaded"
-      ? members.state.data.filter((m) => m.roles.includes("MODERATOR") && m.status === "ACTIVE")
-      : [];
-  return (
-    <form
-      className="card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void run(async () => {
-          onChange(await work.assignModerator(task.id, userId, reason), "Moderator assigned.");
-          setUserId("");
-          setReason("");
-        });
-      }}
-    >
-      <h2>{task.moderator_id ? "Reassign moderator" : "Assign moderator"}</h2>
-      <Select
-        label="Moderator"
-        value={userId}
-        onChange={(e) => setUserId(e.target.value)}
-        options={[
-          { value: "", label: "Choose a moderator" },
-          ...moderators
-            .filter((m) => m.user_id !== task.moderator_id)
-            .map((m) => ({ value: m.user_id, label: `${m.display_name} (${m.email})` })),
-        ]}
-      />
-      {task.moderator_id ? (
-        <TextField
-          label="Reason for reassigning"
-          required
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      ) : null}
-      <ErrorNotice error={error} />
-      <Button
-        type="submit"
-        busy={busy !== null}
-        disabled={!userId || (Boolean(task.moderator_id) && !reason.trim())}
-      >
-        {task.moderator_id ? "Reassign" : "Assign"}
-      </Button>
-    </form>
-  );
-}
-
 /** QC found the audio fine but a signed consent form not (D-146): whose form and what is wrong
  * with it; the moderator (or an admin) uploads a new scan, then sends the same recording back to
  * QC. Nothing is recorded again. */
@@ -364,7 +304,7 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
   const party = (side: "A" | "B") => (side === "A" ? task.participant_a : task.participant_b);
   const codes = fix.participants.map((p) => p.participant_code).join(" and ");
   return (
-    <section className="card record-card" aria-labelledby="consent-fix-title">
+    <section className="card record-card work-card" aria-labelledby="consent-fix-title">
       <div className="record-card__text">
         <h2 id="consent-fix-title">Consent form to fix</h2>
         <p>
@@ -438,86 +378,6 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
   );
 }
 
-/** Uploading a participant's signed consent form from the task page, and opening one (D-144):
- * the task is loaded again after an upload, so its consent and buttons follow at once. */
-function useSignedForms(task: work.TaskDetail, onChange: OnTaskChange) {
-  const action = useAction();
-  const upload = (p: work.Party) => (file: File) =>
-    void action.run(async () => {
-      await sendDocument(task.project_id, p.id, "CONSENT_FORM", file);
-      onChange(
-        await work.getTask(task.id),
-        `Signed consent form of ${p.participant_code} uploaded.`,
-      );
-    }, `upload-${p.id}`);
-  const view = (p: work.Party, doc: work.ParticipantDocument) =>
-    void action.run(() => openDocument(task.project_id, p.id, doc), `view-${doc.id}`);
-  return { ...action, upload, view };
-}
-
-/** The two participants' signed consent forms, where the project takes them (D-144): the project's
- * admins, the moderator and the QC Executive of the task open them here; the admins and the
- * moderator of the open task upload or replace one (for example a better scan). */
-function SignedForms({ task, onChange }: { task: work.TaskDetail; onChange: OnTaskChange }) {
-  const { busy, error, message, upload, view } = useSignedForms(task, onChange);
-  const parties = [task.participant_a, task.participant_b];
-  const shown = parties.some((p) => p.consent_form || p.can_upload_consent_form);
-  if (task.consent_mode !== "UPLOAD" || !shown) return null;
-  return (
-    <section className="card consent" aria-labelledby="signed-forms-title">
-      <h2 id="signed-forms-title">
-        <Icon name="fileText" size={20} />
-        Signed consent forms
-      </h2>
-      <ul className="consent__rows">
-        {parties.map((p, i) => {
-          const doc = p.consent_form ?? null;
-          return (
-            <li key={p.id} className="consent__row signed-forms__row">
-              <span className="consent__who">
-                <span className="consent__side">Participant {i === 0 ? "A" : "B"}</span>
-                <PartyName party={p} />
-              </span>
-              {doc ? (
-                <span className="docs__file">
-                  <span className="docs__name">{doc.file_name}</span>
-                  <span className="muted">{uploadedText(doc)}</span>
-                </span>
-              ) : (
-                <StatusBadge tone="warning" label="Consent form missing" />
-              )}
-              <span className="actions">
-                {doc ? (
-                  <Button
-                    variant="secondary"
-                    icon="eye"
-                    busy={busy === `view-${doc.id}`}
-                    disabled={busy !== null}
-                    aria-label={`View the signed consent form of ${p.participant_code}`}
-                    onClick={() => view(p, doc)}
-                  >
-                    View
-                  </Button>
-                ) : null}
-                {p.can_upload_consent_form ? (
-                  <UploadButton
-                    label={`${doc ? "Replace" : "Upload"} consent form of ${p.participant_code}`}
-                    busy={busy === `upload-${p.id}`}
-                    disabled={busy !== null}
-                    onFile={upload(p)}
-                  />
-                ) : null}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </section>
-  );
-}
-
 /** Consent comes from each participant's own consent form (D-127): nobody ticks it here, or from
  * their signed form uploaded by staff where the project takes them (D-144). Tasks are made only
  * for people who agreed (D-129), so this card shows for older tasks only: it says who has not
@@ -531,7 +391,7 @@ function ConsentStatus({ task, onChange }: { task: work.TaskDetail; onChange: On
   const send = (p: work.Party) => void run(() => work.emailConsentForm(task.project_id, p), p.id);
   const parties = [task.participant_a, task.participant_b];
   return (
-    <section className="card consent" aria-labelledby="consent-title">
+    <section className="card consent work-card" aria-labelledby="consent-title">
       <h2 id="consent-title">Waiting for consent</h2>
       <p className="muted">
         {uploads
@@ -602,76 +462,6 @@ function ConsentChip({ party, mode }: { party: work.Party; mode: string | undefi
   return <StatusBadge tone={tone} label={label} />;
 }
 
-const ENTRY_KIND: Record<work.TimelineEntry["kind"], string> = {
-  status: "Status changed",
-  assignment: "Assigned",
-  comment: "Comment",
-};
-
-/** A history entry in words: "In progress → Recorded" with the reason given, or its text. */
-export function entryText(e: work.TimelineEntry): { title: string; detail: string } {
-  if (e.kind !== "status" || !e.to_status) return { title: e.text, detail: "" };
-  const title = e.from_status
-    ? `${status(e.from_status)} → ${status(e.to_status)}`
-    : `Created as ${status(e.to_status)}`;
-  const detail = [e.reason_code ? labelFor(REASON_LABELS, e.reason_code) : "", e.comment ?? ""]
-    .filter(Boolean)
-    .join(" · ");
-  return { title, detail };
-}
-
-function Timeline({ taskId, version }: { taskId: string; version: string }) {
-  const { state, reload } = useResource(() => work.getTimeline(taskId), [taskId, version]);
-  const [text, setText] = useState("");
-  const { busy, error, message, run } = useAction(reload);
-  return (
-    <section className="card" aria-labelledby="timeline-title">
-      <h2 id="timeline-title">History</h2>
-      {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? (
-        <ol className="list timeline">
-          {state.data.map((e, i) => {
-            const { title, detail } = entryText(e);
-            return (
-              <li key={`${e.at}-${i}`}>
-                <span className="muted">
-                  {when(e.at)} · {e.actor ?? "Platform"} · {ENTRY_KIND[e.kind]}
-                </span>
-                <div>{title}</div>
-                {detail ? <div className="muted">{detail}</div> : null}
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(async () => {
-            await work.addComment(taskId, text);
-            setText("");
-            return "Comment added.";
-          });
-        }}
-      >
-        <TextField label="Add a comment" value={text} onChange={(e) => setText(e.target.value)} />
-        <Button
-          type="submit"
-          variant="secondary"
-          icon="comment"
-          busy={busy !== null}
-          disabled={!text.trim()}
-        >
-          Add comment
-        </Button>
-      </form>
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </section>
-  );
-}
-
 const HAS_RECORDINGS: readonly string[] = [
   "RECORDED",
   "AUDIO_QC",
@@ -680,9 +470,6 @@ const HAS_RECORDINGS: readonly string[] = [
   "APPROVED",
   "REJECTED",
 ];
-/** The device details card (D-147): filled while In progress or Recorded, read only after. */
-const SHOWS_DEVICES: readonly string[] = ["IN_PROGRESS", ...HAS_RECORDINGS];
-
 /** The task's finished recordings; a download brings the consent record with the audio. A
  * recording the moderator replaced with Record again is greyed and says so (D-135); the server
  * lists it only for the people who run the project and the moderator. People who may export get
@@ -720,7 +507,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
         <p className="muted">No finished recording yet.</p>
       ) : null}
       {ready.length > 0 ? (
-        <DataTable>
+        <DataTable className="rec-table">
           <thead>
             <tr>
               <th scope="col">Recording</th>
@@ -783,6 +570,149 @@ function Recordings({ task }: { task: work.TaskDetail }) {
   );
 }
 
+/** Where the device details are filled (In progress, Recorded): with the work; read only after. */
+const FILLS_DEVICES: readonly string[] = ["IN_PROGRESS", "RECORDED"];
+
+/** Who acts next, in one line, for someone with nothing to do on the task now (D-152). */
+function nextStep(task: work.TaskDetail, qcName: string | null | undefined): string {
+  const moderator = task.moderator_name ?? "the moderator";
+  switch (task.status) {
+    case "DRAFT":
+      return task.moderator_name
+        ? `Waiting for ${moderator} to start the session.`
+        : "Waiting for a moderator to be assigned.";
+    case "ASSIGNED":
+      return `Waiting for ${moderator} to start the session.`;
+    case "IN_PROGRESS":
+      return task.recording_mode === "TELEPHONY"
+        ? `${moderator} is calling the participants.`
+        : `${moderator} is recording the conversation.`;
+    case "RECORDED":
+      return `${moderator} listens to the recording, then sends it to QC.`;
+    case "AUDIO_QC":
+      return qcName
+        ? `Waiting for QC: ${qcName} checks the recording.`
+        : "Waiting for a QC Executive to be assigned.";
+    case "CONSENT_FIX":
+      return "Waiting for a new signed consent form.";
+    case "ADMIN_REVIEW":
+      return "QC passed the recording. Waiting for the project admin's final approval.";
+    case "APPROVED":
+      return "Approved. Nothing more to do on this task.";
+    case "REJECTED":
+      return "Rejected. The task has ended.";
+    case "CANCELLED":
+      return "Cancelled. The task has ended.";
+    case "ON_HOLD":
+      return "On hold. A project admin resumes it when it can go on.";
+    default:
+      return "";
+  }
+}
+
+function NextStep({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <section className="card next-step" aria-label="Next step">
+      <Icon name="info" size={18} />
+      <p>{text}</p>
+    </section>
+  );
+}
+
+/** The two columns under the stepper: the work and the task's records on the left, the summary,
+ * the participants and the history on the right (D-152). Grid areas put the work first on a
+ * phone, then the side, then the records. */
+function TaskBody({
+  task,
+  onChange,
+  reload,
+  replace,
+}: {
+  task: work.TaskDetail;
+  onChange: OnTaskChange;
+  reload: () => void;
+  replace: (t: work.TaskDetail) => void;
+}) {
+  const devices = useDeviceDetails(task);
+  const has = HAS_RECORDINGS.includes(task.status);
+  const audio = useAudioQc(task, has);
+  // The QC Executive who decides: the checklist is their work.
+  const decides = audio.state.status === "loaded" && Boolean(audio.state.data?.can_decide);
+  const waitingConsent =
+    task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
+  // D-147: once saved, the task is loaded again quietly, so Send to QC follows what is missing.
+  const deviceCard = (
+    <DeviceDetailsCard
+      task={task}
+      resource={devices}
+      onSaved={() => void work.getTask(task.id).then(replace)}
+    />
+  );
+  const fills = FILLS_DEVICES.includes(task.status);
+  const qcPanel = has ? <AudioQcPanel task={task} resource={audio} onDecided={reload} /> : null;
+  const assigns = task.can_reassign && !task.moderator_id;
+  // As the moderator's card decides (RecordCard, CallCard): a session to start, run or check.
+  const moderates =
+    task.is_moderator &&
+    ((task.status !== "RECORDED" && task.allowed_transitions.includes("IN_PROGRESS")) ||
+      task.status === "IN_PROGRESS" ||
+      (task.status === "RECORDED" && task.allowed_transitions.includes("AUDIO_QC")));
+  const hasWork =
+    assigns ||
+    moderates ||
+    waitingConsent ||
+    (task.status === "CONSENT_FIX" && Boolean(task.consent_fix)) ||
+    (task.status === "ADMIN_REVIEW" && task.allowed_transitions.includes("APPROVED")) ||
+    decides ||
+    (fills && devices.asked);
+  const qcName = audio.state.status === "loaded" ? audio.state.data?.qc_name : null;
+  const layout = (callCard: ReactNode, callHistory: ReactNode) => (
+    <div className="task-layout">
+      <div className="task-work stack">
+        {hasWork ? null : <NextStep text={nextStep(task, qcName)} />}
+        {assigns ? <Assignment task={task} onChange={onChange} card /> : null}
+        {task.recording_mode === "TELEPHONY" ? (
+          callCard
+        ) : task.is_moderator ? (
+          <RecordCard task={task} onChange={onChange} />
+        ) : null}
+        {waitingConsent ? <ConsentStatus task={task} onChange={onChange} /> : null}
+        <ConsentFixCard task={task} onChange={onChange} />
+        <AdminReviewCard task={task} onChange={onChange} />
+        {decides ? qcPanel : null}
+        {fills ? deviceCard : null}
+      </div>
+      <aside className="task-side" aria-label="About this task">
+        <TaskSummary task={task} audio={audio} onChange={onChange} />
+        <ParticipantsMatrix task={task} devices={devices} onChange={onChange} />
+        <Timeline
+          taskId={task.id}
+          version={`${task.status}-${task.moderator_id ?? ""}-${task.participant_a.consent_at ?? ""}-${task.participant_b.consent_at ?? ""}`}
+        />
+      </aside>
+      <div className="task-rest stack">
+        {decides ? null : qcPanel}
+        {fills ? null : deviceCard}
+        {has ? <Recordings task={task} /> : null}
+        {callHistory}
+      </div>
+    </div>
+  );
+  return task.recording_mode === "TELEPHONY" ? (
+    <PhoneCalls
+      task={task}
+      onChange={onChange}
+      // Quietly: the page stays as it is until the new task arrives (no loading flash).
+      onTaskStale={() => void work.getTask(task.id).then(replace)}
+    >
+      {layout}
+    </PhoneCalls>
+  ) : (
+    layout(null, null)
+  );
+}
+
 export function TaskDetailPage() {
   const { taskId = "" } = useParams();
   const { state, reload, replace } = useResource(() => work.getTask(taskId), [taskId]);
@@ -796,18 +726,11 @@ export function TaskDetailPage() {
     replace(t);
     setMessage(text ?? null);
   };
-  const waitingConsent =
-    task.consent_missing.length > 0 && ["DRAFT", "ASSIGNED", "IN_PROGRESS"].includes(task.status);
-  const consent = waitingConsent ? <ConsentStatus task={task} onChange={onChange} /> : null;
-  // D-147: once saved, the task is loaded again quietly, so Send to QC follows what is missing.
-  const devices = SHOWS_DEVICES.includes(task.status) ? (
-    <DeviceDetailsCard task={task} onSaved={() => void work.getTask(task.id).then(replace)} />
-  ) : null;
   const onPath = FLOW.includes(task.status)
     ? task.status
     : (WAITS_AT[task.status] ?? task.held_from ?? "DRAFT");
   return (
-    <section aria-labelledby="task-title" className="stack">
+    <section aria-labelledby="task-title" className="stack task-page">
       <BackLink to="/tasks">All tasks</BackLink>
       <div className="page-header">
         <span className="page-header__title">
@@ -820,7 +743,7 @@ export function TaskDetailPage() {
         <TaskActions task={task} onChange={onChange} />
       </div>
       <SuccessNotice message={message} />
-      <div className="card">
+      <div className="task-steps">
         <Stepper
           steps={FLOW.map(status)}
           current={task.status === "APPROVED" ? FLOW.length : Math.max(0, FLOW.indexOf(onPath))}
@@ -828,66 +751,7 @@ export function TaskDetailPage() {
           label={`Workflow progress: ${status(task.status)}`}
         />
       </div>
-      <dl className="checks checks--facts card">
-        <div className="checks__row">
-          <dt>Recording type</dt>
-          <dd>{labelFor(MODE_LABELS, task.recording_mode)}</dd>
-        </div>
-        <div className="checks__row">
-          <dt>Priority</dt>
-          <dd>{labelFor(PRIORITY_LABELS, task.priority)}</dd>
-        </div>
-        <div className="checks__row">
-          <dt>Moderator</dt>
-          <dd>{task.moderator_name ?? "Not assigned"}</dd>
-        </div>
-        {[task.participant_a, task.participant_b].map((p, i) => (
-          <div key={p.id} className="checks__row">
-            <dt>Participant {i === 0 ? "A" : "B"}</dt>
-            <dd className="party">
-              <span className="party__name">{p.display_label ?? p.participant_code}</span>
-              <span className="party__meta">
-                {p.display_label ? <span className="code-tag">{p.participant_code}</span> : null}
-                <ConsentChip party={p} mode={task.consent_mode} />
-              </span>
-            </dd>
-          </div>
-        ))}
-        {task.reason_code ? (
-          <div className="checks__row">
-            <dt>Reason</dt>
-            <dd>{labelFor(REASON_LABELS, task.reason_code)}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <SignedForms task={task} onChange={onChange} />
-      {task.can_reassign ? <Assignment task={task} onChange={onChange} /> : null}
-      {task.recording_mode === "TELEPHONY" ? (
-        <PhoneCalls
-          task={task}
-          onChange={onChange}
-          // Quietly: the page stays as it is until the new task arrives (no loading flash).
-          onTaskStale={() => void work.getTask(task.id).then(replace)}
-          consent={consent}
-          devices={devices}
-        />
-      ) : (
-        <>
-          {task.is_moderator ? <RecordCard task={task} onChange={onChange} /> : null}
-          {consent}
-          {devices}
-        </>
-      )}
-      <ConsentFixCard task={task} onChange={onChange} />
-      <AdminReviewCard task={task} onChange={onChange} />
-      {HAS_RECORDINGS.includes(task.status) ? (
-        <AudioQcPanel task={task} onDecided={reload} />
-      ) : null}
-      {HAS_RECORDINGS.includes(task.status) ? <Recordings task={task} /> : null}
-      <Timeline
-        taskId={task.id}
-        version={`${task.status}-${task.moderator_id ?? ""}-${task.participant_a.consent_at ?? ""}-${task.participant_b.consent_at ?? ""}`}
-      />
+      <TaskBody task={task} onChange={onChange} reload={reload} replace={replace} />
     </section>
   );
 }

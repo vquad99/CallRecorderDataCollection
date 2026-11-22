@@ -1,5 +1,5 @@
 // Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006, AQC-008, PROJ-011
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -183,18 +183,46 @@ describe("project detail", () => {
     );
   });
 
-  it("loads the rules and saves every card in one request (D-145)", async () => {
+  it("loads the rules one section at a time and saves each with the rest as it is (D-145, D-150)", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage"], {
         "GET /api/v1/projects/p1": () => [200, project],
         "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
-    renderAt("/projects/p1/rules");
+    // The Rules page's own address opens its first section.
+    const router = renderAt("/projects/p1/rules");
     const youngest = await screen.findByRole("spinbutton", { name: "Youngest speaker age" });
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/speakers");
+    expect(screen.getByRole("heading", { level: 1, name: "Rules" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Speakers" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Consent" })).toBeNull();
+    // Its sections are under Rules in the project's menu, the open one marked.
+    const menu = screen.getByRole("navigation", { name: "Project sections" });
+    expect(within(menu).getByRole("link", { name: "Rules" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    const rulesItem = within(menu).getByRole("link", { name: "Rules" }).closest("li");
+    const sections = within(rulesItem as HTMLElement)
+      .getAllByRole("link")
+      .slice(1);
+    expect(sections.map((l) => l.textContent)).toEqual([
+      "Speakers",
+      "Consent",
+      "Approval",
+      "QC checklist",
+      "Device details",
+      "Reminders for moderators",
+      "Audio and progress",
+      "Targets",
+      "Export format",
+    ]);
+    expect(within(menu).getByRole("link", { name: "Speakers" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     const oldest = screen.getByRole("spinbutton", { name: "Oldest speaker age" });
-    for (const card of ["Speakers", "Consent", "Approval"])
-      expect(screen.getByRole("region", { name: card })).toBeInTheDocument();
     expect(youngest).toHaveValue(20);
     expect(oldest).toHaveValue(60);
     const details = screen.getByRole("group", { name: "Speaker details needed before a task" });
@@ -209,15 +237,8 @@ describe("project detail", () => {
     ).toEqual(["Native state", "Native district", "Native PIN code"]);
     const limit = screen.getByRole("spinbutton", { name: "Conversations per speaker (at most)" });
     const once = screen.getByRole("checkbox", { name: "Each pair of speakers only once" });
-    const consent = screen.getByRole("group", { name: "How participants give consent" });
-    const qc = screen.getByRole("checkbox", {
-      name: "QC pass is the final approval (no admin review)",
-    });
     expect(limit).toHaveValue(3);
     expect(once).toBeChecked();
-    expect(within(consent).getByRole("radio", { name: /^Online/ })).toBeChecked();
-    expect(consent).toHaveAccessibleDescription(/is emailed the consent form/);
-    expect(qc).not.toBeChecked();
 
     await userEvent.clear(youngest);
     await userEvent.type(youngest, "18");
@@ -228,11 +249,6 @@ describe("project detail", () => {
     await userEvent.clear(limit);
     await userEvent.type(limit, "5");
     await userEvent.click(once);
-    await userEvent.click(
-      within(consent).getByRole("radio", { name: "Upload (scanned signed form)" }),
-    );
-    expect(consent).toHaveAccessibleDescription(/No consent form is emailed/);
-    await userEvent.click(qc);
     await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
     expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
     const patches = () => calls.filter((c) => c.method === "PATCH");
@@ -247,14 +263,56 @@ describe("project detail", () => {
       ),
       max_conversations_per_speaker: 5,
       unique_pairs: false,
-      consent_mode: "UPLOAD",
-      qc_final_approval: true,
+      consent_mode: "ONLINE", // the other sections go back as they are
+      qc_final_approval: false,
     });
     // Empty means no limit.
     await userEvent.clear(limit);
     await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
     await waitFor(() => expect(patches()).toHaveLength(2));
     expect(patches()[1]?.body).toMatchObject({ max_conversations_per_speaker: null });
+
+    // Consent, on its own page: it starts from what was just saved.
+    await userEvent.click(within(menu).getByRole("link", { name: "Consent" }));
+    const consent = await screen.findByRole("group", { name: "How participants give consent" });
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/consent");
+    expect(screen.queryByRole("region", { name: "Speakers" })).toBeNull();
+    expect(within(consent).getByRole("radio", { name: /^Online/ })).toBeChecked();
+    expect(consent).toHaveAccessibleDescription(/is emailed the consent form/);
+    await userEvent.click(
+      within(consent).getByRole("radio", { name: "Upload (scanned signed form)" }),
+    );
+    expect(consent).toHaveAccessibleDescription(/No consent form is emailed/);
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(patches()).toHaveLength(3));
+    expect(patches()[2]?.body).toMatchObject({
+      speaker_min_age: 18,
+      max_conversations_per_speaker: null,
+      consent_mode: "UPLOAD",
+      qc_final_approval: false,
+    });
+
+    // Approval.
+    await userEvent.click(within(menu).getByRole("link", { name: "Approval" }));
+    const qc = await screen.findByRole("checkbox", {
+      name: "QC pass is the final approval (no admin review)",
+    });
+    expect(qc).not.toBeChecked();
+    await userEvent.click(qc);
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(patches()).toHaveLength(4));
+    expect(patches()[3]?.body).toMatchObject({ consent_mode: "UPLOAD", qc_final_approval: true });
+  });
+
+  it("opens the first section for an unknown one (D-150)", async () => {
+    fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+      }),
+    );
+    const router = renderAt("/projects/p1/rules/no-such-section");
+    expect(await screen.findByRole("region", { name: "Speakers" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/speakers");
   });
 
   it("says when the speaker ages are wrong and sends nothing (D-145)", async () => {
@@ -292,7 +350,7 @@ describe("project detail", () => {
         "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/qc-checklist");
     const card = await screen.findByRole("region", { name: "QC checklist" });
     const first = within(card).getByRole("group", { name: "1. two_speakers" });
     const second = within(card).getByRole("group", { name: "2. echo_in_audio" });
@@ -300,10 +358,8 @@ describe("project detail", () => {
       "The conversation is between exactly two speakers",
     );
     expect(within(first).getByLabelText("Applies to")).toHaveValue("conversation");
-    expect(within(first).getByLabelText("The recording fails when the answer is")).toHaveValue(
-      "no",
-    );
-    expect(within(second).getByLabelText("The recording fails when the answer is")).toHaveValue("");
+    expect(within(first).getByLabelText("Fails when the answer is")).toHaveValue("no");
+    expect(within(second).getByLabelText("Fails when the answer is")).toHaveValue("");
     expect(within(first).getByRole("button", { name: "Move two_speakers up" })).toBeDisabled();
     expect(within(second).getByRole("button", { name: "Move echo_in_audio down" })).toBeDisabled();
 
@@ -314,10 +370,7 @@ describe("project detail", () => {
     expect(words).toHaveAccessibleDescription("Write the question.");
     await userEvent.type(words, "Only two people talk");
     await userEvent.click(within(first).getByRole("checkbox", { name: /Required/ }));
-    await userEvent.selectOptions(
-      within(second).getByLabelText("The recording fails when the answer is"),
-      "yes",
-    );
+    await userEvent.selectOptions(within(second).getByLabelText("Fails when the answer is"), "yes");
     await userEvent.selectOptions(within(second).getByLabelText("Applies to"), "conversation");
     await userEvent.click(within(second).getByRole("button", { name: "Move echo_in_audio up" }));
     expect(within(card).getByRole("group", { name: "1. echo_in_audio" })).toBeInTheDocument();
@@ -387,7 +440,7 @@ describe("project detail", () => {
         "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
       }),
     );
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/devices");
     const card = await screen.findByRole("region", { name: "Device details" });
     const asked = within(card).getByRole("group", { name: "Asked for each speaker" });
     expect(
@@ -430,7 +483,7 @@ describe("project detail", () => {
           "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
         }),
       );
-      renderAt("/projects/p1/rules");
+      renderAt("/projects/p1/rules/reminders");
       const card = await screen.findByRole("region", { name: "Reminders for moderators" });
       const topics = within(card).getByLabelText("Talk about");
       const avoid = within(card).getByLabelText("Avoid");
@@ -488,12 +541,17 @@ describe("project detail", () => {
     },
   );
 
-  it("keeps the Rules tab for project administrators, like the other tabs (D-104, D-145)", async () => {
+  it("keeps the Rules for project administrators, like the other pages (D-104, D-145)", async () => {
     fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
-    renderAt("/projects/p1/rules");
+    const router = renderAt("/projects/p1/rules");
     expect(await screen.findByText("No access")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Project sections" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
+    // A section's own address too (D-150).
+    await act(() => router.navigate("/projects/p1/rules/consent"));
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/consent");
+    expect(screen.getByText("No access")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "How participants give consent" })).toBeNull();
   });
 
   it("keeps an archived project's rules read only (D-145)", async () => {
@@ -511,7 +569,14 @@ describe("project detail", () => {
     ).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
     // The QC checklist too (D-146).
-    const card = screen.getByRole("region", { name: "QC checklist" });
+    await userEvent.click(
+      within(screen.getByRole("navigation", { name: "Project sections" })).getByRole("link", {
+        name: "QC checklist",
+      }),
+    );
+    const card = await screen.findByRole("region", { name: "QC checklist" });
+    expect(screen.getByText("Read only. Reopen the project to change its rules.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Save rules" })).toBeNull();
     expect(within(card).getAllByLabelText("Question")[0]).toBeDisabled();
     expect(within(card).getByRole("button", { name: "Remove two_speakers" })).toBeDisabled();
     expect(within(card).getByRole("button", { name: "Add question" })).toBeDisabled();

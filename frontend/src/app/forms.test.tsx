@@ -59,9 +59,6 @@ const tick =
   async () => {
     await userEvent.click(screen.getByRole("checkbox", { name: label }));
   };
-/** A field inside the group with this name: the device details ask the same of each speaker. */
-const inGroup = (group: RegExp, label: string) =>
-  within(screen.getByRole("group", { name: group })).getByLabelText(label) as HTMLInputElement;
 
 // A phone call in progress on task t1 (D-101).
 const LIVE_CALL = {
@@ -117,11 +114,13 @@ const QC_VIEW = {
   results: [],
 };
 /** Presses Yes or No for every question with this name (a speaker question is asked twice). */
+/** Every Yes / No group of a QC question: once, or for each speaker ("… – Participant A"). */
 const answer =
   (question: string, said: "Yes" | "No"): Step =>
   async () => {
-    for (const group of await screen.findAllByRole("group", { name: question }))
-      await userEvent.click(within(group).getByRole("button", { name: said }));
+    const name = new RegExp(`^${escape(question)}( – Participant [AB])?$`);
+    for (const group of await screen.findAllByRole("radiogroup", { name }))
+      await userEvent.click(within(group).getByRole("radio", { name: said }));
   };
 
 const QC_PAGE: Record<string, Handler> = {
@@ -421,7 +420,7 @@ const FORMS: Record<string, FormSpec> = {
     kept: "Comment",
   },
   "assign moderator": {
-    source: "src/features/tasks/TaskDetailPage.tsx",
+    source: "src/features/tasks/TaskSide.tsx",
     url: "/tasks/t1",
     ready: /Task T000001/,
     fill: [choose("Moderator", "u4"), type("Reason for reassigning", "Mona is away")],
@@ -550,15 +549,13 @@ const FORMS: Record<string, FormSpec> = {
         { ...TASK, status: "IN_PROGRESS", device_details_missing: ["P000001", "P000002"] },
       ],
     },
+    // D-152: one matrix; each box and switch is named "<detail> – Participant <side>".
     fill: [
+      type("Device make – Participant A", "Samsung"),
       async () => {
-        await userEvent.type(inGroup(/^Participant A/, "Device make"), "Samsung");
-      },
-      async () => {
-        const wired = within(screen.getByRole("group", { name: /^Participant B/ })).getByRole(
-          "group",
-          { name: "Wired earphones used" },
-        );
+        const wired = screen.getByRole("radiogroup", {
+          name: "Wired earphones used – Participant B",
+        });
         await userEvent.click(within(wired).getByRole("radio", { name: "Yes" }));
       },
     ],
@@ -571,11 +568,10 @@ const FORMS: Record<string, FormSpec> = {
         { ...DEVICE_DETAILS.participants[1]?.details, side: "B", wired_earphones: true },
       ],
     },
-    kept: "Device make",
-    keptField: () => inGroup(/^Participant A/, "Device make"),
+    kept: "Device make – Participant A",
   },
   "task comment": {
-    source: "src/features/tasks/TaskDetailPage.tsx",
+    source: "src/features/tasks/TaskSide.tsx",
     url: "/tasks/t1",
     ready: /Task T000001/,
     fill: [type("Add a comment", "Called twice, no answer")],

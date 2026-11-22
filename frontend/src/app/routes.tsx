@@ -116,9 +116,16 @@ export const routes: RouteObject[] = [
                   },
                   { path: "audio", element: page(tabs, "AudioRulesTab") },
                   {
-                    // The project's rules (D-145): speakers, consent, approval.
+                    // The project's rules (D-145): one section at a time (D-150); the Rules
+                    // page's own address opens the first.
                     path: "rules",
-                    element: page(() => import("../features/projects/RulesTab"), "RulesTab"),
+                    children: [
+                      { index: true, element: <Navigate to="speakers" replace /> },
+                      {
+                        path: ":section",
+                        element: page(() => import("../features/projects/RulesTab"), "RulesTab"),
+                      },
+                    ],
                   },
                   { path: "languages", element: page(tabs, "LanguagesTab") },
                   { path: "retention", element: page(tabs, "RetentionTab") },

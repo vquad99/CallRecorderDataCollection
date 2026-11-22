@@ -8,7 +8,8 @@ import { useId, useState } from "react";
 import { ApiError } from "../../api/client";
 import type { ConsentMode } from "../../api/projects";
 import * as work from "../../api/work";
-import { Button, IconButton } from "../../components/form/Button";
+import { DataTable } from "../../components/DataTable";
+import { IconButton } from "../../components/form/Button";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -59,23 +60,34 @@ export async function sendDocument(
   return work.uploadDocument(projectId, participantId, kind, file);
 }
 
-/** A button that picks a file and uploads it at once. */
+/** A button that picks a file and uploads it at once. `compact`: the icon only (a table row's
+ * action, D-141), the words shown on hover and read by screen readers. */
 export function UploadButton({
   label,
   busy,
   disabled = false,
+  compact = false,
   onFile,
 }: {
   /** The words, e.g. "Upload signed consent form" or "Replace address proof". */
   label: string;
   busy: boolean;
   disabled?: boolean;
+  compact?: boolean;
   onFile: (file: File) => void;
 }) {
+  const off = disabled || busy ? " is-disabled" : "";
   return (
-    <label className={`button button--secondary${disabled || busy ? " is-disabled" : ""}`}>
-      {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="upload" size={16} />}
-      {label}
+    <label
+      className={compact ? `icon-button upload-icon${off}` : `button button--secondary${off}`}
+      title={compact ? label : undefined}
+    >
+      {busy ? (
+        <span className="spinner" aria-hidden="true" />
+      ) : (
+        <Icon name="upload" size={compact ? 18 : 16} />
+      )}
+      {compact ? <span className="sr-only">{label}</span> : label}
       <input
         type="file"
         accept={work.DOCUMENT_ACCEPT}
@@ -162,6 +174,12 @@ export function DocumentBadges({
   );
 }
 
+/** "21 Nov 2026, 10:30 · Ada · 240 KB": when, by whom and how big, for a table cell. */
+const uploadedCell = (d: work.ParticipantDocument) =>
+  `${when(d.uploaded_at)} by ${d.uploaded_by ?? "someone"} · ${sizeText(d.size_bytes)}`;
+
+/** One kind of document as a table row (D-152): its name and state, the file, when and by whom
+ * it was uploaded, and View and Upload or Replace as icons. */
 function Slot({
   kind,
   doc,
@@ -182,15 +200,14 @@ function Slot({
   onView: (doc: work.ParticipantDocument) => void;
   onFile: (file: File) => void;
 }) {
-  const id = useId();
   const words = DOCUMENT_WORDS[kind];
   return (
-    <section className="docs__slot" aria-labelledby={id}>
-      <div className="docs__head">
-        <h4 id={id}>
-          <Icon name="fileText" size={18} />
+    <tr>
+      <th scope="row">
+        <span className="docs__kind">
+          <Icon name="fileText" size={16} />
           {words}
-        </h4>
+        </span>
         {doc ? (
           <StatusBadge tone="success" label="Uploaded" />
         ) : missing ? (
@@ -199,37 +216,38 @@ function Slot({
             label={kind === "CONSENT_FORM" ? "Consent form missing" : "Address proof missing"}
           />
         ) : null}
-      </div>
+      </th>
       {doc ? (
-        <p className="docs__file">
-          <span className="docs__name">{doc.file_name}</span>
-          <span className="muted">{uploadedText(doc)}</span>
-        </p>
+        <>
+          <td className="docs__name">{doc.file_name}</td>
+          <td className="docs__when">{uploadedCell(doc)}</td>
+        </>
       ) : (
-        <p className="muted">{note}</p>
+        <td colSpan={2} className="docs__note muted">
+          {note}
+        </td>
       )}
-      <div className="actions">
+      <td className="docs__actions">
         {doc ? (
-          <Button
-            variant="secondary"
+          <IconButton
             icon="eye"
+            label={`View ${doc.file_name}`}
             busy={busy === `view-${doc.id}`}
             disabled={busy !== null}
             onClick={() => onView(doc)}
-          >
-            View
-          </Button>
+          />
         ) : null}
         {canUpload ? (
           <UploadButton
+            compact
             label={`${doc ? "Replace" : "Upload"} ${words.toLowerCase()}`}
             busy={busy === `upload-${kind}`}
             disabled={busy !== null}
             onFile={onFile}
           />
         ) : null}
-      </div>
-    </section>
+      </td>
+    </tr>
   );
 }
 
@@ -276,60 +294,87 @@ export function DocumentsPanel({
       ) : null}
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
-      <Slot
-        kind="CONSENT_FORM"
-        doc={d.consent_form}
-        canUpload={d.may_upload_consent_form}
-        missing={uploadMode}
-        note={
-          uploadMode
-            ? "Not uploaded yet. A task needs it, unless they agreed online."
-            : "This project takes consent online: the participant agrees on their personal page."
-        }
-        busy={busy}
-        onView={view}
-        onFile={upload("CONSENT_FORM")}
-      />
-      {d.may_view_address_proof ? (
-        <Slot
-          kind="ADDRESS_PROOF"
-          doc={d.address_proof}
-          canUpload={d.may_upload_address_proof}
-          missing
-          note="Not uploaded yet: optional now, needed before delivery. One for the person, in every project."
-          busy={busy}
-          onView={view}
-          onFile={upload("ADDRESS_PROOF")}
-        />
-      ) : null}
-      <p className="muted">
+      <DataTable className="docs-table" label="Documents">
+        <thead>
+          <tr>
+            <th scope="col">Document</th>
+            <th scope="col">File</th>
+            <th scope="col">Uploaded</th>
+            <th scope="col">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <Slot
+            kind="CONSENT_FORM"
+            doc={d.consent_form}
+            canUpload={d.may_upload_consent_form}
+            missing={uploadMode}
+            note={
+              uploadMode
+                ? "Not uploaded yet. A task needs it, unless they agreed online."
+                : "This project takes consent online: the participant agrees on their personal page."
+            }
+            busy={busy}
+            onView={view}
+            onFile={upload("CONSENT_FORM")}
+          />
+          {d.may_view_address_proof ? (
+            <Slot
+              kind="ADDRESS_PROOF"
+              doc={d.address_proof}
+              canUpload={d.may_upload_address_proof}
+              missing
+              note="Not uploaded yet: optional now, needed before delivery. One for the person, in every project."
+              busy={busy}
+              onView={view}
+              onFile={upload("ADDRESS_PROOF")}
+            />
+          ) : null}
+        </tbody>
+      </DataTable>
+      <p className="muted docs__hint">
         PDF, JPEG or PNG, at most {work.MAX_DOCUMENT_MB} MB. A new upload replaces the current one;
         earlier ones stay below.
       </p>
       {d.earlier.length > 0 ? (
         <section aria-label="Earlier versions" className="docs__earlier">
           <h4>Earlier versions</h4>
-          <ul className="list">
-            {d.earlier.map((e) => (
-              <li key={e.id} className="docs__row">
-                <span>
-                  {DOCUMENT_WORDS[e.kind]}: {e.file_name}
-                  <span className="muted">
-                    {" "}
-                    · {uploadedText(e)} · replaced {when(e.replaced_at)} by{" "}
-                    {e.replaced_by ?? "someone"}
-                  </span>
-                </span>
-                <IconButton
-                  icon="eye"
-                  label={`View ${e.file_name}`}
-                  busy={busy === `view-${e.id}`}
-                  disabled={busy !== null}
-                  onClick={() => view(e)}
-                />
-              </li>
-            ))}
-          </ul>
+          <DataTable className="docs-table" label="Earlier versions">
+            <thead>
+              <tr>
+                <th scope="col">Document</th>
+                <th scope="col">File</th>
+                <th scope="col">Uploaded</th>
+                <th scope="col">Replaced</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.earlier.map((e) => (
+                <tr key={e.id} className="row--replaced">
+                  <th scope="row">{DOCUMENT_WORDS[e.kind]}</th>
+                  <td className="docs__name">{e.file_name}</td>
+                  <td className="docs__when">{uploadedCell(e)}</td>
+                  <td className="docs__when">
+                    {when(e.replaced_at)} by {e.replaced_by ?? "someone"}
+                  </td>
+                  <td className="docs__actions">
+                    <IconButton
+                      icon="eye"
+                      label={`View ${e.file_name}`}
+                      busy={busy === `view-${e.id}`}
+                      disabled={busy !== null}
+                      onClick={() => view(e)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
         </section>
       ) : null}
     </div>

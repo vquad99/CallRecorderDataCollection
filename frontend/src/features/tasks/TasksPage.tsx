@@ -223,7 +223,7 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
       ) : null}
       {tasks.state.status === "loaded" && tasks.state.data.items.length > 0 ? (
         <>
-          <DataTable>
+          <DataTable className="tasks-table">
             <thead>
               <tr>
                 {canSelect ? (

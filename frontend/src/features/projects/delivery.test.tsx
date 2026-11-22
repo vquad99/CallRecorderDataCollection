@@ -26,7 +26,7 @@ function rules(over: Record<string, unknown> = {}) {
   );
 }
 
-const card = () => screen.getByRole("region", { name: "Export" });
+const card = () => screen.getByRole("region", { name: "Export format" });
 const patches = (calls: { method: string; body: unknown }[]) =>
   calls.filter((c) => c.method === "PATCH").map((c) => c.body as Record<string, unknown>);
 
@@ -72,7 +72,7 @@ describe("the names of the client's delivery format", () => {
 describe("the Export card of the Rules tab", () => {
   it("starts with the client's format and saves the layout, the IDs and the audio name", async () => {
     const { calls } = rules();
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/export");
     const layout = await screen.findByRole("group", { name: "Layout of an export" });
     const client = within(layout).getByRole("radio", { name: "The client's delivery format" });
     expect(client).toBeChecked();
@@ -109,7 +109,7 @@ describe("the Export card of the Rules tab", () => {
 
   it("refuses an audio name without the conversation or with unknown tokens", async () => {
     const { calls } = rules({ audio_name_pattern: "{conversation}" });
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/export");
     const name = await screen.findByRole("textbox", { name: "Audio file name" });
     await rename(name, "{a}_{b}");
     expect(name).toHaveAccessibleDescription(
@@ -133,7 +133,7 @@ describe("the Export card of the Rules tab", () => {
 
   it("is read only in an archived project", async () => {
     rules({ status: "ARCHIVED" });
-    renderAt("/projects/p1/rules");
+    renderAt("/projects/p1/rules/export");
     const layout = await screen.findByRole("group", { name: "Layout of an export" });
     expect(
       within(layout).getByRole("radio", { name: "The client's delivery format" }),
@@ -177,16 +177,17 @@ describe("the Export tab's layout", () => {
     );
   }
 
-  it("says the client's format is used, links to the Rules tab and counts what is missing", async () => {
+  it("says the client's format is used, links to its Rules section and counts what is missing", async () => {
     exportTab({ speaker_id_style: "CODE" }, { layout: "CLIENT", missing: 3 });
     renderAt("/projects/p1/export");
     const note = await screen.findByText(/client's delivery format/);
     const paragraph = note.closest("p") as HTMLElement;
     expect(paragraph).toHaveTextContent("P000001_P000002_570001_576101_CON001.wav");
     expect(paragraph).toHaveTextContent(/MISSING\.csv listing what is not on file/);
-    expect(
-      within(paragraph).getByRole("link", { name: "Change it on the Rules tab" }),
-    ).toHaveAttribute("href", "/projects/p1/rules");
+    expect(within(paragraph).getByRole("link", { name: "Change it under Rules" })).toHaveAttribute(
+      "href",
+      "/projects/p1/rules/export",
+    );
     expect(
       await screen.findByText("3 items missing", { selector: ".export__summary span" }),
     ).toBeVisible();

@@ -1,5 +1,6 @@
-/* The moderator's reminders and the device details card (D-147), on the recorder and the task
-   page. Loaded with those pages, not with the first screen. */
+/* The moderator's reminders and the device details matrix (D-147, D-152), on the recorder and the
+   task page; the matrices' pieces (Yes / No switches, ticks and crosses). Loaded with those
+   pages, not with the first screen. */
 
 /* A note with its icon at the left (the recorder's reminders; D-141 callout style). */
 .callout {
@@ -33,48 +34,246 @@
   background: var(--surface-hover);
 }
 
-/* Device details: one block per speaker, side by side on a wide screen. */
-.devices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
-  gap: 16px;
-  max-width: 1100px;
+/* ---------- Matrices (D-152): rows of questions or details, a column per speaker ---------- */
+.table-wrap .table.matrix th,
+.table-wrap .table.matrix td,
+.card .table-wrap .table.matrix th,
+.card .table-wrap .table.matrix td {
+  padding: 6px 10px;
+  vertical-align: middle;
 }
-.device {
-  min-width: 0;
-  margin: 0;
-  padding: 8px 14px 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.device__who {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 0 4px;
-  font-size: 0.9375rem;
+.card .table-wrap .table.matrix thead th,
+.table-wrap .table.matrix thead th {
+  background: var(--k-200);
+  color: var(--text-2);
+  font-size: 0.75rem;
   font-weight: 600;
 }
-.device .form-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+/* Each speaker's column heading in their own tint (as in a grouped heading row). */
+.card .table-wrap .table.matrix thead th.mx-a,
+.table-wrap .table.matrix thead th.mx-a {
+  border-bottom: 2px solid var(--icon-blue);
+  background: var(--tint-blue);
+  color: var(--text);
 }
-.device__yesno {
+.card .table-wrap .table.matrix thead th.mx-b,
+.table-wrap .table.matrix thead th.mx-b {
+  border-bottom: 2px solid var(--icon-violet);
+  background: var(--tint-violet);
+  color: var(--text);
+}
+.table.matrix tbody th {
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.table.matrix tfoot th {
+  text-align: left;
+}
+.table.matrix tbody tr:hover {
+  background: transparent;
+}
+.table.matrix tbody tr:hover th,
+.table.matrix tbody tr:hover td {
+  background-color: var(--k-100);
+}
+/* The row number, quiet. */
+.table.matrix td.mx-n,
+.table.matrix th.mx-n {
+  width: 28px;
+  padding-right: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.mx-col {
+  width: 1%;
+}
+.mx-who {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+.mx-who__meta {
+  color: var(--text-2);
+  font-weight: 400;
+}
+.mx-who__meta .code-tag {
+  padding: 0 5px;
+  background: rgb(255 255 255 / 0.7);
+  font-size: 0.75rem;
+}
+/* A cell whose answer fails the recording: rose tint, the cross beside the switch. */
+.card .table-wrap .table.matrix td.is-fail,
+.table-wrap .table.matrix td.is-fail,
+.table.matrix tbody tr:hover td.is-fail {
+  background: var(--tint-rose);
+}
+.mx-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mx-answer--stack {
   flex-wrap: wrap;
-  gap: 0 28px;
 }
-.device__choices {
-  display: flex;
-  gap: 18px;
+.mx-fails {
+  display: inline-flex;
 }
-.device__last {
-  margin-bottom: 12px;
+.mx-view.button {
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
 }
-.device .checks {
-  margin: 0 0 8px;
+
+/* Yes / No: two radio buttons drawn as one switch; the chosen one filled, a failing one rose. */
+.yn {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
+.yn__opt {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 3px 10px;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+.yn__opt + .yn__opt {
+  border-left: 1px solid var(--border-strong);
+}
+/* The real radio button covers its word, unseen: clicks, keys and screen readers use it. */
+.yn__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.yn__opt:hover {
+  background: var(--surface-hover);
+}
+.yn__opt.is-on {
+  background: var(--primary);
+  color: #fff;
+}
+.yn__opt.is-fail {
+  background: var(--danger);
+  color: #fff;
+}
+.yn__opt:has(.yn__input:focus-visible) {
+  z-index: 1;
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+/* A tick or a cross before its words. */
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+.mark .icon {
+  flex: none;
+}
+.mark--ok {
+  color: var(--text);
+}
+.mark--ok .icon {
+  color: var(--icon-green);
+}
+.mark--no {
+  color: var(--danger);
+}
+.mark--no .icon {
+  color: var(--icon-rose);
+}
+
+/* Device details (D-147) as a matrix: a row per detail, a column per speaker. */
 .devices__hint {
-  margin: -6px 0 14px;
+  margin: -4px 0 10px;
+}
+.table.devices-matrix tbody th {
+  width: 190px;
+}
+.table.devices-matrix td {
+  min-width: 170px;
+}
+.mx-input.field__input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+}
+.mx-last.button {
+  min-height: 26px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.table.devices-matrix tfoot td {
+  font-size: 0.8125rem;
+  white-space: normal;
+}
+.devices__save {
+  margin-top: 10px;
+}
+.table.matrix tfoot th,
+.table.matrix tfoot td {
+  font-weight: 400;
+}
+.table.matrix tfoot th {
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .table-wrap .table.matrix th,
+  .table-wrap .table.matrix td,
+  .card .table-wrap .table.matrix th,
+  .card .table-wrap .table.matrix td {
+    padding: 5px 6px;
+  }
+  .table.matrix td.mx-n,
+  .table.matrix th.mx-n {
+    display: none;
+  }
+  .mx-who {
+    white-space: normal;
+  }
+  .yn__opt {
+    min-width: 32px;
+    padding: 3px 7px;
+  }
+  .table.devices-matrix {
+    table-layout: fixed;
+  }
+  .table.devices-matrix tbody th,
+  .table.devices-matrix thead th:first-child,
+  .table.devices-matrix tfoot th {
+    width: 31%;
+  }
+  .table.devices-matrix td {
+    min-width: 0;
+  }
+  .table.matrix td,
+  .table.matrix tbody th {
+    white-space: normal;
+  }
 }

@@ -166,7 +166,7 @@ function LayoutNote() {
             record.
           </>
         )}{" "}
-        <Link to={`/projects/${project.id}/rules`}>Change it on the Rules tab</Link>.
+        <Link to={`/projects/${project.id}/rules/export`}>Change it under Rules</Link>.
       </span>
     </p>
   );

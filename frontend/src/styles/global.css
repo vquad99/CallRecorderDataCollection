@@ -1,16 +1,27 @@
 /*
  * Conversation Collection - the design system shared by every page: tokens, page structure and the
- * shared components. The look follows KoboToolbox (D-099): dark slate top bar, light grey side
- * menu, white panels, Roboto. The signed-out pages keep the paper-and-teal look the owner chose
- * (D-087), scoped under .public. Styles used by one feature only live in that feature's own file.
- * Icons: Phosphor.
+ * shared components. The shell follows the owner's TalentLMS example (D-150, replacing D-099's
+ * KoboToolbox side menu): a white top bar, a strong blue side menu, a light blue-grey second panel
+ * for a section's own pages, and a dense white content area (compact tables, tight spacing).
+ * Content keeps KoboToolbox's greys and blue, and Roboto. The signed-out pages keep the
+ * paper-and-teal look the owner chose (D-087), scoped under .public. Styles used by one feature
+ * only live in that feature's own file. Icons: Phosphor.
  */
 
 /* ---------- Tokens ---------- */
 :root {
   --gutter: 16px;
-  --topbar-h: 60px;
+  --topbar-h: 56px;
+  --sidenav-w: 224px;
+  --panel-w: 224px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* Spacing scale (D-150): pages use these steps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 
   --font-sans: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -88,9 +99,20 @@
   --tint-green: #e4f0e9;
   --tint-slate: #ecedf0;
 
-  --nav-bg: #edeef2;
-  --nav-text: #333847;
-  --nav-muted: #5a627d;
+  /* The side menu (D-150): white on strong blue 7.5:1, on the hover blue 8.8:1, on the navy of the
+     current page 12.9:1; the group titles 5.3:1. */
+  --nav-bg: #0b4fb3;
+  --nav-hover: #0a449c;
+  --nav-current: #072f6b;
+  --nav-text: #ffffff;
+  --nav-muted: #c7d9f5;
+  /* The second panel: dark text 12:1 on its blue-grey, its titles 6.3:1; white on its navy 10.8:1. */
+  --panel-bg: #e6edf7;
+  --panel-hover: #d5e0f0;
+  --panel-border: #d0dbea;
+  --panel-text: #1d2a44;
+  --panel-muted: #46557a;
+  --panel-current: #0b3a82;
   --brand-ink: #1977c2;
   --accent: #1977c2;
 
@@ -132,12 +154,12 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  font-size: 1.5rem;
+  gap: 10px;
+  font-size: 1.375rem;
   letter-spacing: 0;
 }
 h2 {
-  font-size: 1.0625rem;
+  font-size: 1rem;
   letter-spacing: 0;
 }
 h3 {
@@ -342,114 +364,46 @@ h1 > .tile {
   border-radius: 6px;
 }
 
-/* ---------- Signed-in shell: dark top band, light grey side menu ---------- */
+/* ---------- Signed-in shell: white top bar, blue side menu (D-150) ---------- */
 .shell {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  grid-template-columns: var(--sidenav-w) minmax(0, 1fr);
   min-height: 100vh;
-}
-.sidenav {
-  position: sticky;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  border-right: 1px solid var(--border);
-  background: var(--nav-bg);
-  color: var(--nav-text);
-}
-.sidenav__brand {
-  display: flex;
-  align-items: center;
-  height: var(--topbar-h);
-  padding: 0 18px;
-  background: var(--k-800);
-  /* covers the menu's right border so the dark band runs unbroken */
-  box-shadow: 1px 0 0 var(--k-800);
-}
-.sidenav__brand .brand {
-  color: #fff;
-}
-.sidenav__brand .brand__mark rect {
-  fill: var(--primary);
-}
-.sidenav__nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 12px;
-}
-.sidenav__group + .sidenav__group {
-  margin-top: 18px;
-}
-.sidenav__title {
-  margin: 0 0 4px;
-  padding: 0 10px;
-  color: var(--nav-muted);
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.sidenav__link {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-weight: 400;
-  text-decoration: none;
-  transition:
-    background 0.15s var(--ease),
-    color 0.15s var(--ease);
-}
-.sidenav__link:hover {
-  background: var(--k-300);
-  color: var(--text);
-  text-decoration: none;
-}
-.sidenav__link[aria-current="page"],
-.sidenav__link.active {
-  background: var(--primary-soft);
-  color: #135991;
-  font-weight: 500;
-}
-.sidenav__link.active::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: -12px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--accent);
-  content: "";
-}
-.sidenav__foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 14px 22px;
-  border-top: 1px solid var(--border);
-  color: var(--nav-muted);
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.shell__column {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 .topbar {
   position: sticky;
   top: 0;
   z-index: 30;
   display: flex;
+  grid-column: 1 / -1;
   align-items: center;
   gap: 12px;
   height: var(--topbar-h);
-  padding: 0 28px;
-  background: var(--k-800);
-  backdrop-filter: blur(8px);
+  padding: 0 20px 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--panel-text);
+  text-decoration: none;
+}
+.topbar__brand:hover {
+  color: var(--panel-text);
+  text-decoration: none;
+}
+.topbar .brand__mark rect {
+  fill: var(--nav-bg);
+}
+.topbar .brand__mark path:last-child {
+  stroke: #8ec0ff;
+}
+.topbar__brand .brand__name {
+  font-size: 1rem;
+  font-weight: 600;
 }
 .topbar__menu {
   display: none;
@@ -457,27 +411,11 @@ h1 > .tile {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid rgb(255 255 255 / 0.25);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: #fff;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
-}
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-}
-.crumbs::before {
-  color: var(--k-500);
-  content: attr(data-section) "  /";
-  white-space: pre;
-}
-.crumbs::after {
-  color: #fff;
-  font-weight: 500;
-  content: attr(data-page);
 }
 .topbar__spacer {
   flex: 1;
@@ -491,7 +429,7 @@ h1 > .tile {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 5px 12px 5px 5px;
+  padding: 4px 12px 4px 4px;
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--text);
@@ -499,29 +437,30 @@ h1 > .tile {
 }
 .topbar__account:hover,
 .topbar__account.active {
-  border-color: rgb(255 255 255 / 0.25);
-  background: rgb(255 255 255 / 0.1);
+  border-color: var(--border);
+  background: var(--k-100);
   color: var(--text);
   text-decoration: none;
 }
 .topbar__account .avatar {
-  width: 32px;
-  height: 32px;
-  background: var(--primary);
+  width: 34px;
+  height: 34px;
+  background: var(--nav-bg);
   color: #fff;
+  font-size: 0.75rem;
 }
 .topbar__who {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .topbar__name {
-  color: #fff;
+  color: var(--panel-text);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 .topbar__role {
-  color: var(--k-500);
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 400;
 }
@@ -533,10 +472,10 @@ h1 > .tile {
   height: 34px;
   white-space: nowrap;
   padding: 0 12px;
-  border: 1px solid rgb(255 255 255 / 0.25);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: #fff;
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -544,17 +483,23 @@ h1 > .tile {
 }
 .topbar__signout:hover,
 .topbar__menu:hover {
-  background: rgb(255 255 255 / 0.1);
-  color: #fff;
+  border-color: var(--k-500);
+  background: var(--k-100);
+  color: var(--text);
 }
-/* The moderator's phone line (D-133): its state, with a dot, and Try again after a failure. */
+/* The moderator's phone line (D-133): its state, with a dot, and Try again after a failure; a
+   light pill on the white bar. */
 .phone-line {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   margin: 0;
-  color: #fff;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--k-100);
+  color: var(--text-2);
   font-size: 0.8125rem;
 }
 .phone-line__words {
@@ -571,11 +516,22 @@ h1 > .tile {
   background: var(--k-500);
   content: "";
 }
+/* Ready: a darker green than --ok so its words are 5.3:1 on the light green. */
+.phone-line[data-status="ready"] {
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+  background: var(--ok-soft);
+  color: #14733e;
+}
 .phone-line[data-status="ready"]::before {
-  background: #4cc77f;
+  background: var(--ok);
+}
+.phone-line[data-status="failed"] {
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .phone-line[data-status="failed"]::before {
-  background: #ff7a7a;
+  background: var(--icon-rose);
 }
 .phone-line__short {
   display: none;
@@ -585,62 +541,257 @@ h1 > .tile {
   padding: 0;
   border: 0;
   background: none;
-  color: #fff;
+  color: var(--primary);
   font: inherit;
+  font-weight: 500;
   text-decoration: underline;
   white-space: nowrap;
   cursor: pointer;
+}
+.sidenav {
+  position: sticky;
+  top: var(--topbar-h);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  background: var(--nav-bg);
+  color: var(--nav-text);
+}
+.sidenav__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px;
+  scrollbar-color: rgb(255 255 255 / 0.3) transparent;
+  scrollbar-width: thin;
+}
+.sidenav__group + .sidenav__group {
+  margin-top: 16px;
+}
+.sidenav__title {
+  margin: 0 0 4px;
+  padding: 0 12px;
+  color: var(--nav-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sidenav__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--nav-text);
+  font-weight: 400;
+  text-decoration: none;
+  transition: background 0.15s var(--ease);
+}
+.sidenav__link:hover {
+  background: var(--nav-hover);
+  color: var(--nav-text);
+  text-decoration: none;
+}
+.sidenav__link[aria-current="page"],
+.sidenav__link.active {
+  background: var(--nav-current);
+  color: var(--nav-text);
+  font-weight: 500;
+}
+.sidenav__link:focus-visible {
+  outline-color: #fff;
+}
+.sidenav__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 24px;
+  border-top: 1px solid rgb(255 255 255 / 0.18);
+  color: var(--nav-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.shell__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .shell__main {
   flex: 1;
   min-width: 0;
 }
 .shell__content {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 28px 32px 72px;
+  max-width: 1440px;
+  padding: 20px 24px 48px;
   animation: page-in 0.25s var(--ease);
 }
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
 }
+
+/* ---------- A section's own pages: the second panel beside the side menu (D-150) ---------- */
+.shell__content:has(> .section-layout) {
+  max-width: none;
+  padding: 0;
+}
+.section-layout {
+  display: grid;
+  grid-template-columns: var(--panel-w) minmax(0, 1fr);
+  min-height: calc(100vh - var(--topbar-h));
+}
+.section-layout__main {
+  min-width: 0;
+  max-width: 1320px;
+  padding: 20px 24px 48px;
+}
+.section-panel {
+  position: sticky;
+  top: var(--topbar-h);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  overflow-y: auto;
+  border-right: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  scrollbar-width: thin;
+}
+.section-panel__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.section-panel__head .back-link {
+  margin: 0 0 6px;
+  color: var(--panel-current);
+  font-size: 0.75rem;
+}
+.section-panel__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+}
+.section-panel__code {
+  color: var(--panel-text);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.section-panel__name {
+  margin: 0;
+  color: var(--panel-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.section-nav {
+  padding: 10px 10px 16px;
+}
+.section-nav__list,
+.section-nav__sub {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.section-nav__link,
+.section-nav__sublink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--panel-text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease);
+}
+.section-nav__link .icon {
+  color: var(--panel-muted);
+}
+.section-nav__link:hover,
+.section-nav__sublink:hover {
+  background: var(--panel-hover);
+  color: var(--panel-text);
+  text-decoration: none;
+}
+.section-nav__link[aria-current="page"],
+.section-nav__sublink[aria-current="page"] {
+  background: var(--panel-current);
+  color: #fff;
+  font-weight: 500;
+}
+.section-nav__link[aria-current="page"] .icon {
+  color: #fff;
+}
+/* Rules while one of its sections is open: marked lightly, the section itself in navy. */
+.section-nav__link[aria-current="true"] {
+  background: var(--panel-hover);
+  font-weight: 500;
+}
+.section-nav__sub {
+  margin: 2px 0 6px 18px;
+  padding-left: 8px;
+  border-left: 2px solid var(--panel-border);
+}
+.section-nav__sublink {
+  padding: 5px 10px;
+  white-space: normal;
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidenav {
     position: fixed;
-    inset: 0 auto 0 0;
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
     z-index: 40;
     display: none;
     width: 264px;
+    height: auto;
     box-shadow: var(--shadow-lg);
   }
   .sidenav[data-open] {
     display: flex;
   }
   .topbar {
+    gap: 8px;
     padding: 0 var(--gutter);
   }
   .topbar__menu {
-    z-index: 45;
     display: inline-flex;
+    flex: none;
   }
-  .topbar__who,
-  .crumbs::before {
+  .topbar__who {
     display: none;
+  }
+  .topbar__account {
+    padding: 2px;
+  }
+  .phone-line {
+    padding: 4px 10px;
   }
   .phone-line__words {
     max-width: 18ch;
   }
-  /* A phone's top bar: Sign out as its icon, the phone line as its dot and state (D-141); the
-     full words stay for screen readers. */
+  /* A phone's top bar: the product as its mark, Sign out as its icon, the phone line as its dot
+     and state (D-141); the full words stay for screen readers. */
   .topbar__signout {
     padding: 0 9px;
   }
+  .topbar__brand .brand__name,
   .topbar__signout-words,
   .phone-line:has(.phone-line__short) .phone-line__words {
     position: absolute;
@@ -654,7 +805,64 @@ h1 > .tile {
     display: inline;
   }
   .shell__content {
-    padding: 18px var(--gutter) 56px;
+    padding: 16px var(--gutter) 48px;
+  }
+  /* The second panel becomes the project's title and a row of chips that scrolls sideways. */
+  .section-layout {
+    display: block;
+    min-height: 0;
+  }
+  .section-layout__main {
+    padding: 16px var(--gutter) 48px;
+  }
+  .section-panel {
+    position: static;
+    height: auto;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .section-panel__head {
+    padding: 10px var(--gutter) 6px;
+    border-bottom: 0;
+  }
+  .section-panel__head .back-link {
+    margin-bottom: 2px;
+  }
+  .section-nav {
+    padding: 0;
+  }
+  .section-nav__list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px var(--gutter) 10px;
+    scrollbar-width: none;
+  }
+  .section-nav__list > li,
+  .section-nav__sub,
+  .section-nav__sub > li {
+    display: contents;
+  }
+  .section-nav__link,
+  .section-nav__sublink {
+    flex: none;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .section-nav__link .icon {
+    display: none;
+  }
+  .section-nav__sublink {
+    border-style: dashed;
+  }
+  .section-nav__link[aria-current="page"],
+  .section-nav__sublink[aria-current="page"] {
+    border: 1px solid var(--panel-current);
   }
 }
 
@@ -664,7 +872,7 @@ h1 > .tile {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 8px 28px;
+  padding: 8px 24px;
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -945,10 +1153,10 @@ h1 > .tile {
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-4);
 }
 .stack--tight {
-  gap: 10px;
+  gap: var(--space-2);
 }
 /* A button in a column keeps its own width. */
 .stack > .button {
@@ -993,10 +1201,10 @@ h1 > .tile {
   align-items: center;
   gap: 8px;
 }
-/* Panels: white with a thin grey line. */
+/* Panels: white with a thin grey line; 16 px above and below, 20 px at the sides (D-150). */
 .card,
 .state {
-  padding: 20px 24px;
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1004,7 +1212,7 @@ h1 > .tile {
 }
 .card > h2,
 .card > h3 {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3);
 }
 .with-icon {
   display: flex;
@@ -1140,8 +1348,8 @@ fieldset.card legend,
 .field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: var(--space-3);
 }
 .field__label {
   color: var(--text);
@@ -1235,14 +1443,14 @@ input[type="radio"] {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 0 12px;
-  padding: 14px 16px 0;
+  padding: 12px 16px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 .filters .field {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .card .filters {
   padding: 0;
@@ -1252,7 +1460,7 @@ input[type="radio"] {
 .filters > .button {
   align-self: end;
   justify-self: start;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 /* Forms on a wide screen (D-141): a field keeps a readable width instead of running across the
    page, and figures and dates are short. Filter bars and windows keep their own layout. */
@@ -1277,16 +1485,16 @@ input[type="radio"] {
 /* A group of choices laid out like a field (checkboxes under one label). */
 fieldset.field {
   min-width: 0;
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-3);
   padding: 0;
   border: 0;
 }
 fieldset.field legend {
-  margin-bottom: 5px;
+  margin-bottom: 4px;
   padding: 0;
 }
 
-/* ---------- Tables: grey heading row, light highlight on hover ---------- */
+/* ---------- Tables: full width, compact rows, grey heading row that stays in view ---------- */
 /* position: relative keeps hidden labels (sr-only) inside the frame, so they cannot widen the page. */
 .table-wrap {
   position: relative;
@@ -1296,18 +1504,37 @@ fieldset.field legend {
   background: var(--surface);
   box-shadow: none;
 }
+/* A long table on a wide screen (D-150): its frame is at most the window's height and the rows
+   scroll inside it under the heading row, so the column names stay in view. */
+@media (min-width: 901px) {
+  .table-wrap {
+    max-height: calc(100vh - var(--topbar-h) - 32px);
+    overflow: auto;
+  }
+}
 .table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
+/* Rows of 36-40 px (D-150). */
 .table th,
 .table td {
-  padding: 11px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
+}
+.table td.actions,
+.table td:has(> .icon-button) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.table .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 0.625rem;
 }
 .table th {
   background: var(--k-200);
@@ -1316,6 +1543,13 @@ fieldset.field legend {
   font-size: 0.8125rem;
   font-weight: 500;
   white-space: nowrap;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 .table th.num,
 .table td.num {
@@ -1349,10 +1583,14 @@ fieldset.field legend {
   padding-left: 0;
   background: transparent;
 }
-/* A table inside a card keeps its own padding when it has its own frame (table-wrap). */
+/* A table inside a card keeps its own padding when it has its own frame (table-wrap); its heading
+   row stays opaque as it scrolls. */
 .card .table-wrap .table th,
 .card .table-wrap .table td {
-  padding-left: 16px;
+  padding-left: 12px;
+}
+.card .table-wrap .table thead th {
+  background: var(--surface);
 }
 .row--invalid td {
   color: var(--danger);
@@ -1399,6 +1637,7 @@ fieldset.field legend {
 .table td.actions .button {
   min-height: 28px;
   padding: 3px 8px;
+  box-shadow: none;
   border-color: transparent;
   background: transparent;
   color: var(--primary);
@@ -1714,7 +1953,7 @@ form.dialog__body > h2 {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 8px 28px;
+  padding: 8px 24px;
   background: var(--warn-soft);
   color: var(--warn);
   font-weight: 500;

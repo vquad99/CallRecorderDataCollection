@@ -1,7 +1,8 @@
 // Device details per speaker on the task page (D-147): the moderator fills both people's details
 // and saves them together; "Same as last time" fills a person's last details only when clicked;
 // from QC on they are read only; only the details the project asks are shown, none when it asks
-// none; Send to QC waits for them and goes once they are saved.
+// none; Send to QC waits for them and goes once they are saved. D-152: one matrix, a row per
+// detail and a column per speaker.
 // Requirements: TASK-002, TASK-004, FTF-014, PROJ-011
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,14 +52,15 @@ function open(task: Record<string, unknown>, extra: Record<string, Handler> = {}
   return api;
 }
 
-const speaker = (side: "A" | "B") =>
-  screen.getByRole("group", { name: new RegExp(`^Participant ${side}`) });
+// D-152: one matrix, a row per detail and a column per speaker; each box and switch is named
+// "<detail> – Participant <side>".
+const box = (side: "A" | "B", label: string) =>
+  screen.getByLabelText(`${label} – Participant ${side}`);
+const yesNo = (side: "A" | "B", question: string) =>
+  screen.getByRole("radiogroup", { name: `${question} – Participant ${side}` });
 const answer = (side: "A" | "B", question: string, said: "Yes" | "No") =>
-  userEvent.click(
-    within(within(speaker(side)).getByRole("group", { name: question })).getByRole("radio", {
-      name: said,
-    }),
-  );
+  userEvent.click(within(yesNo(side, question)).getByRole("radio", { name: said }));
+const stillToFill = () => screen.getByRole("row", { name: /^Still to fill/ });
 
 describe("device details on the task page (D-147)", () => {
   it("fills both speakers' details and saves them together", { timeout: 15000 }, async () => {
@@ -86,22 +88,27 @@ describe("device details on the task page (D-147)", () => {
     });
     const card = await screen.findByRole("region", { name: "Device details" });
     expect(await within(card).findByText(/Call type: Face-to-face/)).toBeInTheDocument();
-    // Each speaker by code and, for people who may see it, name.
-    expect(speaker("A")).toHaveAccessibleName("Participant A P000001 Asha");
+    // Each speaker's column by code and, for people who may see it, name.
     expect(
-      within(speaker("A")).getByText(/Still to fill: Device make, Device model/),
-    ).toBeVisible();
+      within(card).getByRole("columnheader", { name: "Participant A P000001 Asha" }),
+    ).toBeInTheDocument();
+    // What is still to fill, under each column.
+    expect(stillToFill()).toHaveTextContent("Still to fill5 details5 details");
+    expect(stillToFill().children[1]).toHaveAttribute(
+      "title",
+      "Device make, Device model, Bluetooth earphones used, Wired earphones used, Loudspeaker on",
+    );
     const save = within(card).getByRole("button", { name: "Save device details" });
     expect(save).toBeDisabled(); // nothing changed yet
 
-    await userEvent.type(within(speaker("A")).getByLabelText("Device make"), "Samsung");
-    await userEvent.type(within(speaker("A")).getByLabelText("Device model"), "Galaxy A14");
+    await userEvent.type(box("A", "Device make"), "Samsung");
+    await userEvent.type(box("A", "Device model"), "Galaxy A14");
     await answer("A", "Bluetooth earphones used", "No");
     await answer("A", "Wired earphones used", "Yes");
     await answer("A", "Loudspeaker on", "No");
-    expect(within(speaker("A")).queryByText(/Still to fill/)).toBeNull();
-    await userEvent.type(within(speaker("B")).getByLabelText("Device make"), "Nokia");
-    await userEvent.type(within(speaker("B")).getByLabelText("Device model"), "105");
+    expect(stillToFill()).toHaveTextContent("Still to fillNothing5 details");
+    await userEvent.type(box("B", "Device make"), "Nokia");
+    await userEvent.type(box("B", "Device model"), "105");
     await answer("B", "Bluetooth earphones used", "No");
     await answer("B", "Wired earphones used", "No");
     await answer("B", "Loudspeaker on", "No");
@@ -151,18 +158,21 @@ describe("device details on the task page (D-147)", () => {
         "PUT /api/v1/tasks/t1/device-details": () => [200, DEVICE_DETAILS],
       },
     );
-    await screen.findByRole("group", { name: /^Participant B/ });
-    // Only the person seen before has it; their boxes stay empty until it is clicked.
-    expect(within(speaker("A")).queryByRole("button", { name: /Same as last time/ })).toBeNull();
-    const make = within(speaker("B")).getByLabelText("Device make");
+    await screen.findByLabelText("Device make – Participant B");
+    // Only the person seen before has it, in their column's heading; their boxes stay empty
+    // until it is clicked.
+    expect(screen.getAllByRole("button", { name: /Same as last time/ })).toHaveLength(1);
+    const make = box("B", "Device make");
     expect(make).toHaveValue("");
     await userEvent.click(
-      within(speaker("B")).getByRole("button", { name: "Same as last time (T000007)" }),
+      screen.getByRole("button", { name: "Same as last time (T000007) – Participant B" }),
     );
     expect(make).toHaveValue("Samsung");
-    expect(within(speaker("B")).getByLabelText("Device model")).toHaveValue("Galaxy A14");
-    const wired = within(speaker("B")).getByRole("group", { name: "Wired earphones used" });
-    expect(within(wired).getByRole("radio", { name: "Yes" })).toBeChecked();
+    expect(box("B", "Device model")).toHaveValue("Galaxy A14");
+    expect(box("A", "Device make")).toHaveValue("");
+    expect(
+      within(yesNo("B", "Wired earphones used")).getByRole("radio", { name: "Yes" }),
+    ).toBeChecked();
     expect(api.calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: "Save device details" }));
     await waitFor(() => expect(api.calls.filter((c) => c.method === "PUT")).toHaveLength(1));
@@ -202,17 +212,17 @@ describe("device details on the task page (D-147)", () => {
     expect(within(card).queryByRole("textbox")).toBeNull();
     expect(within(card).queryByRole("radio")).toBeNull();
     expect(within(card).queryByRole("button", { name: "Save device details" })).toBeNull();
+    // One matrix: a row per detail, a column per speaker.
     const rows = within(card)
-      .getAllByRole("term")
-      .map((dt) => `${dt.textContent}: ${dt.nextElementSibling?.textContent}`);
-    expect(rows.slice(0, 5)).toEqual([
-      "Device make: Samsung",
-      "Device model: Galaxy A14",
-      "Bluetooth earphones used: No",
-      "Wired earphones used: Yes",
-      "Loudspeaker on: No",
+      .getAllByRole("row")
+      .map((row) => Array.from(row.children, (cell) => cell.textContent).join(" | "));
+    expect(rows.slice(1, 6)).toEqual([
+      "Device make | Samsung | Not answered",
+      "Device model | Galaxy A14 | Not answered",
+      "Bluetooth earphones used | No | Not answered",
+      "Wired earphones used | Yes | Not answered",
+      "Loudspeaker on | No | Not answered",
     ]);
-    expect(rows[5]).toBe("Device make: Not answered");
     expect(within(card).getByText(/^Filled in by Mona Moderator/)).toBeInTheDocument();
     expect(within(card).getByText("Not filled in.")).toBeInTheDocument();
   });
@@ -232,11 +242,12 @@ describe("device details on the task page (D-147)", () => {
         ],
       },
     );
-    await screen.findByRole("group", { name: /^Participant A/ });
-    expect(within(speaker("A")).getByLabelText("Device make")).toBeInTheDocument();
-    expect(within(speaker("A")).queryByLabelText("Device model")).toBeNull();
-    expect(within(speaker("A")).getByRole("group", { name: "Loudspeaker on" })).toBeInTheDocument();
-    expect(within(speaker("A")).queryByRole("group", { name: "Wired earphones used" })).toBeNull();
+    await screen.findByLabelText("Device make – Participant A");
+    expect(screen.queryByLabelText("Device model – Participant A")).toBeNull();
+    expect(yesNo("A", "Loudspeaker on")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("radiogroup", { name: "Wired earphones used – Participant A" }),
+    ).toBeNull();
     expect(calls.some((c) => c.path.endsWith("/device-details"))).toBe(true);
   });
 
@@ -280,9 +291,9 @@ describe("device details on the task page (D-147)", () => {
       expect(send).toHaveAccessibleDescription(
         "Fill in the device details of P000002 first (Device details card).",
       );
-      await screen.findByRole("group", { name: /^Participant B/ });
-      await userEvent.type(within(speaker("B")).getByLabelText("Device make"), "Nokia");
-      await userEvent.type(within(speaker("B")).getByLabelText("Device model"), "105");
+      await screen.findByLabelText("Device make – Participant B");
+      await userEvent.type(box("B", "Device make"), "Nokia");
+      await userEvent.type(box("B", "Device model"), "105");
       for (const question of ["Bluetooth earphones used", "Wired earphones used", "Loudspeaker on"])
         await answer("B", question, "No");
       await userEvent.click(screen.getByRole("button", { name: "Save device details" }));

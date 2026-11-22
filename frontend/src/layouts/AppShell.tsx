@@ -1,9 +1,10 @@
-// Responsive application shell (FND-020): skip link, dark side navigation grouped and filtered by
-// permission, a top bar with the page context and the signed-in user, and a two-panel layout for
-// the signed-out pages. On narrow screens the side navigation folds behind a menu button. A
-// moderator with a phone seat has their phone line kept Ready while signed in (D-133).
+// Responsive application shell (FND-020): skip link, a white top bar across the page with the
+// product, the phone line and the signed-in user, and under it a blue side menu grouped and
+// filtered by permission (D-150); a two-panel layout for the signed-out pages. On narrow screens
+// the side menu folds behind a menu button. A moderator with a phone seat has their phone line kept
+// Ready while signed in (D-133).
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { ROLE_LABELS } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
@@ -143,18 +144,51 @@ export function AppShell() {
       items: g.items.filter((i) => i.permission === null || can(i.permission)),
     }))
     .filter((g) => g.items.length > 0);
-  const current = groups
-    .flatMap((g) => g.items.map((i) => ({ ...i, group: g.title })))
-    .find((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`));
 
   return (
     <PhoneLineProvider>
       <div className="shell">
         {skip}
-        <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
-          <div className="sidenav__brand">
+        <header className="topbar">
+          <button
+            type="button"
+            className="topbar__menu"
+            aria-expanded={menuOpen}
+            aria-controls="side-nav"
+            onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
+          >
+            <Icon name={menuOpen ? "close" : "menu"} />
+            <span className="sr-only">Menu</span>
+          </button>
+          <Link to="/" className="topbar__brand">
             <Brand />
+          </Link>
+          <div className="topbar__spacer" />
+          <PhoneLineStatus />
+          <div className="topbar__user">
+            <NavLink to="/account" className="topbar__account">
+              <span className="avatar" aria-hidden="true">
+                {initials(user?.display_name ?? "")}
+              </span>
+              <span className="topbar__who">
+                <span className="topbar__name">{user?.display_name}</span>
+                <span className="topbar__role" aria-hidden="true">
+                  {roles}
+                </span>
+              </span>
+            </NavLink>
+            <button
+              type="button"
+              className="topbar__signout"
+              title="Sign out"
+              onClick={() => void signOut().then(() => navigate("/login"))}
+            >
+              <Icon name="logout" size={16} />
+              <span className="topbar__signout-words">Sign out</span>
+            </button>
           </div>
+        </header>
+        <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
           <nav aria-label="Main" className="sidenav__nav">
             {groups.map((g) => (
               <div key={g.title} className="sidenav__group">
@@ -168,7 +202,8 @@ export function AppShell() {
                         <Icon
                           name={l.icon}
                           size={18}
-                          {...(isActive ? { weight: "fill" as const } : {})}
+                          tone="text"
+                          weight={isActive ? "fill" : "regular"}
                         />
                         {l.label}
                       </>
@@ -179,53 +214,10 @@ export function AppShell() {
             ))}
           </nav>
           <p className="sidenav__foot" aria-hidden="true">
-            <Icon name="lock" size={14} /> Private workspace
+            <Icon name="lock" size={14} tone="text" weight="fill" /> Private workspace
           </p>
         </aside>
         <div className="shell__column">
-          <header className="topbar">
-            <button
-              type="button"
-              className="topbar__menu"
-              aria-expanded={menuOpen}
-              aria-controls="side-nav"
-              onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
-            >
-              <Icon name={menuOpen ? "close" : "menu"} />
-              <span className="sr-only">Menu</span>
-            </button>
-            {/* Page context, drawn by the stylesheet so it adds no duplicate text to the page. */}
-            <div
-              className="crumbs"
-              aria-hidden="true"
-              data-section={current?.group ?? "Account"}
-              data-page={current?.label ?? "My account"}
-            />
-            <div className="topbar__spacer" />
-            <PhoneLineStatus />
-            <div className="topbar__user">
-              <NavLink to="/account" className="topbar__account">
-                <span className="avatar" aria-hidden="true">
-                  {initials(user?.display_name ?? "")}
-                </span>
-                <span className="topbar__who">
-                  <span className="topbar__name">{user?.display_name}</span>
-                  <span className="topbar__role" aria-hidden="true">
-                    {roles}
-                  </span>
-                </span>
-              </NavLink>
-              <button
-                type="button"
-                className="topbar__signout"
-                title="Sign out"
-                onClick={() => void signOut().then(() => navigate("/login"))}
-              >
-                <Icon name="logout" size={16} />
-                <span className="topbar__signout-words">Sign out</span>
-              </button>
-            </div>
-          </header>
           {user?.viewer ? (
             <div className="view-as" role="status">
               <Icon name="info" size={16} />
