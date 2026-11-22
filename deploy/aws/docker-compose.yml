@@ -35,7 +35,7 @@ x-app: &app
 services:
   # Work queue and shared sign-in limits; never evicts a queued job (as on Render). Not published.
   redis:
-    image: redis:7.4.12-alpine
+    image: redis:8.10.3-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes: [redis_data:/data]
     healthcheck:
