@@ -6,7 +6,7 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginx:1.28.3-alpine
+FROM nginx:1.31.8-alpine
 # Origin(s) recordings may play from (Content-Security-Policy media-src); Wasabi by default.
 ENV MEDIA_ORIGINS="https://*.wasabisys.com"
 # Where the backend answers, host:port (the compose service by default; on Render the private
