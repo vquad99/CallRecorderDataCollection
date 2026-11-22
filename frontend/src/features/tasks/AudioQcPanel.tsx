@@ -49,11 +49,13 @@ const CHECK_TONE: Record<qc.CheckState, Tone> = {
 const ATTENTION: readonly qc.CheckState[] = ["FAIL", "REVIEW"];
 
 /** The task's audio check, loaded once for this card and the page's summary (its QC Executive);
- * nothing is asked before the task has a recording. */
+ * nothing is asked before the task has a recording. Loaded again whenever the task's status
+ * changes (FEW-06): Send to QC assigns a QC Executive, and a task sent back to QC can be decided
+ * again, without the page being opened anew. */
 export function useAudioQc(task: work.TaskDetail, has: boolean) {
   return useResource<qc.AudioQcView | null>(
     () => (has ? qc.getAudioQc(task.id) : Promise.resolve(null)),
-    [task.id, has],
+    [task.id, has, task.status],
   );
 }
 export type AudioQcResource = ReturnType<typeof useAudioQc>;
@@ -189,14 +191,19 @@ function AssignQc({
   );
 }
 
-/** What the answers say about the decision, in one line; it is also why Pass waits. */
+/** What the answers say about the decision, in one line; it is also why Pass waits. While
+ * questions are open it also counts the signed forms still to check, so it adds up with the
+ * "Answered n / total" above the checklist (UXW-02). */
 function hint(j: Judgement, consentCheck: boolean): string {
   if (j.failing.length > 0)
     return `The recording fails the checklist (${j.failing[0]}): reject it.`;
-  if (j.missing > 0)
-    return j.missing === 1
-      ? "1 question still to answer."
-      : `${j.missing} questions still to answer.`;
+  if (j.missing > 0) {
+    const questions = j.missing === 1 ? "1 question" : `${j.missing} questions`;
+    const forms = consentCheck ? j.consentUnchecked.length : 0;
+    return forms > 0
+      ? `${questions} and ${forms === 1 ? "1 consent form" : `${forms} consent forms`} still to answer.`
+      : `${questions} still to answer.`;
+  }
   if (consentCheck && j.consentWrong.length > 0)
     return `The consent form of ${j.consentWrong.join(" and ")} is not right: send the task back for its consent form.`;
   if (consentCheck && j.consentUnchecked.length > 0)
@@ -387,10 +394,14 @@ export function AudioQcPanel({
 }) {
   const { state, reload, replace } = resource;
   const { busy, error, run } = useAction();
-  if (state.status === "loading") return <LoadingState label="Loading audio check" />;
+  // A task cancelled before its recording was checked has no card (FEW-10); one cancelled after
+  // keeps its checks and decisions, read only.
+  const cancelled = task.status === "CANCELLED";
+  if (state.status === "loading")
+    return cancelled ? null : <LoadingState label="Loading audio check" />;
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const view = state.data;
-  if (!view) return null;
+  if (!view || (cancelled && view.results.length === 0)) return null;
   const automatic = view.results.find((r) => r.automated);
   const listen = automatic?.asset_id && (view.can_decide || view.can_recheck) ? automatic : null;
   const decisions = view.results.filter((r) => !r.automated);

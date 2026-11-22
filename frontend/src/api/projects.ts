@@ -1,4 +1,4 @@
-import { apiRequest, query, type Page } from "./client";
+import { ApiError, apiRequest, query, type Page } from "./client";
 
 export type ProjectStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type Mode = "TELEPHONY" | "FACE_TO_FACE";
@@ -94,8 +94,9 @@ export interface TargetDistrict {
   district: string;
 }
 
-/** How a project's exports are laid out (D-149): the client's delivery format or the platform's
- * own; speaker and conversation IDs as numbers (001, CON045) or as codes. */
+/** How a project's exports are laid out (D-149): the speaker-pair delivery format (CLIENT, the
+ * first client's) or the platform's own; speaker and conversation IDs as numbers (001, CON045) or
+ * as codes. */
 export type ExportLayout = "CLIENT" | "PLATFORM";
 export type SpeakerIdStyle = "NUMBER" | "CODE";
 export type ConversationIdStyle = "CON_NUMBER" | "CODE";
@@ -140,8 +141,8 @@ export interface ProjectRules {
   /** Percents for FACE_TO_FACE and TELEPHONY, or {} for none. */
   target_modes: Partial<Record<Mode, number>>;
   target_districts: TargetDistrict[];
-  /** How exports are laid out and named (D-149); the client's delivery format at the start. The
-   * audio file name is made of {a}, {b}, {a_pin}, {b_pin} and {conversation}. */
+  /** How exports are laid out and named (D-149); the speaker-pair format at the start. The audio
+   * file name is made of {a}, {b}, {a_pin}, {b_pin} and {conversation}. */
   export_layout: ExportLayout;
   speaker_id_style: SpeakerIdStyle;
   conversation_id_style: ConversationIdStyle;
@@ -159,7 +160,23 @@ export interface Project extends ProjectSummary, ProjectFields {
   audio_rules: AudioRule[];
   retention_rules: RetentionRule[];
   accepts_new_work: boolean;
+  /** When the project was last saved: sent back as `expected_updated_at`, so the server can
+   * refuse a save over someone else's newer one (PROJECT_CHANGED). */
+  updated_at: string;
 }
+
+/** The Overview's own fields (the keys of ProjectSettings). */
+export const SETTINGS_KEYS = [
+  "name",
+  "description",
+  "allows_telephony",
+  "allows_face_to_face",
+  "target_telephony_hours_per_day",
+  "target_face_to_face_hours_per_day",
+  "phone_visibility_policy",
+  "consent_policy_version",
+  "consent_text",
+] as const satisfies readonly (keyof ProjectSettings)[];
 
 export const projectSettings = (p: Project): ProjectSettings => ({
   name: p.name,
@@ -216,16 +233,14 @@ export interface Candidate {
   roles: string[];
 }
 
+/** The kinds of file a retention rule can delete (PROJ-008): the only ones the platform stores per
+ * recording. Face-to-face: what the browser captured and the 16 kHz WAV made from it; phone
+ * calls: the phone system's mixed recording and the 16 kHz WAV made from it. */
 export const ASSET_KINDS = [
-  "PROVIDER_ORIGINAL_TRACK",
-  "PROVIDER_ORIGINAL_MIXED",
-  "TELEPHONY_FINAL_STEREO",
-  "CONSENT_RECORDING",
   "BROWSER_ORIGINAL",
   "FTF_DERIVED_PCM",
+  "PROVIDER_ORIGINAL_MIXED",
   "TELEPHONY_DERIVED_PCM",
-  "TRANSCRIPT_FILE",
-  "EXPORT_PACKAGE",
 ] as const;
 
 /** Allowed next statuses, mirroring the backend rule (the backend still decides). */
@@ -247,12 +262,72 @@ const base = (id: string) => `/api/v1/projects/${id}`;
 
 export const listProjects = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<ProjectSummary>>(`/api/v1/projects${query(params)}`);
+
+/** The server gives at most 100 projects a page (newest first). */
+const ALL_PAGE_SIZE = 100;
+
+/** Every project the person can see, read page by page, for pickers and code lookups: one page
+ * of 100 would silently drop the oldest projects once there are more. */
+export async function listAllProjects(
+  params: Record<string, string | number | undefined> = {},
+): Promise<Page<ProjectSummary>> {
+  const items: ProjectSummary[] = [];
+  let total = 0;
+  for (let page = 1; ; page += 1) {
+    const got = await listProjects({ ...params, page, page_size: ALL_PAGE_SIZE });
+    items.push(...got.items);
+    total = got.total;
+    if (got.items.length < ALL_PAGE_SIZE || items.length >= total) break;
+  }
+  return { items, total, page: 1, page_size: items.length };
+}
+
 export const getProject = (id: string) => apiRequest<Project>(base(id));
 /** A new project gets the server's default rules unless they are given (D-145). */
 export const createProject = (body: ProjectSettings & Partial<ProjectRules> & { code?: string }) =>
   apiRequest<Project>("/api/v1/projects", { method: "POST", body });
-export const updateProject = (id: string, body: ProjectFields) =>
+/** `expected_updated_at`: the project's `updated_at` as it was read; the server answers 409
+ * PROJECT_CHANGED when someone saved it since. Left out, the save is not checked. */
+export const updateProject = (id: string, body: ProjectFields & { expected_updated_at?: string }) =>
   apiRequest<Project>(base(id), { method: "PATCH", body });
+
+/** A value as text with every object's keys in order, so two copies compare equal whatever order
+ * their keys came in. */
+const stableJson = (value: unknown) =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+/** Whether two values hold the same data (a typed copy against the saved one, for example). */
+export const sameValue = (a: unknown, b: unknown) => stableJson(a) === stableJson(b);
+
+export const PROJECT_CHANGED_MESSAGE =
+  "Someone else saved this project after you opened it. Reload the page to see their changes, then save again.";
+
+/**
+ * Saves one part of a project: the Overview's settings, or one section of the Rules (D-150). The
+ * PATCH takes the whole project, so the project is read again first and everything else goes back
+ * as it is now: what another person or another tab saved meanwhile is kept, not undone. When this
+ * part itself was changed since `opened` was read, nothing is sent and the answer is
+ * PROJECT_CHANGED, the same as the server gives when a save comes in between.
+ */
+export async function saveProjectPart<K extends keyof ProjectFields>(
+  opened: Project,
+  keys: readonly K[],
+  values: Pick<ProjectFields, K>,
+): Promise<Project> {
+  const fresh = await getProject(opened.id);
+  if (keys.some((key) => !sameValue(fresh[key], opened[key])))
+    throw new ApiError({ status: 409, code: "PROJECT_CHANGED", message: PROJECT_CHANGED_MESSAGE });
+  const own = Object.fromEntries(keys.map((key) => [key, values[key]])) as Pick<ProjectFields, K>;
+  return updateProject(opened.id, {
+    ...projectSettings(fresh),
+    ...projectRules(fresh),
+    ...own,
+    expected_updated_at: fresh.updated_at,
+  });
+}
 export const changeProjectStatus = (id: string, status: ProjectStatus, reason: string) =>
   apiRequest<Project>(`${base(id)}/status`, {
     method: "POST",

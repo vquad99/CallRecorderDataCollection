@@ -1,4 +1,5 @@
-// Global error boundary (FND-017): a render error shows a recoverable message, not a blank page.
+// Global error boundary (FND-017): a render error outside the pages (the router's own RouteError
+// handles theirs) shows the same recoverable message, not a blank page, and never the error itself.
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { ErrorState } from "./StateViews";
@@ -25,10 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
   override render() {
     if (this.state.error) {
       return (
-        <ErrorState
-          message="The page failed to display. Reload to try again."
-          onRetry={() => window.location.reload()}
-        />
+        <main id="main" className="route-error">
+          <ErrorState
+            title="This page could not be shown"
+            message="Reload the page to try again. If it keeps happening, tell your administrator."
+            onRetry={() => window.location.reload()}
+          />
+        </main>
       );
     }
     return this.props.children;

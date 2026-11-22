@@ -1,12 +1,15 @@
 // Shared fields for creating and editing a project (PROJ-001..005). The project's rules (speakers,
 // pairing, consent, approval) are on its Rules tab (D-145); a new project starts with the defaults.
 // A project records one type, face-to-face or phone calls (D-153): two choices, one daily target.
+// On the Overview, edits not saved yet ask before the page is left (FEA-04); the new-project page
+// does not ask, as it leaves by itself once the project is made.
 import { useId, useState, type FormEvent } from "react";
 
-import type { ProjectSettings } from "../../api/projects";
+import { sameValue, type ProjectSettings } from "../../api/projects";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { UnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
 import { onlyMode, type RecordingMode } from "./recordingType";
 
 /** Filled in on every new project; the admin edits it to fit the project (D-083). */
@@ -63,12 +66,18 @@ export function ProjectForm({
   submitLabel,
   busy,
   disabled = false,
+  readOnlyNote = "Read only. Only a project administrator can change these settings.",
+  guardUnsaved = false,
   onSubmit,
 }: {
   initial: ProjectSettings;
   submitLabel: string;
   busy: boolean;
   disabled?: boolean;
+  /** Said above the fields when they are read only. */
+  readOnlyNote?: string;
+  /** Ask before the page is left with edits not saved yet. */
+  guardUnsaved?: boolean;
   onSubmit: (fields: ProjectSettings) => void;
 }) {
   const [f, setF] = useState<ProjectSettings>(initial);
@@ -80,6 +89,7 @@ export function ProjectForm({
   const typeError = useId();
   const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) =>
     setF({ ...f, [key]: value });
+  const dirty = !disabled && (mode !== onlyMode(initial) || !sameValue(f, initial));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -99,11 +109,8 @@ export function ProjectForm({
 
   return (
     <form onSubmit={submit} noValidate className="card">
-      {disabled ? (
-        <p className="notice notice--info readonly-note">
-          Read only. Only a project administrator can change these settings.
-        </p>
-      ) : null}
+      {guardUnsaved ? <UnsavedChangesGuard dirty={dirty && !busy} /> : null}
+      {disabled ? <p className="notice notice--info readonly-note">{readOnlyNote}</p> : null}
       <fieldset disabled={disabled} className="plain-fieldset">
         <TextField
           label="Name"

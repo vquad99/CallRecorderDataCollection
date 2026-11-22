@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     slow_query_ms: int = Field(default=250, ge=0, le=600_000)
     processing_stale_minutes: int = Field(default=15, ge=1, le=24 * 60)
     recovery_interval_seconds: int = Field(default=60, ge=0, le=3600)  # 0 = start-up only
+    # The sweep deletes the files of closed tasks past their project's retention rule, once an
+    # hour (PROJ-01). Off by default: deleting is permanent, so it is turned on only after every
+    # project's Retention tab has been checked. Off: nothing is deleted by itself;
+    # `python -m app.cli retention` still runs by hand.
+    retention_sweep_enabled: bool = False
+    # Celery queue for export bundles (CALL-04). The default queue unless the server runs a worker
+    # of its own for exports (AWS: EXPORTS_QUEUE=exports with the one-slot exports-worker), so a
+    # server whose worker listens to the default queue only keeps making exports.
+    exports_queue: str = Field(default="celery", min_length=1, max_length=50)
     # Largest request body for every other API call (JSON); larger bodies get 413 (SEC-006).
     # 2.5 MB covers the largest JSON field (user CSV import, 2 000 000 characters) plus encoding.
     max_request_bytes: int = Field(default=2_500_000, ge=10_000, le=64_000_000)

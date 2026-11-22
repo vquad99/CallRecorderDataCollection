@@ -4,7 +4,7 @@
 #   docker-compose.awslogs.yml  when AWS_LOG_GROUP is set in .env (container logs to CloudWatch)
 # and IMAGE_TAG set to the images now live (deploy.sh passes its own). As the ccp user:
 #   deploy/aws/compose.sh ps
-#   deploy/aws/compose.sh logs -f --tail 100 api worker
+#   deploy/aws/compose.sh logs -f --tail 100 api worker exports-worker
 #   deploy/aws/compose.sh exec api python -m app.cli verify-assets
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

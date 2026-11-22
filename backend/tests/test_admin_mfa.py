@@ -7,6 +7,7 @@ Requirements: AUTH-008, SEC-011
 
 from __future__ import annotations
 
+import json
 import time
 import types
 from collections.abc import Callable, Iterator
@@ -123,6 +124,29 @@ def test_an_admin_without_two_step_sign_in_can_only_set_it_up(
     assert off.status_code == 204, off.text
     assert again.get("/api/v1/projects").json()["error"]["code"] == "MFA_SETUP_REQUIRED"
     assert again.post("/api/v1/auth/logout").status_code == 204
+
+
+def test_setting_it_up_ends_the_accounts_other_sessions(
+    strict: dict[str, Any], code: Callable[[int, str], str]
+) -> None:
+    """A session opened with the password alone, on another device, must not become a full admin
+    session when the owner sets up two-step sign-in here (security review 2026-11-22)."""
+    db = strict["db"]
+    project = make_project(db, "ELSEWHERE")
+    pa_user = make_user(db, "pa@example.org", ["PROJECT_ADMIN"], projects=[project])
+    elsewhere: Api = strict["api"]()
+    assert elsewhere.login("pa@example.org").json()["mfa_setup_required"] is True
+    assert elsewhere.get("/api/v1/projects").json()["error"]["code"] == "MFA_SETUP_REQUIRED"
+    pa: Api = strict["api"]()
+    pa.login("pa@example.org")
+    set_up(pa, code)
+    assert pa.get("/api/v1/projects").status_code == 200, "the session that set it up goes on"
+    assert elsewhere.get("/api/v1/auth/me").status_code == 401
+    assert elsewhere.get("/api/v1/projects").status_code == 401
+    entry = db.scalar(select(AuditLog).where(AuditLog.action == "auth.mfa_enabled"))
+    assert entry is not None
+    assert entry.entity_id == str(pa_user.id)
+    assert json.loads(entry.after_summary or "{}") == {"sessions_revoked": 1}
 
 
 def test_a_role_given_later_brings_the_rule_and_viewing_as_does_not_skip_it(

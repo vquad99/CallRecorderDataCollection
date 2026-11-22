@@ -27,6 +27,15 @@ EDITABLE: dict[str, tuple[int, int]] = {
     "capacity.face_to_face_hours_per_day": (0, 1_000_000),
     "capacity.telephony_hours_per_day": (0, 1_000_000),
 }
+# How a refused value is named to the person, as on the Settings page.
+LABELS = {
+    "capacity.staff_accounts": "Staff accounts",
+    "capacity.concurrent_conferences": "Simultaneous phone conferences",
+    "capacity.participants_per_conversation": "Participants per conversation",
+    "capacity.total_hours_per_day": "Total recording hours per day",
+    "capacity.face_to_face_hours_per_day": "Face-to-face hours per day",
+    "capacity.telephony_hours_per_day": "Phone call hours per day",
+}
 
 
 class SettingOut(BaseModel):
@@ -74,7 +83,9 @@ def update_settings(
         low, high = EDITABLE[key]
         if not low <= value <= high:
             raise AppError(
-                f"{key} must be between {low} and {high}", code="OUT_OF_RANGE", status_code=422
+                f"{LABELS.get(key, key)}: enter a whole number from {low} to {high}.",
+                code="OUT_OF_RANGE",
+                status_code=422,
             )
     rows = {r.key: r for r in _rows(db)}
     before = {k: rows[k].value_int for k in body.values if k in rows}

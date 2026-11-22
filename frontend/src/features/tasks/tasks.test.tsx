@@ -1,10 +1,17 @@
 // Requirements: TASK-001, TASK-003, TASK-006, TASK-007, TASK-011, PART-006, SEC-001
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, TASK, worldHandlers } from "../../test/world";
+import {
+  ALL_PERMISSIONS,
+  DEVICE_DETAILS,
+  PROJECT,
+  TASK,
+  TASK_ROW,
+  worldHandlers,
+} from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -39,6 +46,8 @@ const task = {
   },
   can_assign: true,
   can_reassign: true,
+  // Nothing has happened on it yet: Delete is offered (FEW-12, D-115).
+  can_delete: true,
   is_moderator: false,
   consent_missing: ["A", "B"],
 };
@@ -454,39 +463,6 @@ describe("tasks", () => {
     expect(within(card).getByText("Name of P000002")).toBeInTheDocument();
   });
 
-  it("shows audit entries with before and after", async () => {
-    fakeApi(
-      signedInAs(["audit.view"], {
-        "GET /api/v1/audit-logs": () => [
-          200,
-          {
-            items: [
-              {
-                id: "x",
-                created_at: "2026-11-09T00:00:00Z",
-                actor_email: "ada@example.org",
-                action: "user.roles_changed",
-                entity_type: "user",
-                entity_id: "u2",
-                project_id: null,
-                before: { roles: ["MODERATOR"] },
-                after: { roles: ["QC_EXECUTIVE"] },
-                ip: null,
-                request_id: null,
-              },
-            ],
-            total: 1,
-            page: 1,
-            page_size: 50,
-          },
-        ],
-      }),
-    );
-    renderAt("/admin/audit");
-    expect(await screen.findByText("user.roles_changed")).toBeInTheDocument();
-    expect(screen.getByText('before: {"roles":["MODERATOR"]}')).toBeInTheDocument();
-  });
-
   it("says when the project has too few participants and adds many tasks from a file", async () => {
     const proj = {
       id: "p1",
@@ -544,14 +520,16 @@ describe("tasks", () => {
     );
     clicks.mockRestore();
     [URL.createObjectURL, URL.revokeObjectURL] = [create, revoke];
+    // Nothing checked yet: no count on the button (POL-14).
+    expect(screen.getByRole("button", { name: "Add tasks" })).toBeDisabled();
     await userEvent.type(
       screen.getByLabelText("Tasks (CSV)"),
       "participant_a,participant_b{enter}P000001,P000002",
     );
     await userEvent.click(screen.getByRole("button", { name: "Check rows" }));
     expect(await screen.findByText("1 of 1 rows are ready.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Add 1 tasks" }));
-    expect(await screen.findByText("1 tasks added.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add 1 task" }));
+    expect(await screen.findByText("1 task added.")).toBeInTheDocument();
     expect(calls.filter((c) => c.path === "/api/v1/tasks/import").map((c) => c.body)).toEqual([
       { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: false },
       { project_id: "p1", csv: "participant_a,participant_b\nP000001,P000002", confirm: true },
@@ -940,6 +918,14 @@ describe("one task on one screen (D-152)", () => {
     const summary = within(side).getByRole("region", { name: "Summary" });
     expect(summary).toHaveTextContent("ModeratorMona Moderator");
     expect(summary).toHaveTextContent("Recording typeFace-to-face");
+    // The browser tab names the task (UXA-08).
+    await waitFor(() => expect(document.title).toMatch(/^Task T000001 · /));
+    // The project the task belongs to, first, with the way to it (UXW-04).
+    expect(summary).toHaveTextContent(/^SummaryProjectHINDI · Hindi conversations/);
+    expect(within(summary).getByRole("link", { name: "HINDI" })).toHaveAttribute(
+      "href",
+      "/projects/p1",
+    );
     // A row per fact, a column per person.
     const people = within(side).getByRole("table", { name: "Both participants" });
     const rows = within(people)
@@ -981,5 +967,443 @@ describe("one task on one screen (D-152)", () => {
     expect(await screen.findByRole("heading", { name: "Assign moderator" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Next step" })).toBeNull();
     expect(screen.queryByText("Reassign moderator")).toBeNull();
+  });
+
+  it("shows a rejected task stopped at the step it ended at (FEW-11)", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [
+          200,
+          {
+            ...TASK,
+            status: "REJECTED",
+            ended_from: "AUDIO_QC",
+            allowed_transitions: [],
+            can_reassign: false,
+            can_delete: false,
+          },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    const steps = await screen.findByRole("img", { name: "Workflow progress: Rejected" });
+    const states = Array.from(steps.querySelectorAll(".stepper__step"), (s) =>
+      [...s.classList].find((c) => c.startsWith("stepper__step--"))?.replace("stepper__step--", ""),
+    );
+    expect(states).toEqual(["done", "done", "done", "done", "halted", "todo", "todo"]);
+    expect(steps.querySelector(".stepper__step--halted")).toHaveAttribute("data-label", "Audio QC");
+  });
+
+  it("offers Delete only where the server says it can work (FEW-12)", async () => {
+    const cancelled = {
+      ...task,
+      status: "CANCELLED",
+      allowed_transitions: [],
+      can_reassign: false,
+      consent_missing: [],
+    };
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/tasks/t1": () => [200, { ...cancelled, can_delete: false }],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/tasks/t2": () => [200, { ...cancelled, id: "t2", task_code: "T000002" }],
+        "GET /api/v1/tasks/t2/timeline": () => [200, timeline],
+      }),
+    );
+    const router = renderAt("/tasks/t1");
+    // Cancelled after a recording: kept for the record, nothing to delete.
+    await screen.findByRole("heading", { name: /^Task T000001/ });
+    expect(screen.queryByRole("button", { name: "Delete task" })).toBeNull();
+    // Cancelled before anything happened on it: it can still go (D-115).
+    await act(async () => {
+      await router.navigate("/tasks/t2");
+    });
+    await screen.findByRole("heading", { name: /^Task T000002/ });
+    expect(screen.getByRole("button", { name: "Delete task" })).toBeInTheDocument();
+  });
+
+  it("leaves a task's message on that task when another task opens (FEW-14)", async () => {
+    const held = {
+      ...task,
+      status: "ON_HOLD",
+      held_from: "ASSIGNED",
+      allowed_transitions: ["ASSIGNED", "CANCELLED"],
+    };
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/tasks/t1": () => [200, held],
+        "GET /api/v1/tasks/t1/timeline": () => [200, timeline],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks/t1/transition": () => [200, task],
+        "GET /api/v1/tasks/t2": () => [200, { ...task, id: "t2", task_code: "T000002" }],
+        "GET /api/v1/tasks/t2/timeline": () => [200, timeline],
+      }),
+    );
+    const router = renderAt("/tasks/t1");
+    await userEvent.click(await screen.findByRole("button", { name: "Resume task" }));
+    expect(await screen.findByText("Task resumed.")).toBeInTheDocument();
+    // The same page, another task (as a participant's Sessions link opens it).
+    await act(async () => {
+      await router.navigate("/tasks/t2");
+    });
+    expect(await screen.findByRole("heading", { name: /^Task T000002/ })).toBeInTheDocument();
+    expect(screen.queryByText("Task resumed.")).toBeNull();
+  });
+
+  it("keeps a titled page with the way back when the task cannot be shown (POL-13)", async () => {
+    fakeApi(
+      signedInAs(["tasks.view"], {
+        "GET /api/v1/tasks/t1": () => [
+          404,
+          { error: { code: "NOT_FOUND", message: "Task not found", request_id: "r1" } },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(await screen.findByRole("heading", { level: 2, name: "Not found" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Task" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("href", "/tasks");
+  });
+});
+
+describe("a cancelled task keeps its records (FEW-10)", () => {
+  const cancelled = {
+    ...TASK,
+    status: "CANCELLED",
+    ended_from: "RECORDED",
+    allowed_transitions: [],
+    can_reassign: false,
+    can_delete: false,
+  };
+  const AUTO = {
+    id: "q1",
+    recording_id: "r1",
+    asset_id: "as1",
+    automated: true,
+    outcome: "PASS",
+    reason_code: null,
+    comment: "Passed every check",
+    reviewer_name: null,
+    created_at: "2026-11-10T09:00:00Z",
+    checks: [],
+  };
+  const qcView = (results: unknown[]) => ({
+    task_status: "CANCELLED",
+    pass_approves: false,
+    qc_user_id: null,
+    qc_name: null,
+    can_decide: false,
+    can_assign: false,
+    can_recheck: false,
+    reasons: { FAIL: [] },
+    results,
+  });
+  const recording = {
+    id: "r1",
+    task_id: "t1",
+    state: "READY",
+    current: true,
+    saved_seconds: 600,
+    assets: [{ id: "as1", kind: "FTF_DERIVED_PCM", sample_rate: 16000, channels: 1 }],
+  };
+  const [partyA, partyB] = DEVICE_DETAILS.participants;
+
+  it("shows the recording, its audio check and the device details it had, read only", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, cancelled],
+        "GET /api/v1/tasks/t1/recordings": () => [200, [recording]],
+        "GET /api/v1/tasks/t1/audio-qc": () => [200, qcView([AUTO])],
+        "GET /api/v1/tasks/t1/device-details": () => [
+          200,
+          {
+            ...DEVICE_DETAILS,
+            editable: false,
+            participants: [
+              {
+                ...partyA,
+                details: { ...partyA?.details, device_make: "Samsung" },
+                filled_by: "Mona Moderator",
+                filled_at: "2026-11-10T08:00:00Z",
+              },
+              partyB,
+            ],
+          },
+        ],
+      }),
+    );
+    renderAt("/tasks/t1");
+    expect(
+      await screen.findByRole("region", { name: "Recordings" }, { timeout: 5000 }),
+    ).toHaveTextContent("Recording 1");
+    expect(await screen.findByRole("region", { name: "Audio quality" })).toHaveTextContent(
+      "Passed every check",
+    );
+    const devices = await screen.findByRole("region", { name: "Device details" });
+    expect(await within(devices).findByText("Samsung")).toBeInTheDocument();
+    expect(within(devices).queryByRole("textbox")).toBeNull();
+    // The progress line stops where the task was cancelled.
+    const steps = screen.getByRole("img", { name: "Workflow progress: Cancelled" });
+    expect(steps.querySelector(".stepper__step--halted")).toHaveAttribute("data-label", "Recorded");
+  });
+
+  it("shows none of them for a task cancelled before anything was recorded", async () => {
+    const { calls } = fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, { ...cancelled, ended_from: "ASSIGNED" }],
+        "GET /api/v1/tasks/t1/recordings": () => [200, []],
+        "GET /api/v1/tasks/t1/audio-qc": () => [200, qcView([])],
+        "GET /api/v1/tasks/t1/device-details": () => [200, { ...DEVICE_DETAILS, editable: false }],
+      }),
+    );
+    renderAt("/tasks/t1");
+    const people = await screen.findByRole("table", { name: "Both participants" });
+    const deviceRow = () => within(people).getByRole("rowheader", { name: "Device details" });
+    // Not "Not yet": the details were asked, and nobody filled them.
+    await waitFor(() =>
+      expect(deviceRow().closest("tr")).toHaveTextContent("Device detailsNot filledNot filled"),
+    );
+    await waitFor(() =>
+      expect(
+        ["/recordings", "/audio-qc"].every((end) =>
+          calls.some((c) => c.path === `/api/v1/tasks/t1${end}`),
+        ),
+      ).toBe(true),
+    );
+    await act(async () => {});
+    for (const name of ["Recordings", "Audio quality", "Device details"])
+      expect(screen.queryByRole("region", { name })).toBeNull();
+    const summary = screen.getByRole("region", { name: "Summary" });
+    expect(summary).not.toHaveTextContent("QC Executive");
+    expect(screen.getByRole("region", { name: "Next step" })).toHaveTextContent(
+      "Cancelled. The task has ended.",
+    );
+  });
+});
+
+describe("the task list (UXW-05, UXA-11, PERF-09)", () => {
+  const row = (id: string, code: string, moderator: string | null, mode = "FACE_TO_FACE") => ({
+    ...TASK_ROW,
+    id,
+    task_code: code,
+    recording_mode: mode,
+    moderator_name: moderator,
+    participant_a_code: "P000196",
+    participant_b_code: "P000197",
+  });
+
+  it("shows people who assign tasks who holds each task and its two people", async () => {
+    const page = { items: [row("t1", "T000001", "Mona Moderator"), row("t2", "T000002", null)] };
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/projects": () => [
+          200,
+          { items: [PROJECT], total: 1, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/tasks": () => [200, { ...page, total: 2, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/tasks");
+    const line = async (code: string) =>
+      (await screen.findByRole("link", { name: code })).closest("tr") as HTMLElement;
+    const first = await line("T000001");
+    expect(within(first).getByText("Mona Moderator")).toBeInTheDocument();
+    expect(within(first).getByText("P000196 · P000197")).toBeInTheDocument();
+    expect(within(await line("T000002")).getByText("Not assigned")).toHaveClass("muted");
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers.slice(1)).toEqual([
+      "Task",
+      "Project",
+      "Participants",
+      "Recording type",
+      "Status",
+      "Moderator",
+      "Priority",
+      "Due",
+    ]);
+    cleanup();
+
+    // A moderator's list holds only their own tasks: no such columns.
+    fakeApi(
+      signedInAs(["tasks.view"], {
+        "GET /api/v1/projects": () => [
+          200,
+          { items: [PROJECT], total: 1, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/tasks": () => [200, { ...page, total: 2, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/tasks");
+    await screen.findByRole("link", { name: "T000001" });
+    expect(screen.queryByRole("columnheader", { name: "Moderator" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Participants" })).toBeNull();
+    expect(screen.queryByText("P000196 · P000197")).toBeNull();
+  });
+
+  it("has no recording type to choose on the Tasks tab of a one-type project", async () => {
+    const phoneOnly = { ...PROJECT, allows_face_to_face: false };
+    let items = [row("t1", "T000001", "Mona Moderator", "TELEPHONY")];
+    const { calls } = fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/projects/p1": () => [200, phoneOnly],
+        "GET /api/v1/tasks": () => [200, { items, total: items.length, page: 1, page_size: 25 }],
+      }),
+    );
+    // An old link with a type in it changes nothing.
+    renderAt("/projects/p1/tasks?mode=FACE_TO_FACE");
+    expect(await screen.findByRole("link", { name: "T000001" })).toBeInTheDocument();
+    expect(screen.getByText("1 task in this project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Recording type")).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Recording type" })).toBeNull();
+    expect(calls.find((c) => c.path.startsWith("/api/v1/tasks?"))?.path).not.toContain("mode=");
+    cleanup();
+
+    // A task of the other type, made before the project kept to one: the column says which.
+    items = [...items, row("t2", "T000002", null, "FACE_TO_FACE")];
+    renderAt("/projects/p1/tasks");
+    expect(await screen.findByRole("columnheader", { name: "Recording type" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Recording type")).toBeNull();
+  });
+
+  it("names the project of a task past the first 100 projects", async () => {
+    const newer = Array.from({ length: 100 }, (_, i) => ({
+      ...PROJECT,
+      id: `n${i}`,
+      code: `N${i}`,
+    }));
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/projects": (_body, url) =>
+          url.searchParams.get("page") === "2"
+            ? [
+                200,
+                { items: [{ ...PROJECT, code: "OLDEST" }], total: 101, page: 2, page_size: 100 },
+              ]
+            : [200, { items: newer, total: 101, page: 1, page_size: 100 }],
+        "GET /api/v1/tasks": () => [
+          200,
+          { items: [row("t1", "T000001", null)], total: 1, page: 1, page_size: 25 },
+        ],
+      }),
+    );
+    renderAt("/tasks");
+    const line = (await screen.findByRole("link", { name: "T000001" })).closest(
+      "tr",
+    ) as HTMLElement;
+    await waitFor(() => expect(within(line).getByText("OLDEST")).toBeInTheDocument());
+    expect(within(screen.getByLabelText("Project")).getAllByRole("option")).toHaveLength(102);
+    expect(calls.filter((c) => c.path.startsWith("/api/v1/projects?"))).toHaveLength(2);
+  });
+});
+
+describe("new task: finding participants in a large project (FEW-04)", () => {
+  const proj = {
+    id: "p1",
+    code: "PRJ0001",
+    name: "Voice",
+    status: "ACTIVE",
+    allows_telephony: false,
+    allows_face_to_face: true,
+    languages: [],
+  };
+  const person = (n: number) => ({
+    id: `p${n}`,
+    participant_code: `P${String(n).padStart(6, "0")}`,
+    display_label: `Speaker ${n}`,
+    has_phone: true,
+    consent_status: "GIVEN",
+  });
+  // 150 people who all agreed; the server pages 25 at a time and searches code and name.
+  const everyone = Array.from({ length: 150 }, (_, i) => person(i + 1));
+
+  it("finds someone past the first page by code or name, and keeps the people chosen", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": (_body, url) => {
+          const term = (url.searchParams.get("search") ?? "").toLowerCase();
+          const size = Number(url.searchParams.get("page_size"));
+          const found = everyone.filter(
+            (p) =>
+              p.participant_code.toLowerCase().includes(term) ||
+              p.display_label.toLowerCase().includes(term),
+          );
+          return [
+            200,
+            { items: found.slice(0, size), total: found.length, page: 1, page_size: size },
+          ];
+        },
+        "GET /api/v1/projects/p1/members": () => [200, []],
+        "POST /api/v1/tasks": () => [201, { ...TASK, id: "t9" }],
+        "GET /api/v1/tasks/t9": () => [200, { ...TASK, id: "t9" }],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    expect(
+      await screen.findByText("Showing 25 of 150: type a code or name to find others."),
+    ).toBeInTheDocument();
+    // Everyone listed agreed: the 125 not listed are not "left out".
+    expect(screen.queryByText(/Only people who agreed/)).toBeNull();
+    const offered = (label: string) =>
+      within(screen.getByLabelText(label))
+        .getAllByRole("option")
+        .slice(1)
+        .map((o) => o.textContent);
+    expect(offered("Participant A")).toHaveLength(25);
+    await userEvent.selectOptions(screen.getByLabelText("Participant A"), "p2");
+    await userEvent.selectOptions(screen.getByLabelText("Participant B"), "p3");
+    // P000150 is past the first page: found by its code. Enter finds, it never sends the form.
+    const find = screen.getByLabelText("Find participant (code or name)");
+    await userEvent.type(find, "P000150{enter}");
+    await waitFor(() =>
+      expect(offered("Participant B")).toEqual(["P000003 Speaker 3", "P000150 Speaker 150"]),
+    );
+    // The people chosen stay chosen, at the top of their lists.
+    expect(screen.getByLabelText("Participant A")).toHaveValue("p2");
+    expect(offered("Participant A")).toEqual(["P000002 Speaker 2", "P000150 Speaker 150"]);
+    await userEvent.selectOptions(screen.getByLabelText("Participant B"), "p150");
+    // By name too.
+    await userEvent.clear(find);
+    await userEvent.type(find, "speaker 149");
+    await waitFor(() => expect(offered("Participant A")).toContain("P000149 Speaker 149"));
+    expect(screen.getByLabelText("Participant B")).toHaveValue("p150");
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+        participant_a_id: "p2",
+        participant_b_id: "p150",
+      }),
+    );
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(
+      calls.some((c) => c.path.includes("search=P000150") && c.path.includes("page_size=25")),
+    ).toBe(true);
+  });
+
+  it("says when nobody matches, and keeps the too-few notice for the whole project", async () => {
+    fakeApi(
+      signedInAs(["tasks.view", "tasks.assign", "projects.view"], {
+        "GET /api/v1/projects": () => [200, { items: [proj], total: 1, page: 1, page_size: 100 }],
+        "GET /api/v1/projects/p1": () => [200, proj],
+        "GET /api/v1/projects/p1/participants": (_body, url) =>
+          url.searchParams.get("search")
+            ? [200, { items: [], total: 0, page: 1, page_size: 25 }]
+            : [200, { items: everyone.slice(0, 25), total: 150, page: 1, page_size: 25 }],
+        "GET /api/v1/projects/p1/members": () => [200, []],
+      }),
+    );
+    renderAt("/tasks/new");
+    await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
+    await userEvent.type(await screen.findByLabelText("Find participant (code or name)"), "Nobody");
+    expect(await screen.findByText("Nobody in this project matches “Nobody”.")).toBeInTheDocument();
+    // An empty search result is not a project without participants.
+    expect(screen.queryByText(/This project has no participants/)).toBeNull();
   });
 });

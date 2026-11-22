@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import uuid
 from dataclasses import dataclass
@@ -88,11 +90,34 @@ def _failures_since(
 # no longer keep its owner out with five wrong passwords (security review 2026-11-11, D-088).
 ACCOUNT_CEILING_FACTOR = 10
 
+# Wrong authenticator codes after the right password, from any address: an account takes this many
+# per window, then nobody signs in to it until the window has passed (security review 2026-11-22).
+# Only someone who has the password can add to this count, so a stranger still cannot lock the
+# owner out. The owner is emailed at the first one in a window.
+MFA_FAILURES_PER_ACCOUNT = 10
 
-def ensure_not_throttled(db: Session, settings: Settings, email: str, ip: str | None) -> None:
+
+def _mfa_key(email: str) -> str:
+    """Where wrong codes are counted in login_attempts. Upper case on purpose: every address typed
+    at sign-in is stored in lower case (normalize_email), so no typed value can add to this count.
+    Recorded without an address, so the per-address counts do not count a wrong code twice."""
+    return f"MFA:{email}"
+
+
+def ensure_not_throttled(
+    db: Session, settings: Settings, email: str, ip: str | None, *, codes: bool = False
+) -> None:
+    """429 when this account or address has failed too often lately. `codes`: the caller checks
+    an authenticator code, so the account's count of wrong codes applies too. Changing one's
+    password is not held up by it: that is what the owner is told to do."""
     window = timedelta(minutes=settings.login_window_minutes)
     since = datetime.now(UTC) - window
     ip = address_key(ip)  # an IPv6 address counts as its /64
+    if ip:
+        # One check per address at a time: a burst sent at once could otherwise all read the count
+        # before any of its failures was saved. Callers already hold the account lock, so the order
+        # is always account, then address (no deadlock). Held until the transaction ends.
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"login-ip:{ip}"})
     per_account = settings.login_max_failures_per_account
     # (who, limit, whether a successful sign-in starts the count again)
     checks: list[tuple[ColumnElement[bool], int, bool]]
@@ -106,6 +131,8 @@ def ensure_not_throttled(db: Session, settings: Settings, email: str, ip: str | 
         ]
     else:
         checks = [(LoginAttempt.email == email, per_account, True)]
+    if codes:
+        checks.append((LoginAttempt.email == _mfa_key(email), MFA_FAILURES_PER_ACCOUNT, False))
     for match, limit, reset in checks:
         count, oldest = _failures_since(db, match, since, reset_on_success=reset)
         if count >= limit:
@@ -127,6 +154,51 @@ def _account_lock(db: Session, email: str) -> None:
 
 def _record_attempt(db: Session, email: str, ip: str | None, succeeded: bool) -> None:
     db.add(LoginAttempt(email=email, ip=address_key(ip), succeeded=succeeded))
+
+
+def _record_wrong_code(db: Session, settings: Settings, email: str) -> bool:
+    """Counts a wrong authenticator code given with the right password. True when it is the first
+    one in the window, so the owner is told once, not at every try. Run under the account lock."""
+    since = datetime.now(UTC) - timedelta(minutes=settings.login_window_minutes)
+    earlier, _ = _failures_since(
+        db, LoginAttempt.email == _mfa_key(email), since, reset_on_success=False
+    )
+    db.add(LoginAttempt(email=_mfa_key(email), ip=None, succeeded=False))
+    return earlier == 0
+
+
+def _warn_owner(settings: Settings, sender: EmailSender, user: User) -> None:
+    """Someone has this account's password: tell its owner. A failed email does not change the
+    answer to the sign-in; it is logged."""
+    body = (
+        f"Hello {user.display_name},\n\n"
+        "Your password was just entered correctly but the authenticator code was wrong. "
+        "If this was not you, change your password:\n\n"
+        f"{settings.public_app_url}/forgot-password\n"
+    )
+    try:
+        sender.send(
+            OutgoingEmail(
+                to=user.email,
+                subject="Sign-in attempt on your Conversation Collection account",
+                body=body,
+            )
+        )
+    except (EmailSendError, OSError):
+        logger.error("wrong_code_warning_failed", extra={"user_id": str(user.id)})
+
+
+def _typed_email(settings: Settings, email: str, user: User | None) -> dict[str, str | None]:
+    """What a failed sign-in records of the typed email: the address when it names an account, and
+    otherwise only a keyed fingerprint, so a password typed into the email box is never stored in
+    the audit log (it repeats for the same text, which is enough to see a pattern)."""
+    if user is not None:
+        return {"email": email}
+    key = settings.secret_key.get_secret_value().encode()
+    return {
+        "email": None,
+        "fingerprint": hmac.new(key, email.encode(), hashlib.sha256).hexdigest()[:16],
+    }
 
 
 def _fresh_step(user: User, step: int | None) -> bool:
@@ -155,13 +227,15 @@ def login(
     totp_code: str | None,
     ip: str | None,
     user_agent: str | None,
+    mailer: EmailSender | None = None,
 ) -> NewSession:
+    """`mailer` tells the owner when their password was right but the code was wrong."""
     email = normalize_email(email)
     # One sign-in per account at a time: parallel requests can no longer all read the failure
     # count before any of them records a failure, nor use one authenticator code twice (D-088).
     # Held until this transaction ends.
     _account_lock(db, email)
-    ensure_not_throttled(db, settings, email, ip)
+    ensure_not_throttled(db, settings, email, ip, codes=True)
     user = db.scalar(select(User).where(User.email == email))
     password_ok = verify_password(user.password_hash if user else None, password)
 
@@ -174,7 +248,10 @@ def login(
             entity_id=user.id if user else None,
             actor_id=None,
             ip=ip,
-            after={"email": email, "reason": "disabled" if user and password_ok else "credentials"},
+            after={
+                **_typed_email(settings, email, user),
+                "reason": "disabled" if user and password_ok else "credentials",
+            },
         )
         db.commit()
         raise AppError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS", status_code=401)
@@ -189,6 +266,7 @@ def login(
         step = totp_step(secret, totp_code)
         if not _fresh_step(user, step):
             _record_attempt(db, email, ip, succeeded=False)
+            first = _record_wrong_code(db, settings, email)
             audit.record(
                 db,
                 action="auth.login_failed",
@@ -199,6 +277,8 @@ def login(
                 after={"email": email, "reason": "mfa"},
             )
             db.commit()
+            if first and mailer is not None:
+                _warn_owner(settings, mailer, user)
             raise AppError(
                 "The authenticator code is not valid", code="MFA_INVALID", status_code=401
             )
@@ -244,16 +324,23 @@ def logout(db: Session, session_id: uuid.UUID, user_id: uuid.UUID, ip: str | Non
 def revoke_sessions(
     db: Session, user_id: uuid.UUID, *, except_session: uuid.UUID | None = None
 ) -> int:
+    """Ends the user's sessions and returns how many could still be used. A session past its
+    absolute end is dead for good and is neither touched nor counted. One that only went idle is
+    ended too: idleness is measured against the current setting, which may be raised later."""
+    now = datetime.now(UTC)
     stmt = update(UserSession).where(
-        UserSession.user_id == user_id, UserSession.revoked_at.is_(None)
+        UserSession.user_id == user_id,
+        UserSession.revoked_at.is_(None),
+        UserSession.expires_at > now,
     )
     if except_session is not None:
         stmt = stmt.where(UserSession.id != except_session)
-    result = db.execute(stmt.values(revoked_at=datetime.now(UTC)))
+    result = db.execute(stmt.values(revoked_at=now))
     return int(getattr(result, "rowcount", 0) or 0)
 
 
-def list_sessions(db: Session, user_id: uuid.UUID) -> list[UserSession]:
+def list_sessions(db: Session, user_id: uuid.UUID, idle_minutes: int) -> list[UserSession]:
+    """The sessions that still work: not signed out, not past their end, not gone idle."""
     now = datetime.now(UTC)
     return list(
         db.scalars(
@@ -262,6 +349,7 @@ def list_sessions(db: Session, user_id: uuid.UUID) -> list[UserSession]:
                 UserSession.user_id == user_id,
                 UserSession.revoked_at.is_(None),
                 UserSession.expires_at > now,
+                UserSession.last_seen_at > now - timedelta(minutes=idle_minutes),
             )
             .order_by(UserSession.last_seen_at.desc())
         ).all()
@@ -457,8 +545,16 @@ def mfa_enroll(
 
 
 def mfa_confirm(
-    db: Session, cipher: FieldCipher, user_id: uuid.UUID, code: str, ip: str | None
+    db: Session,
+    cipher: FieldCipher,
+    user_id: uuid.UUID,
+    code: str,
+    ip: str | None,
+    *,
+    session_id: uuid.UUID,
 ) -> None:
+    """Turns two-step sign-in on and ends every other session of the account: those signed in
+    with the password alone, and an admin's would otherwise gain full access here (D-106)."""
     user = _user(db, user_id)
     if user.mfa_enabled or not user.mfa_secret_enc:
         raise AppError("Start enrolment first", code="MFA_NOT_PENDING", status_code=409)
@@ -467,6 +563,7 @@ def mfa_confirm(
         raise AppError("The authenticator code is not valid", code="MFA_INVALID", status_code=400)
     user.mfa_enabled = True
     user.mfa_last_step = step  # the enrolment code cannot then be used to sign in
+    revoked = revoke_sessions(db, user.id, except_session=session_id)
     audit.record(
         db,
         action="auth.mfa_enabled",
@@ -474,6 +571,7 @@ def mfa_confirm(
         entity_id=user.id,
         actor_id=user.id,
         ip=ip,
+        after={"sessions_revoked": revoked},
     )
     db.commit()
 
@@ -492,11 +590,13 @@ def mfa_disable(
         raise AppError("Two-step sign-in is not on", code="MFA_NOT_ENABLED", status_code=409)
     _account_lock(db, user.email)
     db.refresh(user)  # read again under the lock
-    ensure_not_throttled(db, settings, user.email, ip)
+    ensure_not_throttled(db, settings, user.email, ip, codes=True)
     password_ok = verify_password(user.password_hash, password)
     step = totp_step(cipher.decrypt(user.mfa_secret_enc), code)
     if not password_ok or not _fresh_step(user, step):
         _record_attempt(db, user.email, ip, succeeded=False)
+        if password_ok:  # the right password with a wrong code counts as at sign-in
+            _record_wrong_code(db, settings, user.email)
         db.commit()
         raise AppError(
             "Password or code is not correct", code="INVALID_CREDENTIALS", status_code=400

@@ -43,10 +43,9 @@ describe("two-step sign-in for admins", () => {
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/two-step-setup");
     expect(screen.getByText(/Your role \(Super Admin\) needs two-step sign-in/)).toBeVisible();
-    // No menu, and no page was asked for its data.
-    expect(within(screen.getByRole("navigation", { name: "Main" })).queryAllByRole("link")).toEqual(
-      [],
-    );
+    // No menu (nor a button for one), and no page was asked for its data.
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
     expect(calls.some((c) => c.path.startsWith("/api/v1/projects"))).toBe(false);
 
     await userEvent.type(screen.getByLabelText(/^Your password/), "a-long-password");

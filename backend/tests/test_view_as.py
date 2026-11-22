@@ -60,6 +60,23 @@ def test_super_admin_sees_the_app_as_a_moderator_and_changes_nothing(
     assert api.get("/api/v1/auth/me").json()["email"] == "sa@example.org"
 
 
+def test_signing_out_while_viewing_is_recorded_as_the_super_admins_own(
+    world: dict[str, Any],
+) -> None:
+    """Only the Super Admin's session ends; the entry must not read as if they signed the other
+    person out (security review 2026-11-22)."""
+    sa, api = _admin(world)
+    mod = _user(world, "mod@example.org")
+    assert api.post("/api/v1/auth/view-as", json={"user_id": str(mod.id)}).status_code == 200
+    assert api.post("/api/v1/auth/logout").status_code == 204
+    world["db"].expire_all()
+    entry = world["db"].scalar(select(AuditLog).where(AuditLog.action == "auth.logout"))
+    assert entry is not None
+    assert (entry.actor_id, entry.entity_id) == (sa.id, str(sa.id))
+    assert "viewed_as" not in (entry.after_summary or "")
+    assert world["mod"].get("/api/v1/auth/me").status_code == 200, "their own session is untouched"
+
+
 def test_only_a_super_admin_views_as_someone_else(world: dict[str, Any]) -> None:
     sa, api = _admin(world)
     mod = _user(world, "mod@example.org")

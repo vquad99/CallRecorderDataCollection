@@ -1,7 +1,7 @@
 /* Participant personal page: a calm single column, readable on a phone. */
 .portal {
   min-height: 100vh;
-  background: var(--bg);
+  background: var(--page-bg);
 }
 .portal__bar {
   display: flex;
@@ -26,20 +26,25 @@
   padding: 28px 16px 64px;
 }
 .portal__hero {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: grid;
+  gap: 2px;
 }
+.portal__hero h1,
 .portal__hero p {
-  margin: 2px 0 0;
+  margin: 0;
 }
 .portal__stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
+/* The four figures: a small white panel each, side by side (D-156). */
 .portal__stats p {
   margin: 0;
+}
+/* The note under the participant's details, apart from the last of them. */
+.portal__main .checks + p {
+  margin-top: var(--space-3);
 }
 .portal__num {
   font-size: 1.5rem;

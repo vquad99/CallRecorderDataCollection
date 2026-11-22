@@ -16,8 +16,9 @@ from typing import Any
 
 import jsonschema
 import pytest
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 
+from app.core import storage
 from app.modules.audit.models import AuditLog
 from app.modules.exports import bundle, jobs
 from app.modules.exports.models import ExportJob
@@ -587,6 +588,71 @@ def test_a_job_that_stopped_is_tried_again_and_a_damaged_file_stops_the_export(
     assert ask(w, content="metadata")["state"] == "READY"
     # Without a worker the hand-off runs in this process and never raises into the request.
     run_export_inline(app, damaged["id"])
+
+
+def test_a_file_missing_from_storage_stops_the_export_and_names_its_task(
+    w: dict[str, Any],
+) -> None:
+    """The database says a file is there and storage does not have it (a clean-up, a restore):
+    the export stops and says which task, like a file that does not match its checksum
+    (EXP-005), instead of an anonymous failure; the task's own download says the same."""
+    pa, db = w["pa"], w["db"]
+    asset = db.scalar(
+        select(AudioAsset).where(
+            AudioAsset.kind == "FTF_DERIVED_PCM", AudioAsset.deleted_at.is_(None)
+        )
+    )
+    assert asset is not None
+    code = pa.get(f"/api/v1/tasks/{w['ftf_task']}").json()["task_code"]
+    name = next(
+        o["Key"]
+        for o in w["s3"].list_objects_v2(Bucket=BUCKET)["Contents"]
+        if o["Key"].endswith(asset.storage_key)
+    )
+    w["s3"].delete_object(Bucket=BUCKET, Key=name)
+
+    missing = ask(w, content="audio")
+    assert missing["state"] == "FAILED", missing
+    assert missing["error"] == f"A stored file of {code} is missing from storage: export stopped"
+    assert (missing["sha256"], missing["size_bytes"]) == (None, 0)
+    assert stored(w, missing["id"]) is None
+    assert not [
+        o
+        for o in w["s3"].list_objects_v2(Bucket=BUCKET).get("Contents", [])
+        if missing["id"] in o["Key"]
+    ]
+    # Metadata alone does not read the audio, so it still exports.
+    assert ask(w, content="metadata")["state"] == "READY"
+    # The task's own bundle says the same, as an answer a person can read, not a 500.
+    set_status(db, w["ftf_task"], "APPROVED")
+    one = pa.get(f"/api/v1/tasks/{w['ftf_task']}/export")
+    assert one.status_code == 409, one.text
+    assert one.json()["error"]["code"] == "EXPORT_FAILED"
+    assert one.json()["error"]["message"] == missing["error"]
+
+
+def test_a_bundle_too_large_for_storage_is_refused_when_asked_for(
+    w: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A streamed object goes to storage in parts of a fixed size, at most 10 000 of them: a
+    bundle that would not fit is refused at once, not after an hour of writing."""
+    assert storage.STREAM_TRANSFER.multipart_chunksize * storage.MAX_PARTS > bundle.MAX_BUNDLE_BYTES
+    assert storage.STREAM_MAX_BYTES - bundle.MAX_BUNDLE_BYTES >= 10 * bundle.GIB  # room to spare
+    # The parts waiting to be sent stay within a small worker's memory.
+    waiting = (
+        storage.STREAM_TRANSFER.multipart_chunksize
+        * storage.STREAM_TRANSFER.max_in_memory_upload_chunks
+    )
+    assert waiting <= 128 * 1024 * 1024
+    base, pa, db = w["base"], w["pa"], w["db"]
+    monkeypatch.setattr(bundle, "MAX_BUNDLE_BYTES", 1)
+    refused = pa.post(f"{base}/exports", json={"scope": "finished", "content": "audio"})
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["error"]["code"] == "TOO_LARGE"
+    assert refused.json()["error"]["message"].startswith("This export would be larger than")
+    assert db.scalar(select(func.count()).select_from(ExportJob)) == 0
+    # Without audio a bundle is small, whatever the recordings.
+    assert ask(w, content="metadata")["state"] == "READY"
 
 
 def test_reports_come_as_csv_or_tsv_that_spreadsheets_read(w: dict[str, Any]) -> None:

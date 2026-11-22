@@ -9,9 +9,11 @@ digits of their phone), their own sessions (date, mode, length, state), their mi
 accepted, and their payable half of the accepted ones, D-095) and their consent answer - read-only
 apart from the consent answer itself; no other speaker, no full phone number, no audio (D-100).
 The answer counts at once, and an "I agree" is final: nobody reviews it and it cannot be withdrawn
-(D-129). A wrong, expired or revoked link answers exactly like one that never existed. A Super
-Admin can open the same page for any participant, without a link and without changing anything
-(D-100).
+(D-129). Where the project takes signed forms and staff uploaded theirs, the page says so and
+there is nothing to answer (D-144). The form shown with an "I agree" is the text they agreed to,
+not the project's newer one (D-068). A wrong, expired or revoked link answers exactly like one
+that never existed. A Super Admin can open the same page for any participant, without a link and
+without changing anything (D-100).
 """
 
 from __future__ import annotations
@@ -180,6 +182,8 @@ def _email(
 ) -> tuple[bool, datetime]:
     address = cipher.decrypt(email_of(participant))
     url, expires = _issue(db, settings, project, participant, actor_id, ip)
+    # Where the link went, as a fingerprint (SECB-02): the log shows it, never the address.
+    sent_to = participants.address_fingerprint(settings, address)
     body = (
         "Hello,\n\n"
         f'You are taking part in the project "{project.name}". Please read the consent form '
@@ -210,6 +214,7 @@ def _email(
         project_id=project.id,
         actor_id=actor_id,
         ip=ip,
+        after={"to": sent_to},
     )
     db.commit()
     return True, expires
@@ -222,8 +227,10 @@ def send_links_job(
     state: Any, project_id: str, participant_ids: list[str], actor_id: str, ip: str | None
 ) -> None:
     """Background (D-129): a fresh personal link emailed to each participant who just joined the
-    project. Anyone deleted or without an email address is skipped. A failed email is logged and
-    the others still go out."""
+    project. Anyone deleted or without an email address is skipped, and anyone emailed a link that
+    still works less than EMAIL_AGAIN_AFTER ago (by hand or by another job since this one was
+    queued, PART-08): a second email would end the link in the first. A failed email is logged
+    and the others still go out."""
     with state.session_factory() as db:
         project = db.get(Project, uuid.UUID(project_id))
         if project is None or consent.takes_uploads(project):
@@ -234,6 +241,12 @@ def send_links_job(
                 continue
             try:
                 check_linkable(participant)
+                if recently_emailed(db, project.id, [participant.id]):
+                    logger.info(
+                        "consent_link_skipped",
+                        extra={"participant_id": pid, "why": "EMAILED_RECENTLY"},
+                    )
+                    continue
                 sent, _ = _email(
                     db,
                     state.settings,
@@ -380,8 +393,16 @@ def build_view(
         for r in rows
     ]
     totals = minute_totals.per_participant(db, project.id, [participant.id]).get(participant.id)
-    answer = consent.latest_own_answer(db, participant.id, project.id)
-    status = consent.word(answer)
+    # Their consent as it counts for staff too: a signed form uploaded in a project that takes
+    # them reads UPLOADED, with the day it came in (PART-01).
+    standing = consent.standings(db, project, [participant.id])[participant.id]
+    answer = standing.answer
+    if answer is not None and consent.word(answer) in ("GIVEN", "WITHDRAWN"):
+        # The form as they answered it, not the project's newer one (D-068, PART-04).
+        version, text = answer.policy_version, answer.form_text or project.consent_text
+    else:
+        # No answer, or "I do not agree": the form an "I agree" would answer now.
+        version, text = project.consent_policy_version, project.consent_text
     return PortalView(
         participant_code=participant.participant_code,
         display_name=participant.display_label,
@@ -389,10 +410,10 @@ def build_view(
         phone_hint=participant.phone_hint,
         project_name=project.name,
         language_code=participant.language_code,
-        consent_policy_version=project.consent_policy_version,
-        consent_text=project.consent_text,
-        consent_status=status,
-        consent_at=answer.created_at if answer and status else None,
+        consent_policy_version=version,
+        consent_text=text,
+        consent_status=standing.status,
+        consent_at=standing.at,
         sessions=sessions,
         accepted_minutes=minute_totals.as_minutes(totals.approved_ms) if totals else 0.0,
         recorded_minutes=minute_totals.as_minutes(totals.recorded_ms) if totals else 0.0,
@@ -401,10 +422,26 @@ def build_view(
     )
 
 
-def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> None:
+FORM_ON_FILE = (
+    "Your signed consent form is on file with the project team: there is nothing to answer here."
+)
+
+
+def answer_consent(
+    db: Session,
+    settings: Settings,
+    cipher: FieldCipher,
+    token: str,
+    decision: str,
+    ip: str | None,
+) -> None:
     """The participant's own answer, GIVEN or REFUSED; it counts at once. "I do not agree" can
-    become "I agree" later; an "I agree" cannot be changed (D-129)."""
+    become "I agree" later; an "I agree" cannot be changed (D-129), nor can a signed form staff
+    uploaded where the project takes them (409 CONSENT_FORM_ON_FILE, PART-01: an answer would
+    change nothing, so none is kept). The record says where the link was emailed (SECB-02)."""
     link, participant, project = _resolve(db, token)
+    if consent.takes_uploads(project) and consent.signed_forms(db, project.id, [participant.id]):
+        raise AppError(FORM_ON_FILE, code="CONSENT_FORM_ON_FILE", status_code=409)
     if not project.consent_text.strip():
         raise AppError(
             "The consent form for this project is not ready yet",
@@ -420,6 +457,23 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             code="ALREADY_AGREED",
             status_code=409,
         )
+    # An email change ends every link (D-088), so a working emailed link went to the address on
+    # file now: the record names it masked, the audit as a fingerprint (SECB-02). An answer from
+    # an address staff put on file for a few minutes then shows in the consent history.
+    address = (
+        cipher.decrypt(participant.email_enc)
+        if participant.email_enc and not link.shown_to_staff
+        else None
+    )
+    if link.shown_to_staff:
+        note = "Answered on the participant's personal page, from a link handed out by staff"
+    elif address:
+        note = (
+            "Answered by the participant on their personal page "
+            f"(link emailed to {participants.masked_address(address)})"
+        )
+    else:
+        note = "Answered by the participant on their personal page"
     db.add(
         ConsentRecord(
             participant_id=participant.id,
@@ -430,11 +484,7 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
             policy_version=project.consent_policy_version,
             captured_by=None,
             link_shown_to=link.created_by if link.shown_to_staff else None,
-            note=(
-                "Answered on the participant's personal page, from a link handed out by staff"
-                if link.shown_to_staff
-                else "Answered by the participant on their personal page"
-            ),
+            note=note,
             form_text=project.consent_text,
         )
     )
@@ -446,6 +496,10 @@ def answer_consent(db: Session, token: str, decision: str, ip: str | None) -> No
         project_id=project.id,
         actor_id=None,
         ip=ip,
-        after={"status": decision, "policy_version": project.consent_policy_version},
+        after={
+            "status": decision,
+            "policy_version": project.consent_policy_version,
+            "emailed_to": participants.address_fingerprint(settings, address) if address else None,
+        },
     )
     db.commit()

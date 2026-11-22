@@ -22,7 +22,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -32,6 +33,7 @@ from app.core.storage import ListedObject, ObjectStorage
 from app.modules.audio_qc import service as audio_qc
 from app.modules.audit import service as audit
 from app.modules.auth.deps import Principal, in_projects
+from app.modules.exports.models import ExportJob
 from app.modules.participants.models import ParticipantDocument
 from app.modules.projects.models import Project, ProjectAudioRule, ProjectRetentionRule
 from app.modules.recordings import assets, media
@@ -43,7 +45,8 @@ from app.modules.recordings.models import (
     RecordingChunk,
 )
 from app.modules.tasks import service as tasks
-from app.modules.tasks.models import Task
+from app.modules.tasks import workflow
+from app.modules.tasks.models import Task, TaskStatusHistory
 
 logger = logging.getLogger("app.recordings")
 
@@ -92,18 +95,9 @@ def start(
             status_code=422,
         )
     tasks.require_consent(db, task)
-    open_one = db.scalar(
-        select(Recording).where(
-            Recording.task_id == task.id, Recording.state.in_(("RECORDING", "INTERRUPTED"))
-        )
-    )
+    open_one = open_recording(db, task.id)
     if open_one is not None:
-        raise AppError(
-            "This task already has an unfinished recording; finish or discard it first",
-            code="RECORDING_OPEN",
-            status_code=409,
-            details=[{"recording_id": str(open_one.id)}],
-        )
+        raise _recording_open(open_one.id)
     rec = Recording(
         id=uuid.uuid4(),
         task_id=task.id,
@@ -115,6 +109,14 @@ def start(
         **data.__dict__,
     )
     db.add(rec)
+    try:
+        db.flush()
+    except IntegrityError:
+        # Two starts at the same moment (a double click): both passed the check above, and the
+        # database lets only one in (uq_recordings_one_open_per_task). The other is told, not 500.
+        db.rollback()
+        winner = open_recording(db, task_id)
+        raise _recording_open(winner.id if winner is not None else None) from None
     audit.record(
         db,
         action="recording.started",
@@ -137,6 +139,25 @@ def start(
     return rec
 
 
+OPEN_STATES = ("RECORDING", "INTERRUPTED")
+
+
+def open_recording(db: Session, task_id: uuid.UUID) -> Recording | None:
+    """The task's unfinished recording (at most one, uq_recordings_one_open_per_task)."""
+    return db.scalar(
+        select(Recording).where(Recording.task_id == task_id, Recording.state.in_(OPEN_STATES))
+    )
+
+
+def _recording_open(recording_id: uuid.UUID | None) -> AppError:
+    return AppError(
+        "This task already has an unfinished recording; finish or discard it first",
+        code="RECORDING_OPEN",
+        status_code=409,
+        details=[{"recording_id": str(recording_id)}] if recording_id is not None else None,
+    )
+
+
 def required_rate(db: Session, project_id: uuid.UUID) -> int:
     """The sample rate a face-to-face recording of this project is made at: the project's audio
     rule for face-to-face (16 kHz unless the project says otherwise)."""
@@ -149,10 +170,23 @@ def required_rate(db: Session, project_id: uuid.UUID) -> int:
 
 
 def _owned_open(
-    db: Session, principal: Principal, recording_id: uuid.UUID, states: tuple[str, ...]
+    db: Session,
+    principal: Principal,
+    recording_id: uuid.UUID,
+    states: tuple[str, ...],
+    *,
+    or_task_moderator: bool = False,
 ) -> tuple[Recording, Task]:
+    """The recording, for the moderator who started it. With `or_task_moderator`, also for the
+    task's moderator now: after a reassignment (On hold, then another moderator) the new one
+    stops, keeps or discards the recording left open, or the task stays stuck (TASK-03). Parts are
+    uploaded only by the browser that started it."""
     rec, task = get_recording(db, principal, recording_id)
-    if rec.created_by != principal.user_id:
+    if rec.created_by != principal.user_id and not (
+        or_task_moderator and tasks.is_moderator(db, principal, task)
+    ):
+        if or_task_moderator:
+            raise forbidden("Only the task's moderator can change this recording")
         raise forbidden("Only the moderator who started this recording can change it")
     _require_state(rec, states)
     return rec, task
@@ -247,7 +281,7 @@ def put_chunk(
 def mark_interrupted(
     db: Session, principal: Principal, recording_id: uuid.UUID, reason: str, ip: str | None
 ) -> Recording:
-    rec, task = _owned_open(db, principal, recording_id, ("RECORDING",))
+    rec, task = _owned_open(db, principal, recording_id, ("RECORDING",), or_task_moderator=True)
     rec.state = "INTERRUPTED"
     rec.interrupted = True
     rec.interruption_reason = reason
@@ -268,7 +302,7 @@ def mark_interrupted(
 def complete(
     db: Session, principal: Principal, recording_id: uuid.UUID, chunk_count: int, ip: str | None
 ) -> Recording:
-    rec, task = _owned_open(db, principal, recording_id, ("RECORDING", "INTERRUPTED"))
+    rec, task = _owned_open(db, principal, recording_id, OPEN_STATES, or_task_moderator=True)
     stored = set(
         db.scalars(select(RecordingChunk.seq).where(RecordingChunk.recording_id == rec.id)).all()
     )
@@ -307,7 +341,7 @@ def discard(
     reason: str,
     ip: str | None,
 ) -> Recording:
-    rec, task = _owned_open(db, principal, recording_id, ("RECORDING", "INTERRUPTED"))
+    rec, task = _owned_open(db, principal, recording_id, OPEN_STATES, or_task_moderator=True)
     for chunk in db.scalars(
         select(RecordingChunk).where(RecordingChunk.recording_id == rec.id)
     ).all():
@@ -382,24 +416,36 @@ def _store_original(
 
 
 def process(
-    db: Session, settings: Settings, storage: ObjectStorage, recording_id: uuid.UUID
+    db: Session,
+    settings: Settings,
+    storage: ObjectStorage,
+    recording_id: uuid.UUID,
+    *,
+    again: bool = False,
 ) -> Recording:
     """Build the original and the derived 16 kHz file, validate both, mark the task recorded.
 
     The recording is claimed with one conditional UPDATE, so two processes (a re-delivered job, the
     recovery sweep, a second web worker) never work on it at once; a PROCESSING recording older than
-    PROCESSING_STALE_MINUTES was abandoned by a stopped process and may be claimed again (H).
+    PROCESSING_STALE_MINUTES was abandoned by a stopped process and may be claimed again (H). A
+    READY recording is processed again only when asked (`again`): a job sent twice, or sent again
+    by the sweep while it waited in the queue, finds it done and changes nothing (TASK-02).
+
+    Both files are on record (committed) before any uploaded part is removed, and the parts go
+    last, best effort: a storage or database failure can never lose a finished recording
+    (TASK-01). Parts left behind are removed by `storage-orphans` once the recording is READY.
     """
     if db.get(Recording, recording_id) is None:
         raise not_found("Recording")
     stale = datetime.now(UTC) - timedelta(minutes=settings.processing_stale_minutes)
+    claimable = ("UPLOADED", "FAILED", "READY") if again else ("UPLOADED", "FAILED")
     claimed = (
         db.execute(
             update(Recording)
             .where(
                 Recording.id == recording_id,
                 or_(
-                    Recording.state.in_(("UPLOADED", "READY", "FAILED")),
+                    Recording.state.in_(claimable),
                     and_(Recording.state == "PROCESSING", Recording.updated_at < stale),
                 ),
             )
@@ -414,6 +460,10 @@ def process(
     db.refresh(rec)
     if not claimed:
         logger.info("processing_already_claimed", extra={"recording_id": str(recording_id)})
+        if not again and rec.state == "READY" and _task_left_behind(db, rec):
+            # The process that saved it stopped before the task moved (a worker stopped by a
+            # deploy, whose job is then delivered again): only that step is done now.
+            task_recorded(db, db.get_one(Task, rec.task_id), "Face-to-face recording ready")
         return rec
     task = db.get_one(Task, rec.task_id)
     project = db.get_one(Project, task.project_id)
@@ -476,10 +526,7 @@ def process(
                 ),
                 label="derived",
             )
-        for chunk in chunks:
-            if not chunk.object_deleted:
-                storage.delete(chunk.storage_key)
-                chunk.object_deleted = True
+        # Saved first: both files are on record before anything uploaded is removed (TASK-01).
         rec.state = "READY"
         rec.failure_reason = None
         db.commit()
@@ -491,9 +538,9 @@ def process(
         rec.failure_reason = type(exc).__name__
         db.commit()
         raise
+    if not again:
+        task_recorded(db, task, "Face-to-face recording ready")
     db.refresh(task)  # the status as it is now
-    if task.status == "IN_PROGRESS":
-        tasks.system_transition(db, task, "RECORDED", comment="Face-to-face recording ready")
     if task.status == "RECORDED":
         try:
             audio_qc.run_automatic(db, rec.id)
@@ -501,7 +548,82 @@ def process(
             # The recording itself is safe; the recovery sweep runs the check again (D-079).
             db.rollback()
             logger.exception("automatic_audio_qc_failed", extra={"recording_id": str(rec.id)})
+    _remove_parts(db, storage, rec)
     return rec
+
+
+def task_recorded(db: Session, task: Task, comment: str) -> None:
+    """A new recording of the task is ready (face to face, or a phone call's). A task in progress
+    moves to Recorded. A task put on hold while the recording was being made resumes at Recorded,
+    not In progress, so the finished conversation is not recorded again (TASK-04). Any other
+    status is left as it is; the recording is kept either way.
+
+    The task's row is locked while it is looked at (FOR NO KEY UPDATE, as tasks.transition does),
+    so a hold or a cancel at the same moment is seen; a move the workflow refuses meanwhile
+    changes nothing (TASK-05), instead of failing the job and having it run again."""
+    tasks.lock_task(db, task)
+    if task.status == "IN_PROGRESS":
+        try:
+            tasks.system_transition(db, task, "RECORDED", comment=comment)
+        except AppError:
+            db.rollback()
+            db.refresh(task)
+        return
+    if task.status == "ON_HOLD" and task.held_from == "IN_PROGRESS":
+        task.held_from = "RECORDED"
+        audit.record(
+            db,
+            action="task.held_from_changed",
+            entity_type="task",
+            entity_id=task.id,
+            project_id=task.project_id,
+            actor_id=None,
+            before={"held_from": "IN_PROGRESS"},
+            after={
+                "held_from": "RECORDED",
+                "comment": f"{comment} while the task was on hold: it resumes at Recorded",
+            },
+        )
+    db.commit()
+
+
+def _task_left_behind(db: Session, rec: Recording) -> bool:
+    """The task's status has not changed since this READY recording was being made: the move it
+    calls for did not happen. Both times are the database's: the recording's last change (made
+    READY) and the task's status history. A Record again, a hold or the move itself came later
+    and says no."""
+    moved = db.scalar(
+        select(
+            exists().where(
+                TaskStatusHistory.task_id == rec.task_id,
+                TaskStatusHistory.created_at > rec.updated_at,
+            )
+        )
+    )
+    return not moved
+
+
+def _remove_parts(db: Session, storage: ObjectStorage, rec: Recording) -> None:
+    """Removes the uploaded parts of a recording whose files are saved: best effort, last. When
+    storage fails, the rest stay (harmless) for `storage-orphans`, which removes the parts of a
+    READY recording; the recording is never touched here."""
+    parts = db.scalars(
+        select(RecordingChunk)
+        .where(RecordingChunk.recording_id == rec.id, RecordingChunk.object_deleted.is_(False))
+        .order_by(RecordingChunk.seq)
+    ).all()
+    removed = 0
+    try:
+        for part in parts:
+            storage.delete(part.storage_key)
+            part.object_deleted = True
+            removed += 1
+    except (BotoCoreError, ClientError):
+        logger.warning(
+            "chunk_cleanup_failed",
+            extra={"recording_id": str(rec.id), "removed": removed, "left": len(parts) - removed},
+        )
+    db.commit()
 
 
 @dataclass(frozen=True)
@@ -550,12 +672,16 @@ def storage_orphans(
     """Objects no record points to (left by a process that stopped between upload and save),
     older than `older_than` so nothing still being written is touched (O12). Backups are kept,
     and so are participants' documents, replaced ones too, until the participant is removed
-    (D-144)."""
+    (D-144), and export bundles while they can be downloaded (READY jobs keep their key; an
+    expired or failed one has none). An uploaded part counts only until its recording is READY:
+    then its files are saved and a part left behind by processing is no longer needed (TASK-01)."""
     now = now or datetime.now(UTC)
     known = set(db.scalars(select(AudioAsset.storage_key).where(AudioAsset.deleted_at.is_(None))))
     known |= set(
         db.scalars(
-            select(RecordingChunk.storage_key).where(RecordingChunk.object_deleted.is_(False))
+            select(RecordingChunk.storage_key)
+            .join(Recording, Recording.id == RecordingChunk.recording_id)
+            .where(RecordingChunk.object_deleted.is_(False), Recording.state != "READY")
         )
     )
     known |= set(
@@ -563,6 +689,13 @@ def storage_orphans(
             select(ParticipantDocument.storage_key).where(ParticipantDocument.removed_at.is_(None))
         )
     )
+    known |= {
+        key
+        for key in db.scalars(
+            select(ExportJob.storage_key).where(ExportJob.storage_key.is_not(None))
+        )
+        if key
+    }
     cutoff = now - older_than
     return [
         o
@@ -661,22 +794,56 @@ def asset_url(
     return url, seconds
 
 
-def apply_retention(db: Session, storage: ObjectStorage, now: datetime | None = None) -> int:
-    """Delete assets older than their project's retention rule (STOR-009). Returns the count."""
+def apply_retention(
+    db: Session, storage: ObjectStorage, now: datetime | None = None, *, limit: int | None = None
+) -> int:
+    """Delete stored files older than their project's retention rule (STOR-009), and only files
+    of closed tasks (approved, rejected or cancelled): a file that QC, an approval or a delivery
+    may still need is kept, whatever the rule says (PROJ-01). Each file on its own: the object,
+    `deleted_at`, the audit entry, one commit; so a stop half-way leaves at most the file being
+    deleted still on record, and the next run finishes it. Two runs at once never take the same
+    file. At most `limit` files (every one when None), oldest first. Returns how many."""
     now = now or datetime.now(UTC)
     deleted = 0
-    for rule in db.scalars(select(ProjectRetentionRule)).all():
-        cutoff = now - timedelta(days=rule.retain_days)
-        expired = db.scalars(
-            select(AudioAsset).where(
-                AudioAsset.project_id == rule.project_id,
-                AudioAsset.kind == rule.asset_kind,
-                AudioAsset.deleted_at.is_(None),
-                AudioAsset.created_at < cutoff,
+    rules = db.execute(
+        select(
+            ProjectRetentionRule.project_id,
+            ProjectRetentionRule.asset_kind,
+            ProjectRetentionRule.retain_days,
+        ).order_by(ProjectRetentionRule.project_id, ProjectRetentionRule.asset_kind)
+    ).all()
+    for project_id, kind, retain_days in rules:
+        if limit is not None and deleted >= limit:
+            break
+        cutoff = now - timedelta(days=retain_days)
+        expired = select(AudioAsset.id).where(
+            AudioAsset.project_id == project_id,
+            AudioAsset.kind == kind,
+            AudioAsset.deleted_at.is_(None),
+            AudioAsset.created_at < cutoff,
+            AudioAsset.recording_id.in_(
+                select(Recording.id)
+                .join(Task, Task.id == Recording.task_id)
+                .where(Task.status.in_(workflow.TERMINAL))
+            ),
+        )
+        expired = expired.order_by(AudioAsset.created_at)
+        if limit is not None:
+            expired = expired.limit(limit - deleted)
+        for asset_id in db.scalars(expired).all():
+            asset = db.scalar(
+                select(AudioAsset)
+                .where(AudioAsset.id == asset_id, AudioAsset.deleted_at.is_(None))
+                .with_for_update(skip_locked=True, key_share=True)
             )
-        ).all()
-        for asset in expired:
-            storage.delete(asset.storage_key)
+            if asset is None:  # deleted meanwhile by another run
+                db.rollback()
+                continue
+            try:
+                storage.delete(asset.storage_key)
+            except (BotoCoreError, ClientError):
+                db.rollback()
+                raise
             asset.deleted_at = now
             audit.record(
                 db,
@@ -685,8 +852,9 @@ def apply_retention(db: Session, storage: ObjectStorage, now: datetime | None = 
                 entity_id=asset.id,
                 project_id=asset.project_id,
                 actor_id=None,
-                after={"kind": asset.kind, "retain_days": rule.retain_days},
+                after={"kind": asset.kind, "retain_days": retain_days},
             )
+            db.commit()
             deleted += 1
     db.commit()
     return deleted

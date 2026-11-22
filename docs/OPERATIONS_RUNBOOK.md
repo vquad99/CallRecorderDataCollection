@@ -134,7 +134,10 @@ the old one), deploy, run `python -m app.cli rotate-keys`, then remove the old o
 - Lost the authenticator: another Super Admin clicks **Reset two-step sign-in** on the user's
   page. The last Super Admin: `python -m app.cli reset-mfa <email>` in the `ccp-api` shell.
 - No Super Admin left: set `ADMIN_EMAIL` and `ADMIN_PASSWORD` on `ccp-api`, then
-  `python -m app.cli create-admin --reset-password`.
+  `python -m app.cli create-admin --reset-password`. It also signs that account out
+  everywhere and voids its unused password links (it prints `password reset; N session(s)
+  ended`). After a suspected takeover, also run `python -m app.cli reset-mfa <email>`:
+  otherwise an authenticator the intruder added stays (D-155).
 - Two-step sign-in itself is broken for everyone: set `REQUIRE_ADMIN_MFA=false` on `ccp-api`
   (it restarts), fix, and set it back to `true`.
 

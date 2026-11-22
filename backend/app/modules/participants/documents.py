@@ -12,9 +12,14 @@ Who may do what - one rule, `Access`:
 - people who manage participants in the project (Super Admin, Project Admin): both kinds, view
   and upload;
 - the moderator of an open task (not approved, rejected or cancelled) with the participant: view
-  and upload the consent form for that project, so a form can be put right on the task;
+  the consent form for that project. They upload it only where a form is put right on their
+  task: at its consent fix (D-146), or before its recording goes to QC (Assigned, In progress, On
+  hold, Recorded) while no task with the person has passed QC (Admin review, Approved). A form QC
+  passed is then replaced only by an admin or through QC's send-back (SECB-01);
 - a QC Executive who decides the QC of a task with the participant (audio_qc.may_decide): view
   that consent form.
+While a task with the person is at Audio QC, nobody replaces their signed form (409
+CONSENT_FORM_IN_QC): QC's decision records the form on file, which is then the one QC saw.
 Anyone else in the project gets 403, anyone outside it 404 (participants.get_in_project). A
 consent form is uploaded only while the project takes uploads (`consent_mode` UPLOAD), and only
 there does it count as consent (participants/consent.py).
@@ -66,6 +71,17 @@ TOO_LARGE = (
 )
 # How the upload route names each kind.
 KIND_PATHS = {"consent-form": CONSENT_FORM, "address-proof": ADDRESS_PROOF}
+# A moderator puts a signed form right before their task's recording goes to QC ...
+BEFORE_QC = ("ASSIGNED", "IN_PROGRESS", "ON_HOLD", "RECORDED")
+# ... unless a task with the person has passed QC already ...
+PASSED_QC = ("ADMIN_REVIEW", "APPROVED")
+# ... or when QC sends their task back for it (D-146).
+CONSENT_FIX = "CONSENT_FIX"
+IN_QC = "AUDIO_QC"
+FORM_IN_QC = (
+    "A task with this person is being checked by QC: the signed consent form stays as it is "
+    "until QC decides."
+)
 # A file's first bytes, its type and the extension it is stored with.
 _SIGNATURES = (
     (b"%PDF-", "application/pdf", "pdf"),
@@ -81,6 +97,11 @@ class Access:
     manager: bool = False  # manages participants in the project
     moderator: bool = False  # moderates an open task with the participant
     qc: bool = False  # decides the QC of a task with the participant
+    # The moderator may upload the signed form now (see the top: their task's consent fix, or
+    # before QC while no task with the person has passed it).
+    moderator_upload: bool = False
+    # A task with the person is at Audio QC: their signed form stays as it is (SECB-01).
+    in_qc: bool = False
 
     @property
     def any(self) -> bool:
@@ -90,7 +111,14 @@ class Access:
         return self.any if kind == CONSENT_FORM else self.manager
 
     def may_upload(self, kind: str) -> bool:
-        return self.manager or (kind == CONSENT_FORM and self.moderator)
+        if kind != CONSENT_FORM:
+            return self.manager
+        return (self.manager or self.moderator_upload) and not self.in_qc
+
+    def frozen(self, kind: str) -> bool:
+        """Someone who sees this signed form may not replace it now: QC is checking it (409
+        rather than 403, so they are told why)."""
+        return kind == CONSENT_FORM and self.in_qc and (self.manager or self.moderator)
 
 
 def _decides_qc_with(
@@ -113,15 +141,45 @@ def _decides_qc_with(
     return any(audio_qc.may_decide(db, principal, task) for task in checked)
 
 
+def _task_statuses(db: Session, project_id: uuid.UUID, participant_id: uuid.UUID) -> set[str]:
+    """The states of the participant's tasks in the project, in one query."""
+    return set(
+        db.scalars(
+            select(Task.status)
+            .where(
+                Task.project_id == project_id,
+                or_(
+                    Task.participant_a_id == participant_id,
+                    Task.participant_b_id == participant_id,
+                ),
+            )
+            .distinct()
+        )
+    )
+
+
 def access(
     db: Session, principal: Principal, project: Project, participant_id: uuid.UUID
 ) -> Access:
     """The caller's rights over this participant's documents in the project (see the top)."""
+    states = _task_statuses(db, project.id, participant_id)
+    in_qc = IN_QC in states
     if principal.can_in_project(Perm.PARTICIPANTS_MANAGE, project.id):
-        return Access(manager=True)
-    if participants.moderator_assigned(db, principal.user_id, participant_id, project.id):
-        return Access(moderator=True)
-    return Access(qc=_decides_qc_with(db, principal, project.id, participant_id))
+        return Access(manager=True, in_qc=in_qc)
+    user = principal.user_id
+    if participants.moderator_assigned(db, user, participant_id, project.id):
+        fix = CONSENT_FIX in states and participants.moderator_assigned(
+            db, user, participant_id, project.id, statuses=(CONSENT_FIX,)
+        )
+        early = (
+            not states.intersection(PASSED_QC)
+            and bool(states.intersection(BEFORE_QC))
+            and participants.moderator_assigned(
+                db, user, participant_id, project.id, statuses=BEFORE_QC
+            )
+        )
+        return Access(moderator=True, moderator_upload=fix or early, in_qc=in_qc)
+    return Access(qc=_decides_qc_with(db, principal, project.id, participant_id), in_qc=in_qc)
 
 
 def file_type(data: bytes) -> tuple[str, str]:
@@ -185,7 +243,9 @@ def upload(
 ) -> ParticipantDocument:
     """Stores a new document of this kind for the participant; it replaces the current one."""
     project, participant = participants.get_in_project(db, principal, project_id, participant_id)
-    if not access(db, principal, project, participant.id).may_upload(kind):
+    rights = access(db, principal, project, participant.id)
+    frozen = rights.frozen(kind)
+    if not (rights.may_upload(kind) or frozen):
         raise forbidden()
     if participant.deleted_at is not None:
         raise AppError("This participant was deleted", code="PARTICIPANT_DELETED", status_code=409)
@@ -196,6 +256,8 @@ def upload(
             code="CONSENT_ONLINE",
             status_code=409,
         )
+    if frozen:
+        raise AppError(FORM_IN_QC, code="CONSENT_FORM_IN_QC", status_code=409)
     content_type, extension = file_type(data)
     store = configured(storage)
     doc_id = uuid.uuid4()
@@ -259,8 +321,9 @@ class Listing:
     names: dict[uuid.UUID, str]  # who uploaded and replaced them
 
     def may_upload(self, kind: str) -> bool:
-        """Whether the window offers Upload: allowed to, the participant is not removed, and a
-        consent form only where the project takes uploads."""
+        """Whether the window offers Upload: allowed to (a signed form not while QC checks it),
+        the participant is not removed, and a consent form only where the project takes
+        uploads."""
         return (
             self.access.may_upload(kind)
             and self.participant.deleted_at is None

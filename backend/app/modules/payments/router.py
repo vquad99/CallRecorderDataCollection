@@ -210,7 +210,7 @@ def _csv(
     settings: AppSettings,
 ) -> Response:
     report = service.earnings(db, principal, who, period, settings.report_timezone)
-    name = service.file_name(db, who, period)
+    name = service.file_name(db, who, period, tz_name=settings.report_timezone)
     service.record_download(db, principal, who, period, len(report.rows), client_ip(request))
     return Response(
         content=service.table(report, who),

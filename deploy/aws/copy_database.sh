@@ -51,7 +51,7 @@ if [ "${1:-}" = compare ]; then compare; exit 0; fi
 
 read -r -p "This replaces everything in the RDS database with Render's data. Type COPY to go on: " answer
 [ "$answer" = COPY ] || exit 1
-compose stop api worker web 2>/dev/null || true
+compose stop api worker exports-worker web 2>/dev/null || true
 echo "copy: clearing the RDS database"
 compose run --rm -T pgtools psql -X -q -v ON_ERROR_STOP=1 -c 'DROP OWNED BY CURRENT_USER'
 echo "copy: Render -> RDS (pg_dump | pg_restore, both over TLS)"

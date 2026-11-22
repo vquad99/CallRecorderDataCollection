@@ -20,6 +20,7 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Stepper } from "../../components/Stepper";
 import { useAction } from "../../hooks/useAction";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { consentAnswer, labelFor, reasonChoices, TASK_STATUS_LABELS } from "../../lib/labels";
@@ -58,7 +59,8 @@ function TaskActions({ task, onChange }: { task: work.TaskDetail; onChange: OnTa
   const can = (to: work.TaskStatus) => task.allowed_transitions.includes(to);
   const held =
     task.status === "ON_HOLD" && task.held_from && can(task.held_from) ? task.held_from : null;
-  const deletable = task.can_assign && ["DRAFT", "ASSIGNED", "CANCELLED"].includes(task.status);
+  // The server says whether Delete can work (FEW-12): nothing has happened on the task yet.
+  const deletable = Boolean(task.can_delete);
 
   const move = (to: work.TaskStatus, title: string, confirmLabel: string, done: string) =>
     confirm.ask({
@@ -303,14 +305,26 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
   if (task.status !== "CONSENT_FIX" || !fix) return null;
   const party = (side: "A" | "B") => (side === "A" ? task.participant_a : task.participant_b);
   const codes = fix.participants.map((p) => p.participant_code).join(" and ");
+  // SECB-03: the project was switched to Online since QC sent it back. A signed form no longer
+  // counts there: each person agrees on their personal page, and nobody uploads anything.
+  const online = fix.by_upload === false;
   return (
     <section className="card record-card work-card" aria-labelledby="consent-fix-title">
       <div className="record-card__text">
         <h2 id="consent-fix-title">Consent form to fix</h2>
-        <p>
-          QC found the recording fine but a problem with the signed consent form of {codes}. Upload
-          a new scan, then send the same recording back to QC. Nothing is recorded again.
-        </p>
+        {online ? (
+          <p>
+            QC found the recording fine but a problem with the signed consent form of {codes}. This
+            project now takes consent online, so a signed form no longer counts: once{" "}
+            {fix.participants.length > 1 ? "they have" : "the person has"} agreed on their personal
+            page, send the same recording back to QC. Nothing is recorded again.
+          </p>
+        ) : (
+          <p>
+            QC found the recording fine but a problem with the signed consent form of {codes}.
+            Upload a new scan, then send the same recording back to QC. Nothing is recorded again.
+          </p>
+        )}
         <p className="notice notice--warning">
           <strong>What QC found:</strong> {fix.comment}
           <span className="muted">
@@ -328,11 +342,17 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
                   <PartyName party={who} />
                 </span>
                 {p.replaced ? (
-                  <StatusBadge tone="success" label="New form uploaded" />
+                  <StatusBadge
+                    tone="success"
+                    label={online ? "Agreed online" : "New form uploaded"}
+                  />
                 ) : (
-                  <StatusBadge tone="warning" label="New form needed" />
+                  <StatusBadge
+                    tone="warning"
+                    label={online ? "Not agreed yet" : "New form needed"}
+                  />
                 )}
-                {who.can_upload_consent_form ? (
+                {online ? null : who.can_upload_consent_form ? (
                   <UploadButton
                     label={`Upload a new consent form of ${p.participant_code}`}
                     busy={busy === `upload-${who.id}`}
@@ -367,7 +387,7 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
           </Button>
           {fix.forms_replaced ? null : (
             <p id="consent-fix-waits" className="muted">
-              Upload the new form first.
+              {online ? "They agree on their personal page first." : "Upload the new form first."}
             </p>
           )}
         </div>
@@ -462,6 +482,8 @@ function ConsentChip({ party, mode }: { party: work.Party; mode: string | undefi
   return <StatusBadge tone={tone} label={label} />;
 }
 
+/** Statuses that can have a recording: a cancelled task keeps the one it had (FEW-10), shown only
+ * when there is one. */
 const HAS_RECORDINGS: readonly string[] = [
   "RECORDED",
   "AUDIO_QC",
@@ -469,17 +491,20 @@ const HAS_RECORDINGS: readonly string[] = [
   "ADMIN_REVIEW",
   "APPROVED",
   "REJECTED",
+  "CANCELLED",
 ];
 /** The task's finished recordings; a download brings the consent record with the audio. A
  * recording the moderator replaced with Record again is greyed and says so (D-135); the server
  * lists it only for the people who run the project and the moderator. People who may export get
- * the approved task's files as one ZIP, as the project export makes them (D-136). */
+ * the approved task's files as one ZIP, as the project export makes them (D-136). A task
+ * cancelled before anything was recorded shows no card at all. */
 function Recordings({ task }: { task: work.TaskDetail }) {
   const { can } = useAuth();
   const { state, reload } = useResource(() => rec.listRecordings(task.id), [task.id]);
   const { busy, error, message, run } = useAction();
   const ready = state.status === "loaded" ? state.data.filter((r) => r.state === "READY") : [];
   const exportable = can("exports.create") && task.status === "APPROVED" && ready.length > 0;
+  if (task.status === "CANCELLED" && state.status !== "failed" && ready.length === 0) return null;
   return (
     <section className="card" aria-labelledby="recordings-title">
       <div className="card__head">
@@ -713,22 +738,43 @@ function TaskBody({
   );
 }
 
+/** The page of one task. Remounted for each task (FEW-14): its message and every card's state
+ * start again when the address moves to another task (a participant's Sessions link). */
 export function TaskDetailPage() {
   const { taskId = "" } = useParams();
+  return <TaskPage key={taskId} taskId={taskId} />;
+}
+
+function TaskPage({ taskId }: { taskId: string }) {
   const { state, reload, replace } = useResource(() => work.getTask(taskId), [taskId]);
   // A message handed over by the page before (the recorder: "Sent to QC.").
   const handed = (useLocation().state as { message?: string } | null)?.message ?? null;
   const [message, setMessage] = useState<string | null>(handed);
+  const loaded = state.status === "loaded" ? state.data : null;
+  // The browser tab names the task once it has loaded (UXA-08).
+  usePageTitle(loaded ? `Task ${loaded.task_code}` : null);
   if (state.status === "loading") return <LoadingState label="Loading task" />;
-  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
+  if (state.status === "failed") {
+    // A task that is gone or not one's own: still a titled page with the way back (POL-13).
+    return (
+      <section aria-labelledby="task-title" className="stack">
+        <BackLink to="/tasks">All tasks</BackLink>
+        <h1 id="task-title">Task</h1>
+        <ErrorState error={state.error} onRetry={reload} />
+      </section>
+    );
+  }
   const task = state.data;
   const onChange: OnTaskChange = (t, text) => {
     replace(t);
     setMessage(text ?? null);
   };
+  // Where the task is, or stopped (FEW-11): on hold at the step it was held from, rejected or
+  // cancelled at the step it ended at; a consent form to fix waits at Audio QC.
+  const stop = task.held_from ?? task.ended_from ?? "DRAFT";
   const onPath = FLOW.includes(task.status)
     ? task.status
-    : (WAITS_AT[task.status] ?? task.held_from ?? "DRAFT");
+    : (WAITS_AT[task.status] ?? WAITS_AT[stop] ?? stop);
   return (
     <section aria-labelledby="task-title" className="stack task-page">
       <BackLink to="/tasks">All tasks</BackLink>

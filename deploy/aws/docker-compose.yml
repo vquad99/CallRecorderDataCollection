@@ -1,6 +1,7 @@
 # Conversation Collection on one AWS EC2 server (D-132): web (nginx: the built app and /api to the
-# API), api, worker, redis, and Caddy for HTTPS in front. The database is Amazon RDS and the files
-# are in S3: neither runs here. Replaces the Render blueprint (render.yaml) once the move is done.
+# API), api, worker, exports-worker, redis, and Caddy for HTTPS in front. The database is Amazon
+# RDS and the files are in S3: neither runs here. Replaces the Render blueprint (render.yaml) once
+# the move is done.
 #
 #   deploy/aws/deploy.sh        build, migrate, start (or update); the timer runs it on every push
 #   deploy/aws/compose.sh ...   any other compose command (it adds the right files and image tag)
@@ -8,6 +9,9 @@
 # Settings and secrets come from deploy/aws/.env (copy env.example; never committed). Only Caddy
 # publishes ports. Fixed addresses: web .10 (the only peer the API takes a visitor's address from),
 # caddy .20 (the only peer nginx takes it from), api .30 (nginx looks the API up once, at start).
+# api and the workers use the server's role for S3. web (.10) and caddy (.20), the two that face
+# the internet, never need it and are kept off the instance metadata address by
+# systemd/ccp-imds-guard.service, which names these two addresses: change both together.
 name: ccp
 
 x-logging: &logging
@@ -63,11 +67,20 @@ services:
       timeout: 5s
       retries: 20
 
-  # Processing, call recordings, exports, emails. A job cut off by a restart is sent again
-  # (acks_late); most finish within the grace period.
+  # Processing, call recordings, emails: the default queue. A job cut off by a restart is sent
+  # again (acks_late); most finish within the grace period.
   worker:
     <<: *app
-    command: ["sh", "-c", "exec celery -A app.worker worker --loglevel=INFO --concurrency=${WORKER_CONCURRENCY:-2}"]
+    command: ["sh", "-c", "exec celery -A app.worker worker -Q celery --loglevel=INFO --concurrency=${WORKER_CONCURRENCY:-2}"]
+    stop_grace_period: 2m
+    depends_on:
+      redis: { condition: service_healthy }
+
+  # Export bundles only, one at a time (queue `exports`, CALL-04): a large export never holds up
+  # new recordings, phone-call fetches or emails. An export cut off by a restart is made again.
+  exports-worker:
+    <<: *app
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "exports", "--concurrency=1", "-n", "exports@%h", "--loglevel=INFO"]
     stop_grace_period: 2m
     depends_on:
       redis: { condition: service_healthy }
@@ -96,7 +109,7 @@ services:
 
   # HTTPS in front of the web container; the only service with public ports (see Caddyfile).
   caddy:
-    image: caddy:2.10.2-alpine
+    image: caddy:2.11.9-alpine
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
       TLS: ${TLS:-internal}

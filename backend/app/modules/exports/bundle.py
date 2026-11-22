@@ -22,10 +22,12 @@ Both layouts end with the same tables (recordings, participants), schema/, READM
 manifests with every file's checksum; the client's format also has MISSING.csv.
 
 Every audio file (and uploaded document) is checked against the checksum recorded when it was
-stored; a file that does not match stops the export. Phone numbers, names and email addresses are
-left out unless the person asking may export personal data and asked for them. The client's format
-holds speaker details (age, gender, PIN codes): only people who may see them ask for it or
-download it (D-143, D-149).
+stored; a file that does not match, or that is no longer in storage, stops the export and the
+reason names its task or speaker (EXP-005). Phone numbers, names and email addresses are left out
+unless the person asking may export personal data and asked for them. The client's format holds
+speaker details (age, gender, PIN codes): only people who may see them ask for it or download it
+(D-143, D-149). A bundle larger than MAX_BUNDLE_BYTES is refused when it is asked for: storage
+takes a streamed object of at most core.storage.STREAM_MAX_BYTES.
 """
 
 from __future__ import annotations
@@ -39,14 +41,15 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from botocore.exceptions import ClientError
+from sqlalchemy import Row, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.csvio import write_table
 from app.core.days import check_days, day_bounds
 from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
-from app.core.storage import ObjectStorage
+from app.core.storage import ObjectStorage, is_missing
 from app.modules.audio_qc import service as audio_qc
 from app.modules.auth.deps import Principal
 from app.modules.auth.models import User
@@ -69,6 +72,11 @@ from app.modules.tasks.models import Task, TaskAssignment
 MODES = ("FACE_TO_FACE", "TELEPHONY")
 FOLDERS = {"FACE_TO_FACE": "face_to_face", "TELEPHONY": "telephony"}
 MAX_RECORDINGS = 5000  # one bundle; more is split with the filters
+GIB = 1024**3
+# The largest bundle asked for, counting its audio: a bundle goes to storage in parts while it is
+# written, and storage takes at most 312.5 GiB that way (core.storage.STREAM_MAX_BYTES); the rest
+# is room for the details files, tables and uploaded documents.
+MAX_BUNDLE_BYTES = 300 * GIB
 NO_TRANSCRIPTS = "Not included: this version of the platform makes no transcripts."
 # Why a person who may export but not see speaker details gets no bundle in the client's format.
 CLIENT_NEEDS_DETAILS = (
@@ -220,7 +228,12 @@ def check(db: Session, principal: Principal, project: Project, sel: Selection) -
         raise forbidden()
 
 
-def _ref(asset: AudioAsset) -> FileRef:
+# A stored file as select_entries reads it, not as a whole row (an audio file's pauses, say):
+# recording_id, kind, version, storage_key, size_bytes, sha256, file_extension, duration_ms.
+FileRow = Row[uuid.UUID, str, int, str, int, str, str, int]
+
+
+def _ref(asset: FileRow) -> FileRef:
     return FileRef(
         kind=asset.kind,
         key=asset.storage_key,
@@ -240,7 +253,8 @@ def select_entries(
 ) -> list[Entry]:
     """The current recording of each task that fits the selection (D-135), by task code; with
     `task_id`, of that one task only (D-136). Mode, language and days narrow the tasks in the
-    database."""
+    database. Only the columns an entry needs are read: the export summary asks this for every
+    change of choice, and whole rows (an audio file's pauses, say) cost more than the rest."""
     newest_q = (
         current_recordings_query()
         .join(Task, Task.id == Recording.task_id)
@@ -251,7 +265,9 @@ def select_entries(
     if task_id is not None:
         newest_q = newest_q.where(Task.id == task_id)
     newest = newest_q.subquery()
-    query = select(Task, newest.c.recording_id).join(newest, newest.c.task_id == Task.id)
+    query = select(Task.id, Task.task_code, Task.recording_mode, newest.c.recording_id).join(
+        newest, newest.c.task_id == Task.id
+    )
     if sel.mode:
         query = query.where(Task.recording_mode == sel.mode)
     if sel.language:
@@ -271,19 +287,28 @@ def select_entries(
             code="TOO_LARGE",
             status_code=422,
         )
-    assets: dict[uuid.UUID, list[AudioAsset]] = {}
+    assets: dict[uuid.UUID, list[FileRow]] = {}
     if found:
-        for asset in db.scalars(
-            select(AudioAsset)
+        for asset in db.execute(
+            select(
+                AudioAsset.recording_id,
+                AudioAsset.kind,
+                AudioAsset.version,
+                AudioAsset.storage_key,
+                AudioAsset.size_bytes,
+                AudioAsset.sha256,
+                AudioAsset.file_extension,
+                AudioAsset.duration_ms,
+            )
             .where(
-                AudioAsset.recording_id.in_([rid for _, rid in found]),
+                AudioAsset.recording_id.in_([row.recording_id for row in found]),
                 AudioAsset.deleted_at.is_(None),
             )
             .order_by(AudioAsset.kind, AudioAsset.version)
         ):
             assets.setdefault(asset.recording_id, []).append(asset)
     entries = []
-    for task, recording_id in found:
+    for tid, task_code, mode, recording_id in found:
         mine = assets.get(recording_id, [])
         delivery = [a for a in mine if a.kind in DELIVERY_KINDS]
         final = delivery[-1] if delivery else None  # the newest version
@@ -292,10 +317,10 @@ def select_entries(
         )
         entries.append(
             Entry(
-                task_id=task.id,
+                task_id=tid,
                 recording_id=recording_id,
-                task_code=task.task_code,
-                mode=task.recording_mode,
+                task_code=task_code,
+                mode=mode,
                 audio=_ref(final) if final else None,
                 originals=originals,
                 duration_ms=final.duration_ms if final else None,
@@ -400,18 +425,26 @@ class _Zip:
         self, path: str, key: str, sha256: str, kind: str, e: Entry | None, owner: str
     ) -> Iterator[bytes]:
         """A stored file, read in parts and checked against the checksum recorded when it was
-        stored; `owner` (a task or participant code) names it if it does not match."""
+        stored; `owner` (a task or participant code) names it if it does not match, or if it is
+        no longer in storage (the database and storage disagree: nothing is left out silently)."""
         assert self.storage is not None  # noqa: S101
         digest = hashlib.sha256()
         size = 0
-        with self.zf.open(_zip_entry(path, zipfile.ZIP_STORED), "w", force_zip64=True) as dest:
-            for part in self.storage.iter_bytes(key):
-                dest.write(part)
-                digest.update(part)
-                size += len(part)
-                chunk = self.sink.take()
-                if chunk:
-                    yield chunk
+        try:
+            with self.zf.open(_zip_entry(path, zipfile.ZIP_STORED), "w", force_zip64=True) as dest:
+                for part in self.storage.iter_bytes(key):
+                    dest.write(part)
+                    digest.update(part)
+                    size += len(part)
+                    chunk = self.sink.take()
+                    if chunk:
+                        yield chunk
+        except ClientError as exc:
+            if not is_missing(exc):
+                raise
+            raise BundleError(
+                f"A stored file of {owner} is missing from storage: export stopped"
+            ) from None
         if digest.hexdigest() != sha256:
             # What is in storage is not what was stored: never hand it on as if it were.
             raise BundleError(

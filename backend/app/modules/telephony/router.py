@@ -7,7 +7,7 @@ never shows a call as connected on its own (TEL-037).
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.adapters.telephony import ProviderError
 from app.api.deps import AppSettings, Cipher, Provider
+from app.core.days import local_now
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
@@ -573,7 +574,7 @@ def export_calls(
         after={"days": days, "rows": count},
     )
     db.commit()
-    name = f"phone_calls_{datetime.now(UTC):%Y%m%d}.csv"
+    name = f"phone_calls_{local_now(settings.report_timezone):%Y%m%d}.csv"
     return Response(
         content=body,
         media_type="text/csv; charset=utf-8",

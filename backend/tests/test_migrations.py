@@ -301,6 +301,39 @@ def test_the_audit_action_index_comes_and_goes(test_database_url: str) -> None:
     engine.dispose()
 
 
+def test_the_task_participant_indexes_come_and_go(test_database_url: str) -> None:
+    """0040 (PERF-10): a participant's tasks (participant_a_id = X OR participant_b_id = X) are
+    found through an index on each side, the ones the model declares; going back removes them."""
+    names = {"ix_tasks_participant_a_id", "ix_tasks_participant_b_id"}
+    assert names <= {i.name for i in Base.metadata.tables["tasks"].indexes}
+    reset_schema(test_database_url)
+    cfg = alembic_config(test_database_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(test_database_url)
+    found = text(
+        "SELECT indexname, indexdef FROM pg_indexes"
+        " WHERE tablename = 'tasks' AND indexname LIKE 'ix_tasks_participant_%'"
+    )
+    with engine.begin() as conn:
+        indexes = {name: sql for name, sql in conn.execute(found)}
+        assert set(indexes) == names
+        assert "(participant_a_id)" in indexes["ix_tasks_participant_a_id"]
+        assert "(participant_b_id)" in indexes["ix_tasks_participant_b_id"]
+        conn.execute(text("SET LOCAL enable_seqscan = off"))
+        lookup = text(
+            "EXPLAIN SELECT id FROM tasks WHERE participant_a_id = CAST(:p AS uuid)"
+            " OR participant_b_id = CAST(:p AS uuid)"
+        )
+        person = "00000000-0000-4000-8000-000000000000"
+        plan = " ".join(line for (line,) in conn.execute(lookup, {"p": person}))
+        assert all(name in plan for name in names), plan
+    command.downgrade(cfg, "0039")
+    with engine.begin() as conn:
+        assert conn.execute(found).all() == []
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
 def test_payments_and_the_qc_final_approval_option_come_and_go(test_database_url: str) -> None:
     """0030 (D-137): payment rates and payments.manage for the Super Admin and the Project
     Admin; 0031 (D-138): every project starts with "QC pass is the final approval" off."""

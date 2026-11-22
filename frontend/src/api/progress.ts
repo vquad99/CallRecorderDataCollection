@@ -1,7 +1,7 @@
 // The project's Progress tab (D-148): completed minutes, conversations and speakers against the
-// project's targets, and what is still needed to finish (D-153). Its own module, so only the
-// Progress tab's chunk (and the Participants page's "Still needed" line) loads it (the first screen
-// is near its budget).
+// project's targets, and what is still needed to finish (D-153); and its download as Excel or
+// CSV. Its own module, so only the Progress tab's chunk (and the Participants page's "Still
+// needed" line) loads it (the first screen is near its budget).
 import { apiRequest } from "./client";
 import type { ProgressCounts } from "./projects";
 
@@ -72,13 +72,20 @@ export interface StillNeeded {
   };
   districts: { has_target: boolean; rows: DistrictNeed[]; total: DistrictNeed | null };
   conversations: ConversationNeed[];
+  /** Whether the registered people can give the conversations still to make (D-143 rules). */
   capacity: {
+    /** Conversations per speaker; null = no limit. */
     limit: number | null;
+    /** Each pair of speakers only once. */
+    unique_pairs: boolean;
     registered: number;
     /** Conversations the registered people may still take part in, added up (two a
      * conversation); null without a limit. */
     places_left: number | null;
     conversations_to_make: number | null;
+    /** The fewest more people with whom the registered ones could give the conversations still
+     * to make (their places, and with unique pairs the pairs left); 0 when they can; null without
+     * a conversations target. */
     more_speakers_needed: number | null;
   };
 }
@@ -136,3 +143,10 @@ export interface ProjectProgress {
  * the project. */
 export const getProgress = (id: string) =>
   apiRequest<ProjectProgress>(`/api/v1/projects/${id}/progress`);
+
+/** The Progress tab as a file: an Excel workbook with a sheet per table, or one long CSV table. */
+export type ProgressExportFormat = "xlsx" | "csv";
+
+/** Where the Progress tab's download is (the same people as the tab; audited), for apiDownload. */
+export const progressExportPath = (id: string, format: ProgressExportFormat) =>
+  `/api/v1/projects/${id}/progress/export?format=${format}`;

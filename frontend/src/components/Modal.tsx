@@ -21,12 +21,17 @@ export function Modal({
   title,
   onClose,
   wide = false,
+  size,
   children,
 }: {
   title: ReactNode;
   onClose: () => void;
-  /** For a large view (a participant's details) rather than a short form. */
+  /** For a large view (a participant's details) rather than a short form; the same as
+   * size="wide". */
   wide?: boolean;
+  /** "medium" for a small table (a participant's documents), "wide" for a large view; a short
+   * form when not given. */
+  size?: "medium" | "wide";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -36,10 +41,11 @@ export function Modal({
     closeModal();
     onClose();
   };
+  const width = size ?? (wide ? "wide" : null);
   return (
     <dialog
       ref={ref}
-      className={wide ? "dialog dialog--wide" : "dialog"}
+      className={width ? `dialog dialog--${width}` : "dialog"}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

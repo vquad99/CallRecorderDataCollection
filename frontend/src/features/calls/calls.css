@@ -1,5 +1,5 @@
-/* Phone calls page (D-102; plain tables in D-154) and the call card on a task page (D-103). The
-   sections, key figures, day chart and tables are in components/charts. */
+/* Phone calls page (D-102; plain tables in D-154, framed sections in D-156) and the call card on
+   a task page (D-103). The sections, key figures, day chart and tables are in components/charts. */
 .calls-page .panel > p {
   margin: 0;
 }

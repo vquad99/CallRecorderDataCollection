@@ -1,6 +1,6 @@
-/* Figures and charts of the dashboard, the Phone calls page and the Progress tab (D-151, D-154):
-   one grid of plain sections (a heading over a table or a chart, no box), the key figures as one
-   line, tables instead of stacks of cards. Series colours:
+/* Figures and charts of the dashboard, the Phone calls page and the Progress tab (D-151, D-154,
+   D-156): one grid of sections (a white framed panel each, its title on a bar over its table or
+   chart), the key figures as one line, tables instead of stacks of cards. Series colours:
    KoboToolbox blue and amber for approved and waiting (D-099); blue, orange and red for the calls;
    the six task stages in stages.ts. Checked with the dataviz validator on #ffffff; the legend and
    the table view carry the same information as the colours. Text stays in the text colours. */
@@ -102,14 +102,19 @@
   }
 }
 
-/* A section (D-154): its heading over its table or chart, no box of its own. Its content answers
-   to the section's own width. */
+/* A section (D-156): a white panel with a thin frame on the grey page, its title on a bar of its
+   own over its table or chart. Its content answers to the section's own width. */
 .panel {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   min-width: 0;
+  padding: 0 var(--card-px) var(--card-py);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.05);
 }
 .panel__head {
   display: flex;
@@ -118,6 +123,11 @@
   justify-content: space-between;
   gap: 4px 12px;
   min-height: 22px;
+  margin: 0 calc(-1 * var(--card-px));
+  padding: 11px var(--card-px);
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: #fafbfd;
 }
 .panel__head h2,
 .panel .chart__head h2 {
@@ -269,6 +279,27 @@
 .panel .table-wrap {
   flex: none;
   max-height: none;
+}
+/* A table directly in a section runs edge to edge under the title bar. */
+.panel > .table-wrap {
+  margin-inline: calc(-1 * var(--card-px));
+  border-width: 1px 0;
+  border-radius: 0;
+}
+.panel > .table-wrap:last-child {
+  margin-bottom: calc(-1 * var(--card-py));
+  border-bottom: 0;
+  border-radius: 0 0 8px 8px;
+}
+.panel > .panel__head + .table-wrap {
+  margin-top: -10px;
+  border-top: 0;
+}
+.panel > .table-wrap .table :is(th, td):first-child {
+  padding-left: var(--card-px);
+}
+.panel > .table-wrap .table :is(th, td):last-child {
+  padding-right: var(--card-px);
 }
 .panel .table th,
 .panel .table td {

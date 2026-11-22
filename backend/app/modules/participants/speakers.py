@@ -129,7 +129,8 @@ def clean(field: str, value: object) -> int | str | None:
         number: int | None = None
         if isinstance(value, int) and not isinstance(value, bool):
             number = value
-        elif isinstance(value, str) and value.strip().isdigit():
+        elif isinstance(value, str) and value.strip().isdecimal():
+            # isdecimal, not isdigit: exactly what int() reads ("२५" too), never "²" (PART-06).
             number = int(value.strip())
         if number is None or not MIN_AGE <= number <= MAX_AGE:
             raise _bad(field, f"Age must be a whole number from {MIN_AGE} to {MAX_AGE}")

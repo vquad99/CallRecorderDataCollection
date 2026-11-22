@@ -3,8 +3,9 @@
 # Terraform's user data saves this script as /usr/local/sbin/ccp-bootstrap and runs it at first
 # boot. That run stops after making the server's deploy key: add the key to GitHub (read-only),
 # then run it again by hand:   sudo ccp-bootstrap
-# The second run clones the repository to /opt/ccp, installs the deploy and backup timers and starts
-# the CloudWatch agent. Safe to run again at any time (docs/DEPLOYMENT_AWS.md steps 5-6).
+# The second run clones the repository to /opt/ccp, installs the deploy and backup timers and the
+# metadata guard (ccp-imds-guard) and starts the CloudWatch agent. Safe to run again at any time
+# (docs/DEPLOYMENT_AWS.md steps 5-6).
 set -euo pipefail
 
 APP_USER=ccp
@@ -86,8 +87,9 @@ if [ ! -d "$APP_DIR/.git" ]; then
 fi
 install -d -o "$APP_USER" -g "$APP_USER" -m 700 "$APP_DIR/deploy/aws/certs" "$APP_DIR/deploy/aws/.state"
 
-# 6. Timers (deploy on push, daily backup), log rotation, CloudWatch agent (disk and memory figures,
-#    the deploy and backup log).
+# 6. Timers (deploy on push, daily backup), the guard that keeps web and caddy off the instance
+#    metadata address (the server's S3 role), log rotation, CloudWatch agent (disk and memory
+#    figures, the deploy and backup log).
 install -m 644 "$APP_DIR"/deploy/aws/systemd/ccp-*.service "$APP_DIR"/deploy/aws/systemd/ccp-*.timer \
   /etc/systemd/system/
 printf '/var/log/ccp/*.log {\n  monthly\n  rotate 12\n  compress\n  missingok\n  notifempty\n  copytruncate\n}\n' \
@@ -95,6 +97,6 @@ printf '/var/log/ccp/*.log {\n  monthly\n  rotate 12\n  compress\n  missingok\n 
 install -m 644 "$APP_DIR/deploy/aws/cloudwatch-agent.json" "$CWAGENT/etc/ccp.json"
 "$CWAGENT/bin/amazon-cloudwatch-agent-ctl" -a fetch-config -m ec2 -s -c "file:$CWAGENT/etc/ccp.json"
 systemctl daemon-reload
-systemctl enable --now ccp-deploy.timer ccp-backup.timer
+systemctl enable --now ccp-deploy.timer ccp-backup.timer ccp-imds-guard.service
 
 say "done. Next: $APP_DIR/deploy/aws/.env and the first deploy (docs/DEPLOYMENT_AWS.md steps 6-7)."

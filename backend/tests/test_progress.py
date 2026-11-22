@@ -1,26 +1,31 @@
 """The project's audio and progress settings, its targets, the Progress tab and completed hours on
-the dashboard (D-148).
+the dashboard (D-148), and the Progress tab's download as Excel or CSV (owner's request).
 
 Every number of the Progress tab is worked out here by hand from a small set of tasks with known
-lengths, effective speech and speakers.
+lengths, effective speech and speakers; the download is checked against the tab's own answer.
 
-Requirements: DASH-001, DASH-003, PROJ-001, PROJ-011
+Requirements: DASH-001, DASH-003, PROJ-001, PROJ-011, EXP-002, EXP-007, SEC-001
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 import uuid
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select, update
 
 from app.modules.audit.models import AuditLog
 from app.modules.participants.models import Participant
-from app.modules.projects import targets
+from app.modules.projects import progress, targets
 from app.modules.projects.models import Project
 from app.modules.recordings.models import AudioAsset, Recording
 from app.modules.tasks.models import Task
@@ -30,6 +35,8 @@ pytestmark = pytest.mark.db
 
 FRONTEND_TARGETS = Path(__file__).resolve().parents[2] / "frontend/src/features/projects/targets.ts"
 MINUTE = 60_000
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+SHEET_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
 def _person(api: Api, pid: Any, label: str, **details: Any) -> uuid.UUID:
@@ -147,7 +154,8 @@ def world(db: Any, new_api: Any) -> dict[str, Any]:
     # E's gender is missing (saved before D-143, say).
     db.execute(update(Participant).where(Participant.id == e).values(gender=None))
     db.commit()
-    return {"db": db, "project": project, "other": other, "mod_user": mod, **apis}
+    people = {"A": a, "B": b, "C": c, "D": d, "E": e, "F": f}
+    return {"db": db, "project": project, "other": other, "mod_user": mod, "people": people, **apis}
 
 
 def _progress(api: Api, project: Any) -> Any:
@@ -244,6 +252,10 @@ def test_full_length_counts_when_the_project_says_so(world: dict[str, Any]) -> N
     _set(world, world["project"], progress_counts="FULL", target_hours=None)
     done = _progress(world["pa"], world["project"]).json()["completed"]
     assert (done["counts"], done["completed_ms"]) == ("FULL", 17 * MINUTE)
+    assert (done["target_hours"], done["percent_of_target"]) == (None, None)
+    # An hours target of 0, saved before PROJ-12 refused it, is no target either.
+    _set(world, world["project"], target_hours=0)
+    done = _progress(world["pa"], world["project"]).json()["completed"]
     assert (done["target_hours"], done["percent_of_target"]) == (None, None)
 
 
@@ -355,6 +367,7 @@ def test_still_needed_shares_the_targets_out_and_counts_who_is_on_the_way(
     # aside), so the 6 registered people have 2 places left; 595 conversations need 1190.
     assert needed["capacity"] == {
         "limit": 2,
+        "unique_pairs": False,
         "registered": 6,
         "places_left": 2,
         "conversations_to_make": 595,
@@ -404,6 +417,7 @@ def test_still_needed_without_targets_shows_who_there_is(world: dict[str, Any]) 
     }
     assert needed["capacity"] == {
         "limit": None,
+        "unique_pairs": False,
         "registered": 6,
         "places_left": None,
         "conversations_to_make": None,
@@ -425,6 +439,324 @@ def test_an_empty_project_still_needs_everything(world: dict[str, Any]) -> None:
     assert [r["label"] for r in needed["speakers"]["rows"]] == ["20-30", "30-40", "40-50", "50-60"]
     assert _need(needed["speakers"]["total"]["total"]) == (500, 0, 0, 500)
     assert needed["capacity"]["registered"] == 0
+
+
+def test_capacity_needs_two_people_a_conversation_and_each_pair_once(
+    world: dict[str, Any],
+) -> None:
+    """PROJ-09: what the registered people can give is bounded by their places (each at most the
+    limit, two a conversation) and, with each pair only once, by the pairs they have left; more
+    speakers needed is the fewest more people that are enough, with or without a limit."""
+    db, pa, other = world["db"], world["pa"], world["other"]
+    # 600 conversations to make (the project's target, nothing made yet), no limit per speaker.
+    _set(world, other, max_conversations_per_speaker=None, unique_pairs=True)
+    gita = _person(pa, other.id, "Gita")
+
+    def capacity() -> dict[str, Any]:
+        found: dict[str, Any] = _progress(pa, other).json()["still_needed"]["capacity"]
+        return found
+
+    # One person: each pair talks once, and 36 people make 630 pairs (35 only 595).
+    assert capacity() == {
+        "limit": None,
+        "unique_pairs": True,
+        "registered": 1,
+        "places_left": None,
+        "conversations_to_make": 600,
+        "more_speakers_needed": 35,
+    }
+    _set(world, other, unique_pairs=False)
+    assert capacity()["more_speakers_needed"] == 1, "without the pairs rule, a second person"
+
+    # Three people, at most 3 conversations each, each pair once, 4 to make: their 9 places
+    # would give 4, but three people make only 3 pairs; a fourth makes 6.
+    hari = _person(pa, other.id, "Hari")
+    isha = _person(pa, other.id, "Isha")
+    _set(world, other, max_conversations_per_speaker=3, unique_pairs=True, target_conversations=4)
+    assert capacity() == {
+        "limit": 3,
+        "unique_pairs": True,
+        "registered": 3,
+        "places_left": 9,
+        "conversations_to_make": 4,
+        "more_speakers_needed": 1,
+    }
+
+    # Gita and Hari talked (approved): their pair is used, and a place each. 3 still to make,
+    # 7 places would give 3, but only 2 pairs are left. A rejected conversation uses nothing.
+    by = world["mod_user"].id
+    _task(db, other, 21, gita, hari, "FACE_TO_FACE", "APPROVED", by)
+    _task(db, other, 22, hari, isha, "FACE_TO_FACE", "REJECTED", by)
+    found = capacity()
+    assert (found["places_left"], found["conversations_to_make"]) == (7, 3)
+    assert found["more_speakers_needed"] == 1
+    # Without the pairs rule the places are enough.
+    _set(world, other, unique_pairs=False)
+    assert capacity()["more_speakers_needed"] == 0
+
+
+def test_at_the_limit_counts_only_the_people_still_registered(world: dict[str, Any]) -> None:
+    """PROJ-10: a person erased since (data erasure) is no longer registered, nor at the limit;
+    their approved conversations still count as done."""
+    db = world["db"]
+    db.execute(
+        update(Participant)
+        .where(Participant.id == world["people"]["A"])
+        .values(deleted_at=datetime.now(UTC))
+    )
+    db.commit()
+    body = _progress(world["pa"], world["project"]).json()
+    people = body["speakers"]
+    # Limit 2: B (T1, T4), C (T2, T5) and F (T4, T5); A (T1, T3) is erased.
+    assert (people["registered"], people["at_limit"], people["with_approved"]) == (5, 3, 5)
+    assert body["still_needed"]["capacity"]["places_left"] == 2  # D and E, one each
+
+
+# ------------------------------------------------------------------------ the download
+
+
+def _export(api: Api, project: Any, table_format: str | None = None) -> Any:
+    params = {"format": table_format} if table_format else None
+    return api.get(f"/api/v1/projects/{project.id}/progress/export", params=params)
+
+
+def _value(text: str | None) -> int | float:
+    number = float(text or "nan")
+    return int(number) if (text or "").lstrip("-").isdigit() else number
+
+
+def _column(ref: str) -> int:
+    """A cell's column, counted from 0, from its reference ("C7" is 2)."""
+    letters = re.match(r"[A-Z]+", ref)
+    assert letters is not None, ref
+    index = 0
+    for letter in letters.group():
+        index = index * 26 + ord(letter) - ord("A") + 1
+    return index - 1
+
+
+def _workbook(data: bytes) -> dict[str, list[list[Any]]]:
+    """An .xlsx file's sheets by name, each as rows of values (None for an empty cell); no cell
+    may be a formula."""
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    assert archive.testzip() is None
+    book = ElementTree.fromstring(archive.read("xl/workbook.xml"))  # noqa: S314 - our own file
+    sheets: dict[str, list[list[Any]]] = {}
+    for number, sheet in enumerate(book.iterfind(".//m:sheet", SHEET_NS), start=1):
+        part = archive.read(f"xl/worksheets/sheet{number}.xml")
+        rows = []
+        for row in ElementTree.fromstring(part).iterfind(".//m:row", SHEET_NS):  # noqa: S314
+            values: list[Any] = []
+            for cell in row.iterfind("m:c", SHEET_NS):
+                assert cell.find("m:f", SHEET_NS) is None, "never a formula"
+                values += [None] * (_column(cell.get("r") or "") - len(values))
+                if cell.get("t") == "inlineStr":
+                    values.append("".join(t.text or "" for t in cell.iterfind(".//m:t", SHEET_NS)))
+                else:
+                    values.append(_value(cell.findtext("m:v", namespaces=SHEET_NS)))
+            rows.append(values)
+        sheets[str(sheet.get("name"))] = rows
+    return sheets
+
+
+def _padded(rows: list[list[Any]]) -> list[list[Any]]:
+    """Rows as wide as the heading (a sheet leaves out empty cells at a row's end)."""
+    width = len(rows[0])
+    return [row + [None] * (width - len(row)) for row in rows]
+
+
+def test_the_progress_tab_downloads_as_excel_with_its_own_numbers(world: dict[str, Any]) -> None:
+    """Owner's request: the tab as a workbook, one sheet per table, every number the tab's."""
+    project = world["project"]
+    _set(world, project, target_hours=1, target_districts=list(targets.CLIENT_DISTRICTS))
+    tab = _progress(world["pa"], project).json()
+    answer = _export(world["pa"], project)  # Excel unless asked otherwise
+    assert answer.status_code == 200, answer.text
+    assert answer.headers["content-type"] == XLSX
+    day = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y%m%d")
+    assert answer.headers["content-disposition"] == (
+        f'attachment; filename="progress_summary_PROG_{day}.xlsx"'
+    )
+    book = {name: _padded(rows) for name, rows in _workbook(answer.content).items()}
+    assert list(book) == [
+        "About",
+        "Key figures",
+        "Speakers by age and gender",
+        "Speakers by district",
+        "Conversations to make",
+        "Capacity",
+        "Balance",
+        "Conversations by status",
+        "Completed",
+    ]
+    about = dict(book["About"][1:])
+    assert about["Project code"] == "PROG"
+    assert about["Project name"] == "Project PROG"
+    assert about["Recording type"] == "Face-to-face and phone call"
+    assert re.fullmatch(
+        r"\d{4}-\d\d-\d\d \d\d:\d\d \(UTC\+05:30, Asia/Kolkata\)", about["Generated"]
+    )
+    assert about["Completed counts"] == "Effective speech"
+    assert (about["Conversations per speaker"], about["Each pair of speakers only once"]) == (
+        2,
+        "No",
+    )
+
+    figures = {row[0]: row[1:] for row in book["Key figures"][1:]}
+    assert book["Key figures"][0] == ["Figure", "Value", "Target", "% of target"]
+    assert figures["Completed hours (effective speech)"] == [0.18, 1, 18.3]  # 11 of 60 minutes
+    assert figures["Approved conversations"] == [3, 600, 0.5]
+    assert figures["Speakers with an approved conversation"] == [5, 500, 1]
+    assert figures["Registered speakers"] == [6, None, None]
+    assert figures["Registered speakers at the limit of 2 conversations"] == [4, None, None]
+    assert figures["Approved conversations not measured yet"] == [1, None, None]
+    assert figures["Effective speech (% of the recorded audio)"] == [71.9, None, None]
+
+    needed = tab["still_needed"]
+    matrix = book["Speakers by age and gender"]
+    assert matrix[0] == ["Age band", "Gender", "Target", "Done", "Registered", "Still needed"]
+    expected = [
+        [row["label"], gender, *_need(row[key])]
+        for row in [*needed["speakers"]["rows"], needed["speakers"]["total"]]
+        for gender, key in (("Male", "male"), ("Female", "female"), ("Total", "total"))
+    ]
+    assert matrix[1:] == expected
+    assert matrix[-1] == ["Total", "Total", 500, 5, 1, 495]
+    districts = book["Speakers by district"]
+    assert districts[1:] == [
+        [row["label"], *_need(row)]
+        for row in [*needed["districts"]["rows"], needed["districts"]["total"]]
+    ]
+    assert districts[-2:] == [["Other districts", None, 1, 0, None], ["Total", 500, 5, 1, 495]]
+    assert book["Conversations to make"][1:] == [
+        [c["label"], c["target"], c["approved"], c["in_pipeline"], c["still_to_make"]]
+        for c in needed["conversations"]
+    ]
+    assert book["Capacity"][1:] == [
+        ["Registered speakers", 6],
+        ["Places left (two per conversation; none without a limit)", 2],
+        ["Conversations still to make", 595],
+        ["More speakers needed", 594],
+    ]
+
+    balance = book["Balance"]
+    assert balance[0][-1] == "Variance (points)"
+    shares = [("Age bands", "age_bands"), ("Gender", "gender")]
+    shares += [("Face-to-face and phone", "modes"), ("Districts", "districts")]
+    assert balance[1:] == [
+        [group, r["label"], r["count"], r["percent"], r["target_percent"], r["variance"]]
+        for group, key in shares
+        for r in tab[key]["rows"]
+    ]
+    assert ["Gender", "Male", 2, 40, 50, -10] in balance  # a number below the target
+    assert ["Districts", "Raigad (Maharashtra)", 0, 0, 12.5, -12.5] in balance
+
+    statuses = {row[1]: row[2:] for row in book["Conversations by status"][1:]}
+    assert statuses["Approved"] == [3, 42.9]
+    assert statuses["Audio QC"] == [1, 14.3]
+    assert statuses["Draft"] == [0, 0]
+    assert statuses["All tasks"] == [7, 100]
+    assert len(statuses) == 12, "every status, and the total"
+    assert book["Completed"][1:] == [
+        ["Approved", "Number", 3],
+        ["Approved", "Full length (h)", 0.28],  # 17 minutes
+        ["Approved", "Effective speech (h)", 0.18],  # 11 minutes
+        ["Recorded, not yet approved", "Number", 1],
+        ["Recorded, not yet approved", "Full length (h)", 0.02],
+        ["Recorded, not yet approved", "Effective speech (h)", 0.01],
+    ]
+
+
+def test_the_csv_is_one_long_table_with_the_same_numbers(world: dict[str, Any]) -> None:
+    project = world["project"]
+    _set(world, project, target_districts=list(targets.CLIENT_DISTRICTS))
+    answer = _export(world["pa"], project, "csv")
+    assert answer.status_code == 200, answer.text
+    assert answer.headers["content-type"] == "text/csv; charset=utf-8"
+    day = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y%m%d")
+    assert answer.headers["content-disposition"] == (
+        f'attachment; filename="progress_summary_PROG_{day}.csv"'
+    )
+    text = answer.content.decode("utf-8")
+    assert text.startswith("\ufeff"), "spreadsheets read UTF-8 with the BOM"
+    rows = list(csv.reader(io.StringIO(text.removeprefix("\ufeff"))))
+    assert tuple(rows[0]) == progress.SUMMARY_COLUMNS
+    found = {(r[0], r[1], r[2]): dict(zip(rows[0], r, strict=True)) for r in rows[1:]}
+    # The same tables as the workbook, one row each.
+    book = _workbook(_export(world["pa"], project, "xlsx").content)
+    assert len(rows) - 1 == sum(len(sheet) - 1 for sheet in book.values())
+    assert found[("About", "Project code", "PROG")]["section"] == "About"
+    key = found[("Key figures", "", "Approved conversations")]
+    assert (key["count"], key["target"], key["percent"]) == ("3", "600", "0.5")
+    cell = found[("Speakers by age and gender", "30-40", "Male")]
+    assert [cell[k] for k in ("target", "done", "registered", "still_needed")] == [
+        "75",
+        "1",
+        "1",
+        "73",
+    ]
+    talks = found[("Conversations to make", "", "All conversations")]
+    assert [talks[k] for k in ("target", "done", "count", "still_needed")] == [
+        "600",
+        "3",
+        "2",
+        "595",
+    ]
+    # A variance below the target is written as a number (no quote in front), and so is every
+    # other figure.
+    male = found[("Balance", "Gender", "Male")]
+    assert (male["count"], male["percent"], male["target_percent"], male["variance"]) == (
+        "2",
+        "40.0",
+        "50.0",
+        "-10.0",
+    )
+    assert found[("Balance", "Districts", "Raigad (Maharashtra)")]["variance"] == "-12.5"
+    assert found[("Conversations by status", "Total", "All tasks")]["count"] == "7"
+
+
+def test_a_district_typed_as_a_formula_stays_text_in_the_download(world: dict[str, Any]) -> None:
+    """With no districts listed, the balance's rows are the speakers' own native districts, free
+    text: one written as a formula must not run in a spreadsheet."""
+    formula = '=HYPERLINK("http://evil.example","Click")'
+    db = world["db"]
+    db.execute(
+        update(Participant).where(Participant.id == world["people"]["E"]).values(district=formula)
+    )
+    db.commit()
+    project = world["project"]
+    text = _export(world["pa"], project, "csv").content.decode("utf-8").removeprefix("\ufeff")
+    rows = list(csv.reader(io.StringIO(text)))
+    districts = [r[2] for r in rows if r[0] == "Balance" and r[1] == "Districts"]
+    assert "'" + formula in districts, "a quote in front: the spreadsheet shows it as text"
+    assert not any(cell.startswith(("=", "+", "@")) for r in rows for cell in r)
+    sheet = _workbook(_export(world["pa"], project).content)["Balance"]
+    assert ["Districts", formula] in [row[:2] for row in sheet], "plain text, never a formula"
+
+
+def test_only_the_people_who_manage_the_project_download_it(world: dict[str, Any]) -> None:
+    """Like the tab: projects.manage (others 403, another project's admin 404); every download
+    is audited, a refused one is not; only Excel and CSV."""
+    db, project = world["db"], world["project"]
+    for who in ("mod", "qc", "client"):
+        assert _export(world[who], project).status_code == 403, who
+    assert _export(world["pa2"], project, "csv").status_code == 404, "not their project"
+    assert _export(world["root"], project, "csv").status_code == 200
+    assert _export(world["pa"], project, "xlsx").status_code == 200
+    wrong = _export(world["pa"], project, "pdf")
+    assert wrong.status_code == 422, wrong.text
+    assert wrong.json()["error"]["code"] == "VALIDATION_ERROR"
+    db.expire_all()
+    entries = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.action == "project.exported")
+        .order_by(AuditLog.created_at, AuditLog.id)
+    ).all()
+    assert sorted(e.after_summary or "" for e in entries) == [
+        '{"content": "progress_summary", "format": "csv"}',
+        '{"content": "progress_summary", "format": "xlsx"}',
+    ]
+    assert {e.project_id for e in entries} == {project.id}
 
 
 # ------------------------------------------------------------------------ the dashboard
@@ -607,6 +939,7 @@ def test_the_settings_save_with_the_project_and_are_audited(world: dict[str, Any
         ({"pause_limit_seconds": 31}, "VALIDATION_ERROR", None),
         ({"progress_counts": "SOME"}, "VALIDATION_ERROR", None),
         ({"target_speakers": 0}, "VALIDATION_ERROR", None),
+        ({"target_hours": 0}, "VALIDATION_ERROR", None),  # PROJ-12: no target is null
         (
             {"target_age_bands": [{"from": 20, "to": 30, "percent": 60}]},
             "INVALID_TARGETS",

@@ -1,12 +1,14 @@
 // Tasks the user can see: all in their projects for task managers, only their own otherwise
-// (TASK-005, TASK-011). The same list sits on a project's Tasks tab, fixed to that project (D-117).
-// The filters live in the address (?status=AUDIO_QC&project=...), so a link from the dashboard
-// opens the list already filtered and the browser's Back button keeps them.
+// (TASK-005, TASK-011). The same list sits on a project's Tasks tab, fixed to that project (D-117)
+// and, for a project that records one type, to that type (D-153). The filters live in the address
+// (?status=AUDIO_QC&project=...), so a link from the dashboard opens the list already filtered and
+// the browser's Back button keeps them. People who assign tasks also see who holds each task and
+// its two people (UXW-05).
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 
-import { listProjects } from "../../api/projects";
-import { listTasks, transitionTask, type TaskSummary } from "../../api/work";
+import { listAllProjects } from "../../api/projects";
+import { listTasks, transitionTask, type TaskListItem } from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
@@ -22,16 +24,31 @@ import { useDebounced } from "../../hooks/useDebounced";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { day } from "../../lib/format";
 import { labelFor, MODE_LABELS, PRIORITY_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
+import type { RecordingMode } from "../projects/recordingType";
 import "./tasks.css";
 
 const PAGE_SIZE = 25;
 
-export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) {
+/** Both people of a task by code ("P000196 · P000197"). */
+const pairOf = (t: TaskListItem) =>
+  t.participant_a_code && t.participant_b_code
+    ? `${t.participant_a_code} · ${t.participant_b_code}`
+    : "-";
+
+export function TasksPage({
+  fixedProjectId,
+  fixedMode = null,
+}: {
+  fixedProjectId?: string;
+  /** The project's one recording type (D-153): no type to filter by, and the type's column only
+   * for a task of another type (made before the project kept to one). */
+  fixedMode?: RecordingMode | null;
+} = {}) {
   const { can } = useAuth();
   const inProject = fixedProjectId !== undefined;
   const [params, setParams] = useSearchParams();
   const status = params.get("status") ?? "";
-  const mode = params.get("mode") ?? "";
+  const mode = fixedMode ? "" : (params.get("mode") ?? "");
   const projectId = fixedProjectId ?? params.get("project") ?? "";
   const page = Number(params.get("page") ?? "1") || 1;
   /** Change filters in the address; any change of filter starts again at page 1. */
@@ -56,11 +73,13 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
     if (settled !== search) setFilter({ search: settled });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settled]);
+  // Every project the person can see, past the first 100 too (PERF-09): the filter and the
+  // project codes of the rows.
   const projects = useResource(
     () =>
       inProject
         ? Promise.resolve({ items: [], total: 0, page: 1, page_size: 100 })
-        : listProjects({ page_size: 100 }),
+        : listAllProjects(),
     [inProject],
   );
   const tasks = useResource(
@@ -90,7 +109,11 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
   // A message handed over by the page before (for example "Task T000012 deleted.").
   const handed = (useLocation().state as { message?: string } | null)?.message ?? null;
   const { busy, error, message, run } = useAction(tasks.reload, handed);
-  const rows: TaskSummary[] = tasks.state.status === "loaded" ? tasks.state.data.items : [];
+  const rows: TaskListItem[] = tasks.state.status === "loaded" ? tasks.state.data.items : [];
+  // Who holds each task and which two people it records: for people who assign tasks (a
+  // moderator's list holds only their own tasks).
+  const showsPeople = can("tasks.assign");
+  const showsMode = !fixedMode || rows.some((t) => t.recording_mode !== fixedMode);
   const chosen = rows.filter((t) => selected.includes(t.id));
   const waiting = chosen.filter((t) => t.status === "ADMIN_REVIEW");
   const toggle = (id: string) =>
@@ -175,15 +198,17 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
             ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label })),
           ]}
         />
-        <Select
-          label="Recording type"
-          value={mode}
-          onChange={(e) => setFilter({ mode: e.target.value })}
-          options={[
-            { value: "", label: "All" },
-            ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
-          ]}
-        />
+        {fixedMode ? null : (
+          <Select
+            label="Recording type"
+            value={mode}
+            onChange={(e) => setFilter({ mode: e.target.value })}
+            options={[
+              { value: "", label: "All" },
+              ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+        )}
       </div>
       {canSelect && selected.length > 0 ? (
         <div className="card bulkbar" role="group" aria-label="Actions for selected tasks">
@@ -235,14 +260,16 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
                 ) : null}
                 <th scope="col">Task</th>
                 {inProject ? null : <th scope="col">Project</th>}
-                <th scope="col">Recording type</th>
+                {showsPeople ? <th scope="col">Participants</th> : null}
+                {showsMode ? <th scope="col">Recording type</th> : null}
                 <th scope="col">Status</th>
+                {showsPeople ? <th scope="col">Moderator</th> : null}
                 <th scope="col">Priority</th>
                 <th scope="col">Due</th>
               </tr>
             </thead>
             <tbody>
-              {tasks.state.data.items.map((t) => (
+              {rows.map((t) => (
                 <tr key={t.id}>
                   {canSelect ? (
                     <td>
@@ -260,15 +287,23 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
                     </Link>
                   </td>
                   {inProject ? null : <td>{codes[t.project_id] ?? "-"}</td>}
-                  <td>
-                    <span className="cell-icon">
-                      <Icon name={t.recording_mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
-                      {labelFor(MODE_LABELS, t.recording_mode)}
-                    </span>
-                  </td>
+                  {showsPeople ? <td className="tasks-table__pair">{pairOf(t)}</td> : null}
+                  {showsMode ? (
+                    <td>
+                      <span className="cell-icon">
+                        <Icon name={t.recording_mode === "TELEPHONY" ? "phone" : "mic"} size={15} />
+                        {labelFor(MODE_LABELS, t.recording_mode)}
+                      </span>
+                    </td>
+                  ) : null}
                   <td>
                     <StatusBadge status={t.status} label={labelFor(TASK_STATUS_LABELS, t.status)} />
                   </td>
+                  {showsPeople ? (
+                    <td className="tasks-table__who">
+                      {t.moderator_name ?? <span className="muted">Not assigned</span>}
+                    </td>
+                  ) : null}
                   <td>
                     <span className={`priority priority--${t.priority.toLowerCase()}`}>
                       {labelFor(PRIORITY_LABELS, t.priority)}

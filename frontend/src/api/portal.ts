@@ -16,10 +16,13 @@ export interface PortalView {
   phone_hint: string | null;
   project_name: string;
   language_code: string;
+  /** The form they agreed to once they agreed (D-068); otherwise the project's current one. */
   consent_policy_version: string;
   consent_text: string;
-  /** The answer as it counts now; "I agree" is final (D-129). WITHDRAWN only from before. */
-  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | null;
+  /** Their consent as it counts now; "I agree" is final (D-129). WITHDRAWN only from before.
+   * UPLOADED: staff uploaded their signed form, in a project that takes them (D-144). */
+  consent_status: "GIVEN" | "REFUSED" | "WITHDRAWN" | "UPLOADED" | null;
+  /** When it was given: the answer, or the day the signed form came in. */
   consent_at: string | null;
   sessions: PortalSession[];
   accepted_minutes: number;

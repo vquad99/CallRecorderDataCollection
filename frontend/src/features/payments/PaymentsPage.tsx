@@ -1,7 +1,8 @@
 // Payments (D-137): what moderators and participants earned on approved tasks, at each project's
 // rate per approved minute, with the rates themselves. For the Super Admin and Project Admins.
 // One row per person and project (each project has its own rates); the days are approval days in
-// India time. A project with no rate yet shows its minutes and "No rate set".
+// India time. A project with no rate yet shows its minutes and "No rate set". A long list is shown
+// a page at a time; its totals and the CSV always cover every row.
 import { useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
@@ -12,17 +13,20 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
-import { rupees, when } from "../../lib/format";
+import { rupees, typedDay, when } from "../../lib/format";
 
 const VIEWS: { id: pay.Payee; label: string }[] = [
   { id: "moderators", label: "Moderators" },
   { id: "participants", label: "Participants" },
 ];
 const NO_RATE = "No rate set";
+/** Rows drawn at once: thousands of participants stay quick to show and to scroll. */
+const PAGE_SIZE = 50;
 
 const rate = (value: string | null) => (value === null ? NO_RATE : `${rupees(value)} / min`);
 const amount = (value: string | null) => (value === null ? NO_RATE : rupees(value));
@@ -51,7 +55,13 @@ function Totals({ totals, columns }: { totals: pay.PayTotals; columns: number })
   );
 }
 
-function ModeratorTable({ data }: { data: pay.Payments<pay.ModeratorPay> }) {
+/** One page of a tab's rows, and the totals of them all. */
+interface Shown<Row> {
+  rows: Row[];
+  totals: pay.PayTotals;
+}
+
+function ModeratorTable({ rows, totals }: Shown<pay.ModeratorPay>) {
   return (
     <DataTable label="Moderator payments">
       <thead>
@@ -73,7 +83,7 @@ function ModeratorTable({ data }: { data: pay.Payments<pay.ModeratorPay> }) {
         </tr>
       </thead>
       <tbody>
-        {data.rows.map((r) => (
+        {rows.map((r) => (
           <tr key={`${r.project_id}-${r.user_id}`}>
             <td>{r.project_code}</td>
             <td>{r.name}</td>
@@ -84,12 +94,12 @@ function ModeratorTable({ data }: { data: pay.Payments<pay.ModeratorPay> }) {
           </tr>
         ))}
       </tbody>
-      <Totals totals={data.totals} columns={2} />
+      <Totals totals={totals} columns={2} />
     </DataTable>
   );
 }
 
-function ParticipantTable({ data }: { data: pay.Payments<pay.ParticipantPay> }) {
+function ParticipantTable({ rows, totals }: Shown<pay.ParticipantPay>) {
   return (
     <DataTable label="Participant payments">
       <thead>
@@ -112,7 +122,7 @@ function ParticipantTable({ data }: { data: pay.Payments<pay.ParticipantPay> }) 
         </tr>
       </thead>
       <tbody>
-        {data.rows.map((r) => (
+        {rows.map((r) => (
           <tr key={`${r.project_id}-${r.participant_id}`}>
             <td>{r.project_code}</td>
             <td>
@@ -126,12 +136,13 @@ function ParticipantTable({ data }: { data: pay.Payments<pay.ParticipantPay> }) 
           </tr>
         ))}
       </tbody>
-      <Totals totals={data.totals} columns={3} />
+      <Totals totals={totals} columns={3} />
     </DataTable>
   );
 }
 
-/** One tab: a search, the CSV download, and the table `show` draws from what `load` gives. */
+/** One tab: a search, the CSV download, and the table `show` draws for one page of what `load`
+ * gives, with the totals of every row. */
 function Earnings<Row>({
   who,
   filters,
@@ -141,13 +152,19 @@ function Earnings<Row>({
   who: pay.Payee;
   filters: pay.PayFilters;
   load: (filters: pay.PayFilters) => Promise<pay.Payments<Row>>;
-  show: (data: pay.Payments<Row>) => ReactNode;
+  show: (shown: Shown<Row>) => ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
   const asked = { ...filters, search: query || undefined };
-  const { state, reload } = useResource(() => load(asked), [JSON.stringify(asked)]);
+  const key = JSON.stringify(asked);
+  const { state, reload } = useResource(() => load(asked), [key]);
+  // Another choice or search starts again at its first page.
+  const [paging, setPaging] = useState({ key, page: 1 });
   const download = useAction();
+  const rows = state.status === "loaded" ? state.data.rows : [];
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(paging.key === key ? paging.page : 1, pages);
   return (
     <div className="stack stack--tight">
       <div className="filters" role="group" aria-label="Search and download">
@@ -170,8 +187,21 @@ function Earnings<Row>({
       {state.status === "loading" ? <LoadingState label="Loading payments" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
-        state.data.rows.length ? (
-          show(state.data)
+        rows.length ? (
+          <>
+            {show({
+              rows: rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+              totals: state.data.totals,
+            })}
+            {pages > 1 ? (
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={rows.length}
+                onPage={(p) => setPaging({ key, page: p })}
+              />
+            ) : null}
+          </>
         ) : (
           <p className="muted">No approved work in this choice.</p>
         )
@@ -324,12 +354,15 @@ export function PaymentsPage() {
   const [to, setTo] = useState("");
   // Amounts change with the rates: the tab is loaded again after a rate is saved.
   const [version, setVersion] = useState(0);
-  const backwards = from !== "" && to !== "" && from > to;
+  // The days as asked: a year still being typed (0002, 0020, 0202) is no day yet.
+  const fromDay = typedDay(from);
+  const toDay = typedDay(to);
+  const backwards = fromDay !== "" && toDay !== "" && fromDay > toDay;
   const projects = rates.state.status === "loaded" ? rates.state.data : [];
   const filters: pay.PayFilters = {
     project_id: projectId || undefined,
-    date_from: from || undefined,
-    date_to: to || undefined,
+    date_from: fromDay || undefined,
+    date_to: toDay || undefined,
   };
   return (
     <section aria-labelledby="payments-title" className="stack">
@@ -404,7 +437,7 @@ export function PaymentsPage() {
             who="moderators"
             filters={filters}
             load={pay.moderatorPay}
-            show={(data) => <ModeratorTable data={data} />}
+            show={(shown) => <ModeratorTable {...shown} />}
           />
         ) : (
           <Earnings
@@ -412,7 +445,7 @@ export function PaymentsPage() {
             who="participants"
             filters={filters}
             load={pay.participantPay}
-            show={(data) => <ParticipantTable data={data} />}
+            show={(shown) => <ParticipantTable {...shown} />}
           />
         )}
       </div>

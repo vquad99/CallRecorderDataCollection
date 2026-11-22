@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.csvio import write_table
-from app.core.days import day_bounds
+from app.core.days import day_bounds, local_now
 from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.modules.audit import service as audit
@@ -318,9 +318,10 @@ def table(report: Report, who: Who) -> str:
     return write_table(_COLUMNS[who], lines, bom=True)
 
 
-def file_name(db: Session, who: Who, period: Period) -> str:
+def file_name(db: Session, who: Who, period: Period, *, tz_name: str) -> str:
+    """payments_moderators_PRJ0001_20261122.csv: dated in `tz_name`, the report time zone."""
     project = db.get(Project, period.project_id) if period.project_id else None
-    day = datetime.now(UTC).strftime("%Y%m%d")
+    day = local_now(tz_name).strftime("%Y%m%d")
     return f"payments_{who}_{project.code if project else 'all'}_{day}.csv"
 
 

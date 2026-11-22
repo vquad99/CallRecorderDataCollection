@@ -1,11 +1,15 @@
 // A project's rules (D-145): what it asks of its speakers, how consent is given, who gives the
 // final approval, what QC checks (D-146), what the moderator fills and reads (device details
 // and reminders, D-147), the audio, progress and target settings (D-148), and how exports are laid
-// out and named (D-149). Every rule a client sets is a project setting; the first client's numbers
-// are only what a new project starts with. One section per kind of rule (SECTIONS), each on its own
-// page under Rules in the project's menu with its own "Save rules" (D-150), saved through the
-// project's PATCH with everything else as it is: a later kind of rule is one more section with its
-// fields in the draft. Everyone who sees the project may read them; project admins change them.
+// out and named (D-149). Every rule a client sets is a project setting; the defaults (the first
+// client's numbers) are only what a new project starts with. One section per kind of rule
+// (SECTIONS), each on its own page under Rules in the project's menu with its own "Save rules"
+// (D-150). A section saves only its own fields: the project is read again first and everything
+// else goes back as it is now, so a section saved meanwhile in another tab or by another admin is
+// kept; when this section itself was changed meanwhile, nothing is saved and the page says so.
+// Leaving a section with changes not saved yet asks first. A later kind of rule is one more
+// section with its fields in the draft. Everyone who sees the project may read them; project
+// admins change them.
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
 
@@ -16,6 +20,7 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import {
   AGE_LIMITS,
   INDIAN_STATES,
@@ -211,8 +216,10 @@ function targetErrors(draft: RulesDraft): TargetErrors {
   const errors: TargetErrors = {};
   if (pauseLimitOf(draft.pause_limit_seconds) === null)
     errors.pause = `Type a whole number of seconds from ${PAUSE_LIMITS.min} to ${PAUSE_LIMITS.max}.`;
-  if (t.hours.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(t.hours.trim()))
-    errors.hours = "Type hours as a number with at most two decimals, or leave it empty.";
+  const hours = t.hours.trim();
+  // A target of 0 hours means nothing: no target is an empty box (PROJ-12).
+  if (hours !== "" && !(/^\d+(\.\d{1,2})?$/.test(hours) && Number(hours) > 0))
+    errors.hours = "Type hours above 0 with at most two decimals, or leave it empty.";
   for (const key of ["speakers", "conversations"] as const) {
     const n = numberOf(t[key]);
     if (n !== null && !(Number.isInteger(n) && n >= 1))
@@ -365,9 +372,17 @@ const CONSENT_MODES: readonly { value: api.ConsentMode; label: string }[] = [
 
 function ConsentRules({ draft, change }: SectionProps) {
   const hintId = useId();
+  const warningId = useId();
+  // From signed forms back to online (D-144): the forms stay on file but stop counting, which
+  // blocks tasks and recording for those people at once. Said before it is saved (PROJ-02).
+  const { project } = useProject();
+  const formsStopCounting = project.consent_mode === "UPLOAD" && draft.consent_mode === "ONLINE";
   return (
     <>
-      <fieldset className="field" aria-describedby={hintId}>
+      <fieldset
+        className="field"
+        aria-describedby={formsStopCounting ? `${hintId} ${warningId}` : hintId}
+      >
         <legend className="field__label">How participants give consent</legend>
         {CONSENT_MODES.map((m) => (
           <label key={m.value} className="checkbox">
@@ -386,6 +401,13 @@ function ConsentRules({ draft, change }: SectionProps) {
             ? "No consent form is emailed. Staff upload each person's signed consent form when they add them, and a task needs it. A person who already agreed online still counts."
             : "Everyone who joins the project is emailed the consent form (its text is on the Overview page) and agrees on their personal page."}
         </p>
+        {formsStopCounting ? (
+          <p id={warningId} className="notice rules__warning">
+            Signed forms uploaded so far stop counting while the project is Online: those people
+            cannot be put on tasks or recorded until they agree on their personal page. Switch back
+            to Upload and the forms count again.
+          </p>
+        ) : null}
       </fieldset>
     </>
   );
@@ -415,13 +437,13 @@ function checklistErrors(draft: RulesDraft): Record<number, string> {
 }
 
 const SCOPES: readonly { value: api.ChecklistItem["scope"]; label: string }[] = [
-  { value: "conversation", label: "The conversation (once)" },
-  { value: "speaker", label: "Each speaker (both)" },
+  { value: "conversation", label: "Conversation" },
+  { value: "speaker", label: "Each speaker" },
 ];
 const FAILS: readonly { value: string; label: string }[] = [
   { value: "no", label: "No" },
   { value: "yes", label: "Yes" },
-  { value: "", label: "Never (observation)" },
+  { value: "", label: "Never" },
 ];
 
 /** One question of the checklist as one row of the matrix (D-150): its key and words, what it
@@ -555,8 +577,9 @@ function QcChecklistRules({ draft, change }: SectionProps) {
       <p className="field__hint rules__note">
         The QC Executive answers Yes or No to each question for every recording: questions about the
         conversation once, questions about the speakers for each person. A recording passes only
-        when every required question is answered and no answer fails it. Answers already given keep
-        the questions as they read then.
+        when every required question is answered and no answer fails it; a question that never fails
+        is an observation, its answer only noted. Answers already given keep the questions as they
+        read then.
       </p>
       <p className="muted">
         {items.length === 1 ? "1 question" : `${items.length} questions`} (at most {MAX_ITEMS}).
@@ -619,7 +642,7 @@ function QcChecklistRules({ draft, change }: SectionProps) {
             icon="history"
             onClick={() => set(CLIENT_QC_CHECKLIST.map((i) => ({ ...i })))}
           >
-            Reset to the client&apos;s list
+            Reset to the default list
           </Button>
         </div>
         {full ? <p className="muted">The list is full ({MAX_ITEMS} questions).</p> : null}
@@ -751,7 +774,7 @@ function ReminderRules({ draft, change }: SectionProps) {
           icon="history"
           onClick={() => change({ recording_reminders: textsOf(CLIENT_REMINDERS) })}
         >
-          Reset to the client&apos;s text
+          Reset to the default text
         </Button>
       </div>
     </>
@@ -899,8 +922,8 @@ function TargetRules({ draft, change }: SectionProps) {
       <p className="field__hint rules__note">
         The Progress page shows what was collected against these, and what is still needed. Age,
         gender and districts are shares of the speakers with an approved conversation
-        {bothTypes ? "; face-to-face and phone are shares of the approved conversations" : ""}. The
-        first client&apos;s targets are where a project starts.
+        {bothTypes ? "; face-to-face and phone are shares of the approved conversations" : ""}. A
+        new project starts with the default targets.
       </p>
       <div className="form-grid">
         <TextField
@@ -977,7 +1000,7 @@ function TargetRules({ draft, change }: SectionProps) {
             icon="history"
             onClick={() => set({ bands: bandTexts(CLIENT_AGE_BANDS) })}
           >
-            Reset to the client&apos;s age bands
+            Reset to the default age bands
           </Button>
         </div>
       </fieldset>
@@ -1004,7 +1027,7 @@ function TargetRules({ draft, change }: SectionProps) {
         <p className="field__hint">
           Each listed district is expected to give an equal share of the speakers
           {t.districts.length > 0
-            ? `: ${share} % each for ${t.districts.length}.`
+            ? `: ${share}% each for ${t.districts.length}.`
             : ". None listed: the Progress page shows the speakers' own districts."}
         </p>
         {t.districts.length > 0 ? (
@@ -1050,7 +1073,7 @@ function TargetRules({ draft, change }: SectionProps) {
             icon="history"
             onClick={() => set({ districts: CLIENT_DISTRICTS.map((d) => ({ ...d })) })}
           >
-            Use the client&apos;s Konkani districts
+            Use the Konkani-region districts
           </Button>
         </div>
       </fieldset>
@@ -1059,7 +1082,7 @@ function TargetRules({ draft, change }: SectionProps) {
 }
 
 const LAYOUTS: readonly { value: api.ExportLayout; label: string }[] = [
-  { value: "CLIENT", label: "The client's delivery format" },
+  { value: "CLIENT", label: "Speaker-pair format" },
   { value: "PLATFORM", label: "The platform's own layout" },
 ];
 const SPEAKER_ID_STYLES: readonly { value: api.SpeakerIdStyle; label: string }[] = [
@@ -1067,7 +1090,7 @@ const SPEAKER_ID_STYLES: readonly { value: api.SpeakerIdStyle; label: string }[]
   { value: "CODE", label: "Participant code (P000123)" },
 ];
 const CONVERSATION_ID_STYLES: readonly { value: api.ConversationIdStyle; label: string }[] = [
-  { value: "CON_NUMBER", label: "CON and number (T000045 is CON045)" },
+  { value: "CON_NUMBER", label: "CON + number (CON045)" },
   { value: "CODE", label: "Task code (T000045)" },
 ];
 
@@ -1144,7 +1167,7 @@ function ExportRules({ draft, change }: SectionProps) {
             })
           }
         >
-          Reset to the client&apos;s format
+          Reset to the default format
         </Button>
       </div>
     </>
@@ -1153,28 +1176,68 @@ function ExportRules({ draft, change }: SectionProps) {
 
 const has = (errors: object) => Object.keys(errors).length > 0;
 
-/** Each section's fields, and whether what is typed there holds its save, by RULE_SECTIONS key: a
- * later kind of rule is one more entry. */
-const SECTIONS: Record<
-  string,
-  { Section: (props: SectionProps) => ReactNode; wrong: (draft: RulesDraft) => boolean }
-> = {
-  speakers: { Section: SpeakerRules, wrong: (d) => has(ageErrors(d)) },
-  consent: { Section: ConsentRules, wrong: () => false },
-  approval: { Section: ApprovalRules, wrong: () => false },
-  "qc-checklist": { Section: QcChecklistRules, wrong: (d) => has(checklistErrors(d)) },
-  devices: { Section: DeviceRules, wrong: () => false },
-  reminders: { Section: ReminderRules, wrong: (d) => has(reminderErrors(d)) },
-  "audio-progress": { Section: AudioProgressRules, wrong: (d) => !!targetErrors(d).pause },
+/** A section of the rules: its fields on the page, the project fields it owns (the only ones its
+ * Save sends as typed; FEA-02) and whether what is typed there holds its save. */
+interface SectionEntry {
+  Section: (props: SectionProps) => ReactNode;
+  fields: readonly (keyof api.ProjectRules)[];
+  wrong: (draft: RulesDraft) => boolean;
+}
+
+/** Each section by RULE_SECTIONS key: a later kind of rule is one more entry. */
+const SECTIONS: Record<string, SectionEntry> = {
+  speakers: {
+    Section: SpeakerRules,
+    fields: [
+      "speaker_min_age",
+      "speaker_max_age",
+      "required_speaker_details",
+      "max_conversations_per_speaker",
+      "unique_pairs",
+    ],
+    wrong: (d) => has(ageErrors(d)),
+  },
+  consent: { Section: ConsentRules, fields: ["consent_mode"], wrong: () => false },
+  approval: { Section: ApprovalRules, fields: ["qc_final_approval"], wrong: () => false },
+  "qc-checklist": {
+    Section: QcChecklistRules,
+    fields: ["qc_checklist"],
+    wrong: (d) => has(checklistErrors(d)),
+  },
+  devices: { Section: DeviceRules, fields: ["device_fields"], wrong: () => false },
+  reminders: {
+    Section: ReminderRules,
+    fields: ["recording_reminders"],
+    wrong: (d) => has(reminderErrors(d)),
+  },
+  "audio-progress": {
+    Section: AudioProgressRules,
+    fields: ["pause_limit_seconds", "long_pauses_need_review", "progress_counts"],
+    wrong: (d) => !!targetErrors(d).pause,
+  },
   targets: {
     Section: TargetRules,
+    fields: [
+      "target_hours",
+      "target_speakers",
+      "target_conversations",
+      "target_age_bands",
+      "target_gender",
+      "target_modes",
+      "target_districts",
+    ],
     wrong: (d) => Object.keys(targetErrors(d)).some((k) => k !== "pause"),
   },
-  export: { Section: ExportRules, wrong: (d) => audioNameProblem(d.audio_name_pattern) !== null },
+  export: {
+    Section: ExportRules,
+    fields: ["export_layout", "speaker_id_style", "conversation_id_style", "audio_name_pattern"],
+    wrong: (d) => audioNameProblem(d.audio_name_pattern) !== null,
+  },
 };
 
 /** One section of the rules: its card, with its title and Save at the top (kept in view while a
- * long section scrolls), and its fields. The rest of the project goes back as it is. */
+ * long section scrolls), and its fields. Its Save sends only this section's fields as typed; the
+ * rest of the project goes back as it is now (api.saveProjectPart). */
 function RulesSection({ sectionKey }: { sectionKey: string }) {
   const { project, replace } = useProject();
   const { can } = useAuth();
@@ -1183,6 +1246,12 @@ function RulesSection({ sectionKey }: { sectionKey: string }) {
   const canEdit = canManage && project.status !== "ARCHIVED";
   const [draft, setDraft] = useState(() => draftOf(api.projectRules(project)));
   const { busy, error, message, run } = useAction();
+  // What is typed here and not saved yet asks before the page is left (FEA-04).
+  const dirty =
+    canEdit &&
+    busy === null &&
+    !api.sameValue(rulesOf(draft), rulesOf(draftOf(api.projectRules(project))));
+  const leaveGuard = useUnsavedChanges(dirty);
   const meta = RULE_SECTIONS.find((s) => s.key === sectionKey);
   const entry = SECTIONS[sectionKey];
   if (!meta || !entry) return null;
@@ -1197,12 +1266,7 @@ function RulesSection({ sectionKey }: { sectionKey: string }) {
         e.preventDefault();
         if (wrong) return;
         void run(async () => {
-          // The Overview's settings and the other sections go back as they are: the PATCH takes
-          // the whole project.
-          const saved = await api.updateProject(project.id, {
-            ...api.projectSettings(project),
-            ...rulesOf(draft),
-          });
+          const saved = await api.saveProjectPart(project, entry.fields, rulesOf(draft));
           replace(saved);
           setDraft(draftOf(api.projectRules(saved)));
           return "Rules saved.";
@@ -1231,6 +1295,7 @@ function RulesSection({ sectionKey }: { sectionKey: string }) {
           <Section draft={draft} change={change} />
         </fieldset>
       </section>
+      {leaveGuard}
     </form>
   );
 }

@@ -34,6 +34,9 @@ services:
   worker:
     environment: *local-db
     depends_on: *needs-db
+  exports-worker:
+    environment: *local-db
+    depends_on: *needs-db
   pgtools:
     environment:
       PGHOST: db

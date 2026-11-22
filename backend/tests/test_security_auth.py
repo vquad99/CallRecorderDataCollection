@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import time
 import types
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.modules.auth import security
@@ -210,6 +212,104 @@ def test_guessing_authenticator_codes_is_throttled(
         assert api.login("guess@example.org", totp_code="000000").status_code == 401
     right = security._totp_at(secret, int(now // security.TOTP_STEP_SECONDS))
     assert api.login("guess@example.org", totp_code=right).status_code == 429
+
+
+def _with_mfa(db: Any, user: Any) -> str:
+    """Turns two-step sign-in on for `user` straight in the database; returns the secret."""
+    secret = security.new_totp_secret()
+    user.mfa_enabled = True
+    user.mfa_secret_enc = security.FieldCipher(TEST_FERNET_KEY).encrypt(secret)
+    db.commit()
+    return secret
+
+
+def test_wrong_codes_are_limited_per_account_from_any_address_and_the_owner_is_told(
+    db: Any, db_app: Any, outbox: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Someone with the password tries codes from many addresses: ten codes are checked in a
+    window, then the account is closed to everyone, even with the right code, and its owner gets
+    one email (security review 2026-11-22)."""
+    user = make_user(db, "owner@example.org", ["SUPER_ADMIN"])
+    now = time.time()
+    _frozen_clock(monkeypatch, now)
+    secret = _with_mfa(db, user)
+    step = int(now // security.TOTP_STEP_SECONDS)
+    valid = {security._totp_at(secret, step + d) for d in (-1, 0, 1)}
+    wrong = next(c for c in ("000000", "111111", "222222", "333333") if c not in valid)
+    clients: list[TestClient] = []
+
+    def from_address(ip: str) -> Api:
+        clients.append(TestClient(db_app, client=(ip, 50000)))
+        return Api(clients[-1])
+
+    answers: Counter[str] = Counter()
+    try:
+        for n in range(12):
+            api = from_address(f"203.0.113.{n + 1}")
+            for _ in range(5):
+                answers[
+                    api.login("owner@example.org", totp_code=wrong).json()["error"]["code"]
+                ] += 1
+        assert answers == {"MFA_INVALID": 10, "RATE_LIMITED": 50}
+        right = security._totp_at(secret, step)
+        assert (
+            from_address("198.51.100.9").login("owner@example.org", totp_code=right).status_code
+            == 429
+        )
+    finally:
+        for client in clients:
+            client.close()
+    [warning] = read_outbox(outbox)
+    assert "To: owner@example.org" in warning
+    assert "password was just entered correctly but the authenticator code was wrong" in warning
+    assert "/forgot-password" in warning
+
+
+def test_a_wrong_code_needs_the_right_password_to_count(
+    db: Any, new_api: Any, outbox: Path
+) -> None:
+    """A stranger who knows only the email cannot fill the account's code count, nor make it
+    send emails: wrong passwords never reach the code (D-088 still holds)."""
+    user = make_user(db, "owner@example.org", ["SUPER_ADMIN"])
+    _with_mfa(db, user)
+    for n in range(12):
+        new_api().login("owner@example.org", f"wrong-password-{n}", totp_code="000000")
+    # Typed as the email itself, the counter's own name is just an unknown account.
+    for _ in range(12):
+        new_api().login("MFA:owner@example.org", "whatever-password-1")
+    counted = db.execute(
+        text("SELECT count(*) FROM login_attempts WHERE email = 'MFA:owner@example.org'")
+    ).scalar()
+    assert counted == 0
+    assert read_outbox(outbox) == []
+
+
+@pytest.mark.parametrize("confirm_as", ["grouped", "padded"])
+def test_a_code_typed_with_spaces_is_accepted_and_not_counted_as_a_failure(
+    db: Any, new_api: Any, monkeypatch: pytest.MonkeyPatch, confirm_as: str
+) -> None:
+    """Authenticator apps show a code as "123 456" (security review 2026-11-22)."""
+
+    def typed(code: str, form: str) -> str:
+        return f"{code[:3]} {code[3:]}" if form == "grouped" else f" {code} "
+
+    make_user(db, "spaced@example.org", ["MODERATOR"])
+    now = time.time()
+    step = int(now // security.TOTP_STEP_SECONDS)
+    _frozen_clock(monkeypatch, now)
+    api: Api = new_api()
+    api.login("spaced@example.org")
+    secret = api.post("/api/v1/auth/mfa/enroll", json={"password": TEST_PASSWORD}).json()["secret"]
+    confirmed = api.post(
+        "/api/v1/auth/mfa/confirm",
+        json={"code": typed(security._totp_at(secret, step - 1), confirm_as)},
+    )
+    assert confirmed.status_code == 204, confirmed.text
+    sign_in_as = "padded" if confirm_as == "grouped" else "grouped"
+    code = typed(security._totp_at(secret, step), sign_in_as)
+    assert new_api().login("spaced@example.org", totp_code=code).status_code == 200
+    failed = db.execute(text("SELECT count(*) FROM login_attempts WHERE NOT succeeded")).scalar()
+    assert failed == 0
 
 
 def test_guessing_the_password_through_a_signed_in_session_is_throttled(

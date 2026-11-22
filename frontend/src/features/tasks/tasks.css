@@ -1,8 +1,8 @@
 /* Task pages: the task list's priority marks, and on one task (D-152) a compact stepper, the work
    and the task's records on the left, a summary, the participants matrix and the history on the
    right; the next step with its buttons (D-091, D-092), the QC checklist as matrices (D-146) with
-   its decision bar, and the audio player. Plain sections, no boxes (D-154): only tables keep a
-   frame. The matrices' own pieces are in moderator.css. */
+   its decision bar, and the audio player. Each section a framed panel with a title bar (D-156).
+   The matrices' own pieces are in moderator.css. */
 
 .priority {
   display: inline-flex;
@@ -114,7 +114,8 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  max-height: calc(100vh - var(--topbar-h) - 24px);
+  /* Short enough that at the page's end the column is not pushed up under the top bar. */
+  max-height: calc(100vh - var(--topbar-h) - 60px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -146,11 +147,10 @@
 }
 
 /* The person's next step: a plain section like the others; its button is the page's main one. */
-.task-page .card > h2,
-.task-page .card > h3 {
+.task-page .card > :is(h2, h3):not(:first-child) {
   margin-bottom: 10px;
 }
-.task-page .card .card__head {
+.task-page .card .card__head:not(:first-child) {
   margin-bottom: 4px;
 }
 .assign-card .field {
@@ -195,6 +195,19 @@
   color: var(--text);
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+/* The project's code in the summary (UXW-04): a link to the project for people who may open it. */
+.fact-code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+a.fact-code {
+  color: var(--primary);
+  text-decoration: none;
+}
+a.fact-code:hover {
+  text-decoration: underline;
 }
 .side-more {
   margin-top: 8px;
@@ -293,6 +306,10 @@
   overflow-wrap: break-word;
   text-align: left;
 }
+/* A form QC sent back (D-146, UXW-03): marked until a new one is uploaded. */
+.mx-file.is-fault .mx-file__open {
+  color: var(--danger);
+}
 .mx-file .icon-button {
   flex: none;
   width: 28px;
@@ -366,6 +383,13 @@
 .task-side .comment-form .field {
   flex: 1 1 160px;
   margin: 0;
+}
+/* The comment box above the entries (UXW-11). */
+.task-side .comment-form {
+  margin-bottom: 12px;
+}
+.task-side .comment-form ~ .notice {
+  margin-bottom: 10px;
 }
 
 /* ---------- The next step, in one card with one main button ---------- */
@@ -475,11 +499,13 @@
   background: var(--surface);
   list-style: none;
 }
+/* One wrapping row (UXW-01): who, the chip at the right, the action on the next line when the
+   row is too narrow; nothing ever paints over the code or the name. */
 .consent__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
@@ -488,18 +514,20 @@
 }
 .consent__who {
   display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   min-width: 0;
 }
 .consent__side {
   color: var(--text-2);
   font-size: 0.8125rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 @media (max-width: 640px) {
-  .record-card,
-  .consent__row {
+  .record-card {
     grid-template-columns: minmax(0, 1fr);
   }
   .record-card__steps {
@@ -716,6 +744,41 @@
   color: var(--ok);
 }
 
+/* ---------- New task (FEW-04): find a participant, then A and B side by side ---------- */
+.task-form__find {
+  max-width: 640px;
+}
+.task-form__find .field {
+  margin-bottom: 4px;
+}
+.task-form__found {
+  min-height: 1.125rem;
+  margin: 0 0 var(--space-3);
+}
+/* Two fields side by side, as wide together as one field above them. */
+.form-grid.task-form__pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  max-width: 640px;
+}
+.shell__content form .task-form__pair > .field,
+.shell__content form .task-form__pair > .field:has(> input[type="date"]) {
+  max-width: none;
+}
+.task-form__rules {
+  max-width: 640px;
+  margin: -4px 0 var(--space-3);
+}
+/* The CSV's first line wraps on a phone instead of running off the screen. */
+.bulk-tasks__head {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .form-grid.task-form__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- The task list: compact rows ---------- */
 .table.tasks-table th,
 .table.tasks-table td {
@@ -724,6 +787,16 @@
 }
 .tasks-table .code {
   font-family: var(--font-mono);
+}
+/* Who holds the task and its two people (UXW-05): one line each. */
+.tasks-table .tasks-table__who {
+  white-space: nowrap;
+}
+.tasks-table .tasks-table__pair {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: nowrap;
 }
 
 /* Who acts next, for someone with nothing to do on the task now: one line. */

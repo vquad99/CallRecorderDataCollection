@@ -3,6 +3,9 @@
 - "progress": one row per task (status, people, recording length, checks, decisions, dates);
 - "participants": one row per participant with recorded, approved and payable minutes (D-095).
 
+Times in a report are in the report time zone (REPORT_TIMEZONE, India time by default), as on
+every page and in the calls CSV, written "YYYY-MM-DD HH:MM".
+
 Recordings themselves are exported as a bundle made in the background: see bundle.py and jobs.py;
 one task's bundle is made at once from its page (D-136).
 Access: exports.create in the project, the project visible to the caller. Every export is audited.
@@ -14,15 +17,17 @@ import hashlib
 import tempfile
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import IO
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.days import local_now
 from app.core.errors import AppError
 from app.core.permissions import Perm, Role
 from app.core.slots import turn
@@ -58,8 +63,9 @@ BUILDS_BUSY = "Another download is being prepared. Try again in a minute."
 _builds = threading.BoundedSemaphore(BUILD_SLOTS)
 
 
-def _iso(value: datetime | None) -> str:
-    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M") if value else ""
+def _local(value: datetime | None, tz: ZoneInfo) -> str:
+    """A time as "YYYY-MM-DD HH:MM" in the report time zone; "" when there is none."""
+    return value.astimezone(tz).strftime("%Y-%m-%d %H:%M") if value else ""
 
 
 def report_project(
@@ -92,23 +98,29 @@ def record(
     db.commit()
 
 
-def file_name(project: Project, content: str, table_format: str) -> str:
-    day = datetime.now(UTC).strftime("%Y%m%d")
+def file_name(project: Project, content: str, table_format: str, *, tz_name: str) -> str:
+    """progress_PRJ0001_20261122.csv: dated in `tz_name`, the report time zone."""
+    day = local_now(tz_name).strftime("%Y%m%d")
     return f"{content}_{project.code}_{day}.{table_format}"
 
 
-def report(db: Session, project: Project, content: str, table_format: str) -> str:
+def report(db: Session, project: Project, content: str, table_format: str, *, tz_name: str) -> str:
+    """The report as text; its times in `tz_name` (the report time zone)."""
     if content == "progress":
-        return progress_table(db, project, table_format)
+        return progress_table(db, project, table_format, tz_name=tz_name)
     return participants_table(db, project, table_format)
 
 
 # ---------------------------------------------------------------- progress report
 
 
-def progress_table(db: Session, project: Project, table_format: str = "csv") -> str:
+def progress_table(
+    db: Session, project: Project, table_format: str = "csv", *, tz_name: str
+) -> str:
     """One row per task. Every column comes from one query over the whole project, so the
-    report costs the same dozen queries for ten tasks or ten thousand."""
+    report costs the same dozen queries for ten tasks or ten thousand. Its times (created_at,
+    approved_at) are in `tz_name`, the report time zone."""
+    tz = ZoneInfo(tz_name)
     columns = [
         "task_code",
         "status",
@@ -229,7 +241,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
                 task.recording_mode,
                 task.priority,
                 task.due_at.date().isoformat() if task.due_at else "",
-                _iso(task.created_at),
+                _local(task.created_at, tz),
                 a_code,
                 a_language,
                 b_code,
@@ -241,7 +253,7 @@ def progress_table(db: Session, project: Project, table_format: str = "csv") -> 
                 round(effective / 60000, 2) if effective is not None else "",
                 automatic.get(newest, "") if newest else "",
                 decision.get(newest, "") if newest else "",
-                _iso(approved_at.get(task.id)) if task.status == "APPROVED" else "",
+                _local(approved_at.get(task.id), tz) if task.status == "APPROVED" else "",
                 call_counts.get(task.id, 0) if task.recording_mode == "TELEPHONY" else "",
                 last_call.get(task.id, ""),
             ]

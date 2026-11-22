@@ -316,6 +316,36 @@ def test_no_answer_in_time_says_so() -> None:
     assert DIAL_PASSWORD not in str(caught.value)
 
 
+def test_an_answer_that_is_not_http_is_a_provider_error() -> None:
+    """A wrong port, or a TLS-only port asked over http, answers bytes that are not HTTP: that is
+    TxContact not answering properly, said in words, never an error that escapes (a 500 and a
+    call left dialling)."""
+
+    def odd(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        raise http.client.BadStatusLine("SOMETHING ODD")
+
+    provider = TxContact(
+        build_settings(
+            txcontact_dialer_username="u",
+            txcontact_dialer_password=DIAL_PASSWORD,
+            txcontact_record_user="r",
+            txcontact_record_password=RECORD_PASSWORD,
+        ),
+        opener=odd,
+    )
+    for ask, what in (
+        (lambda: provider.dial(PHONE, "70001"), "dial"),
+        (lambda: provider.attach(PHONE, "70001"), "attach"),
+        (lambda: provider.sessions("70001", date(2026, 11, 13)), "recording search"),
+        (lambda: provider.traffic(date(2026, 11, 1), date(2026, 11, 13)), "call traffic"),
+    ):
+        with pytest.raises(ProviderError) as caught:
+            ask()
+        assert str(caught.value) == f"TxContact's answer could not be read ({what})"
+        for secret in (DIAL_PASSWORD, RECORD_PASSWORD, PHONE, PHONE[3:]):
+            assert secret not in str(caught.value)
+
+
 def test_one_search_answer_serves_every_call_of_a_sweep() -> None:
     server = FakeServer()
     server.answer("/txrecord/api/v1/auth/", 200, {"auth_token": "tok"})

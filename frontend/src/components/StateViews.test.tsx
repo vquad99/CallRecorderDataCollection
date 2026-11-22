@@ -28,6 +28,17 @@ describe("state views", () => {
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
+
+  it("offers another way on beside Try again", () => {
+    render(<ErrorState message="Failed" onRetry={vi.fn()} action={<a href="/">Start</a>} />);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start" })).toBeInTheDocument();
+  });
+
+  it("titles a whole page with h1 when asked", () => {
+    render(<EmptyState level="h1" title="Page not found" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
+  });
 });
 
 function Thrower(): never {
@@ -42,7 +53,9 @@ describe("ErrorBoundary", () => {
         <Thrower />
       </ErrorBoundary>,
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("The page failed to display");
+    expect(screen.getByRole("heading", { name: "This page could not be shown" })).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Reload the page to try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("render failure");
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     expect(consoleError).toHaveBeenCalled();
   });

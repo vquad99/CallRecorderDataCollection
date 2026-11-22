@@ -228,9 +228,27 @@
 .speaker-details .notice {
   margin: 0 0 12px;
 }
+/* The country code and the number on one line, as wide as the fields around them (D-083). */
+.form-grid.phone-fields {
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  max-width: 640px;
+}
+@media (max-width: 520px) {
+  .form-grid.phone-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* What the form's button still waits for, beside it (under it on a phone). */
+.form-waits {
+  flex: 1 1 18rem;
+  align-self: center;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
 
-/* Uploaded documents (D-144, D-152): one table row per kind (Document | File | Uploaded | View and
-   Upload as icons), then the earlier versions as a second table. */
+/* Uploaded documents (D-144, D-152): one table row per kind (Document | File, with when and by whom
+   under its name | View and Upload as icons), then the earlier versions as a second table. */
 .docs {
   gap: 10px;
 }
@@ -256,18 +274,46 @@
   align-items: center;
   gap: 6px;
 }
-.docs__name,
-.table td.docs__name {
-  min-width: 110px;
-  font-weight: 500;
-  overflow-wrap: break-word;
+.table td.docs__file,
+.table td.docs__note {
+  width: 100%;
+  min-width: 140px;
   white-space: normal;
 }
-.table td.docs__when,
 .table td.docs__note {
-  min-width: 120px;
   color: var(--text-2);
-  white-space: normal;
+}
+.docs__name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.docs__when {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+/* On a phone the three columns share the width: the kind's badge may wrap, cells are tighter. */
+@media (max-width: 640px) {
+  .table.docs-table th,
+  .table.docs-table td,
+  .card .table-wrap .table.docs-table th,
+  .card .table-wrap .table.docs-table td {
+    padding: 6px 8px;
+  }
+  .table.docs-table tbody th {
+    width: 40%;
+    min-width: 0;
+  }
+  .table.docs-table tbody th .badge {
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    line-height: 1.4;
+    white-space: normal;
+  }
+  .table td.docs__file,
+  .table td.docs__note {
+    min-width: 0;
+  }
 }
 .docs__actions {
   width: 1%;
@@ -294,9 +340,6 @@
 .button.is-disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-.button:focus-within {
-  box-shadow: var(--focus-ring);
 }
 /* A participant's row: what is still missing, side by side. */
 .row-badges {

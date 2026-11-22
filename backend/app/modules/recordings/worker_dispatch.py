@@ -4,7 +4,13 @@ Recovery (Option H): if a hand-off fails or a process stops mid-way, the recordi
 or PROCESSING. `recover` finds such recordings and processes them again; it runs at start-up and
 every RECOVERY_INTERVAL_SECONDS in each web process, and on demand with
 `python -m app.cli recover-recordings`. Claiming inside `service.process` keeps two processes from
-working on the same recording.
+working on the same recording. The same sweep applies the projects' retention rules, once an hour
+(PROJ-01).
+
+Queues (CALL-04): export bundles go to the queue EXPORTS_QUEUE names (settings.exports_queue). On
+AWS it is a queue of its own (`exports`) served by a one-slot worker, so a long export never holds
+the slots that process recordings and fetch phone calls; by default it is Celery's default queue,
+the one every other job uses.
 """
 
 from __future__ import annotations
@@ -12,14 +18,22 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI
+from sqlalchemy import text
 
 from app.modules.audio_qc import service as audio_qc
 from app.modules.recordings import service
 
 logger = logging.getLogger("app.recordings")
+
+# Retention (PROJ-01): one process deletes at a time (pg_try_advisory_xact_lock); each process
+# looks once an hour, and again at the next sweep while a full batch was deleted.
+RETENTION_LOCK_KEY = 0x0CC9A1E8
+RETENTION_EVERY = timedelta(hours=1)
+RETENTION_BATCH = 500
 
 
 def run_inline(app: FastAPI, recording_id: uuid.UUID) -> None:
@@ -70,9 +84,43 @@ def recover(app: FastAPI) -> int:
     check_pending_audio(app)
     fetch_call_recordings(app)
     sweep_exports(app)
+    apply_retention_when_due(app)
     fill_effective_speech(app)
     check_operations(app)
     return len(stalled)
+
+
+def apply_retention_when_due(app: FastAPI, now: datetime | None = None) -> int | None:
+    """Delete the files of closed tasks that are past their project's retention rule (PROJ-01,
+    STOR-009, service.apply_retention): from the sweep, once an hour in each process (at the next
+    sweep again while a full batch was deleted), one process at a time. RETENTION_SWEEP_ENABLED
+    false turns it off; `python -m app.cli retention` runs it by hand. Returns how many files were
+    deleted, or None when it did not run."""
+    settings = app.state.settings
+    if not settings.retention_sweep_enabled or app.state.storage is None:
+        return None
+    now = now or datetime.now(UTC)
+    due: datetime | None = getattr(app.state, "retention_due_at", None)
+    if due is not None and now < due:
+        return None
+    app.state.retention_due_at = now + RETENTION_EVERY
+    try:
+        with app.state.session_factory() as lock:
+            # Held by this open transaction while the files are deleted, each in its own commit.
+            if not lock.execute(
+                text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": RETENTION_LOCK_KEY}
+            ).scalar():
+                return None
+            with app.state.session_factory() as db:
+                deleted = service.apply_retention(db, app.state.storage, limit=RETENTION_BATCH)
+    except Exception:
+        logger.exception("retention_sweep_failed")
+        return None
+    if deleted >= RETENTION_BATCH:
+        app.state.retention_due_at = now  # more are waiting: the next sweep goes on
+    if deleted:
+        logger.info("retention_applied", extra={"deleted": deleted})
+    return deleted
 
 
 def fill_effective_speech(app: FastAPI) -> int:
@@ -137,12 +185,15 @@ def run_export_inline(app: FastAPI, job_id: uuid.UUID) -> None:
 
 
 def dispatch_export(app: FastAPI, job_id: uuid.UUID, background: BackgroundTasks | None) -> None:
-    """Hand an export to the worker; without one it is made in this process, after the answer
-    has been sent. A hand-off that fails is repeated by the sweep."""
+    """Hand an export to the worker on the exports queue (settings.exports_queue, CALL-04); without
+    Celery it is made in this process, after the answer has been sent. A hand-off that fails is
+    repeated by the sweep."""
     celery: Any = getattr(app.state, "celery", None)
     if celery is not None:
         try:
-            celery.send_task("exports.build", args=[str(job_id)])
+            celery.send_task(
+                "exports.build", args=[str(job_id)], queue=app.state.settings.exports_queue
+            )
         except Exception:
             logger.exception("export_dispatch_failed", extra={"export_id": str(job_id)})
     elif background is not None:

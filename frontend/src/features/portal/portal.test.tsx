@@ -9,6 +9,9 @@ import { PORTAL } from "../../test/world";
 afterEach(() => vi.unstubAllGlobals());
 
 const PORTAL_AT = "2026-11-09T06:00:00Z";
+/** `a` comes before `b` in the page. */
+const before = (a: HTMLElement, b: HTMLElement) =>
+  Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 const anonymous = {
   "GET /api/v1/auth/csrf": () => [204, null] as [number, unknown],
   "GET /api/v1/auth/me": () =>
@@ -75,6 +78,50 @@ describe("participant page", () => {
     expect(calls.filter((c) => c.path === "/api/v1/portal/consent").map((c) => c.body)).toEqual([
       { decision: "GIVEN" },
     ]);
+  });
+
+  it("says a signed form staff uploaded is on file and asks nothing (D-144)", async () => {
+    fakeApi({
+      ...anonymous,
+      "GET /api/v1/portal/me": () => [
+        200,
+        { ...PORTAL, consent_status: "UPLOADED", consent_at: "2026-11-21T05:00:00Z" },
+      ],
+    });
+    renderAt("/portal#secret-link-token-0123456789");
+    expect(
+      await screen.findByText(
+        "The project team has your signed consent form (received on 21 Nov 2026).",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Signed form received")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting for your answer")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByLabelText("I have read and understood this form")).toBeNull();
+  });
+
+  it("puts a form still to answer first, where a phone shows it at once (UXW-07)", async () => {
+    fakeApi({ ...anonymous, "GET /api/v1/portal/me": () => [200, PORTAL] });
+    renderAt("/portal#secret-link-token-0123456789");
+    const consent = await screen.findByRole("heading", { name: "Consent form" });
+    expect(before(consent, screen.getByRole("heading", { name: "Your details" }))).toBe(true);
+    // No picture tiles: the page reads as a document (D-154).
+    expect(document.querySelector(".tile")).toBeNull();
+  });
+
+  it("puts an answered form after the figures", async () => {
+    fakeApi({
+      ...anonymous,
+      "GET /api/v1/portal/me": () => [
+        200,
+        { ...PORTAL, consent_status: "GIVEN", consent_at: "2026-11-10T06:00:00Z" },
+      ],
+    });
+    renderAt("/portal#secret-link-token-0123456789");
+    const agreed = await screen.findByRole("heading", { name: "Consent form" });
+    expect(before(screen.getByRole("heading", { name: "Your details" }), agreed)).toBe(true);
+    expect(before(screen.getByText("Your share for payment"), agreed)).toBe(true);
+    expect(before(agreed, screen.getByRole("heading", { name: "Your sessions" }))).toBe(true);
   });
 
   it("explains a link without its secret and asks nothing of the server", async () => {

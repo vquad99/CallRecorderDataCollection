@@ -1,12 +1,17 @@
-/* Audit log: an entry's before and after, closed until opened, wrapping inside its cell. */
+/* Audit log: an entry's change, closed until opened, one line per field, wrapping inside its cell. */
 .audit-change summary {
   color: var(--primary);
   font-weight: 500;
   cursor: pointer;
 }
-.audit-change > div {
+.audit-change__lines {
   min-width: 240px;
   max-width: 520px;
-  margin-top: 6px;
+  margin: 6px 0 0;
+  padding-left: 18px;
   white-space: normal;
+  overflow-wrap: anywhere;
+}
+.audit-change__lines li + li {
+  margin-top: 2px;
 }

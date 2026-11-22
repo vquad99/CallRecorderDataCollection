@@ -462,9 +462,25 @@ export function ChecklistProgress({ j, saving }: { j: Judgement; saving: ReactNo
 
 const WORD: Record<qc.Answer, string> = { yes: "Yes", no: "No" };
 
-/** A recorded answer: a tick and the word, or a cross, the word and "Fails". */
-function Said({ answer, fails }: { answer: qc.Answer | null | undefined; fails: boolean }) {
+/** A recorded answer: a tick and the word, or a cross, the word and "Fails". An observation (a
+ * question no answer fails, D-146) is the word alone: "Yes" to "Is echo present?" is no tick
+ * (UXW-02). */
+function Said({
+  answer,
+  fails,
+  observation = false,
+}: {
+  answer: qc.Answer | null | undefined;
+  fails: boolean;
+  observation?: boolean;
+}) {
   if (!answer) return <span className="muted">Not answered</span>;
+  if (observation && !fails)
+    return (
+      <span className="mark">
+        <span>{WORD[answer]}</span>
+      </span>
+    );
   return (
     <span className={`mark ${fails ? "mark--no" : "mark--ok"}`}>
       <Icon name={fails ? "failed" : "ok"} size={16} />
@@ -534,7 +550,11 @@ export function RecordedChecklist({ latest }: { latest: qc.RecordedAnswers }) {
                         <td className="mx-n">{i + 1}</td>
                         <th scope="row">{item.question}</th>
                         <td className={`mx-cell${failing ? " is-fail" : ""}`}>
-                          <Said answer={latest.conversation[item.key]} fails={failing} />
+                          <Said
+                            answer={latest.conversation[item.key]}
+                            fails={failing}
+                            observation={item.fails_on === null}
+                          />
                         </td>
                       </tr>
                     );
@@ -571,7 +591,11 @@ export function RecordedChecklist({ latest }: { latest: qc.RecordedAnswers }) {
                         const failing = fails.has(`${p.side}:${item.key}`);
                         return (
                           <td key={p.side} className={`mx-cell${failing ? " is-fail" : ""}`}>
-                            <Said answer={p.answers[item.key]} fails={failing} />
+                            <Said
+                              answer={p.answers[item.key]}
+                              fails={failing}
+                              observation={item.fails_on === null}
+                            />
                           </td>
                         );
                       })}

@@ -1,0 +1,21 @@
+# Keeps the two containers that face the internet, web (172.30.58.10, nginx) and caddy
+# (172.30.58.20), off the instance metadata address, so a flaw in nginx or Caddy cannot hand over
+# the server's role and with it the S3 bucket (SECF-05). api and the workers still use the role.
+# Docker sends forwarded traffic through its DOCKER-USER chain first and never changes that chain.
+# Each rule is checked before it is added, so a restart of Docker or of this unit adds no duplicate.
+# Only 169.254.169.254 is blocked: the VPC's DNS (.253) and time service (.123) keep working.
+# The addresses must stay in step with deploy/aws/docker-compose.yml.
+[Unit]
+Description=Conversation Collection: keep web and caddy off the instance metadata address
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -s 172.30.58.10 -d 169.254.169.254/32 -j DROP 2>/dev/null || iptables -I DOCKER-USER -s 172.30.58.10 -d 169.254.169.254/32 -j DROP'
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -s 172.30.58.20 -d 169.254.169.254/32 -j DROP 2>/dev/null || iptables -I DOCKER-USER -s 172.30.58.20 -d 169.254.169.254/32 -j DROP'
+
+[Install]
+WantedBy=multi-user.target

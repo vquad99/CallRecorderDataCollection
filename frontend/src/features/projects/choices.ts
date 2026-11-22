@@ -1,11 +1,14 @@
 // Fixed lists for the dropdowns: languages and phone country codes (D-083).
 import type { Language } from "../../api/projects";
 
-/** Language codes the platform stores (ISO 639), with the name people pick from. */
+/** Language codes the platform stores (BCP 47: ISO 639, with a region where it matters), with the
+ * name people pick from. All 22 languages of India's Eighth Schedule are here. */
 export const LANGUAGES: readonly { code: string; name: string }[] = [
   { code: "hi", name: "Hindi" },
   { code: "en", name: "English" },
   { code: "en-IN", name: "English (India)" },
+  { code: "en-US", name: "English (United States)" },
+  { code: "en-GB", name: "English (United Kingdom)" },
   { code: "bn", name: "Bengali" },
   { code: "ta", name: "Tamil" },
   { code: "te", name: "Telugu" },
@@ -24,16 +27,24 @@ export const LANGUAGES: readonly { code: string; name: string }[] = [
   { code: "sd", name: "Sindhi" },
   { code: "ks", name: "Kashmiri" },
   { code: "sa", name: "Sanskrit" },
+  { code: "brx", name: "Bodo" },
+  { code: "doi", name: "Dogri" },
+  { code: "mni", name: "Manipuri" },
+  { code: "sat", name: "Santali" },
   { code: "si", name: "Sinhala" },
   { code: "ar", name: "Arabic" },
   { code: "fr", name: "French" },
+  { code: "fr-CA", name: "French (Canada)" },
   { code: "de", name: "German" },
   { code: "es", name: "Spanish" },
+  { code: "es-MX", name: "Spanish (Mexico)" },
   { code: "pt", name: "Portuguese" },
+  { code: "pt-BR", name: "Portuguese (Brazil)" },
   { code: "it", name: "Italian" },
   { code: "ru", name: "Russian" },
   { code: "tr", name: "Turkish" },
   { code: "zh", name: "Chinese" },
+  { code: "zh-TW", name: "Chinese (Taiwan)" },
   { code: "ja", name: "Japanese" },
   { code: "ko", name: "Korean" },
   { code: "id", name: "Indonesian" },
@@ -42,9 +53,28 @@ export const LANGUAGES: readonly { code: string; name: string }[] = [
   { code: "vi", name: "Vietnamese" },
 ];
 
+/** The browser's own English names for languages, for a code set outside the list (the server
+ * takes any well-formed code); null where the browser has none. */
+const DISPLAY_NAMES = (() => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" });
+  } catch {
+    return null;
+  }
+})();
+
+/** "Konkani (kok)"; a code outside the list by the browser's name for it when it has one
+ * ("Swahili (sw)"), otherwise the code as it is. */
 export const languageLabel = (code: string) => {
   const known = LANGUAGES.find((l) => l.code === code);
-  return known ? `${known.name} (${code})` : code;
+  if (known) return `${known.name} (${code})`;
+  let name: string | undefined;
+  try {
+    name = DISPLAY_NAMES?.of(code);
+  } catch {
+    name = undefined; // not a well-formed code: shown as it is
+  }
+  return name && name !== code ? `${name} (${code})` : code;
 };
 
 /**
@@ -62,7 +92,10 @@ export function languageOptions(projectLanguages: readonly Language[], current =
   ];
 }
 
-/** Phone country codes, India first. */
+/** The "Other" country code: the number box then holds the whole number, its code included. */
+export const OTHER_CODE = "+";
+
+/** Phone country codes, India first; "Other" last, for every code not listed. */
 export const COUNTRY_CODES: readonly { code: string; name: string }[] = [
   { code: "+91", name: "India" },
   { code: "+1", name: "USA / Canada" },
@@ -101,16 +134,50 @@ export const COUNTRY_CODES: readonly { code: string; name: string }[] = [
   { code: "+20", name: "Egypt" },
   { code: "+55", name: "Brazil" },
   { code: "+52", name: "Mexico" },
+  { code: OTHER_CODE, name: "Other (type the country code too)" },
 ];
 
+/** An Indian number: exactly 10 digits after +91 (D-083). */
 export const PHONE_DIGITS = 10;
 
-/** Split a stored "+919876543210" into the dropdown's code and the 10-digit number. */
+/** How many digits the number box takes: exactly 10 after +91 (D-083); after any other code what
+ * the server's check allows, 8 to 15 digits in all with the code (E.164); after Other, the whole
+ * number with its code. */
+export function phoneDigits(cc: string): { min: number; max: number } {
+  if (cc === "+91") return { min: PHONE_DIGITS, max: PHONE_DIGITS };
+  const code = cc.replace(/\D/g, "").length;
+  return { min: Math.max(1, 8 - code), max: 15 - code };
+}
+
+/** What is wrong with the digits typed after this country code, or "" (the server checks again). */
+export function phoneProblem(cc: string, digits: string): string {
+  if (!digits) return "";
+  const { min, max } = phoneDigits(cc);
+  if (digits.length < min || digits.length > max) {
+    const wanted = min === max ? `exactly ${min}` : `${min} to ${max}`;
+    return `Type ${wanted} digits (you typed ${digits.length}).`;
+  }
+  if (cc === OTHER_CODE && digits.startsWith("0"))
+    return "Start with the country code, without 00 or +.";
+  return "";
+}
+
+/** The words under the number box for this country code. */
+export function phoneHint(cc: string): string {
+  if (cc === "+91")
+    return `${PHONE_DIGITS} digits, without the country code. Needed for phone call tasks.`;
+  if (cc === OTHER_CODE) return "The whole number, starting with the country code.";
+  return "Without the country code.";
+}
+
+/** Split a stored "+919876543210" into the list's code and the rest. A number whose code is not
+ * listed is Other, holding the whole number; an empty one starts at India. */
 export function splitPhone(phone: string | null | undefined): { cc: string; digits: string } {
-  const value = (phone ?? "").replace(/[^\d+]/g, "");
+  const value = (phone ?? "").trim().replace(/[^\d+]/g, "");
+  if (!value.startsWith("+")) return { cc: "+91", digits: value.replace(/\D/g, "") };
   const match = COUNTRY_CODES.map((c) => c.code)
-    .filter((code) => value.startsWith(code))
+    .filter((code) => code !== OTHER_CODE && value.startsWith(code))
     .sort((a, b) => b.length - a.length)[0];
-  if (match) return { cc: match, digits: value.slice(match.length) };
-  return { cc: "+91", digits: value.replace(/\D/g, "") };
+  const code = match ?? OTHER_CODE;
+  return { cc: code, digits: value.slice(code.length).replace(/\D/g, "") };
 }

@@ -85,6 +85,8 @@ PAGES = [
     # D-148: the Progress tab, a few set-based queries over the project's tasks; D-153's "still
     # needed" comes from the same three (8 in all, for 2 people or 10).
     ("sa", "/api/v1/projects/{project}/progress"),
+    # UXW-05: each row's moderator and both participant codes, one query each for the whole page
+    # (8 in all, for 2 tasks or 10).
     ("sa", "/api/v1/tasks?page_size=100"),
     ("mod", "/api/v1/tasks?page_size=100"),
     ("sa", "/api/v1/tasks/{task}/timeline"),

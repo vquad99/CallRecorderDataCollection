@@ -1,6 +1,29 @@
 /* A project's Progress tab (D-148, D-151, D-153). Loaded with the tab, not with the first screen.
    The sections, key figures and tables are in components/charts. */
 
+/* ---------- The tab as a file: when the figures were read, then Excel, CSV and Print ---------- */
+.progress-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.progress-actions__asof {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.progress-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* The printed page's first line (the project and the time of its figures); not on screen. */
+.progress-print-head {
+  display: none;
+}
+
 /* ---------- Still needed (D-153) ---------- */
 .needs-lead {
   max-width: 900px;
@@ -146,4 +169,68 @@ td:not(.need-cell) > .need {
 .definitions dd {
   margin: 0;
   color: var(--text-2);
+}
+
+/* ---------- Printed, or saved as PDF: a report, not a screen ----------
+   Only while the Progress tab is on the page (this file stays loaded after it): the app's menus,
+   bars and buttons are left out, the page takes the whole width on white paper, every table shows
+   all its rows (no frame that scrolls, no heading row held in place; a table's total once, at its
+   end, not at the foot of every page) and a row is never cut across two pages. The colours of the
+   variance and the bars are printed too. */
+@media print {
+  :root:has(.dash.progress),
+  body:has(.dash.progress) {
+    background: #fff;
+  }
+  body:has(.dash.progress)
+    :is(
+      .topbar,
+      .sidenav,
+      .section-panel,
+      .skip-link,
+      .view-as,
+      .idle-warning,
+      .pwa-update,
+      .progress-actions,
+      button
+    ) {
+    display: none !important;
+  }
+  body:has(.dash.progress) :is(.shell, .section-layout) {
+    display: block;
+    min-height: 0;
+  }
+  body:has(.dash.progress) :is(.shell__content, .section-layout__main) {
+    max-width: none;
+    padding: 0;
+    animation: none;
+  }
+  body:has(.dash.progress) .table-wrap {
+    max-height: none;
+    overflow: visible;
+    border-color: #c8d0da;
+  }
+  body:has(.dash.progress) thead th {
+    position: static;
+  }
+  body:has(.dash.progress) tfoot {
+    display: table-row-group;
+  }
+  body:has(.dash.progress) tr {
+    break-inside: avoid;
+  }
+  body:has(.dash.progress) :is(.panel__head, h2, h3) {
+    break-after: avoid;
+  }
+  .dash.progress {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .progress-print-head {
+    display: block;
+    margin: 0;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
 }

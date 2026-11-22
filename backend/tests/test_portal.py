@@ -174,6 +174,75 @@ def test_an_agreement_sent_back_before_d129_can_be_given_again(world: dict[str, 
     assert again.json()["consent_status"] == "GIVEN"
 
 
+def test_the_page_shows_the_form_as_agreed_not_the_projects_newer_one(
+    world: dict[str, Any],
+) -> None:
+    """PART-04 (D-068): someone who agreed reads the text and version they agreed to; someone who
+    did not agree reads the project's current form, the one an "I agree" would answer now."""
+    pid = str(world["project"].id)
+    chitra = make_participant(world["pa"], pid, "Chitra", agreed=False)
+    devi = make_participant(world["pa"], pid, "Devi", agreed=False)
+    _setup(world, participant=chitra["id"])  # the project's form, version 1
+    pages = {}
+    for person, decision in ((chitra, "GIVEN"), (devi, "REFUSED")):
+        api, head = _visitor(world, _token(world, person["id"]))
+        answered = api.post("/api/v1/portal/consent", json={"decision": decision}, headers=head)
+        assert answered.json()["consent_policy_version"] == "1", answered.text
+        pages[person["id"]] = (api, head)
+    db = world["db"]
+    db.execute(
+        update(Project)
+        .where(Project.id == world["project"].id)
+        .values(consent_text="Version two of the form.", consent_policy_version="2")
+    )
+    db.commit()
+    api, head = pages[chitra["id"]]
+    agreed = api.get("/api/v1/portal/me", headers=head).json()
+    assert (agreed["consent_status"], agreed["consent_policy_version"]) == ("GIVEN", "1")
+    assert agreed["consent_text"] == FORM
+    api, head = pages[devi["id"]]
+    refused = api.get("/api/v1/portal/me", headers=head).json()
+    assert (refused["consent_status"], refused["consent_policy_version"]) == ("REFUSED", "2")
+    assert refused["consent_text"] == "Version two of the form."
+
+
+def test_the_record_says_where_the_link_was_emailed(world: dict[str, Any]) -> None:
+    """SECB-02: an answer names the address its link went to, masked for staff and as a keyed
+    fingerprint in the audit log; neither holds the address itself."""
+    from app.modules.audit.models import AuditLog
+    from app.modules.participants import service as participants
+
+    pid = str(world["project"].id)
+    address = f"chitra.{uuid.uuid4().hex[:6]}@example.org"
+    made = world["pa"].post(
+        f"/api/v1/projects/{pid}/participants",
+        json={"display_label": "Chitra", "language_code": "hi", "email": address},
+    )
+    assert made.status_code == 201, made.text
+    c = made.json()["id"]
+    _, _, token = _setup(world, participant=c)
+    api, head = _visitor(world, token)
+    assert api.post("/api/v1/portal/consent", json={"decision": "GIVEN"}, headers=head).is_success
+    db = world["db"]
+    db.expire_all()
+    record = db.scalars(
+        select(ConsentRecord).where(ConsentRecord.participant_id == uuid.UUID(c))
+    ).one()
+    assert record.note == (
+        "Answered by the participant on their personal page (link emailed to ch•••@example.org)"
+    )
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "consent.self_recorded")).one()
+    fingerprint = participants.address_fingerprint(world["app"].state.settings, address)
+    assert len(fingerprint) == 16
+    assert f'"emailed_to": "{fingerprint}"' in (entry.after_summary or "")
+    assert address not in (entry.after_summary or "")
+    history = world["pa"].get(f"/api/v1/projects/{pid}/participants/{c}/consent").json()
+    assert history[0]["note"] == record.note
+    file = world["pa"].get(f"/api/v1/projects/{pid}/participants/{c}/consent-form/file").text
+    assert "The participant, on their personal page (link emailed to ch•••@example.org)" in file
+    assert address not in file
+
+
 def test_without_a_consent_form_nothing_can_be_answered(world: dict[str, Any]) -> None:
     pid = str(world["project"].id)
     chitra = make_participant(world["pa"], pid, "Chitra", agreed=False)

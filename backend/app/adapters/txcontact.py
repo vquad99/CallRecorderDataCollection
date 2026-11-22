@@ -135,9 +135,12 @@ class TxContact:
         return re.sub(r"\s+", " ", text).strip()[:300]
 
     def _call(self, request: urllib.request.Request, what: str) -> tuple[int, _Response]:
+        """Sends the request; returns the answer's status and the answer to read. Not reached,
+        no answer in time, or an answer that is not HTTP (a wrong port, a TLS-only port asked
+        over http) is a ProviderError like any other, never an exception that escapes."""
         try:
             response = self._open(request, float(self._s.txcontact_timeout_seconds))
-        except (urllib.error.URLError, OSError) as exc:
+        except _READ_ERRORS as exc:  # URLError is an OSError
             timed_out = isinstance(exc, TimeoutError) or isinstance(
                 getattr(exc, "reason", None), TimeoutError
             )
@@ -146,6 +149,8 @@ class TxContact:
             )
             if timed_out:
                 raise ProviderError(f"TxContact did not answer in time ({what})") from None
+            if isinstance(exc, http.client.HTTPException):
+                raise ProviderError(f"TxContact's answer could not be read ({what})") from None
             raise ProviderError(f"TxContact could not be reached ({what})") from None
         return int(response.status), response
 

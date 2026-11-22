@@ -309,6 +309,30 @@ def test_a_participant_is_not_emailed_again_within_ten_minutes(
     assert len(_consent_mails(outbox)) == 3
 
 
+def test_a_queued_email_is_not_sent_again_within_ten_minutes(
+    world: dict[str, Any], outbox: Path
+) -> None:
+    """PART-08: the ten minutes hold for the worker too. A job queued before someone emailed the
+    form by hand (or before another job sent it) skips them, so their link keeps working."""
+    pa, base = world["pa"], _with_form(world)
+    celery = FakeCelery()
+    world["app"].state.celery = celery
+    made = pa.post(
+        base,
+        json={"display_label": "Chitra", "language_code": "hi", "email": "chitra@example.org"},
+    )
+    assert made.json()["consent_email"] == "Consent form emailed."
+    pid = made.json()["id"]
+    [(name, args)] = celery.sent  # the join email, still waiting for the worker
+    assert name == portal.SEND_LINKS_TASK
+    by_hand = pa.post(f"{base}/{pid}/portal-link/email")
+    assert by_hand.json()["sent"] is True
+    portal.send_links_job(world["app"].state, *args)  # the worker gets to it now
+    assert len(_consent_mails(outbox)) == 1
+    listed = {p["id"]: p for p in pa.get(base).json()["items"]}
+    assert listed[pid]["link_active"] is True, "the link in the email they have still works"
+
+
 def test_a_broker_that_cannot_be_reached_is_reported_and_the_participant_kept(
     world: dict[str, Any],
 ) -> None:

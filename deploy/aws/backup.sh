@@ -47,7 +47,7 @@ case "${1:-}" in
     trap 'rm -f "$tmp"' EXIT
     compose exec -T api python -m app.cli backup-download "$key" > "$tmp"
     test -s "$tmp"
-    compose stop api worker web
+    compose stop api worker exports-worker web
     # Clear out what is there first (objects a newer migration made would clash with the dump).
     compose run --rm -T pgtools psql -X -q -v ON_ERROR_STOP=1 -c 'DROP OWNED BY CURRENT_USER'
     compose run --rm -T pgtools sh -c \

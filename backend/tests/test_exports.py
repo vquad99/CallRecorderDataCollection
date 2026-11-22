@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import csv
 import io
+import uuid
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import func, select
 
+from app.modules.tasks.models import Task, TaskStatusHistory
 from tests import test_audio_qc, test_recordings
 from tests.conftest import Api, make_user
 
@@ -54,7 +58,16 @@ def test_a_project_exports_its_recordings_and_a_progress_report(world: dict[str,
     rows = list(csv.DictReader(io.StringIO(progress.content.decode("utf-8-sig"))))
     assert rows[0]["task_code"] == world["task"]["task_code"]
     assert rows[0]["status"] == "APPROVED"
-    assert rows[0]["approved_at"]
+    # Times in India time (the report time zone), as on every page and in the calls CSV.
+    db, india = world["db"], ZoneInfo("Asia/Kolkata")
+    created = db.scalar(select(Task.created_at).where(Task.id == uuid.UUID(tid)))
+    approved = db.scalar(
+        select(func.max(TaskStatusHistory.created_at)).where(
+            TaskStatusHistory.task_id == uuid.UUID(tid), TaskStatusHistory.to_status == "APPROVED"
+        )
+    )
+    assert rows[0]["created_at"] == created.astimezone(india).strftime("%Y-%m-%d %H:%M")
+    assert rows[0]["approved_at"] == approved.astimezone(india).strftime("%Y-%m-%d %H:%M")
 
     # Who may export: the project's admin and client viewer; not its moderator; no other project.
     # The client's delivery format holds speaker details, which a client viewer does not see

@@ -1,16 +1,20 @@
 // Responsive application shell (FND-020): skip link, a white top bar across the page with the
 // product, the phone line and the signed-in user, and under it a blue side menu grouped and
 // filtered by permission (D-150); a two-panel layout for the signed-out pages. On narrow screens
-// the side menu folds behind a menu button. A moderator with a phone seat has their phone line kept
-// Ready while signed in (D-133).
-import { useState } from "react";
+// the side menu folds behind a menu button and opens over the page: Escape, a tap beside it or any
+// of its links closes it. Until two-step sign-in is set up there is no menu at all (D-106). A
+// moderator with a phone seat has their phone line kept Ready while signed in (D-133). Each page
+// gets its own tab title (routes.tsx).
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { ROLE_LABELS } from "../api/admin";
+import { useRouteTitle } from "../app/routeTitle";
 import { useAuth } from "../auth/AuthContext";
 import { IdleWarning } from "../auth/IdleWarning";
 import { BrandMark, Icon, type IconName } from "../components/Icon";
 import { PhoneLineProvider, PhoneLineStatus } from "../features/phoneline/PhoneLine";
+import { PRODUCT } from "../hooks/usePageTitle";
 
 import { LoginArt } from "../components/Art";
 
@@ -54,8 +58,6 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
-const PRODUCT = "Conversation Collection";
-
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "";
@@ -76,10 +78,28 @@ export function AppShell() {
   const { status, user, can, signOut, stopViewing } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  useRouteTitle();
   // The small-screen menu stays open only on the page where it was opened, so following a link
   // closes it.
   const [menuOpenOn, setMenuOpenOn] = useState<string | null>(null);
   const menuOpen = menuOpenOn === location.pathname;
+  const menuButton = useRef<HTMLButtonElement>(null);
+  // A sign-out whose request did not reach the server leaves the session live: say so, for as long
+  // as that sign-in lasts (a later one starts without the message).
+  const [signOutFailedFor, setSignOutFailedFor] = useState<object | null>(null);
+  const signOutFailed = user !== null && signOutFailedFor === user;
+
+  // Escape closes the open menu and puts the focus back on its button.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpenOn(null);
+      menuButton.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   const skip = (
     <a className="skip-link" href="#main">
@@ -138,28 +158,38 @@ export function AppShell() {
 
   const roles = (user?.roles ?? []).map((r) => ROLE_LABELS[r] ?? r).join(", ");
   // No menu until two-step sign-in is set up: nothing behind it would open (D-106).
-  const groups = (user?.mfa_setup_required ? [] : GROUPS)
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((i) => i.permission === null || can(i.permission)),
-    }))
-    .filter((g) => g.items.length > 0);
+  const bare = Boolean(user?.mfa_setup_required);
+  const groups = GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => i.permission === null || can(i.permission)),
+  })).filter((g) => g.items.length > 0);
+  const closeMenu = () => setMenuOpenOn(null);
+  const signOutNow = () => {
+    setSignOutFailedFor(null);
+    void signOut().then(
+      () => navigate("/login"),
+      () => setSignOutFailedFor(user),
+    );
+  };
 
   return (
     <PhoneLineProvider>
-      <div className="shell">
+      <div className={bare ? "shell shell--bare" : "shell"}>
         {skip}
         <header className="topbar">
-          <button
-            type="button"
-            className="topbar__menu"
-            aria-expanded={menuOpen}
-            aria-controls="side-nav"
-            onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
-          >
-            <Icon name={menuOpen ? "close" : "menu"} />
-            <span className="sr-only">Menu</span>
-          </button>
+          {bare ? null : (
+            <button
+              ref={menuButton}
+              type="button"
+              className="topbar__menu"
+              aria-expanded={menuOpen}
+              aria-controls="side-nav"
+              onClick={() => setMenuOpenOn(menuOpen ? null : location.pathname)}
+            >
+              <Icon name={menuOpen ? "close" : "menu"} />
+              <span className="sr-only">Menu</span>
+            </button>
+          )}
           <Link to="/" className="topbar__brand">
             <Brand />
           </Link>
@@ -177,47 +207,62 @@ export function AppShell() {
                 </span>
               </span>
             </NavLink>
-            <button
-              type="button"
-              className="topbar__signout"
-              title="Sign out"
-              onClick={() => void signOut().then(() => navigate("/login"))}
-            >
+            <button type="button" className="topbar__signout" title="Sign out" onClick={signOutNow}>
               <Icon name="logout" size={16} />
               <span className="topbar__signout-words">Sign out</span>
             </button>
           </div>
         </header>
-        <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
-          <nav aria-label="Main" className="sidenav__nav">
-            {groups.map((g) => (
-              <div key={g.title} className="sidenav__group">
-                <p className="sidenav__title" aria-hidden="true">
-                  {g.title}
-                </p>
-                {g.items.map((l) => (
-                  <NavLink key={l.to} to={l.to} className="sidenav__link">
-                    {({ isActive }) => (
-                      <>
-                        <Icon
-                          name={l.icon}
-                          size={18}
-                          tone="text"
-                          weight={isActive ? "fill" : "regular"}
-                        />
-                        {l.label}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-          </nav>
-          <p className="sidenav__foot" aria-hidden="true">
-            <Icon name="lock" size={14} tone="text" weight="fill" /> Private workspace
-          </p>
-        </aside>
+        {bare ? null : (
+          <aside id="side-nav" className="sidenav" data-open={menuOpen || undefined}>
+            <nav aria-label="Main" className="sidenav__nav">
+              {groups.map((g) => (
+                <div key={g.title} className="sidenav__group">
+                  <p className="sidenav__title" aria-hidden="true">
+                    {g.title}
+                  </p>
+                  {g.items.map((l) => (
+                    <NavLink key={l.to} to={l.to} className="sidenav__link" onClick={closeMenu}>
+                      {({ isActive }) => (
+                        <>
+                          <Icon
+                            name={l.icon}
+                            size={18}
+                            tone="text"
+                            weight={isActive ? "fill" : "regular"}
+                          />
+                          {l.label}
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            <p className="sidenav__foot" aria-hidden="true">
+              <Icon name="lock" size={14} tone="text" weight="fill" /> Private workspace
+            </p>
+          </aside>
+        )}
+        {menuOpen && !bare ? (
+          // A tap beside the open menu closes it instead of pressing the page under it.
+          <button
+            type="button"
+            className="sidenav__backdrop"
+            tabIndex={-1}
+            aria-label="Close menu"
+            onClick={closeMenu}
+          />
+        ) : null}
         <div className="shell__column">
+          {signOutFailed ? (
+            <p className="signout-failed" role="alert">
+              <Icon name="warning" size={16} />
+              <span>
+                You are still signed in: the server could not be reached. Try Sign out again.
+              </span>
+            </p>
+          ) : null}
           {user?.viewer ? (
             <div className="view-as" role="status">
               <Icon name="info" size={16} />

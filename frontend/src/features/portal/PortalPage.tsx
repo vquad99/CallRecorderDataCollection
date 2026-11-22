@@ -1,14 +1,15 @@
 // A participant's personal page (D-067): opened from a private link, no account. Shows the
 // participant's own details, minutes and sessions (read-only) and the project's consent form with
 // their answer (D-100). The answer counts at once; "I agree" is final, with nothing to withdraw
-// (D-129). The same page, without the answer buttons, is the Super Admin's view.
+// (D-129). Where the project takes signed forms and theirs is on file, the page says so and asks
+// nothing (D-144). The same page, without the answer buttons, is the Super Admin's view.
 import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { ApiError } from "../../api/client";
 import { answerConsent, getPortal, type PortalView } from "../../api/portal";
 import { Button } from "../../components/form/Button";
-import { BrandMark, Icon, IconTile } from "../../components/Icon";
+import { BrandMark, Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge, type Tone } from "../../components/StatusBadge";
@@ -30,16 +31,20 @@ const TONE: Record<string, Tone> = {
   "Not used": "neutral",
 };
 /** The participant's own answer, in their words; the colours are the shared consent ones.
- * "Withdrew" only on answers from before D-129. */
+ * "Withdrew" only on answers from before D-129; "received" for a signed form staff uploaded. */
 const ANSWER: Record<string, string> = {
   GIVEN: "You agreed",
   REFUSED: "You did not agree",
   WITHDRAWN: "You withdrew your consent",
+  UPLOADED: "Signed form received",
 };
 const yourAnswer = (status: string) => ({
   label: ANSWER[status] ?? labelFor({}, status),
   tone: CONSENT_ANSWER[status]?.tone ?? "neutral",
 });
+/** Nothing left to answer: they agreed, or their signed form is on file. */
+const settled = (status: PortalView["consent_status"]) =>
+  status === "GIVEN" || status === "UPLOADED";
 
 function Consent({
   view,
@@ -61,17 +66,20 @@ function Consent({
   return (
     <section className="card stack" aria-labelledby="consent-title">
       <div className="page-header">
-        <h2 id="consent-title" className="with-icon">
-          <IconTile name="verified" size={28} />
-          Consent form
-        </h2>
+        <h2 id="consent-title">Consent form</h2>
         {answer ? (
           <StatusBadge tone={answer.tone} label={answer.label} />
         ) : (
           <StatusBadge tone="warning" label="Waiting for your answer" />
         )}
       </div>
-      {view.consent_text.trim() ? (
+      {view.consent_status === "UPLOADED" ? (
+        // Their signed paper form is their consent here: nothing to answer online (D-144).
+        <p className="notice notice--success" role="status">
+          The project team has your signed consent form
+          {view.consent_at ? ` (received on ${day(view.consent_at)})` : ""}.
+        </p>
+      ) : view.consent_text.trim() ? (
         <>
           <div className="consent-text">{view.consent_text}</div>
           <p className="muted">Version {view.consent_policy_version}</p>
@@ -140,17 +148,20 @@ export function ParticipantView({
     ...(view.dialect ? ([["Dialect", view.dialect]] as [string, string][]) : []),
     ["Phone", view.phone_hint ? `ending in ${view.phone_hint}` : "Not given"],
   ];
+  // The consent email asks for an answer, so a form still to answer comes first, where a phone
+  // shows it without scrolling; once settled it sits after the figures. Decided when the page
+  // opens, so an answer just given stays in view (UXW-07).
+  const [consentFirst] = useState(() => !settled(view.consent_status));
+  const consentForm = <Consent view={view} token={token} onChange={onChange} />;
   return (
     <>
       <div className="portal__hero">
-        <IconTile name="user" size={48} />
-        <div>
-          <h1>Your participation</h1>
-          <p className="muted">
-            {view.project_name} · participant {view.participant_code}
-          </p>
-        </div>
+        <h1>Your participation</h1>
+        <p className="muted">
+          {view.project_name} · participant {view.participant_code}
+        </p>
       </div>
+      {consentFirst ? consentForm : null}
       <section className="card" aria-labelledby="details-title">
         <h2 id="details-title">Your details</h2>
         <dl className="checks">
@@ -182,8 +193,8 @@ export function ParticipantView({
           <p className="muted">Half of each accepted conversation</p>
         </div>
       </div>
-      <Consent view={view} token={token} onChange={onChange} />
-      <section className="stack stack--tight" aria-labelledby="sessions-title">
+      {consentFirst ? null : consentForm}
+      <section className="card stack stack--tight" aria-labelledby="sessions-title">
         <h2 id="sessions-title">Your sessions</h2>
         {view.sessions.length === 0 ? (
           <EmptyState title="No sessions yet" message="Your recording sessions will appear here." />

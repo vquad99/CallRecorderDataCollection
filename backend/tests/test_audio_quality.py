@@ -18,6 +18,7 @@ from typing import Any
 import numpy as np
 import pytest
 import soundfile
+import soxr
 
 from app.modules.recordings import media
 from tests import audio_fixtures as fx
@@ -147,7 +148,7 @@ def test_a_16k_stereo_phone_file_is_copied_not_resampled(
     sample for sample, as face-to-face does (D-123). The resampler is not even started."""
     left, right = fx.tone(2.0, freq=220.0), fx.tone(2.0, freq=330.0, dbfs=-12.0)
     raw = fx.write_raw(tmp_path / "s.f32", fx.interleave(left, right))
-    monkeypatch.setattr(media.soxr, "ResampleStream", None)
+    monkeypatch.setattr(soxr, "ResampleStream", None)  # the same module object media uses
     media.resample_keep_channels_to_pcm16(raw, 16_000, tmp_path / "d.wav", 2)
     data, rate = soundfile.read(tmp_path / "d.wav", dtype="int16")
     assert (rate, data.shape) == (16_000, (len(left), 2))

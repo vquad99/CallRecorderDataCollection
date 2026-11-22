@@ -8,6 +8,7 @@ as the consent history, and names the participant by code only in the file.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,8 @@ from app.modules.participants import consent, service
 from app.modules.participants.models import ConsentRecord
 
 ANSWER_WORDS = {"GIVEN": "Agreed", "REFUSED": "Did not agree", "WITHDRAWN": "Withdrew consent"}
+# The masked address an answer's note names (portal/service.answer_consent, SECB-02).
+_EMAILED_TO = re.compile(r"\(link emailed to ([^()]+)\)\s*$")
 
 
 @dataclass
@@ -29,6 +32,23 @@ class Answer:
     answered_at: datetime
     policy_version: str
     link_handed_out: bool = False  # answered on a link shown to staff, not emailed (D-088)
+    # Where the link they answered on was emailed, masked ("ka•••@example.org"); empty on
+    # answers from before it was noted.
+    emailed_to: str | None = None
+
+
+def emailed_to(note: str) -> str | None:
+    """The masked address an own answer's note names, if any."""
+    found = _EMAILED_TO.search(note or "")
+    return found.group(1) if found else None
+
+
+def answered_by(answer: Answer) -> str:
+    """Who answered, for the 'Answered by' row: the participant, and where their link went."""
+    if answer.link_handed_out:
+        return "On the participant's personal page, from a link handed out by staff (not emailed)"
+    where = f" (link emailed to {answer.emailed_to})" if answer.emailed_to else ""
+    return f"The participant, on their personal page{where}"
 
 
 @dataclass
@@ -49,6 +69,7 @@ def _answer(r: ConsentRecord) -> Answer:
         answered_at=r.created_at,
         policy_version=r.policy_version,
         link_handed_out=r.link_shown_to is not None,
+        emailed_to=emailed_to(r.note),
     )
 
 
@@ -97,14 +118,7 @@ def as_file(
         c = form.current
         rows.append(_row("Answer", ANSWER_WORDS.get(c.status, c.status)))
         rows.append(_row("Answered on", _when(c.answered_at)))
-        rows.append(
-            _row(
-                "Answered by",
-                "On the participant's personal page, from a link handed out by staff (not emailed)"
-                if c.link_handed_out
-                else "The participant, on their personal page",
-            )
-        )
+        rows.append(_row("Answered by", answered_by(c)))
     else:
         rows.append(_row("Answer", "Not answered yet"))
     earlier = "".join(

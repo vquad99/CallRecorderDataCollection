@@ -22,6 +22,12 @@ services:
       options:
         <<: *awslogs
         awslogs-stream: worker
+  exports-worker:
+    logging:
+      driver: awslogs
+      options:
+        <<: *awslogs
+        awslogs-stream: exports-worker
   web:
     logging:
       driver: awslogs

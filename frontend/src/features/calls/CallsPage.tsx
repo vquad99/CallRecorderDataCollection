@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import { listProjects } from "../../api/projects";
+import { listAllProjects } from "../../api/projects";
 import * as tel from "../../api/telephony";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -29,7 +29,7 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
-import { duration, when } from "../../lib/format";
+import { duration, plural, when } from "../../lib/format";
 import { labelFor } from "../../lib/labels";
 import { CallBadge } from "./callUi";
 
@@ -147,7 +147,7 @@ function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
       </DataTable>
       {ours.some((n) => n > 0) ? (
         <p className="muted">
-          Busiest hour: {two(busiest)}:00 ({ours[busiest]} call(s)).
+          Busiest hour: {two(busiest)}:00 ({plural(ours[busiest] ?? 0, "call")}).
         </p>
       ) : (
         <p className="muted">No calls in this period yet.</p>
@@ -521,7 +521,11 @@ function Figures({
         <Figure
           label="Average call"
           value={minutes(data.avg_call_minutes)}
-          note={data.calls_per_task === null ? "" : `${data.calls_per_task} call(s) for each task`}
+          note={
+            data.calls_per_task === null
+              ? ""
+              : `${plural(data.calls_per_task, "call")} for each task`
+          }
         />
         <Figure
           label="Recorded audio"
@@ -542,7 +546,7 @@ function Figures({
         <Figure
           label="Tasks not called yet"
           value={String(data.tasks_not_called)}
-          note={`${data.tasks_called_again} task(s) called more than once`}
+          note={`${plural(data.tasks_called_again, "task")} called more than once`}
         />
       </FigureLine>
       <div className="dash-grid">
@@ -590,9 +594,10 @@ function Figures({
   );
 }
 
-/** A project filter shared by both views. */
+/** A project filter shared by both views: every project the person can see, not only the
+ * newest hundred. */
 function ProjectSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
-  const projects = useResource(() => listProjects({ page_size: 100 }), []);
+  const projects = useResource(() => listAllProjects(), []);
   return (
     <Select
       label="Project"
@@ -681,7 +686,7 @@ function CallFigures() {
     <section aria-labelledby="calls-title" className="stack stack--tight calls-page">
       <Header
         title="Phone calls"
-        lead="Calls made through TxContact: how many and how they ended."
+        lead="Calls made through TxContact: how many and how they ended. Times are in India time (IST), here and in the CSV."
         actions={
           <Button
             variant="secondary"

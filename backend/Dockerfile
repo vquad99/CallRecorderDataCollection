@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     PATH=/opt/venv/bin:$PATH
 
-RUN pip install --no-cache-dir uv==0.13.1
+RUN pip install --no-cache-dir uv==0.13.9
 
 WORKDIR /srv
 COPY pyproject.toml uv.lock ./

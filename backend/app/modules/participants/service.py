@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import Select, exists, or_, select, text, update
+from sqlalchemy import Select, exists, func, or_, select, text, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -58,6 +58,8 @@ CONTACT_COLUMNS = (
     "dialect",
     "district",
 )
+# What a removed participant's address proofs are called from then on (PART-07).
+REMOVED_PROOF_NAME = "address_proof"
 
 
 def phone_hash(settings: Settings, phone: str) -> str:
@@ -67,9 +69,33 @@ def phone_hash(settings: Settings, phone: str) -> str:
     ).hexdigest()
 
 
+def address_fingerprint(settings: Settings, email: str) -> str:
+    """A participant's email address as the audit log keeps it: a keyed hash (like phone_hash),
+    first 16 hex characters. Two entries with the same address show the same fingerprint, so the
+    log proves where a consent link went without holding a readable address (SECB-02)."""
+    return hmac.new(
+        settings.secret_key.get_secret_value().encode(),
+        email.strip().casefold().encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
+def masked_address(email: str) -> str:
+    """An address as staff may see it in a consent record: "ka•••@example.org"."""
+    local, _, domain = email.strip().rpartition("@")
+    return f"{local[:2]}•••@{domain}" if local else "•••"
+
+
 def moderator_assigned(
-    db: Session, user_id: uuid.UUID, participant_id: uuid.UUID, project_id: uuid.UUID
+    db: Session,
+    user_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    statuses: Collection[str] | None = None,
 ) -> bool:
+    """The user moderates a task of the project with this participant: an open one (not approved,
+    rejected or cancelled), or one in `statuses` when given."""
+    status = Task.status.in_(statuses) if statuses is not None else Task.status.not_in(TERMINAL)
     return bool(
         db.scalar(
             select(
@@ -79,7 +105,7 @@ def moderator_assigned(
                     TaskAssignment.role_code == Role.MODERATOR.value,
                     TaskAssignment.active.is_(True),
                     Task.project_id == project_id,
-                    Task.status.not_in(TERMINAL),
+                    status,
                     or_(
                         Task.participant_a_id == participant_id,
                         Task.participant_b_id == participant_id,
@@ -274,9 +300,11 @@ def check_language(project: Project, language_code: str, dialect: str) -> None:
         )
 
 
-def _duplicate(
+def refuse_duplicate_phone(
     db: Session, principal: Principal, digest: str, exclude: uuid.UUID | None = None
 ) -> None:
+    """409 DUPLICATE_PARTICIPANT when someone (not removed) already has this phone number
+    (`digest` from phone_hash), named by code when the caller may see them."""
     query = select(Participant).where(
         Participant.phone_hash == digest, Participant.deleted_at.is_(None)
     )
@@ -311,6 +339,30 @@ def _duplicate(
         status_code=409,
         details=[{"participant_code": existing.participant_code}] if visible else None,
     )
+
+
+def refuse_same_person(
+    db: Session, cipher: FieldCipher, project: Project, name: str, email: str
+) -> None:
+    """409 DUPLICATE_PARTICIPANT when the project already has someone (not removed) with this
+    name and this email address, both compared without case (PART-05). The phone is optional, so
+    it cannot be the only check; a family sharing one address (different names) is still allowed.
+    `email` is the address as clean_email gives it."""
+    wanted = email.casefold()
+    same_name = _in_project(project).where(
+        # Both sides lower-cased by the database, so they follow the same rules.
+        func.lower(Participant.display_label) == func.lower(name.strip()),
+        Participant.email_enc.is_not(None),
+    )
+    for existing in db.scalars(same_name.order_by(Participant.participant_code)):
+        stored = existing.email_enc
+        if stored is not None and cipher.decrypt(stored).casefold() == wanted:
+            raise AppError(
+                f"Already in this project as {existing.participant_code}",
+                code="DUPLICATE_PARTICIPANT",
+                status_code=409,
+                details=[{"participant_code": existing.participant_code}],
+            )
 
 
 def _apply_phone(
@@ -348,7 +400,7 @@ def create_participant(
     check_language(project, data.language_code, data.dialect)
     phone = normalize_phone(data.phone) if data.phone else None
     if phone:
-        _duplicate(db, principal, phone_hash(settings, phone))
+        refuse_duplicate_phone(db, principal, phone_hash(settings, phone))
     participant = Participant(
         id=uuid.uuid4(),
         display_label=data.display_label.strip(),
@@ -359,11 +411,14 @@ def create_participant(
         created_by=principal.user_id,
     )
     _apply_speaker(participant, data.speaker, project)
+    # Every participant needs an email: the consent form reaches them by email (D-128). The same
+    # name with the same address is someone already here (PART-05).
+    email = clean_email(require_email(data.email))
+    refuse_same_person(db, cipher, project, participant.display_label, email)
     code = f"P{db.scalar(text("SELECT nextval('participant_code_seq')")):06d}"
     participant.participant_code = code
     _apply_phone(participant, settings, cipher, phone)
-    # Every participant needs an email: the consent form reaches them by email (D-128).
-    participant.email_enc = cipher.encrypt(clean_email(require_email(data.email)))
+    participant.email_enc = cipher.encrypt(email)
     db.add(participant)
     db.add(ParticipantProjectLink(participant_id=participant.id, project_id=project.id))
     audit.record(
@@ -430,8 +485,9 @@ def link_candidates(
 ) -> list[Participant]:
     """People who can be added to this project as they are (D-090): not deleted, not already in
     it, in a project where the caller manages participants (a Super Admin: any project),
-    speaking one of this project's languages when it has a list, and within its speaker ages
-    (D-145). Search by code or name."""
+    speaking one of this project's languages and dialects when it has a list (the exact pairs
+    link_existing takes, PART-10), and within its speaker ages (D-145). Search by code or
+    name."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     already = select(ParticipantProjectLink.participant_id).where(
         ParticipantProjectLink.project_id == project.id
@@ -449,9 +505,9 @@ def link_candidates(
             ParticipantProjectLink.project_id.in_(managed)
         )
         query = query.where(Participant.id.in_(visible))
-    codes = sorted({lang.language_code for lang in project.languages})
-    if codes:
-        query = query.where(Participant.language_code.in_(codes))
+    pairs = sorted({(x.language_code, x.dialect) for x in project.languages})
+    if pairs:
+        query = query.where(tuple_(Participant.language_code, Participant.dialect).in_(pairs))
     # Within the project's speaker ages, or no age yet (D-145): link_existing refuses the others.
     query = query.where(
         or_(
@@ -490,13 +546,14 @@ def correct_participant(
     phone = normalize_phone(data.phone) if data.phone else None
     new_hash = phone_hash(settings, phone) if phone else None
     if new_hash and new_hash != participant.phone_hash:
-        _duplicate(db, principal, new_hash, exclude=participant.id)
-    before = {
-        "display_label": participant.display_label,
+        refuse_duplicate_phone(db, principal, new_hash, exclude=participant.id)
+    # The append-only audit log never holds the person's name or native district: a removal has
+    # to erase them everywhere (PART-009). It names what changed, not the values (D-143, PART-07).
+    before: dict[str, object] = {
         "language_code": participant.language_code,
         "dialect": participant.dialect,
-        "district": participant.district,
     }
+    old_name = participant.display_label
     phone_changed = new_hash != participant.phone_hash
     participant.display_label = data.display_label.strip()
     participant.language_code = data.language_code
@@ -505,6 +562,12 @@ def correct_participant(
     participant.notes = data.notes
     if phone_changed:
         _apply_phone(participant, settings, cipher, phone)
+    after: dict[str, object] = {
+        "language_code": participant.language_code,
+        "dialect": participant.dialect,
+        "name_changed": participant.display_label != old_name,
+        "phone_changed": phone_changed,
+    }
     # Email: not sent = keep; otherwise replace. It cannot be removed, and someone saved before
     # it was required gets one with their next correction (D-128).
     email_changed = False
@@ -513,7 +576,11 @@ def correct_participant(
         old_email = cipher.decrypt(participant.email_enc) if participant.email_enc else None
         email_changed = new_email != old_email
         if email_changed:
-            participant.email_enc = cipher.encrypt(new_email) if new_email else None
+            participant.email_enc = cipher.encrypt(new_email)
+            # Where consent links go from now on, as a fingerprint (SECB-02): an address staff
+            # put on file for a while shows in the log, never readable.
+            before["email"] = address_fingerprint(settings, old_email) if old_email else None
+            after["email"] = address_fingerprint(settings, new_email)
             # A personal link already mailed to the old address stops working (D-088), as staff
             # invitation and reset links do when an email changes (D-064).
             db.execute(
@@ -534,13 +601,10 @@ def correct_participant(
         ip=ip,
         before=before,
         after={
-            "display_label": participant.display_label,
-            "language_code": participant.language_code,
-            "dialect": participant.dialect,
-            "district": participant.district,
-            "phone_changed": phone_changed,
+            **after,
             "email_changed": email_changed,
-            # Which speaker details changed, not their values (D-143).
+            # Which speaker details changed (the native district as `district`), not their
+            # values (D-143).
             "speaker_details_changed": speaker_changed,
             "speaker_details_complete": speakers.complete(participant, project),
         },
@@ -597,6 +661,8 @@ def delete_participant(
     participant.deleted_at = datetime.now(UTC)
     participant.deleted_by = principal.user_id
     participant.deletion_reason = reason.strip()
+    # The row stays as the record that a proof was held; its file name often carries the person's
+    # name ("Aadhaar_Priya.pdf"), so it goes with the file (PART-07).
     proofs = list(
         db.scalars(
             update(ParticipantDocument)
@@ -605,7 +671,7 @@ def delete_participant(
                 ParticipantDocument.kind == ADDRESS_PROOF,
                 ParticipantDocument.removed_at.is_(None),
             )
-            .values(removed_at=participant.deleted_at)
+            .values(removed_at=participant.deleted_at, file_name=REMOVED_PROOF_NAME)
             .returning(ParticipantDocument.storage_key)
         )
     )

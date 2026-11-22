@@ -3,13 +3,16 @@
 Requirements: USER-001, USER-002, USER-004, USER-005, USER-006, USER-007, USER-008, USER-009
 """
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.modules.audit.models import AuditLog
+from app.modules.auth.models import UserSession
+from app.modules.auth.security import hash_token
 from tests.conftest import Api, link_token, make_user, read_outbox
 
 pytestmark = pytest.mark.db
@@ -85,6 +88,41 @@ def test_edit_user_and_role_change_is_audited(admin: Api, db: Any) -> None:
     assert entry.actor_id is not None
     bad = admin.put(f"/api/v1/users/{user.id}/roles", json={"roles": ["WIZARD"]})
     assert bad.json()["error"]["code"] == "UNKNOWN_ROLE"
+
+
+def test_a_name_of_spaces_alone_is_refused(admin: Api, db: Any) -> None:
+    """A blank name left a row in the Users list with nothing to click (security review
+    2026-11-22); the CSV import already refused it."""
+    body = {"email": "blank@example.org", "display_name": "   ", "roles": ["MODERATOR"]}
+    assert admin.post("/api/v1/users", json=body).status_code == 422
+    made = admin.post("/api/v1/users", json={**body, "display_name": "  Asha Rao  "})
+    assert made.status_code == 201, made.text
+    user_id = made.json()["user"]["id"]
+    assert made.json()["user"]["display_name"] == "Asha Rao"
+    assert admin.patch(f"/api/v1/users/{user_id}", json={"display_name": "\t "}).status_code == 422
+    assert admin.get(f"/api/v1/users/{user_id}").json()["display_name"] == "Asha Rao"
+
+
+def test_signing_out_everywhere_counts_only_sessions_that_could_still_be_used(
+    admin: Api, db: Any, new_api: Any
+) -> None:
+    """A session past its end is dead already: it is not counted as signed out (security review
+    2026-11-22)."""
+    user = make_user(db, "laptop@example.org", ["MODERATOR"])
+    live, old = new_api(), new_api()
+    live.login(user.email)
+    old.login(user.email)
+    token = old.client.cookies.get("ccp_session") or ""
+    db.execute(
+        update(UserSession)
+        .where(UserSession.token_hash == hash_token(token))
+        .values(expires_at=datetime.now(UTC) - timedelta(minutes=1))
+    )
+    db.commit()
+    revoked = admin.post(f"/api/v1/users/{user.id}/sessions/revoke")
+    assert revoked.json() == {"sessions_revoked": 1}
+    assert live.get("/api/v1/auth/me").status_code == 401
+    assert '"sessions_revoked": 1' in (_audit(db, "user.sessions_revoked")[-1].after_summary or "")
 
 
 def test_deactivated_user_loses_access_at_the_next_request(

@@ -410,6 +410,15 @@ describe("the QC checklist (D-146)", () => {
       },
     );
     renderAt("/tasks/t1");
+    // The open questions and the forms still to check add up with "Answered 0 / 5" (UXW-02).
+    expect(
+      await screen.findByText(
+        "3 questions and 2 consent forms still to answer.",
+        {},
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Answered 0 / 5")).toBeInTheDocument();
     await answerAll();
     const forms = screen.getByRole("region", { name: "Signed consent forms" });
     expect(
@@ -514,5 +523,66 @@ describe("the QC checklist (D-146)", () => {
     ).toBeInTheDocument();
     expect(within(talk).getByText("No").closest("td")).toHaveClass("is-fail");
     expect(speakers).toHaveTextContent(/Is echo present\?\s*Yes\s*Not answered/);
+    // An observation is the word alone: "Yes, there is echo" gets no green tick (UXW-02).
+    const echo = within(speakers).getByText("Yes").closest("td") as HTMLElement;
+    expect(echo.querySelector(".mark--ok")).toBeNull();
+    expect(echo.querySelector("svg")).toBeNull();
+    // A question that can fail keeps its cross.
+    expect(within(talk).getByText("No").closest("td")?.querySelector("svg")).not.toBeNull();
+  });
+});
+
+describe("after Send to QC (FEW-06)", () => {
+  it("names the QC Executive the platform assigned, without opening the page again", async () => {
+    let status = "RECORDED";
+    const recorded = {
+      ...TASK,
+      status: "RECORDED",
+      allowed_transitions: ["AUDIO_QC", "IN_PROGRESS"],
+      can_assign: false,
+      can_reassign: false,
+      can_delete: false,
+    };
+    const recording = {
+      id: "r1",
+      task_id: "t1",
+      state: "READY",
+      current: true,
+      saved_seconds: 120,
+      assets: [{ id: "a2", kind: "FTF_DERIVED_PCM" }],
+    };
+    const { calls } = fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/tasks/t1": () => [200, recorded],
+        "GET /api/v1/tasks/t1/recordings": () => [200, [recording]],
+        // The server assigns a QC Executive in the same step as Send to QC (D-116).
+        "GET /api/v1/tasks/t1/audio-qc": () => [
+          200,
+          status === "RECORDED"
+            ? view({ task_status: "RECORDED", results: [{ ...AUTO, outcome: "PASS" }] })
+            : view({
+                qc_user_id: "q9",
+                qc_name: "Quinn QC",
+                results: [{ ...AUTO, outcome: "PASS" }],
+              }),
+        ],
+        "POST /api/v1/tasks/t1/transition": () => {
+          status = "AUDIO_QC";
+          return [200, { ...recorded, status: "AUDIO_QC", allowed_transitions: [] }];
+        },
+      }),
+    );
+    renderAt("/tasks/t1");
+    const summary = await screen.findByRole("region", { name: "Summary" });
+    await waitFor(() => expect(summary).toHaveTextContent("QC ExecutiveNot assigned"), {
+      timeout: 5000,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Send to QC" }));
+    await waitFor(() => expect(summary).toHaveTextContent("QC ExecutiveQuinn QC"));
+    expect(screen.getByRole("region", { name: "Next step" })).toHaveTextContent(
+      "Waiting for QC: Quinn QC checks the recording.",
+    );
+    expect(calls.filter((c) => c.path === "/api/v1/tasks/t1/audio-qc")).toHaveLength(2);
   });
 });

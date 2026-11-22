@@ -3,15 +3,21 @@
 // needed" near the top for the people who recruit (speakers by age band and gender, by district,
 // the conversations still to make, and whether the registered people can give them); the shares
 // in one balance table; the conversations by status and the completed minutes as two small
-// tables; the definitions folded away. For the people who manage the project, like the other tabs
-// (D-104). Loaded with the tab, not with the first screen.
-import { useId } from "react";
+// tables; the definitions folded away. Above them, the tab as a file (owner's request): Excel with
+// a sheet per table, one long CSV table, or the browser's print (Save as PDF) as a clean report:
+// the menus left out, every row shown, the definitions open. For the people who manage the
+// project, like the other tabs (D-104). Loaded with the tab, not with the first screen.
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { flushSync } from "react-dom";
 
+import { apiDownload } from "../../api/client";
 import {
   getProgress,
+  progressExportPath,
   type AgeGenderNeed,
   type ConversationNeed,
   type Need,
+  type ProgressExportFormat,
   type ProjectProgress,
   type Share,
   type ShareRow,
@@ -28,9 +34,13 @@ import {
 } from "../../components/charts/Charts";
 import { stageParts } from "../../components/charts/stages";
 import { DataTable } from "../../components/DataTable";
+import { Button } from "../../components/form/Button";
+import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
+import { useAction } from "../../hooks/useAction";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
+import { when } from "../../lib/format";
 import { useProject } from "./ProjectDetailPage";
 import "./progress.css";
 
@@ -46,11 +56,11 @@ export function spokenLength(ms: number): string {
 }
 
 const number = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-/** A percent: "40 %", "12.5 %". */
-const pct = (n: number) => `${number(n)} %`;
-/** A variance in percentage points: "+4 %", "−6 %", "0 %". */
+/** A percent, as the rest of the app writes one: "40%", "12.5%". */
+const pct = (n: number) => `${number(n)}%`;
+/** A variance in percentage points: "+4%", "−6%", "0%". */
 export const variance = (n: number) =>
-  n > 0 ? `+${number(n)} %` : n < 0 ? `−${number(-n)} %` : "0 %";
+  n > 0 ? `+${number(n)}%` : n < 0 ? `−${number(-n)}%` : "0%";
 /** "1 speaker", "3 speakers". */
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -232,19 +242,27 @@ function ConversationsTable({ rows }: { rows: ConversationNeed[] }) {
   );
 }
 
-/** Whether the registered speakers can give the conversations still to make, in one sentence. */
+/** Whether the registered speakers can give the conversations still to make, in one sentence,
+ * from the server's count of more speakers needed: it weighs each conversation's two speakers,
+ * the conversations per speaker and, when the project says so, each pair only once (D-143). */
 export function capacityText(capacity: StillNeeded["capacity"]): string | null {
   const { limit, registered, conversations_to_make: toMake } = capacity;
-  const people = count(registered, "registered speaker");
   if (toMake === null) return null;
   if (toMake === 0) return "No more conversations are needed beyond the open tasks.";
-  if (limit === null)
-    return `No limit on conversations per speaker: the ${people} can give the ${count(toMake, "conversation")} still to make.`;
+  const people = count(registered, "registered speaker");
+  const talks = `the ${count(toMake, "conversation")} still to make`;
+  const pairs = capacity.unique_pairs ? " (each pair of speakers only once)" : "";
+  const rules = [
+    ...(limit === null ? [] : [`each at most ${count(limit, "conversation")}`]),
+    ...(capacity.unique_pairs ? ["each pair of speakers only once"] : []),
+  ];
   const more = capacity.more_speakers_needed ?? 0;
-  const each = count(limit, "conversation");
-  return more > 0
-    ? `Even if every one of the ${people} records ${each}, ${count(more, "more speaker")} ${more === 1 ? "is" : "are"} needed for the ${count(toMake, "conversation")} still to make.`
-    : `The ${people} can give the ${count(toMake, "conversation")} still to make (each at most ${each}).`;
+  if (more === 0)
+    return `The ${people} can give ${talks}${rules.length > 0 ? ` (${rules.join(", ")})` : ""}.`;
+  const needed = `${count(more, "more speaker")} ${more === 1 ? "is" : "are"} needed for ${talks}`;
+  if (limit !== null && registered > 0)
+    return `Even if every one of the ${people} records ${count(limit, "conversation")}, ${needed}${pairs}.`;
+  return `${needed} (${rules.length > 0 ? rules.join(", ") : "a conversation takes two speakers"}).`;
 }
 
 function StillNeededPanel({ needed }: { needed: StillNeeded }) {
@@ -304,9 +322,12 @@ interface Group {
 }
 
 /** Every share in one table: a section per group, the actual count and percent against the
- * target percent, the variance, and a bar with a tick at the target. */
-function BalanceMatrix({ data }: { data: ProjectProgress }) {
-  const districts = useFirstRows(data.districts.rows, FIRST_DISTRICTS);
+ * target percent, the variance, and a bar with a tick at the target. Printed, every district. */
+function BalanceMatrix({ data, printing }: { data: ProjectProgress; printing: boolean }) {
+  const districts = useFirstRows(
+    data.districts.rows,
+    printing ? data.districts.rows.length : FIRST_DISTRICTS,
+  );
   const groups: Group[] = [
     {
       key: "age",
@@ -459,7 +480,78 @@ function CompletedTable({ done }: { done: ProjectProgress["completed"] }) {
   );
 }
 
-function Body({ data }: { data: ProjectProgress }) {
+/** True while the browser prints the page or saves it as PDF (from the button or its own menu):
+ * the page then shows every row, and the definitions (`notes`) are opened for the print and
+ * closed again after it unless they were open. */
+function usePrintView(notes: RefObject<HTMLDetailsElement | null>): boolean {
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    let wasOpen = false;
+    const before = () => {
+      // At once: the browser lays the page out for printing as soon as this returns.
+      flushSync(() => setPrinting(true));
+      if (notes.current) {
+        wasOpen = notes.current.open;
+        notes.current.open = true;
+      }
+    };
+    const after = () => {
+      setPrinting(false);
+      if (notes.current) notes.current.open = wasOpen;
+    };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, [notes]);
+  return printing;
+}
+
+/** The tab as a file (owner's request): an Excel workbook with a sheet per table, one long CSV
+ * table (both made by the server from the same answer, audited), or the browser's print, which
+ * also saves a PDF. A printed page starts with the project and the time of its figures. */
+function ReportActions({ asOf }: { asOf: string }) {
+  const { project } = useProject();
+  const { busy, error, run } = useAction();
+  const download = (format: ProgressExportFormat) =>
+    void run(() => apiDownload(progressExportPath(project.id, format)), format);
+  return (
+    <>
+      <div className="progress-actions">
+        <p className="progress-actions__asof">Figures as of {when(asOf)}</p>
+        <div className="progress-actions__buttons">
+          <Button
+            variant="secondary"
+            icon="table"
+            busy={busy === "xlsx"}
+            onClick={() => download("xlsx")}
+          >
+            Download Excel
+          </Button>
+          <Button
+            variant="secondary"
+            icon="fileCsv"
+            busy={busy === "csv"}
+            onClick={() => download("csv")}
+          >
+            Download CSV
+          </Button>
+          <Button variant="secondary" icon="fileText" onClick={() => window.print()}>
+            Print or save as PDF
+          </Button>
+        </div>
+      </div>
+      <ErrorNotice error={error} />
+      <p className="progress-print-head">
+        {project.code} · {project.name} · as of {when(asOf)}
+      </p>
+    </>
+  );
+}
+
+function Body({ data, asOf }: { data: ProjectProgress; asOf: string }) {
   const done = data.completed;
   const effective = done.counts === "EFFECTIVE";
   const counted = effective ? "effective speech" : "full length";
@@ -468,8 +560,11 @@ function Body({ data }: { data: ProjectProgress }) {
   const targetMs = done.target_hours === null ? null : done.target_hours * 3_600_000;
   const ofTarget = (percent: number | null) =>
     percent === null ? "No target set." : `${pct(percent)} of the target`;
+  const notes = useRef<HTMLDetailsElement>(null);
+  const printing = usePrintView(notes);
   return (
     <div className="dash progress">
+      <ReportActions asOf={asOf} />
       {talks.approved === 0 ? (
         <p className="notice notice--info">
           No approved conversations yet: the figures fill in as conversations are approved.
@@ -521,7 +616,7 @@ function Body({ data }: { data: ProjectProgress }) {
       <StillNeededPanel needed={data.still_needed} />
 
       <Panel title="Balance against the targets" action="Variance: actual minus target">
-        <BalanceMatrix data={data} />
+        <BalanceMatrix data={data} printing={printing} />
       </Panel>
 
       <div className="dash-grid">
@@ -545,7 +640,7 @@ function Body({ data }: { data: ProjectProgress }) {
         </Panel>
       </div>
 
-      <details className="dash-notes">
+      <details className="dash-notes" ref={notes}>
         <summary>How these are counted</summary>
         <dl className="definitions">
           <dt>Effective speech</dt>
@@ -579,9 +674,10 @@ function Body({ data }: { data: ProjectProgress }) {
           <dt>Conversations still to make</dt>
           <dd>
             The target less the approved conversations and the open tasks (not started, in progress,
-            waiting for QC or approval). Each conversation needs two speakers, and each speaker
-            gives at most the project&apos;s conversations per speaker (rejected and cancelled ones
-            aside).
+            waiting for QC or approval). Each conversation needs two speakers; each speaker gives at
+            most the project&apos;s conversations per speaker (rejected and cancelled ones aside)
+            and, when the project says so, talks with each other speaker only once. More speakers
+            needed: the fewest more people with whom the registered ones could give them all.
           </dd>
           <dt>Speakers and shares</dt>
           <dd>
@@ -595,9 +691,7 @@ function Body({ data }: { data: ProjectProgress }) {
             scale; the tick is the target.
           </dd>
           <dt>Variance</dt>
-          <dd>
-            The actual percent minus the target percent: +4 % is above the target, −6 % below.
-          </dd>
+          <dd>The actual percent minus the target percent: +4% is above the target, −6% below.</dd>
         </dl>
       </details>
     </div>
@@ -606,8 +700,12 @@ function Body({ data }: { data: ProjectProgress }) {
 
 export function ProgressTab() {
   const { project } = useProject();
-  const { state, reload } = useResource(() => getProgress(project.id), [project.id]);
+  // The figures with the time they were read: what "as of" says on the page and when printed.
+  const { state, reload } = useResource(
+    () => getProgress(project.id).then((data) => ({ data, asOf: new Date().toISOString() })),
+    [project.id],
+  );
   if (state.status === "loading") return <LoadingState label="Loading progress" />;
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
-  return <Body data={state.data} />;
+  return <Body data={state.data.data} asOf={state.data.asOf} />;
 }

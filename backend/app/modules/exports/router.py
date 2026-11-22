@@ -169,14 +169,15 @@ def report(
     request: Request,
     principal: CurrentPrincipal,
     db: DbSession,
+    settings: AppSettings,
     content: Report = "progress",
     table_format: Annotated[TableFormat, Query(alias="format")] = "csv",
 ) -> Response:
-    """A report as one table: CSV, or TSV with `format=tsv`."""
+    """A report as one table: CSV, or TSV with `format=tsv`; times in the report time zone."""
     project = service.report_project(db, principal, project_id, content, table_format)
-    body = service.report(db, project, content, table_format)
+    body = service.report(db, project, content, table_format, tz_name=settings.report_timezone)
     service.record(db, principal, project, content, table_format, client_ip(request))
-    name = service.file_name(project, content, table_format)
+    name = service.file_name(project, content, table_format, tz_name=settings.report_timezone)
     media = "text/tab-separated-values" if table_format == "tsv" else "text/csv"
     return Response(
         content=body,

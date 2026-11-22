@@ -12,6 +12,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { BackLink } from "../../components/BackLink";
 import { Icon, type IconName } from "../../components/Icon";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useResource } from "../../hooks/useResource";
 import { StatusBadge } from "../../components/StatusBadge";
 import { labelFor, PROJECT_STATUS_LABELS } from "../../lib/labels";
@@ -124,9 +125,33 @@ export function ProjectDetailPage() {
   const { can } = useAuth();
   const onOverview = useMatch({ path: "/projects/:projectId", end: true }) !== null;
   const page = useMatch("/projects/:projectId/:page/*")?.params.page ?? "";
+  const section = useMatch("/projects/:projectId/rules/:section")?.params.section;
   const { state, reload, replace } = useResource(() => getProject(projectId), [projectId]);
+  const loaded = state.status === "loaded" ? state.data : null;
+  // The browser tab: the project on its overview; elsewhere the page (with the Rules section)
+  // and the project's code, so several projects open in tabs can be told apart.
+  usePageTitle(
+    ...(!loaded
+      ? []
+      : onOverview
+        ? [`${loaded.code} · ${loaded.name}`]
+        : [
+            RULE_SECTIONS.find((s) => s.key === section)?.title,
+            PAGES.find((p) => p.to === page)?.label ?? "Project",
+            loaded.code,
+          ]),
+  );
   if (state.status === "loading") return <LoadingState label="Loading project" />;
-  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
+  if (state.status === "failed") {
+    // A project that is gone or not one's own: still a titled page with the way back.
+    return (
+      <section aria-labelledby="project-title" className="stack">
+        <BackLink to="/projects">All projects</BackLink>
+        <h1 id="project-title">Project</h1>
+        <ErrorState error={state.error} onRetry={reload} />
+      </section>
+    );
+  }
   const project = state.data;
   // The Export page also needs the right to export.
   const pages = PAGES.filter(

@@ -583,6 +583,10 @@ def cancel_call(
     """End a call without a recording. Allowed at every stage before the recording is stored, also
     while it is being fetched: a call must never be something nobody can stop."""
     call, _ = _call_for_change(db, principal, call_id)
+    # The fetch makes a call RECORDED with the row locked: locked and read again here, a cancel
+    # that arrives at that moment waits and then finds the call recorded, instead of writing
+    # over it.
+    db.refresh(call, with_for_update=True)
     _require_state(call, "DIALLING", "WAITING_FOR_RECORDING", "NEEDS_MATCH", "FETCH_FAILED")
     if reason not in CANCEL_REASONS:
         raise AppError(
@@ -604,6 +608,11 @@ def mark_cancelled(
     call.note = note
     call.closed_at = call.closed_at or datetime.now(UTC)
     call.next_fetch_at = None
+    if call.recording_id is None:
+        # A provider recording found or chosen for this call is let go, so the call it really
+        # belongs to can take it; the call's history still names it (masked).
+        call.provider_session_id = None
+        call.provider_file = None
     record_event(
         db,
         call,

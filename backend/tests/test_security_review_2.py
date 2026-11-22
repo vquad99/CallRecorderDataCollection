@@ -3,6 +3,8 @@
 Requirements: AUTH-006, AUTH-008, AUTH-009, SEC-005, SEC-006
 """
 
+import threading
+from collections import Counter
 from typing import Any
 
 import pytest
@@ -10,6 +12,7 @@ from cryptography.fernet import Fernet
 
 from app.core.errors import AppError
 from app.core.ratelimit import address_key
+from app.main import create_app
 from app.modules.auth import security
 from app.modules.auth import service as auth_service
 from tests.conftest import TEST_PASSWORD, build_settings, make_user
@@ -113,6 +116,36 @@ def test_signing_in_to_ones_own_account_does_not_reset_the_address_count(
     with pytest.raises(AppError) as blocked:
         _login(db_app, db, "insider@example.org", TEST_PASSWORD, ip)
     assert blocked.value.code == "RATE_LIMITED"
+
+
+@pytest.mark.db
+def test_guesses_sent_at_once_from_one_address_stay_within_its_limit(migrated_db: str) -> None:
+    """Password spraying in one burst: each guess is at a different account, all from one address.
+    The address's count is read under its own lock, so no more passwords are checked than the
+    limit allows (security review 2026-11-22)."""
+    app = create_app(
+        build_settings(database_url=migrated_db, login_max_failures_per_ip=5, db_pool_size=20)
+    )
+    burst = 15
+    start = threading.Barrier(burst)
+    answers: list[str] = []
+
+    def guess(n: int) -> None:
+        with app.state.session_factory() as session:
+            start.wait(timeout=30)
+            try:
+                _login(app, session, f"target{n}@example.org", "guess-guess-guess", "203.0.113.70")
+                answers.append("SIGNED_IN")
+            except AppError as error:
+                answers.append(error.code)
+
+    threads = [threading.Thread(target=guess, args=(n,)) for n in range(burst)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=120)
+    app.state.engine.dispose()
+    assert Counter(answers) == {"INVALID_CREDENTIALS": 5, "RATE_LIMITED": burst - 5}
 
 
 @pytest.mark.db

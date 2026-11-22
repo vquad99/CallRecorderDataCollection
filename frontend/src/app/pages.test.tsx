@@ -2,7 +2,8 @@
 // Requirements: FND-015, FND-018, FND-019, FND-020, ROLE-011, AUTH-016
 //
 // 1. Inventory: every route in routes.tsx has an entry below, so a new page cannot ship untested.
-// 2. Loaded: the page shows its content and has no accessibility violations.
+// 2. Loaded: the page shows its content, names itself in the browser tab (WCAG 2.4.2) and has no
+//    accessibility violations.
 // 3. Loading: a polite status message is shown while the data is on its way.
 // 4. Failed: for a server error, not found, no permission, service not configured and a lost
 //    connection, the page says what happened (with the server's reference for a server error) and
@@ -14,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { PRODUCT } from "../hooks/usePageTitle";
 import { fakeApi, renderAt, signedInAs, type Handler } from "../test/fakeApi";
 import { BY_PATH, FLAT, PAGES, type PageSpec } from "../test/pageSpecs";
 import { ALL_PERMISSIONS, worldHandlers } from "../test/world";
@@ -44,8 +46,10 @@ const WITH_DATA = ALL.filter(([, s]) => s.data);
 
 describe.each(ALL)("%s", (_, spec) => {
   it("shows its content with no accessibility violations", async () => {
+    document.title = PRODUCT; // so the page before cannot pass for this one
     open(spec);
     await loaded(spec);
+    await waitFor(() => expect(document.title).toMatch(/^\S.* · Conversation Collection$/));
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });

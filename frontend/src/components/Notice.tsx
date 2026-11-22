@@ -21,13 +21,14 @@ export function fieldProblems(error: ApiError): string[] {
 export function ErrorNotice({ error }: { error: ApiError | null }) {
   if (!error) return null;
   const problems = fieldProblems(error);
+  // The server's reference helps only with a fault on its side; a refused request (a wrong
+  // password, a field to fix) says what to do instead.
+  const reference = error.status >= 500 ? error.requestId : null;
   return (
     <div className="notice notice--error" role="alert">
       <p>
         {error.message}
-        {error.requestId ? (
-          <span className="notice__meta"> (reference {error.requestId})</span>
-        ) : null}
+        {reference ? <span className="notice__meta"> (reference {reference})</span> : null}
       </p>
       {problems.length > 0 ? (
         <ul>

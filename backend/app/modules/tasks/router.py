@@ -81,7 +81,8 @@ class ConsentFixParty(BaseModel):
     side: Literal["A", "B"]
     participant_id: uuid.UUID
     participant_code: str
-    # A new signed form is on file since QC sent the task back.
+    # A new signed form is on file since QC sent the task back; in a project switched to Online
+    # since (by_upload false), the person has agreed online (SECB-03).
     replaced: bool
 
 
@@ -94,6 +95,9 @@ class ConsentFixOut(BaseModel):
     participants: list[ConsentFixParty]
     # Every form QC found not right was replaced: the task may go back to QC.
     forms_replaced: bool
+    # The project takes signed forms now. False: it was switched to Online since, a signed form
+    # no longer counts, and each person agrees on their personal page instead (SECB-03).
+    by_upload: bool
     # The caller may send it back (the task's moderator, or someone who assigns tasks).
     can_send_back: bool
 
@@ -109,8 +113,23 @@ class RemindersOut(BaseModel):
     tips: list[str]
 
 
+class TaskListItem(TaskSummary):
+    """A row of the task list (UXW-05): who holds the task and which two people it records. Only
+    the list sends these; the task itself (TaskDetail) has its own moderator and participants."""
+
+    moderator_name: str | None = None
+    participant_a_code: str
+    participant_b_code: str
+
+
 class TaskDetail(TaskSummary):
+    # The project the task belongs to (UXW-04), so its page can say so.
+    project_code: str
+    project_name: str
     held_from: str | None
+    # A rejected or cancelled task: the status it stopped at (FEW-11), for the page's progress
+    # line: the status it left last, or the one it was held from. Null otherwise.
+    ended_from: str | None = None
     reason_code: str | None
     participant_a: PartyOut
     participant_b: PartyOut
@@ -121,6 +140,10 @@ class TaskDetail(TaskSummary):
     can_assign: bool
     # The caller may change the moderator now (assigns tasks, and the status still allows it).
     can_reassign: bool
+    # The caller may delete the task now (FEW-12, D-115): they assign tasks, it is Draft,
+    # Assigned or Cancelled, and nothing has happened on it (no recording, call, consent noted on
+    # it or audio check).
+    can_delete: bool = False
     is_moderator: bool
     # D-119: participants (A, B) without consent to record; recording is refused until empty.
     consent_missing: list[str]
@@ -175,7 +198,10 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
     )
     return TaskDetail(
         **summary(t).model_dump(),
+        project_code=project.code,
+        project_name=project.name,
         held_from=t.held_from,
+        ended_from=service.ended_from(db, t),
         reason_code=t.reason_code,
         participant_a=party(sides[0]),
         participant_b=party(sides[1]),
@@ -185,6 +211,7 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
         reasons={k: sorted(v) for k, v in workflow.REASONS.items()},
         can_assign=actor.can_assign,
         can_reassign=service.can_reassign(actor, t),
+        can_delete=service.can_delete(db, actor, t),
         is_moderator=actor.is_moderator,
         consent_missing=consents.missing(sides),
         consent_mode=project.consent_mode,
@@ -197,7 +224,7 @@ def detail(db: DbSession, principal: Principal, t: Task) -> TaskDetail:
     )
 
 
-class TaskPage(Page[TaskSummary]):
+class TaskPage(Page[TaskListItem]):
     pass
 
 
@@ -217,7 +244,23 @@ def list_tasks(
         project_id=project_id, status=status, mode=mode, mine=mine, search=search
     )
     items, total = service.list_tasks(db, principal, f, page, page_size)
-    return TaskPage(items=[summary(t) for t in items], total=total, page=page, page_size=page_size)
+    # Who holds each task and its two people: two queries for the whole page (UXW-05).
+    moderators = service.moderator_names(db, [t.id for t in items])
+    codes = service.participant_codes(db, items)
+    return TaskPage(
+        items=[
+            TaskListItem(
+                **summary(t).model_dump(),
+                moderator_name=moderators.get(t.id),
+                participant_a_code=codes.get(t.participant_a_id, ""),
+                participant_b_code=codes.get(t.participant_b_id, ""),
+            )
+            for t in items
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 class CreateTaskBody(BaseModel):
@@ -368,6 +411,19 @@ def transition(
         # Then the device details the project asks, for both people (D-147).
         devices.ensure_complete(db, task)
         audio_qc.ensure_checked(db, task)
+    if task.status == "ADMIN_REVIEW" and body.to == "APPROVED":
+        # Who may approve first, then whether both people's consent still counts (SECB-03): a
+        # project switched from signed forms to online consent while the task was in QC can
+        # leave a person with none (409 CONSENT_MISSING).
+        workflow.check(
+            task.status,
+            body.to,
+            actor,
+            held_from=task.held_from,
+            reason_code=body.reason_code,
+            comment=body.comment,
+        )
+        service.require_consent(db, task)
     service.transition(
         db,
         task,

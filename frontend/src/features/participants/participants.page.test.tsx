@@ -284,11 +284,11 @@ describe("participants section", () => {
       ),
     );
     await userEvent.type(screen.getByLabelText("Participants (CSV)"), "name,language");
-    expect(screen.getByRole("button", { name: "Add 0 participants" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add participants" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Check rows" }));
     expect(await screen.findByText("1 of 2 rows are ready.")).toBeInTheDocument();
     expect(screen.getByText("Name is missing")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Add 1 participants" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add 1 participant" }));
     expect(await screen.findByText("1 added.")).toBeInTheDocument();
     expect(screen.getByText("Added. Consent form emailed. (P000010)")).toBeInTheDocument();
     expect(
@@ -370,6 +370,91 @@ describe("participants section", () => {
     ]);
     await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog", { name: "Participant details" })).toBeNull();
+  });
+
+  it("offers every project, not only the newest 100 (PERF-09)", async () => {
+    const newer = Array.from({ length: 100 }, (_, i) => ({
+      ...PROJECT,
+      id: `n${i}`,
+      code: `PRJ${String(i + 2).padStart(4, "0")}`,
+      name: `Project ${i + 2}`,
+    }));
+    const { calls } = open({
+      "GET /api/v1/projects": (_body, url) => [
+        200,
+        url.searchParams.get("page") === "2"
+          ? { items: [PROJECT], total: 101, page: 2, page_size: 100 }
+          : { items: newer, total: 101, page: 1, page_size: 100 },
+      ],
+    });
+    renderAt("/participants");
+    const picker = await screen.findByLabelText("Project", {}, wait);
+    // "Choose a project", then all 101.
+    expect(within(picker).getAllByRole("option")).toHaveLength(102);
+    expect(
+      within(picker).getByRole("option", { name: "HINDI · Hindi conversations" }),
+    ).toBeInTheDocument();
+    expect(calls.filter((c) => c.path.startsWith("/api/v1/projects?")).map((c) => c.path)).toEqual([
+      "/api/v1/projects?page=1&page_size=100",
+      "/api/v1/projects?page=2&page_size=100",
+    ]);
+  });
+
+  it("keeps a selection to the list it was made in, so no action reaches people not shown (FEW-05)", async () => {
+    const { calls } = open({
+      "GET /api/v1/projects/p1/participants": (_body, url) => [
+        200,
+        url.searchParams.get("search")
+          ? { items: [PARTICIPANT_B], total: 1, page: 1, page_size: 25 }
+          : { items: [PARTICIPANT, PARTICIPANT_B], total: 2, page: 1, page_size: 25 },
+      ],
+    });
+    await openList();
+    await screen.findByText("P000001", {}, wait);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select P000001" }));
+    expect(
+      screen.getByRole("group", { name: "Actions for selected participants" }),
+    ).toHaveTextContent("1 selected");
+    // Another search: the ticked person is no longer shown, and nothing stays selected.
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search by name or code" }), "Bina");
+    expect(screen.queryByRole("group", { name: "Actions for selected participants" })).toBeNull();
+    await waitFor(() =>
+      expect(calls.some((c) => c.path.includes("/participants?search=Bina"))).toBe(true),
+    );
+    expect(await screen.findByRole("checkbox", { name: "Select P000002" }, wait)).not.toBeChecked();
+    expect(screen.queryByText("P000001")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Actions for selected participants" })).toBeNull();
+    expect(calls.some((c) => c.path.endsWith("/participants/bulk"))).toBe(false);
+  });
+
+  it("names how many are removed, and says when a search finds no one (UXA-12, UXA-13)", async () => {
+    open({
+      "GET /api/v1/projects/p1/participants": (_body, url) => [
+        200,
+        url.searchParams.get("search")
+          ? { items: [], total: 0, page: 1, page_size: 25 }
+          : { items: [PARTICIPANT, PARTICIPANT_B], total: 2, page: 1, page_size: 25 },
+      ],
+    });
+    await openList();
+    await screen.findByText("P000001", {}, wait);
+    await userEvent.click(screen.getByLabelText("Select all on this page"));
+    await userEvent.click(
+      within(screen.getByRole("group", { name: "Actions for selected participants" })).getByRole(
+        "button",
+        { name: "Remove" },
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Remove 2 participants?" })).toBeInTheDocument();
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Go back" }),
+    );
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search by name or code" }), "zz");
+    expect(
+      await screen.findByRole("heading", { name: "No participants match" }, wait),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Try another name or code.")).toBeInTheDocument();
+    expect(screen.queryByText(/to get started/)).toBeNull();
   });
 
   it("says so when a participant has no link, no calls and no sessions yet", async () => {

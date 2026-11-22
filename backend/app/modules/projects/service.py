@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, or_, select, text
+from sqlalchemy import Select, and_, null, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, forbidden, not_found
@@ -31,6 +31,8 @@ from app.modules.projects.models import (
     ProjectMembership,
     ProjectRetentionRule,
 )
+from app.modules.tasks.models import Task, TaskAssignment
+from app.modules.tasks.workflow import TERMINAL
 
 # Allowed lifecycle moves (PROJ-009). Reopening a completed or archived project needs a reason.
 TRANSITIONS: dict[str, set[str]] = {
@@ -57,6 +59,22 @@ DEFAULT_AUDIO = {
     "FACE_TO_FACE": {"sample_rate": 16000, "bit_depth": 16, "channels": 1},
 }
 DEFAULT_MAX_SILENCE_PCT = Decimal("25")
+# Settings whose column has a database default: a None left as it is would be left out of the
+# INSERT, and the default (3, 500, 600) stored instead of "no limit" or "no target" (PROJ-08).
+_NULLABLE_WITH_DEFAULT = (
+    "max_conversations_per_speaker",
+    "target_speakers",
+    "target_conversations",
+)
+# A member's work that still needs them (PROJ-06): a moderator's task until it goes to QC (or back
+# to them for a consent form), a QC Executive's until it is decided or waits for the admin.
+_MODERATOR_WORK = ("ASSIGNED", "IN_PROGRESS", "RECORDED", "ON_HOLD", "CONSENT_FIX")
+_QC_DONE = (*TERMINAL, "ADMIN_REVIEW")
+_TASK_CODES_NAMED = 5
+PROJECT_CHANGED = (
+    "Someone else saved this project after you opened it. Reload the page to see their changes, "
+    "then save again."
+)
 
 
 def visible_projects_query(principal: Principal) -> Select[Project]:
@@ -80,6 +98,16 @@ def get_manageable(
     if not principal.can_in_project(perm, project.id):
         raise forbidden()
     return project
+
+
+def _require_not_archived(project: Project) -> None:
+    """An archived project is read only (PROJ-05): its settings, languages, audio rules and
+    retention wait until it is reopened. Its team does not: removing someone is how their access
+    ends, and a client may be added to collect the delivery."""
+    if project.status == "ARCHIVED":
+        raise AppError(
+            "Reopen the project before editing it", code="PROJECT_ARCHIVED", status_code=409
+        )
 
 
 def ensure_accepts_new_work(project: Project) -> None:
@@ -361,12 +389,16 @@ def create_project(
         "audio_name_pattern": delivery.DEFAULT_AUDIO_NAME_PATTERN,
         **_values(data),
     }
+    for name in _NULLABLE_WITH_DEFAULT:
+        if values[name] is None:
+            values[name] = null()  # "no limit" / "no target" stored, not the column's default
     project = Project(
         id=uuid.uuid4(), code=code, status="DRAFT", created_by=principal.user_id, **values
     )
     project.audio_rules = []
     _ensure_default_audio_rules(project)
     db.add(project)
+    db.flush()  # the audit entry below records what was stored
     audit.record(
         db,
         action="project.created",
@@ -382,13 +414,24 @@ def create_project(
 
 
 def update_project(
-    db: Session, principal: Principal, project_id: uuid.UUID, data: ProjectInput, ip: str | None
+    db: Session,
+    principal: Principal,
+    project_id: uuid.UUID,
+    data: ProjectInput,
+    ip: str | None,
+    expected_updated_at: datetime | None = None,
 ) -> Project:
+    """The whole project saved at once (D-145). With `expected_updated_at` (the `updated_at` the
+    page loaded), a project someone saved since is refused, 409 PROJECT_CHANGED, instead of their
+    changes being undone by this older copy (PROJ-03); left out, nothing is compared."""
     project = get_manageable(db, principal, project_id)
-    if project.status == "ARCHIVED":
-        raise AppError(
-            "Reopen the project before editing it", code="PROJECT_ARCHIVED", status_code=409
-        )
+    # One save at a time: the row stays locked (FOR NO KEY UPDATE, like a task's, TASK-005: rows
+    # that only point at the project do not wait) until this one ends, so a save that read the
+    # project before another one committed sees that it changed.
+    db.refresh(project, with_for_update={"key_share": True})
+    _require_not_archived(project)
+    if expected_updated_at is not None and expected_updated_at != project.updated_at:
+        raise AppError(PROJECT_CHANGED, code="PROJECT_CHANGED", status_code=409)
     _check_modes(data, project)
     values = _values(data)
     before = _snapshot(project)
@@ -462,6 +505,7 @@ def set_languages(
     ip: str | None,
 ) -> Project:
     project = get_manageable(db, principal, project_id)
+    _require_not_archived(project)
     unique = sorted({(code.strip(), dialect.strip()) for code, dialect in entries})
     before = sorted((lang.language_code, lang.dialect) for lang in project.languages)
     # Keep the rows that stay: replacing them would insert a duplicate before the old row is
@@ -470,17 +514,18 @@ def set_languages(
     project.languages = [
         current.get((c, d)) or ProjectLanguage(language_code=c, dialect=d) for c, d in unique
     ]
-    audit.record(
-        db,
-        action="project.languages_changed",
-        entity_type="project",
-        entity_id=project.id,
-        project_id=project.id,
-        actor_id=principal.user_id,
-        ip=ip,
-        before={"languages": before},
-        after={"languages": unique},
-    )
+    if unique != before:  # a save with nothing changed is no event (PROJ-13)
+        audit.record(
+            db,
+            action="project.languages_changed",
+            entity_type="project",
+            entity_id=project.id,
+            project_id=project.id,
+            actor_id=principal.user_id,
+            ip=ip,
+            before={"languages": before},
+            after={"languages": unique},
+        )
     db.commit()
     return project
 
@@ -497,6 +542,20 @@ class AudioRuleInput:
     max_duration_seconds: int | None
 
 
+def _audio_rules_view(rules: list[ProjectAudioRule]) -> list[dict[str, object]]:
+    """The audio rules as their audit entry shows them, before and after alike (PROJ-13): every
+    setting by mode; whole numbers as numbers, percents as saved ("25.00"), none as null."""
+    views = [
+        {
+            name: str(value) if isinstance(value, Decimal) else value
+            for name in AudioRuleInput.__dataclass_fields__
+            for value in [getattr(rule, name)]
+        }
+        for rule in rules
+    ]
+    return sorted(views, key=lambda view: str(view["mode"]))
+
+
 def set_audio_rules(
     db: Session,
     principal: Principal,
@@ -505,6 +564,7 @@ def set_audio_rules(
     ip: str | None,
 ) -> Project:
     project = get_manageable(db, principal, project_id)
+    _require_not_archived(project)
     allowed = {
         m
         for m, ok in (
@@ -530,10 +590,7 @@ def set_audio_rules(
             raise AppError(
                 "Maximum duration is below the minimum", code="INVALID_DURATION", status_code=422
             )
-    before = [
-        {"mode": a.mode, "sample_rate": a.sample_rate, "channels": a.channels}
-        for a in project.audio_rules
-    ]
+    before = _audio_rules_view(list(project.audio_rules))
     existing = {a.mode: a for a in project.audio_rules}
     for r in rules:
         target = existing.get(r.mode)
@@ -542,17 +599,19 @@ def set_audio_rules(
         else:
             for key, value in r.__dict__.items():
                 setattr(target, key, value)
-    audit.record(
-        db,
-        action="project.audio_rules_changed",
-        entity_type="project",
-        entity_id=project.id,
-        project_id=project.id,
-        actor_id=principal.user_id,
-        ip=ip,
-        before={"rules": before},
-        after={"rules": [{k: str(v) for k, v in r.__dict__.items()} for r in rules]},
-    )
+    after = _audio_rules_view(list(project.audio_rules))
+    if after != before:  # a save with nothing changed is no event (PROJ-13)
+        audit.record(
+            db,
+            action="project.audio_rules_changed",
+            entity_type="project",
+            entity_id=project.id,
+            project_id=project.id,
+            actor_id=principal.user_id,
+            ip=ip,
+            before={"rules": before},
+            after={"rules": after},
+        )
     db.commit()
     return project
 
@@ -565,6 +624,7 @@ def set_retention(
     ip: str | None,
 ) -> Project:
     project = get_manageable(db, principal, project_id)
+    _require_not_archived(project)
     kinds = [k for k, _ in rules]
     if len(set(kinds)) != len(kinds):
         raise AppError("Each asset kind may appear once", code="DUPLICATE_KIND", status_code=422)
@@ -576,17 +636,18 @@ def set_retention(
         row.retain_days = days
         kept.append(row)
     project.retention_rules = kept
-    audit.record(
-        db,
-        action="project.retention_changed",
-        entity_type="project",
-        entity_id=project.id,
-        project_id=project.id,
-        actor_id=principal.user_id,
-        ip=ip,
-        before=before,
-        after=dict(rules),
-    )
+    if dict(rules) != before:  # a save with nothing changed is no event (PROJ-13)
+        audit.record(
+            db,
+            action="project.retention_changed",
+            entity_type="project",
+            entity_id=project.id,
+            project_id=project.id,
+            actor_id=principal.user_id,
+            ip=ip,
+            before=before,
+            after=dict(rules),
+        )
     db.commit()
     return project
 
@@ -634,6 +695,52 @@ def add_member(
     db.commit()
 
 
+def _require_no_open_work(db: Session, project: Project, user_id: uuid.UUID) -> None:
+    """A member whose tasks here still need them stays until those are reassigned or done
+    (PROJ-06): out of the project they could no longer open them, and nobody else would have
+    them. 409 MEMBER_HAS_OPEN_TASKS names the first few. A moderator whose tasks went on to QC,
+    or a QC Executive whose tasks wait for the admin, may go."""
+    codes = list(
+        db.scalars(
+            select(Task.task_code)
+            .join(TaskAssignment, TaskAssignment.task_id == Task.id)
+            .where(
+                Task.project_id == project.id,
+                TaskAssignment.user_id == user_id,
+                TaskAssignment.active.is_(True),
+                or_(
+                    and_(
+                        TaskAssignment.role_code == "MODERATOR",
+                        Task.status.in_(_MODERATOR_WORK),
+                    ),
+                    and_(
+                        TaskAssignment.role_code == "QC_EXECUTIVE",
+                        Task.status.not_in(_QC_DONE),
+                    ),
+                ),
+            )
+            .distinct()
+            .order_by(Task.task_code)
+        ).all()
+    )
+    if not codes:
+        return
+    user = db.get(User, user_id)
+    who = user.display_name if user else "This person"
+    named = ", ".join(codes[:_TASK_CODES_NAMED])
+    if len(codes) > _TASK_CODES_NAMED:
+        named += f" and {len(codes) - _TASK_CODES_NAMED} more"
+    one = len(codes) == 1
+    raise AppError(
+        f"{who} still has {len(codes)} open task{'' if one else 's'} in this project ({named}). "
+        f"Reassign {'it' if one else 'them'}, or let {'it' if one else 'them'} finish, before "
+        "removing this person.",
+        code="MEMBER_HAS_OPEN_TASKS",
+        status_code=409,
+        details=[{"open_tasks": len(codes), "task_codes": codes[:_TASK_CODES_NAMED]}],
+    )
+
+
 def remove_member(
     db: Session, principal: Principal, project_id: uuid.UUID, user_id: uuid.UUID, ip: str | None
 ) -> None:
@@ -645,6 +752,7 @@ def remove_member(
     )
     if membership is None:
         raise not_found("Member")
+    _require_no_open_work(db, project, user_id)
     db.delete(membership)
     audit.record(
         db,

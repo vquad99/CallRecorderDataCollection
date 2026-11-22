@@ -1,0 +1,59 @@
+/* A project's Overview for members who do not manage it (Moderator, QC Executive, Client Viewer):
+   the project in a few rows, label left and value right, a thin line between rows; on a phone the
+   label sits above its value. Loaded with the project's pages. */
+.project-summary {
+  max-width: 760px;
+}
+.project-summary h2 {
+  margin: 0 0 var(--space-3);
+}
+.project-summary__list {
+  margin: 0;
+  font-size: 0.875rem;
+}
+.project-summary__row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.project-summary__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.project-summary dt {
+  color: var(--text-2);
+}
+.project-summary dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+/* A description keeps its own line breaks; "No description" and the like read as plain words. */
+.project-summary__text,
+.project-summary dd .muted {
+  font-weight: 400;
+}
+.project-summary__text {
+  white-space: pre-line;
+}
+@media (max-width: 560px) {
+  .project-summary__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Retention: the heading, what the automatic deletion does, then the four kinds two by two (the
+   face-to-face pair, then the phone pair); one under the other on a phone. */
+.retention h2 {
+  margin: 0 0 var(--space-2);
+}
+.retention__note {
+  max-width: 760px;
+  margin: 0 0 var(--space-4);
+}
+.retention .form-grid {
+  max-width: 540px;
+}

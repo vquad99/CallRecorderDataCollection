@@ -57,9 +57,12 @@ or `npm audit` in CI) takes its fixed release at once, through `exclude-newer-pa
 | Frontend build image | node | 22.23.4-alpine | frontend/Dockerfile |
 | Web server image | nginx | 1.28.3-alpine | frontend/Dockerfile |
 
-Tooling outside the lockfiles: uv 0.13.1 (backend/Dockerfile, CI), Node.js 22.23.x (CI 22.23.4),
+Tooling outside the lockfiles: uv 0.13.9 (backend/Dockerfile, CI), Node.js 22.23.x (CI 22.23.4),
 Python 3.12. GitHub Actions: actions/checkout@v7, actions/setup-node@v7, astral-sh/setup-uv@v10.3.3,
 gitleaks/gitleaks-action@v3.
+
+Dependabot (`.github/dependabot.yml`, D-155) opens weekly update pull requests. A pull request that
+bumps a package or image listed in the table above must change that row too, or TA-ARCH-01 fails.
 
 ## Chosen, not yet pinned (later phases)
 

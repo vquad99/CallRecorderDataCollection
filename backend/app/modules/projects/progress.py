@@ -30,15 +30,24 @@ Still needed (D-153), from the targets:
   people without the detail fill none.
 - Conversations: the target less the approved ones and the open tasks (not started, in progress,
   waiting for QC or approval).
-- Capacity: the conversations the registered people may still give under the conversations-per-
-  speaker limit (each at most the limit, less the conversations they have, rejected and cancelled
-  ones aside), against the two places each conversation still to make needs.
+- Capacity: whether the registered people can give the conversations still to make under the
+  pairing rules (D-143): each conversation takes two different people, each at most the
+  conversations-per-speaker limit (less the conversations they have, rejected and cancelled ones
+  aside), and with "each pair only once" a pair of people at most one. How many more people
+  that needs, when they cannot.
+
+The download (owner's request, `GET /projects/{id}/progress/export`): the same answer as tables,
+`summary_tables`, one sheet each in the Excel workbook and one long table in the CSV
+(`summary_csv_rows`), so a file always says what the tab says.
 """
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -166,16 +175,21 @@ class ConversationNeed(BaseModel):
 
 
 class Capacity(BaseModel):
-    """Whether the registered people can give the conversations still to make (D-143 limit)."""
+    """Whether the registered people can give the conversations still to make under the pairing
+    rules (D-143): each conversation takes two different people, each person at most `limit`
+    conversations, and with `unique_pairs` each pair of people at most one."""
 
     limit: int | None  # conversations per speaker; None = no limit
+    unique_pairs: bool  # each pair of speakers only once
     registered: int
     # Conversations the registered people may still take part in, added up (each conversation
     # takes two of these places); None without a limit.
     places_left: int | None
     conversations_to_make: int | None
-    # More people needed even if every registered one gives the limit; None without a limit or a
-    # conversations target.
+    # The fewest more people with whom the registered ones could give the conversations still to
+    # make: as many as their places allow (two a conversation; k more people bring k x limit) and,
+    # with unique pairs, as many as the pairs not used yet (k more people bring k x registered +
+    # k(k-1)/2); 0 when the registered people can. None without a conversations target.
     more_speakers_needed: int | None
 
 
@@ -484,6 +498,53 @@ def _conversation_need(
     )
 
 
+def _capacity(
+    limit: int | None,
+    unique_pairs: bool,
+    registered: int,
+    used: int,
+    pairs_used: int,
+    to_make: int | None,
+) -> Capacity:
+    """What the registered people can still give, and how many more people the conversations
+    still to make need (the Capacity model): `used` is the registered people's counted
+    conversations (each up to the limit), `pairs_used` the pairs among them that already share a
+    counted conversation."""
+    places = None if limit is None else max(0, registered * limit - used)
+
+    def can_give(more: int) -> float:
+        """Conversations the registered people and `more` new ones could give at most."""
+        people = registered + more
+        if people < 2:
+            return 0
+        most = math.inf
+        if limit is not None and places is not None:
+            most = min(most, (places + more * limit) // 2)
+        if unique_pairs:
+            most = min(most, people * (people - 1) // 2 - pairs_used)
+        return most
+
+    needed = None
+    if to_make is not None:
+        # The fewest: can_give only grows with more people, and 2 x to_make + 2 always suffice.
+        low, high = 0, 2 * to_make + 2
+        while low < high:
+            middle = (low + high) // 2
+            if can_give(middle) >= to_make:
+                high = middle
+            else:
+                low = middle + 1
+        needed = low
+    return Capacity(
+        limit=limit,
+        unique_pairs=unique_pairs,
+        registered=registered,
+        places_left=places,
+        conversations_to_make=to_make,
+        more_speakers_needed=needed,
+    )
+
+
 def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progress:
     """The Progress tab: completed minutes, conversations and speakers against the project's
     targets, the shares by age band, gender, recording type and district, and what is still
@@ -608,9 +669,10 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
     waiting = [p for p in grouped if not p.approved]
     with_approved = sum(int(p.n) for p in people)
 
-    # 3. The people registered in the project, who reached the conversations-per-speaker limit
-    # (D-143: cancelled and rejected tasks do not count), and the conversations the registered
-    # ones have under the limit, in one round trip.
+    # 3. The people registered in the project, those of them who reached the conversations-per-
+    # speaker limit (D-143: cancelled and rejected tasks do not count), the conversations they
+    # have under the limit and, with unique pairs, the pairs among them already used, in one
+    # round trip.
     registered_ids = (
         select(ParticipantProjectLink.participant_id)
         .join(Participant, Participant.id == ParticipantProjectLink.participant_id)
@@ -618,24 +680,37 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
     )
     registered = select(func.count()).select_from(registered_ids.subquery()).scalar_subquery()
     limit = project.max_conversations_per_speaker
+    counted = (in_project, Task.status.not_in(NOT_COUNTED))
     at_limit_q: Any = null()
     used_q: Any = null()
+    pairs_q: Any = null()
     if limit is not None:
-        counted = (in_project, Task.status.not_in(NOT_COUNTED))
         each = union_all(
             select(Task.participant_a_id.label("pid")).where(*counted),
             select(Task.participant_b_id.label("pid")).where(*counted),
         ).subquery()
         per = select(each.c.pid, func.count().label("used")).group_by(each.c.pid).subquery()
+        mine = per.c.pid.in_(registered_ids)  # people erased since no longer count (PROJ-10)
         at_limit_q = (
-            select(func.count()).select_from(per).where(per.c.used >= limit).scalar_subquery()
-        )
+            select(func.count()).select_from(per).where(per.c.used >= limit, mine)
+        ).scalar_subquery()
         used_q = (
             select(func.coalesce(func.sum(func.least(per.c.used, limit)), 0))
-            .where(per.c.pid.in_(registered_ids))
+            .where(mine)
             .scalar_subquery()
         )
-    registered_n, at_limit, used = db.execute(select(registered, at_limit_q, used_q)).one()
+    if project.unique_pairs:
+        a, b = Task.participant_a_id, Task.participant_b_id
+        pairs = (
+            select(func.least(a, b).label("x"), func.greatest(a, b).label("y"))
+            .where(*counted, a.in_(registered_ids), b.in_(registered_ids))
+            .distinct()
+            .subquery()
+        )
+        pairs_q = select(func.count()).select_from(pairs).scalar_subquery()
+    registered_n, at_limit, used, pairs_used = db.execute(
+        select(registered, at_limit_q, used_q, pairs_q)
+    ).one()
     registered_n = int(registered_n or 0)
 
     one_mode = project.only_mode
@@ -679,22 +754,17 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
             )
             for i, (mode, words) in enumerate(MODE_WORDS.items())
         ]
-    to_make = talks[0].still_to_make
-    places = None if limit is None else max(0, registered_n * limit - int(used or 0))
-    more = None
-    if limit is not None and places is not None and to_make is not None:
-        short = max(0, 2 * to_make - places)
-        more = -(-short // limit)  # whole people, rounded up
     still_needed = StillNeeded(
         speakers=_speakers_needed(project, people, waiting),
         districts=_districts_needed(project, people, waiting),
         conversations=talks,
-        capacity=Capacity(
-            limit=limit,
-            registered=registered_n,
-            places_left=places,
-            conversations_to_make=to_make,
-            more_speakers_needed=more,
+        capacity=_capacity(
+            limit,
+            project.unique_pairs,
+            registered_n,
+            int(used or 0),
+            int(pairs_used or 0),
+            talks[0].still_to_make,
         ),
     )
 
@@ -718,3 +788,325 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
         districts=_district_share(people, list(project.target_districts), with_approved),
         still_needed=still_needed,
     )
+
+
+# ---------------------------------------------------------------------- the download
+
+Cell = str | int | float | None
+# The CSV: every table of the download in one long table, a row per row of a sheet.
+SUMMARY_COLUMNS = (
+    "section",
+    "group",
+    "label",
+    "target",
+    "done",
+    "registered",
+    "still_needed",
+    "count",
+    "percent",
+    "target_percent",
+    "variance",
+)
+COUNTS_WORDS = {"EFFECTIVE": "Effective speech", "FULL": "Full length"}
+# The task statuses by stage, in the tab's order (frontend components/charts/stages.ts).
+STAGES = (
+    ("Approved", ("APPROVED",)),
+    ("Waiting for QC or approval", WAITING_QC),
+    ("In progress", IN_PROGRESS),
+    ("Not started", NOT_STARTED),
+    ("Rejected", ("REJECTED",)),
+    ("Cancelled", ("CANCELLED",)),
+)
+STATUS_WORDS = {
+    "APPROVED": "Approved",
+    "AUDIO_QC": "Audio QC",
+    "ADMIN_REVIEW": "Admin review",
+    "IN_PROGRESS": "In progress",
+    "RECORDED": "Recorded",
+    "ON_HOLD": "On hold",
+    "CONSENT_FIX": "Consent form to fix",
+    "DRAFT": "Draft",
+    "ASSIGNED": "Assigned",
+    "REJECTED": "Rejected",
+    "CANCELLED": "Cancelled",
+}
+
+
+@dataclass(frozen=True)
+class SummaryTable:
+    """One table of the download: a sheet of the workbook, named by its title, and a section of
+    the CSV. `columns`: each column's key among SUMMARY_COLUMNS and its heading on the sheet, in
+    the sheet's order; `rows` by those keys (a key left out is an empty cell)."""
+
+    title: str
+    columns: tuple[tuple[str, str], ...]
+    rows: list[dict[str, Cell]]
+
+    @property
+    def header(self) -> list[str]:
+        return [heading for _, heading in self.columns]
+
+    def cells(self) -> list[list[Cell]]:
+        return [[row.get(key) for key, _ in self.columns] for row in self.rows]
+
+
+def stamp(now: datetime) -> str:
+    """When a download was made, in the report's time zone: "2026-11-22 15:04 (UTC+05:30,
+    Asia/Kolkata)"."""
+    offset = now.strftime("%z")
+    zone = getattr(now.tzinfo, "key", None) or now.strftime("%Z")
+    return f"{now:%Y-%m-%d %H:%M} (UTC{offset[:3]}:{offset[3:]}, {zone})"
+
+
+def _hours(ms: int) -> float:
+    return round(ms / 3_600_000, 2)
+
+
+def _many(n: int, one: str) -> str:
+    return f"{n} {one}{'' if n == 1 else 's'}"
+
+
+def _need_cells(need: Need) -> dict[str, Cell]:
+    return {
+        "target": need.target,
+        "done": need.done,
+        "registered": need.registered,
+        "still_needed": need.still_needed,
+    }
+
+
+_NEED_COLUMNS = (
+    ("target", "Target"),
+    ("done", "Done"),
+    ("registered", "Registered"),
+    ("still_needed", "Still needed"),
+)
+
+
+def _about(p: Progress, project: Project, generated: str) -> SummaryTable:
+    capacity = p.still_needed.capacity
+    items: list[tuple[str, Cell]] = [
+        ("Project code", project.code),
+        ("Project name", project.name),
+        ("Recording type", MODE_WORDS.get(p.recording_mode or "", "Face-to-face and phone call")),
+        ("Generated", generated),
+        ("Completed counts", COUNTS_WORDS.get(p.completed.counts, p.completed.counts)),
+        ("Conversations per speaker", "No limit" if capacity.limit is None else capacity.limit),
+        ("Each pair of speakers only once", "Yes" if capacity.unique_pairs else "No"),
+    ]
+    return SummaryTable(
+        "About",
+        (("group", "Item"), ("label", "Value")),
+        [{"group": item, "label": value} for item, value in items],
+    )
+
+
+def _key_figures(p: Progress) -> SummaryTable:
+    done, talks, people = p.completed, p.conversations, p.speakers
+    counted = COUNTS_WORDS.get(done.counts, done.counts).lower()
+    rows: list[dict[str, Cell]] = [
+        {
+            "label": f"Completed hours ({counted})",
+            "count": _hours(done.completed_ms),
+            "target": done.target_hours,
+            "percent": done.percent_of_target,
+        },
+        {
+            "label": "Approved conversations",
+            "count": talks.approved,
+            "target": talks.target,
+            "percent": talks.percent_of_target,
+        },
+        {
+            "label": "Speakers with an approved conversation",
+            "count": people.with_approved,
+            "target": people.target,
+            "percent": people.percent_of_target,
+        },
+        {"label": "Registered speakers", "count": people.registered},
+    ]
+    if people.limit is not None:
+        limit = _many(people.limit, "conversation")
+        rows.append(
+            {"label": f"Registered speakers at the limit of {limit}", "count": people.at_limit}
+        )
+    rows += [
+        {"label": "Approved conversations not measured yet", "count": done.not_measured},
+        {"label": "Effective speech (% of the recorded audio)", "count": done.effective_share_pct},
+    ]
+    return SummaryTable(
+        "Key figures",
+        (("label", "Figure"), ("count", "Value"), ("target", "Target"), ("percent", "% of target")),
+        rows,
+    )
+
+
+def _speakers_by_age(p: Progress) -> SummaryTable:
+    speakers = p.still_needed.speakers
+    groups = [*speakers.rows, *([speakers.total] if len(speakers.rows) > 1 else [])]
+    return SummaryTable(
+        "Speakers by age and gender",
+        (("group", "Age band"), ("label", "Gender"), *_NEED_COLUMNS),
+        [
+            {"group": row.label, "label": gender, **_need_cells(need)}
+            for row in groups
+            for gender, need in (("Male", row.male), ("Female", row.female), ("Total", row.total))
+        ],
+    )
+
+
+def _speakers_by_district(p: Progress) -> SummaryTable:
+    districts = p.still_needed.districts
+    rows = [*districts.rows, *([districts.total] if districts.total else [])]
+    return SummaryTable(
+        "Speakers by district",
+        (("label", "Native district"), *_NEED_COLUMNS),
+        [{"label": row.label, **_need_cells(row)} for row in rows],
+    )
+
+
+def _conversations_to_make(p: Progress) -> SummaryTable:
+    return SummaryTable(
+        "Conversations to make",
+        (
+            ("label", "Conversations"),
+            ("target", "Target"),
+            ("done", "Approved"),
+            ("count", "Open tasks"),
+            ("still_needed", "Still to make"),
+        ),
+        [
+            {
+                "label": c.label,
+                "target": c.target,
+                "done": c.approved,
+                "count": c.in_pipeline,
+                "still_needed": c.still_to_make,
+            }
+            for c in p.still_needed.conversations
+        ],
+    )
+
+
+def _capacity_table(p: Progress) -> SummaryTable:
+    capacity = p.still_needed.capacity
+    items: list[tuple[str, Cell]] = [
+        ("Registered speakers", capacity.registered),
+        ("Places left (two per conversation; none without a limit)", capacity.places_left),
+        ("Conversations still to make", capacity.conversations_to_make),
+        ("More speakers needed", capacity.more_speakers_needed),
+    ]
+    return SummaryTable(
+        "Capacity",
+        (("label", "Item"), ("count", "Value")),
+        [{"label": item, "count": value} for item, value in items],
+    )
+
+
+def _balance(p: Progress) -> SummaryTable:
+    groups = [
+        ("Age bands", p.age_bands),
+        ("Gender", p.gender),
+        *([("Face-to-face and phone", p.modes)] if p.modes else []),
+        ("Districts", p.districts),
+    ]
+    return SummaryTable(
+        "Balance",
+        (
+            ("group", "Group"),
+            ("label", "Row"),
+            ("count", "Count"),
+            ("percent", "Share (%)"),
+            ("target_percent", "Target share (%)"),
+            ("variance", "Variance (points)"),
+        ),
+        [
+            {
+                "group": name,
+                "label": row.label,
+                "count": row.count,
+                "percent": row.percent,
+                "target_percent": row.target_percent,
+                "variance": row.variance,
+            }
+            # Shares of nobody yet are left out, as on the tab: their variance would mean nothing.
+            for name, share in groups
+            if share.total
+            for row in share.rows
+        ],
+    )
+
+
+def _by_status(p: Progress) -> SummaryTable:
+    by = p.conversations.by_status
+    total = sum(by.values())
+    known = {status for _, statuses in STAGES for status in statuses}
+    listed = [(stage, status) for stage, statuses in STAGES for status in statuses]
+    listed += [("Other", status) for status in sorted(set(by) - known)]
+    rows: list[dict[str, Cell]] = [
+        {
+            "group": stage,
+            "label": STATUS_WORDS.get(status, status),
+            "count": by.get(status, 0),
+            "percent": _pct(by.get(status, 0), total),
+        }
+        for stage, status in listed
+    ]
+    rows.append(
+        {"group": "Total", "label": "All tasks", "count": total, "percent": _pct(total, total)}
+    )
+    return SummaryTable(
+        "Conversations by status",
+        (("group", "Stage"), ("label", "Status"), ("count", "Tasks"), ("percent", "Share (%)")),
+        rows,
+    )
+
+
+def _completed(p: Progress) -> SummaryTable:
+    done = p.completed
+    kinds = (
+        ("Approved", done.approved_conversations, done.approved_ms, done.approved_effective_ms),
+        (
+            "Recorded, not yet approved",
+            done.recorded_conversations,
+            done.recorded_ms,
+            done.recorded_effective_ms,
+        ),
+    )
+    rows: list[dict[str, Cell]] = []
+    for kind, n, full, speech in kinds:
+        rows += [
+            {"group": kind, "label": "Number", "count": n},
+            {"group": kind, "label": "Full length (h)", "count": _hours(full)},
+            {"group": kind, "label": "Effective speech (h)", "count": _hours(speech)},
+        ]
+    return SummaryTable(
+        "Completed", (("group", "Conversations"), ("label", "Measure"), ("count", "Value")), rows
+    )
+
+
+def summary_tables(p: Progress, project: Project, generated: str) -> list[SummaryTable]:
+    """The Progress tab as tables, in its order: about the file, the key figures, what is still
+    needed (speakers by age band and gender and by district, conversations, capacity), the
+    balance against the targets (every row, all the districts too), the conversations by status
+    and the completed time. `generated`: when, as `stamp` writes it."""
+    return [
+        _about(p, project, generated),
+        _key_figures(p),
+        _speakers_by_age(p),
+        _speakers_by_district(p),
+        _conversations_to_make(p),
+        _capacity_table(p),
+        _balance(p),
+        _by_status(p),
+        _completed(p),
+    ]
+
+
+def summary_csv_rows(tables: Sequence[SummaryTable]) -> list[list[Cell]]:
+    """The tables as one long table under SUMMARY_COLUMNS, each row named by its table's title."""
+    return [
+        [table.title, *(row.get(key) for key in SUMMARY_COLUMNS[1:])]
+        for table in tables
+        for row in table.rows
+    ]

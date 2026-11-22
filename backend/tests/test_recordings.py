@@ -309,8 +309,9 @@ def test_reprocessing_creates_a_new_identical_version(world: dict[str, Any]) -> 
         select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")
     ).one()
     sha_before = original_before.sha256
+    # Only when asked: a job sent twice changes nothing (TASK-02, test_recovery).
     service.process(
-        db, world["app"].state.settings, world["app"].state.storage, __import__("uuid").UUID(rid)
+        db, world["app"].state.settings, world["app"].state.storage, uuid.UUID(rid), again=True
     )
     derived = db.scalars(
         select(AudioAsset).where(AudioAsset.kind == "FTF_DERIVED_PCM").order_by(AudioAsset.version)
@@ -333,7 +334,8 @@ def test_reprocessing_refuses_a_damaged_stored_original(world: dict[str, Any], s
             db,
             world["app"].state.settings,
             world["app"].state.storage,
-            __import__("uuid").UUID(rid),
+            uuid.UUID(rid),
+            again=True,
         )
     assert world["mod"].get(f"/api/v1/recordings/{rid}").json()["state"] == "FAILED"
 
@@ -435,16 +437,24 @@ def test_retention_deletes_expired_files_and_usage_counts_live_ones(
     db.commit()
     before = {r["kind"]: r["files"] for r in world["pa"].get("/api/v1/storage/usage").json()}
     assert before == {"BROWSER_ORIGINAL": 1, "FTF_DERIVED_PCM": 1}
+    # The task is still open (Recorded): QC, the approval and a delivery may need the file yet,
+    # whatever the rule says (PROJ-01).
+    assert service.apply_retention(db, world["app"].state.storage) == 0
+    tid = world["task"]["id"]
+    cancelled = world["pa"].post(
+        f"/api/v1/tasks/{tid}/transition",
+        json={"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
     assert service.apply_retention(db, world["app"].state.storage) == 1
+    db.expire_all()
     original = db.scalars(select(AudioAsset).where(AudioAsset.kind == "BROWSER_ORIGINAL")).one()
     assert original.deleted_at is not None
     assert world["app"].state.storage.head(original.storage_key) is None
     after = {r["kind"]: r["files"] for r in world["pa"].get("/api/v1/storage/usage").json()}
     assert after == {"FTF_DERIVED_PCM": 1}
-    assert (
-        db.scalar(select(Recording.state).where(Recording.id == __import__("uuid").UUID(rid)))
-        == "READY"
-    )
+    assert db.scalar(select(Recording.state).where(Recording.id == uuid.UUID(rid))) == "READY"
+    assert service.apply_retention(db, world["app"].state.storage) == 0, "once is enough"
 
 
 def test_the_task_list_carries_each_recordings_files(world: dict[str, Any]) -> None:
@@ -553,3 +563,139 @@ def test_a_recording_stops_growing_at_its_byte_limit(world: dict[str, Any]) -> N
     over = put(mod, rid, 15, second)
     assert (over.status_code, over.json()["error"]["code"]) == (422, "TOO_LARGE")
     assert mod.get(f"/api/v1/recordings/{rid}").json()["chunks_received"] == 15
+
+
+# ------------------------------------------------- what is left open or finishes at a bad moment
+
+
+def _hold(world: dict[str, Any]) -> None:
+    held = world["pa"].post(
+        f"/api/v1/tasks/{world['task']['id']}/transition",
+        json={"to": "ON_HOLD", "reason_code": "TECHNICAL_PROBLEM"},
+    )
+    assert held.status_code == 200, held.text
+
+
+def test_a_new_moderator_can_finish_or_discard_a_recording_left_open(
+    world: dict[str, Any],
+) -> None:
+    """TASK-03: the moderator is replaced (On hold, Reassign, Resume) while their recording is
+    open; the new moderator stops it, discards it and records, instead of a task stuck for all."""
+    tid = world["task"]["id"]
+    mona: Api = world["mod"]
+    rid = _record(world, chunks(2, 0), complete=False)
+    pa: Api = world["pa"]
+    _hold(world)
+    mod2 = world["api"]("mod2@example.org")
+    mod2_id = mod2.get("/api/v1/auth/me").json()["id"]
+    reassigned = pa.post(
+        f"/api/v1/tasks/{tid}/assign", json={"user_id": mod2_id, "reason": "Mona is ill"}
+    )
+    assert reassigned.status_code == 200, reassigned.text
+    resumed = pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+    assert resumed.json()["status"] == "IN_PROGRESS", resumed.text
+
+    blocked = mod2.post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert blocked.json()["error"]["code"] == "RECORDING_OPEN"
+    assert blocked.json()["error"]["details"] == [{"recording_id": rid}]
+    # Parts come only from the browser that started it; the replaced moderator no longer sees it.
+    assert put(mod2, rid, 2, chunks(1, 0)[0]).status_code == 403
+    assert mona.post(f"/api/v1/recordings/{rid}/discard", json={"reason": "x"}).status_code == 404
+    assert pa.post(f"/api/v1/recordings/{rid}/discard", json={"reason": "x"}).status_code == 403
+
+    stopped = mod2.post(f"/api/v1/recordings/{rid}/interrupted", json={"reason": "Mona left"})
+    assert (stopped.status_code, stopped.json()["state"]) == (200, "INTERRUPTED"), stopped.text
+    gone = mod2.post(f"/api/v1/recordings/{rid}/discard", json={"reason": "Recorded again"})
+    assert (gone.status_code, gone.json()["state"]) == (200, "DISCARDED"), gone.text
+    again = mod2.post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert again.status_code == 201, again.text
+
+
+def test_the_new_moderator_can_keep_the_saved_audio(world: dict[str, Any]) -> None:
+    """TASK-03: Keep on the recorder's card works for the task's moderator now too."""
+    tid = world["task"]["id"]
+    rid = _record(world, chunks(2, 0), complete=False)
+    _hold(world)
+    mod2 = world["api"]("mod2@example.org")
+    mod2_id = mod2.get("/api/v1/auth/me").json()["id"]
+    pa: Api = world["pa"]
+    pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": mod2_id, "reason": "Cover"})
+    pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+    assert (
+        mod2.post(f"/api/v1/recordings/{rid}/interrupted", json={"reason": "x"}).status_code == 200
+    )
+    kept = mod2.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 2})
+    assert kept.status_code == 200, kept.text
+    assert mod2.get(f"/api/v1/recordings/{rid}").json()["state"] == "READY"
+    assert mod2.get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+
+
+def test_a_recording_finished_while_the_task_is_on_hold_resumes_at_recorded(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-04: the task is put on hold while its recording is processed; the finished
+    conversation is not lost: Resume lands on Recorded, the sweep checks it, the moderator sends
+    it to QC."""
+    from app.modules.audit.models import AuditLog
+    from app.modules.recordings import worker_dispatch
+
+    tid = world["task"]["id"]
+    mod: Api = world["mod"]
+    pa: Api = world["pa"]
+    rid = _record(world, chunks(3, 0), complete=False)
+    with monkeypatch.context() as m:  # completed; processing has not run yet
+        m.setattr(worker_dispatch, "run_inline", lambda *_: None)
+        done = mod.post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 3})
+        assert done.status_code == 200, done.text
+    _hold(world)
+    app = world["app"]
+    service.process(world["db"], app.state.settings, app.state.storage, uuid.UUID(rid))
+
+    task = pa.get(f"/api/v1/tasks/{tid}").json()
+    assert (task["status"], task["held_from"]) == ("ON_HOLD", "RECORDED")
+    assert mod.get(f"/api/v1/recordings/{rid}").json()["state"] == "READY"
+    db = world["db"]
+    db.expire_all()
+    noted = db.scalar(select(AuditLog).where(AuditLog.action == "task.held_from_changed"))
+    assert noted is not None
+    assert noted.actor_id is None, "the platform's own change"
+    assert "resumes at Recorded" in (noted.after_summary or "")
+    assert "RECORDED" in task["allowed_transitions"]
+
+    resumed = pa.post(f"/api/v1/tasks/{tid}/transition", json={"to": "RECORDED"})
+    assert resumed.json()["status"] == "RECORDED", resumed.text
+    assert worker_dispatch.check_pending_audio(app) == 1, "the sweep runs the automatic check"
+    assert sorted(mod.get(f"/api/v1/tasks/{tid}").json()["allowed_transitions"]) == [
+        "AUDIO_QC",
+        "IN_PROGRESS",
+    ]
+    sent = mod.post(f"/api/v1/tasks/{tid}/transition", json={"to": "AUDIO_QC"})
+    assert sent.json()["status"] == "AUDIO_QC", sent.text
+
+
+def test_a_double_start_is_told_the_recording_is_open_not_a_server_error(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FEW-08: two Start recording requests at the same moment both pass the check for an open
+    recording; the database lets one in and the other gets 409 RECORDING_OPEN, not 500."""
+    tid = world["task"]["id"]
+    first = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert first.status_code == 201, first.text
+    real = service.open_recording
+    looked: list[uuid.UUID] = []
+
+    def missed(db: Any, task_id: uuid.UUID) -> Any:
+        looked.append(task_id)
+        return None if len(looked) == 1 else real(db, task_id)  # the check runs too early
+
+    monkeypatch.setattr(service, "open_recording", missed)
+    second = world["mod"].post(f"/api/v1/tasks/{tid}/recordings", json=START)
+    assert second.status_code == 409, second.text
+    error = second.json()["error"]
+    assert (error["code"], error["details"]) == (
+        "RECORDING_OPEN",
+        [{"recording_id": first.json()["id"]}],
+    )
+    db = world["db"]
+    db.expire_all()
+    assert len(db.scalars(select(Recording).where(Recording.state == "RECORDING")).all()) == 1

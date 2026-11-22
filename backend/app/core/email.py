@@ -39,7 +39,9 @@ def _build(message: OutgoingEmail, sender: str) -> EmailMessage:
     email = EmailMessage()
     email["From"] = sender
     email["To"] = message.to
-    email["Subject"] = message.subject
+    # One line: a header may not hold a line break, and a subject made from a name typed by staff
+    # (a project's, PROJ-11) could carry one (LF, CR, U+2028 ...). str.split() takes them all.
+    email["Subject"] = " ".join(message.subject.split())
     email.set_content(message.body)
     return email
 

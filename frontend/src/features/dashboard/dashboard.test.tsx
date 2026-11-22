@@ -1,6 +1,6 @@
 // Dashboard filters and phone-call figures (D-108), laid out as one screen (D-151).
 // Requirements: DASH-001, DASH-002, DASH-004
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -82,6 +82,30 @@ describe("dashboard filters", () => {
         .slice(before)
         .some((q) => q?.includes("date_to=2026-10-20")),
     ).toBe(false);
+  });
+
+  it("waits for a typed year before asking for the days (Edge fills it with zeros first)", async () => {
+    const { calls } = open();
+    renderAt("/dashboard");
+    await screen.findByText("Moderator output", {}, wait);
+    await userEvent.selectOptions(screen.getByLabelText("Period"), "custom");
+    const from = await screen.findByLabelText("From");
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-11-10" } });
+    await waitFor(() => expect(asked(calls).at(-1)).toBe("days=30&date_to=2026-11-10"));
+    const before = asked(calls).length;
+    // The first day's year half typed: nothing asked, no error, and the figures stay.
+    fireEvent.change(from, { target: { value: "0002-11-01" } });
+    fireEvent.change(from, { target: { value: "0202-11-01" } });
+    await new Promise((done) => setTimeout(done, 300));
+    expect(asked(calls)).toHaveLength(before);
+    expect(screen.queryByText("Must not be before the first day")).toBeNull();
+    expect(screen.getByRole("group", { name: "Key figures" })).toBeInTheDocument();
+    // The whole year: asked once.
+    fireEvent.change(from, { target: { value: "2026-11-01" } });
+    await waitFor(() =>
+      expect(asked(calls).at(-1)).toBe("days=30&date_from=2026-11-01&date_to=2026-11-10"),
+    );
+    expect(asked(calls)).toHaveLength(before + 1);
   });
 
   it("opens the task list filtered to a queue that needs attention", async () => {

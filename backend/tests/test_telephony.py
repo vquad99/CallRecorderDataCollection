@@ -40,12 +40,13 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
 from app.modules.auth.security import FieldCipher
 from app.modules.participants.models import ConsentRecord, Participant
-from app.modules.projects.models import ProjectAudioRule
+from app.modules.projects.models import Project, ProjectAudioRule
 from app.modules.projects.service import DEFAULT_AUDIO, DEFAULT_MAX_SILENCE_PCT
 from app.modules.recordings.models import AssetProcessingStep, AudioAsset, Recording
 from app.modules.recordings.worker_dispatch import fetch_call_recordings
-from app.modules.telephony import fetch
+from app.modules.telephony import analytics, fetch
 from app.modules.telephony.models import Call, CallEvent
+from app.modules.telephony.service import candidate_key
 from tests import fake_txcontact
 from tests.conftest import (
     TEST_FERNET_KEY,
@@ -753,6 +754,40 @@ def test_a_redial_does_not_take_the_dropped_calls_recording(world: dict[str, Any
     assert (row.state, row.provider_session_id) == ("RECORDED", "REAL")
 
 
+def test_a_cancelled_call_lets_go_of_the_recording_chosen_for_it(world: dict[str, Any]) -> None:
+    """Two calls on one seat with the same person A both fit two provider calls. S-2 is chosen
+    for the first by mistake, which is then cancelled: S-2 is free again for the second call,
+    whose conversation it is, and the first call's history still says what was chosen."""
+    w = world
+    first_task, first = started_and_closed(w)
+    second_task, second = started_and_closed(w)
+    now = datetime.now(UTC)
+    w["provider"].listed = [session("S-1", now), session("S-2", now + timedelta(seconds=20))]
+    for call in (first, second):
+        due_now(w, call["id"])
+    sweep(w)
+    assert [seen(w, t)["state"] for t in (first_task, second_task)] == ["NEEDS_MATCH"] * 2
+
+    chosen = w["mod"].post(f"/api/v1/calls/{first['id']}/match", json={"key": candidate_key("S-2")})
+    assert chosen.status_code == 200, chosen.text
+    cancelled = w["mod"].post(
+        f"/api/v1/calls/{first['id']}/cancel",
+        json={"reason": "OTHER", "note": "Chose the other call's recording"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    w["db"].expire_all()
+    row = w["db"].get(Call, first["id"])
+    assert (row.state, row.provider_session_id, row.provider_file) == ("CANCELLED", None, None)
+    kinds = [e["kind"] for e in seen(w, first_task)["events"]]
+    assert "MATCH_CHOSEN" in kinds
+
+    taken = w["mod"].post(f"/api/v1/calls/{second['id']}/match", json={"key": candidate_key("S-2")})
+    assert taken.status_code == 200, taken.text
+    sweep(w)
+    row = w["db"].get(Call, second["id"])
+    assert (row.state, row.provider_session_id) == ("RECORDED", "S-2")
+
+
 def test_a_call_waits_with_a_task_on_hold_and_ends_with_a_task_that_is_over(
     world: dict[str, Any],
 ) -> None:
@@ -937,11 +972,14 @@ def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[st
     assert [i["state"] for i in recorded["items"]] == ["RECORDED"]
     assert recorded["items"][0]["recording_seconds"] == 4.0
 
-    # The spreadsheet of calls: one row a call, no phone numbers.
+    # The spreadsheet of calls: one row a call, no phone numbers; with the mark that makes
+    # spreadsheet software read it as UTF-8, so names and notes in any script show (EXP-007).
     sheet = w["pa"].get(f"/api/v1/calls/export?project_id={w['project_id']}&days=7")
     assert sheet.status_code == 200, sheet.text
     assert sheet.headers["content-type"].startswith("text/csv")
-    rows = list(csv.DictReader(io.StringIO(sheet.text)))
+    assert sheet.content.startswith(b"\xef\xbb\xbf")
+    rows = list(csv.DictReader(io.StringIO(sheet.content.decode("utf-8-sig"))))
+    assert next(iter(rows[0])) == "started"  # the mark is not part of the first column's name
     assert len(rows) == 3
     done = next(r for r in rows if r["state"] == "RECORDED")
     assert (done["a_joined"], done["b_joined"], done["quality_ok"]) == ("yes", "yes", "no")
@@ -957,6 +995,53 @@ def test_analytics_count_what_happened_and_respect_who_may_see_it(world: dict[st
     mod2 = w["api"]("mod2@example.org")
     assert mod2.get("/api/v1/calls").json()["total"] == 0
     assert mod2.get("/api/v1/telephony/analytics").status_code == 403
+
+
+def test_the_calls_csv_refuses_a_period_it_cannot_hold_whole(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """More calls than the file holds: said, never a file cut short without a word."""
+    w = world
+    give_seat(w)
+    for _ in range(2):
+        start(w, w["new_task"]())
+    monkeypatch.setattr(analytics, "MAX_CSV_ROWS", 1)
+    refused = w["pa"].get("/api/v1/calls/export?days=7")
+    assert refused.status_code == 422, refused.text
+    error = refused.json()["error"]
+    assert error["code"] == "TOO_LARGE"
+    assert error["message"].endswith("calls in this period: choose a project or a shorter period")
+    monkeypatch.setattr(analytics, "MAX_CSV_ROWS", 2)
+    sheet = w["pa"].get("/api/v1/calls/export?days=7")
+    assert sheet.status_code == 200, sheet.text
+    assert len(list(csv.DictReader(io.StringIO(sheet.content.decode("utf-8-sig"))))) == 2
+
+
+def test_the_daily_phone_target_follows_one_rule_for_every_manager(
+    world: dict[str, Any],
+) -> None:
+    """The target of the live projects, or of the project chosen, the same for a Super Admin and
+    a Project Admin of the same projects (and as on the dashboard)."""
+    w = world
+    db = w["db"]
+    phone = db.get(Project, uuid.UUID(w["project_id"]))
+    phone.target_telephony_hours_per_day = 1.5
+    done = make_project(db, "DONE", status="COMPLETED")
+    done.target_telephony_hours_per_day = 3
+    held = make_project(db, "HELD", status="PAUSED")
+    held.target_telephony_hours_per_day = 2
+    db.commit()
+    make_user(db, "pa.all@example.org", ["PROJECT_ADMIN"], projects=[phone, done, held])
+    pa_all = w["api"]("pa.all@example.org")
+
+    def target(api: Api, project: Any | None) -> Any:
+        params = {"days": 7} | ({"project_id": str(project.id)} if project else {})
+        got = api.get("/api/v1/telephony/analytics", params=params)
+        assert got.status_code == 200, got.text
+        return got.json()["target_minutes_per_day"]
+
+    for project, minutes in ((None, 90.0), (phone, 90.0), (done, 180.0), (held, 120.0)):
+        assert target(w["sa"], project) == target(pa_all, project) == minutes, project
 
 
 def test_a_call_left_open_is_counted_as_needing_a_person(world: dict[str, Any]) -> None:
@@ -1050,7 +1135,8 @@ def test_participant_details_tell_everything_about_the_person_to_those_who_manag
         "GIVEN",
     )
 
-    # Participant B is in the same sessions as B; phone calls ring A only.
+    # Participant B is in the same sessions as B. A call rings A, and rings B only once the
+    # moderator rings them in (D-111), which this call never did: none counts as B's.
     b = w["pa"].get(f"{base}/{w['b']['id']}/details").json()
     assert [s["slot"] for s in b["sessions"]] == ["B", "B"]
     assert b["calls"] is None
@@ -1124,6 +1210,12 @@ def test_the_moderator_rings_participant_b_into_the_call_once_a_is_on(
     text = " ".join(e["text"] for e in body["events"])
     assert B_PHONE not in text
     assert B_PHONE[3:] not in text
+    # Rung into the call, B has a phone call to them too, at the time B was rung (D-104).
+    details = f"/api/v1/projects/{w['project_id']}/participants/{w['b']['id']}/details"
+    b_calls = w["pa"].get(details).json()["calls"]
+    assert (b_calls["total"], b_calls["recorded"], b_calls["last_state"]) == (1, 0, "DIALLING")
+    rung_at = w["db"].scalar(select(Call.b_dialled_at).where(Call.id == call["id"]))
+    assert datetime.fromisoformat(b_calls["last_at"]) == rung_at
 
     # Refused by TxContact, then not reachable: said so, and B can be rung again.
     w["provider"].attach_answer = DialResult(False, 200, "")

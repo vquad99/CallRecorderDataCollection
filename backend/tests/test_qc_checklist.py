@@ -14,15 +14,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.modules.audio_qc import checklist
 from app.modules.audio_qc.models import AudioQcDraft, AudioQcResult
 from app.modules.audit.models import AuditLog
+from app.modules.participants.models import ConsentRecord
 from app.modules.recordings.models import Recording
 from app.modules.tasks import workflow
 from tests import test_audio_qc, test_recordings
-from tests.conftest import Api, make_user, set_status
+from tests.conftest import Api, agree, make_user, set_status
 from tests.test_audio_qc import answers, passing
 from tests.test_participant_documents import JPEG, PDF, put
 
@@ -398,6 +399,7 @@ def test_send_back_for_consent_then_a_new_scan_then_back_to_qc_then_pass(
         False,
         True,
     )
+    assert fix["by_upload"] is True
     assert fix["participants"] == [
         {"side": "A", "participant_id": a, "participant_code": code_a, "replaced": False}
     ]
@@ -473,6 +475,75 @@ def test_a_send_back_where_qc_pass_is_the_final_approval(world: dict[str, Any]) 
     back = world["pa"].post(f"/api/v1/tasks/{tid}/consent-fix/send-to-qc", json={})
     assert back.json()["status"] == "AUDIO_QC", back.text
     assert _decide(qc, tid, **passing(qc, tid)).json()["task_status"] == "APPROVED"
+
+
+def _forms_only(world: dict[str, Any], *participant_ids: str) -> None:
+    """These people consent by their signed form only: they never agreed online (test-only)."""
+    db = world["db"]
+    db.execute(
+        delete(ConsentRecord).where(
+            ConsentRecord.project_id == world["project"].id,
+            ConsentRecord.participant_id.in_(participant_ids),
+        )
+    )
+    db.commit()
+
+
+def test_after_a_switch_to_online_the_person_must_agree_online(world: dict[str, Any]) -> None:
+    """SECB-03: QC sent the task back for A's form, then the project switched to Online, where a
+    signed form no longer counts: the task goes back to QC once A agrees online, and QC passes it
+    only once both have."""
+    a, b = _uploads(world)
+    _forms_only(world, a, b)
+    test_audio_qc._record(world)
+    tid = world["task"]["id"]
+    pa, mod = world["pa"], world["mod"]
+    qc = test_audio_qc._assign_qc(world)
+    wrong = {**answers(qc, tid), "consent": {"A": "no", "B": "yes"}}
+    sent = _decide(qc, tid, outcome="SEND_BACK_CONSENT", answers=wrong, comment="Wrong person")
+    assert sent.json()["task_status"] == "CONSENT_FIX", sent.text
+    switched = _patch(pa, world["project"].id, consent_mode="ONLINE")
+    assert switched.status_code == 200, switched.text
+
+    fix = mod.get(f"/api/v1/tasks/{tid}").json()["consent_fix"]
+    assert (fix["forms_replaced"], fix["participants"][0]["replaced"]) == (False, False)
+    # The task page says the person agrees online now, not that a form is needed.
+    assert fix["by_upload"] is False
+    url = f"/api/v1/tasks/{tid}/consent-fix/send-to-qc"
+    refused = mod.post(url, json={})
+    assert _error(refused) == "CONSENT_FORM_NOT_REPLACED"
+    assert "has not agreed on the consent form online yet" in refused.json()["error"]["message"]
+    agree(pa, world["project"].id, a)
+    assert mod.get(f"/api/v1/tasks/{tid}").json()["consent_fix"]["forms_replaced"] is True
+    back = mod.post(url, json={})
+    assert back.json()["status"] == "AUDIO_QC", back.text
+    # B consented by a form only, which no longer counts here: no pass yet.
+    blocked = _decide(qc, tid, **passing(qc, tid))
+    assert (blocked.status_code, _error(blocked)) == (409, "CONSENT_MISSING")
+    agree(pa, world["project"].id, b)
+    passed = _decide(qc, tid, **passing(qc, tid))
+    assert passed.json()["task_status"] == "ADMIN_REVIEW", passed.text
+
+
+def test_qc_cannot_pass_a_task_whose_consent_no_longer_counts(world: dict[str, Any]) -> None:
+    """SECB-03: a task waiting in QC when the project switched to Online, where QC pass is the
+    final approval: the pass is refused while consent is missing; a reject is not."""
+    a, b = _uploads(world)
+    _forms_only(world, a, b)
+    world["project"].qc_final_approval = True
+    world["db"].commit()
+    test_audio_qc._record(world)
+    tid = world["task"]["id"]
+    qc = test_audio_qc._assign_qc(world)
+    assert _patch(world["pa"], world["project"].id, consent_mode="ONLINE").status_code == 200
+    refused = _decide(qc, tid, **passing(qc, tid))
+    assert (refused.status_code, _error(refused)) == (409, "CONSENT_MISSING")
+    assert refused.json()["error"]["details"] == [{"missing": ["A", "B"]}]
+    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "AUDIO_QC", "not approved"
+    rejected = _decide(
+        qc, tid, outcome="FAIL", reason_code="CONSENT_PROBLEM", comment="No consent on file"
+    )
+    assert rejected.json()["task_status"] == "REJECTED", rejected.text
 
 
 def test_a_task_waiting_for_its_consent_form_can_be_cancelled(world: dict[str, Any]) -> None:

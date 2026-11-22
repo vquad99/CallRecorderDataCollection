@@ -24,7 +24,7 @@ import { TextField } from "../../components/form/TextField";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
-import { bytes, hours } from "../../lib/format";
+import { bytes, hours, typedDay } from "../../lib/format";
 import { labelFor, MODE_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
 import { languageLabel } from "../projects/choices";
 import "./dashboard.css";
@@ -391,7 +391,10 @@ export function DashboardPage() {
   const [to, setTo] = useState("");
   const [filters, setFilters] = useState(NO_FILTERS);
   const custom = period === "custom";
-  const backwards = custom && from !== "" && to !== "" && from > to;
+  // The days as asked: a year still being typed (0002, 0020, 0202) is no day yet.
+  const fromDay = typedDay(from);
+  const toDay = typedDay(to);
+  const backwards = custom && fromDay !== "" && toDay !== "" && fromDay > toDay;
   const asked: DashboardFilters = {
     project_id: projectId || undefined,
     days: custom ? 30 : Number(period),
@@ -401,8 +404,8 @@ export function DashboardPage() {
     district: filters.district || undefined,
     status: filters.status || undefined,
     staff_id: filters.staffId || undefined,
-    date_from: custom ? from || undefined : undefined,
-    date_to: custom ? to || undefined : undefined,
+    date_from: custom ? fromDay || undefined : undefined,
+    date_to: custom ? toDay || undefined : undefined,
   };
   const key = JSON.stringify(asked);
   const { state, reload } = useResource(

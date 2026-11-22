@@ -23,10 +23,12 @@ export const DOCUMENT_WORDS: Record<work.DocumentKind, string> = {
   ADDRESS_PROOF: "Address proof",
 };
 
+/** A non-breaking space: a size's unit never wraps onto a line of its own ("240 KB"). */
+const NBSP = String.fromCharCode(0xa0);
 const sizeText = (bytes: number) =>
   bytes < 1024 * 1024
-    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    ? `${Math.max(1, Math.round(bytes / 1024))}${NBSP}KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)}${NBSP}MB`;
 
 /** "Uploaded 21 Nov 2026, 10:30 by Ada · 240 KB" */
 export const uploadedText = (d: work.ParticipantDocument) =>
@@ -174,12 +176,24 @@ export function DocumentBadges({
   );
 }
 
-/** "21 Nov 2026, 10:30 · Ada · 240 KB": when, by whom and how big, for a table cell. */
-const uploadedCell = (d: work.ParticipantDocument) =>
-  `${when(d.uploaded_at)} by ${d.uploaded_by ?? "someone"} · ${sizeText(d.size_bytes)}`;
+/** A file as a table cell: its name, and under it when, by whom and how big; an earlier version
+ * also when it was replaced. One column, so the row's icons stay in view on a phone. */
+function FileCell({ doc }: { doc: work.ParticipantDocument }) {
+  return (
+    <td className="docs__file">
+      <div className="docs__name">{doc.file_name}</div>
+      <div className="docs__when">{uploadedText(doc)}</div>
+      {doc.replaced_at ? (
+        <div className="docs__when">
+          Replaced {when(doc.replaced_at)} by {doc.replaced_by ?? "someone"}
+        </div>
+      ) : null}
+    </td>
+  );
+}
 
-/** One kind of document as a table row (D-152): its name and state, the file, when and by whom
- * it was uploaded, and View and Upload or Replace as icons. */
+/** One kind of document as a table row (D-152): its name and state, the file with when and by
+ * whom it was uploaded, and View and Upload or Replace as icons. */
 function Slot({
   kind,
   doc,
@@ -217,16 +231,7 @@ function Slot({
           />
         ) : null}
       </th>
-      {doc ? (
-        <>
-          <td className="docs__name">{doc.file_name}</td>
-          <td className="docs__when">{uploadedCell(doc)}</td>
-        </>
-      ) : (
-        <td colSpan={2} className="docs__note muted">
-          {note}
-        </td>
-      )}
+      {doc ? <FileCell doc={doc} /> : <td className="docs__note muted">{note}</td>}
       <td className="docs__actions">
         {doc ? (
           <IconButton
@@ -265,7 +270,7 @@ export function DocumentsPanel({
   /** After an upload (for example to load the list behind again). */
   onChanged?: () => void;
 }) {
-  const { state, reload } = useResource(
+  const { state, reload, replace } = useResource(
     () => work.participantDocuments(projectId, participantId),
     [projectId, participantId],
   );
@@ -280,7 +285,8 @@ export function DocumentsPanel({
     void run(async () => {
       await sendDocument(projectId, participantId, kind, file);
       setShownProblem(null);
-      reload();
+      // The table is read again in place, without a loading screen in between.
+      void work.participantDocuments(projectId, participantId).then(replace, reload);
       onChanged?.();
       return `${DOCUMENT_WORDS[kind]} uploaded.`;
     }, `upload-${kind}`);
@@ -299,7 +305,6 @@ export function DocumentsPanel({
           <tr>
             <th scope="col">Document</th>
             <th scope="col">File</th>
-            <th scope="col">Uploaded</th>
             <th scope="col">
               <span className="sr-only">Actions</span>
             </th>
@@ -346,8 +351,6 @@ export function DocumentsPanel({
               <tr>
                 <th scope="col">Document</th>
                 <th scope="col">File</th>
-                <th scope="col">Uploaded</th>
-                <th scope="col">Replaced</th>
                 <th scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -357,11 +360,7 @@ export function DocumentsPanel({
               {d.earlier.map((e) => (
                 <tr key={e.id} className="row--replaced">
                   <th scope="row">{DOCUMENT_WORDS[e.kind]}</th>
-                  <td className="docs__name">{e.file_name}</td>
-                  <td className="docs__when">{uploadedCell(e)}</td>
-                  <td className="docs__when">
-                    {when(e.replaced_at)} by {e.replaced_by ?? "someone"}
-                  </td>
+                  <FileCell doc={e} />
                   <td className="docs__actions">
                     <IconButton
                       icon="eye"

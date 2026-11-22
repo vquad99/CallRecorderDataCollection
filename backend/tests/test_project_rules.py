@@ -1,12 +1,14 @@
 """The project's rules (D-145): the speaker ages a project takes and the speaker details a person
 needs before a task are project settings with the first client's numbers only as defaults; the
-rules moved to the Rules tab (pairing, consent, approval) still save through the project PATCH.
+rules moved to the Rules tab (pairing, consent, approval) still save through the project PATCH;
+a new project may have no limit and no targets (PROJ-08).
 
 Requirements: PROJ-001, PROJ-011, PART-001, PART-012, PART-016, TASK-001
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -14,7 +16,7 @@ from sqlalchemy import select
 
 from app.modules.audit.models import AuditLog
 from app.modules.participants import speakers
-from tests.conftest import Api, make_participant, make_project, make_user
+from tests.conftest import Api, email_for, make_participant, make_project, make_user
 
 pytestmark = pytest.mark.db
 
@@ -78,7 +80,9 @@ def _error(response: Any) -> tuple[int, str, str]:
 
 
 def _new(world: dict[str, Any], base: str = "", **details: Any) -> Any:
-    body = {"display_label": "Sneha", "language_code": "hi", "email": "sneha@example.org"}
+    """A new person (each with an address of their own: the same name and address twice is the
+    same person, PART-05)."""
+    body = {"display_label": "Sneha", "language_code": "hi", "email": email_for("Sneha")}
     return world["pa"].post(base or world["base"], json={**body, **details})
 
 
@@ -128,6 +132,32 @@ def test_a_new_project_starts_with_the_usual_rules_and_keeps_its_own(
         first.after_summary or ""
     )
     assert '"required_speaker_details": []' in (entries[-1].after_summary or "")
+
+
+def test_a_new_project_may_have_no_limit_and_no_targets(world: dict[str, Any], db: Any) -> None:
+    """PROJ-08: null on POST is "no limit" and "no target", stored as null (not the column's
+    default) and audited as stored; left out, the usual numbers."""
+    root = world["root"]
+    one_type = {"allows_telephony": False, "allows_face_to_face": True}
+    nulls = {
+        "max_conversations_per_speaker": None,
+        "target_speakers": None,
+        "target_conversations": None,
+    }
+    made = root.post("/api/v1/projects", json={"name": "Open", **one_type, **nulls})
+    assert made.status_code == 201, made.text
+    assert {k: made.json()[k] for k in nulls} == nulls
+    again = root.get(f"/api/v1/projects/{made.json()['id']}").json()
+    assert {k: again[k] for k in nulls} == nulls
+    [entry] = db.scalars(
+        select(AuditLog).where(
+            AuditLog.action == "project.created", AuditLog.entity_id == made.json()["id"]
+        )
+    ).all()
+    after = json.loads(entry.after_summary or "")
+    assert {k: after[k] for k in nulls} == nulls
+    usual = root.post("/api/v1/projects", json={"name": "Usual", **one_type}).json()
+    assert [usual[k] for k in nulls] == [3, 500, 600]
 
 
 @pytest.mark.parametrize(

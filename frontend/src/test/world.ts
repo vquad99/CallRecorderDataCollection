@@ -359,6 +359,9 @@ export const TASK = {
   id: "t1",
   task_code: "T000001",
   project_id: "p1",
+  // The project the task belongs to (UXW-04), as the server names it.
+  project_code: "HINDI",
+  project_name: "Hindi conversations",
   recording_mode: "FACE_TO_FACE",
   status: "ASSIGNED",
   priority: "NORMAL",
@@ -366,6 +369,8 @@ export const TASK = {
   created_at: "2026-11-09T00:00:00Z",
   held_from: null,
   reason_code: null,
+  // Nothing has happened on it yet: people who assign tasks may delete it (FEW-12, D-115).
+  can_delete: true,
   participant_a: party(PARTICIPANT),
   participant_b: party(PARTICIPANT_B),
   moderator_id: "m1",
@@ -388,6 +393,13 @@ export const TASK = {
     avoid: CLIENT_REMINDERS.avoid,
     tips: CLIENT_REMINDERS.face_to_face,
   },
+};
+
+/** Task t1 as a row of the task list (UXW-05): its moderator's name and both people's codes too. */
+export const TASK_ROW = {
+  ...TASK,
+  participant_a_code: PARTICIPANT.participant_code,
+  participant_b_code: PARTICIPANT_B.participant_code,
 };
 
 const noDevice = {
@@ -829,7 +841,7 @@ export function worldHandlers(): Record<string, Handler> {
     "GET /api/v1/projects/p1/progress": ok(PROGRESS),
     "GET /api/v1/projects/p1/participants/a1/consent": ok([]),
     "GET /api/v1/projects/p1/participants/a1/documents": ok(NO_DOCUMENTS),
-    "GET /api/v1/tasks": ok(page([TASK])),
+    "GET /api/v1/tasks": ok(page([TASK_ROW])),
     "GET /api/v1/dashboard": ok(DASHBOARD),
     "GET /api/v1/portal/me": ok(PORTAL),
     "GET /api/v1/projects/p1/participants/a1/page": ok({ ...PORTAL, link_expires_at: null }),

@@ -1,7 +1,8 @@
-// A project's targets on the Rules tab (D-148): the first client's districts (Konkani, NLTM), which
-// "Use the client's Konkani districts" fills in, and the checks the targets must pass before they
-// are saved (the server checks again). The districts are written once more in the server
-// (projects/targets.py); a backend test checks that the two match.
+// A project's targets on the Rules tab (D-148): the Konkani-region districts of the first client
+// (NLTM), which "Use the Konkani-region districts" fills in, the default age bands ("Reset to the
+// default age bands"), and the checks the targets must pass before they are saved (the server
+// checks again). The districts are written once more in the server (projects/targets.py); a
+// backend test checks that the two match.
 import type { AgeBand, TargetDistrict } from "../../api/projects";
 
 export const CLIENT_DISTRICTS: readonly TargetDistrict[] = [
@@ -15,7 +16,7 @@ export const CLIENT_DISTRICTS: readonly TargetDistrict[] = [
   { state: "Maharashtra", district: "Raigad" },
 ];
 
-/** The first client's age bands, as a new project starts. */
+/** The default age bands (the first client's), as a new project starts. */
 export const CLIENT_AGE_BANDS: readonly AgeBand[] = [
   { from: 20, to: 30, percent: 40 },
   { from: 30, to: 40, percent: 30 },

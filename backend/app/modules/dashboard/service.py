@@ -17,9 +17,15 @@ and last day, every figure counts only recordings started on those days (tasks: 
 them) and the series shows exactly those days. The answer also lists what can be chosen.
 
 Scope is the caller's projects (all for a Super Admin); a project the caller cannot see answers 404,
-exactly like a project that does not exist. Hours come from each ready recording's final file (the
-mono face-to-face WAV or the stereo telephony WAV), counted once per recording, and stay counted
-after retention deletes the file. Days are calendar days in REPORT_TIMEZONE (IST by default).
+exactly like a project that does not exist. Hours come from each task's current recording (its
+newest finished one, D-135: the one QC checks, an export delivers and the Progress tab counts), from
+its final file (the mono face-to-face WAV or the stereo telephony WAV), and stay counted after
+retention deletes the file. A take the moderator replaced with Record again or Call again is not
+counted, except in the moderators' output, which shows every finished take they made. Days are
+calendar days in REPORT_TIMEZONE (IST by default).
+
+Daily targets are the projects' own: of the chosen project, or else of every live (ACTIVE)
+project in view; a paused, finished or archived project's target is not today's work.
 
 Effective speech (D-148) is shown next to the hours: the time someone speaks in those recordings.
 Completed hours follow each project's `progress_counts`: the approved recordings' effective speech
@@ -35,7 +41,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select, union_all
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
@@ -47,7 +53,13 @@ from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.models import User
 from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
-from app.modules.recordings.models import AudioAsset, Recording, final_length_subquery
+from app.modules.recordings.models import (
+    AudioAsset,
+    Recording,
+    current_recordings,
+    current_recordings_query,
+    final_length_subquery,
+)
 from app.modules.tasks.models import TASK_STATUSES, Task, TaskAssignment
 from app.modules.telephony.models import Call
 
@@ -234,8 +246,15 @@ def summary(
         return query
 
     # Lengths of the recordings of the tasks in view only (every task's for a Super Admin's
-    # unfiltered view), with their effective speech (D-148).
-    final = final_length_subquery(select(Task.id).where(*on_task) if on_task else None)
+    # unfiltered view), with their effective speech (D-148), and each task's current recording
+    # (D-135): a replaced take is not counted again.
+    in_view = select(Task.id).where(*on_task) if on_task else None
+    final = final_length_subquery(in_view)
+    current = (
+        current_recordings(in_view)
+        if in_view is not None
+        else current_recordings_query().subquery()
+    )
     approved = Task.status == "APPROVED"
     # Completed (D-148): each project counts its approved recordings as its `progress_counts`
     # says, effective speech or the full length; a total over several projects adds each
@@ -254,6 +273,7 @@ def summary(
             func.count().label("n"),
         )
         .join(final, final.c.recording_id == Recording.id)
+        .join(current, current.c.recording_id == Recording.id)
         .join(Task, Task.id == Recording.task_id)
         .join(Project, Project.id == Task.project_id)
         .where(Recording.state == "READY")
@@ -291,7 +311,8 @@ def summary(
                 series[row.day].completed_hours + _hours(row.completed_ms), 2
             )
 
-    # Daily targets: the projects' own targets for the modes they allow.
+    # Daily targets: the projects' own targets for the modes they allow; over several projects,
+    # the live ones only (a chosen project shows its own, whatever its status).
     targets_q = select(
         func.coalesce(
             func.sum(
@@ -305,6 +326,8 @@ def summary(
     )
     if scope is not None:
         targets_q = targets_q.where(Project.id.in_(scope))
+    if project_id is None:
+        targets_q = targets_q.where(Project.status == "ACTIVE")
     ftf_target, tel_target = db.execute(targets_q).one()
     if view != "worker":
         # Moderators and QC see their own work only, never the project's targets (owner
@@ -470,10 +493,15 @@ def _options(db: Session, scope: list[uuid.UUID] | None, *, with_staff: bool) ->
     """What the filters offer: the languages and dialects of the people on these projects'
     tasks, and, for managers, the staff on those tasks."""
     in_projects = [Task.project_id.in_(scope)] if scope is not None else []
+    # Each task's two people as one list, read once: joining the tasks on IN (a, b) instead
+    # probes the participants twice for every task.
+    speakers = union_all(
+        select(Task.participant_a_id.label("pid")).where(*in_projects),
+        select(Task.participant_b_id.label("pid")).where(*in_projects),
+    ).subquery()
     spoken = db.execute(
         select(Participant.language_code, Participant.dialect, Participant.district)
-        .join(Task, Participant.id.in_([Task.participant_a_id, Task.participant_b_id]))
-        .where(*in_projects)
+        .where(Participant.id.in_(select(speakers.c.pid)))
         .distinct()
         .limit(MAX_OPTIONS * 2)
     ).all()

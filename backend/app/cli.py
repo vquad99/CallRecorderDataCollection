@@ -101,10 +101,16 @@ def create_admin(
 ) -> str:
     """Bootstrap the first Super Admin in any environment (a new deployment has no users and no
     way to invite one before someone can sign in). Creates the account if it is missing; changes
-    an existing account's password only with reset. Audited."""
+    an existing account's password only with reset, which also ends its sessions and its unused
+    password links, as a reset by email does. Audited."""
+    from datetime import UTC, datetime
+
     from email_validator import EmailNotValidError, validate_email
+    from sqlalchemy import update
 
     from app.modules.audit import service as audit
+    from app.modules.auth import service as auth_service
+    from app.modules.auth.models import PasswordResetToken
 
     try:
         email = validate_email(email.strip(), check_deliverability=False).normalized.lower()
@@ -124,6 +130,7 @@ def create_admin(
                 # Every deploy runs this. Once a Super Admin exists, a changed or removed
                 # ADMIN_EMAIL account must not come back with the stored password (D-088).
                 return "skipped (a Super Admin already exists)"
+            after: dict[str, Any]
             if user is None:
                 role = db.scalar(
                     select(RoleRecord).where(RoleRecord.code == Role.SUPER_ADMIN.value)
@@ -134,8 +141,20 @@ def create_admin(
                 user.roles = [role]
                 db.add(user)
                 outcome = "created"
+                after = {"outcome": outcome}
             else:
-                outcome = "password reset"
+                # The way back in when no Super Admin can sign in, perhaps after a takeover: whoever
+                # used the old password is signed out, and links mailed before stop working.
+                ended = auth_service.revoke_sessions(db, user.id)
+                db.execute(
+                    update(PasswordResetToken)
+                    .where(
+                        PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None)
+                    )
+                    .values(used_at=datetime.now(UTC))
+                )
+                outcome = f"password reset; {ended} session(s) ended"
+                after = {"outcome": "password reset", "sessions_revoked": ended}
             user.password_hash = hash_password(password)
             user.status = "ACTIVE"
             db.flush()
@@ -145,7 +164,7 @@ def create_admin(
                 entity_type="user",
                 entity_id=user.id,
                 actor_id=None,
-                after={"outcome": outcome},
+                after=after,
             )
             db.commit()
             return outcome

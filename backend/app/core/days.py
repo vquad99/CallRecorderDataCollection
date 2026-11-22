@@ -15,6 +15,12 @@ def start_of(day: date, zone: ZoneInfo) -> datetime:
     return datetime.combine(day, time.min, zone)
 
 
+def local_now(tz_name: str) -> datetime:
+    """Now in `tz_name` (the report time zone). Download file names are dated with it, so a file
+    saved at 01:00 in India carries that day, not the day before in UTC."""
+    return datetime.now(ZoneInfo(tz_name))
+
+
 def check_days(first: date | None, last: date | None) -> None:
     """422 when both days are given and the first is after the last."""
     if first and last and first > last:

@@ -1,15 +1,37 @@
-// Requirements: PROJ-009, PROJ-013, ROLE-011, USER-003, EXP-008, EXP-009, EXP-010, PART-006, AQC-008, PROJ-011
+// Requirements: PROJ-001, PROJ-002, PROJ-008, PROJ-009, PROJ-010, PROJ-011, PROJ-012, PROJ-013, ROLE-011, USER-003, PART-006, AQC-008
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SPEAKER_FIELDS } from "../../lib/speakers";
-import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { PROJECT } from "../../test/world";
+import { fakeApi, renderAt, signedInAs, type Handler } from "../../test/fakeApi";
+import { PARTICIPANT, PROGRESS, PROJECT, worldHandlers } from "../../test/world";
 import { CLIENT_QC_CHECKLIST } from "./qcChecklist";
 import { CLIENT_REMINDERS } from "./reminders";
 
 afterEach(() => vi.unstubAllGlobals());
+
+/** The project's GET and PATCH as the server answers them: what a save keeps is what the next read
+ * gives, with a newer `updated_at`. */
+function projectApi(start: Record<string, unknown>): Record<string, Handler> {
+  let current = { ...start };
+  let saves = 0;
+  return {
+    "GET /api/v1/projects/p1": () => [200, current],
+    "PATCH /api/v1/projects/p1": (body) => {
+      const fields = { ...(body as Record<string, unknown>) };
+      delete fields.expected_updated_at;
+      saves += 1;
+      current = { ...current, ...fields, updated_at: `2026-11-21T10:00:0${saves}Z` };
+      return [200, current];
+    },
+  };
+}
+
+const MANAGER = ["projects.view", "projects.manage"];
+const sections = () => screen.getByRole("navigation", { name: "Project sections" });
+const patches = (calls: { method: string; body: unknown }[]) =>
+  calls.filter((c) => c.method === "PATCH").map((c) => c.body as Record<string, unknown>);
 
 /** Audio, progress and targets (D-148), as a new project starts. */
 const TARGETS = {
@@ -31,37 +53,6 @@ const DELIVERY = {
   speaker_id_style: PROJECT.speaker_id_style,
   conversation_id_style: PROJECT.conversation_id_style,
   audio_name_pattern: PROJECT.audio_name_pattern,
-};
-
-const SUMMARY = {
-  recordings: 3,
-  face_to_face: 2,
-  telephony: 1,
-  audio_bytes: 240_000_000,
-  file_name: "audio_HINDI_20261111_0900.zip",
-  layout: "CLIENT",
-  missing: 0,
-};
-const JOB = {
-  id: "x1",
-  state: "READY",
-  content: "audio",
-  scope: "finished",
-  table_format: "tsv",
-  filters: {},
-  file_name: "audio_HINDI_20261111_0900.zip",
-  recordings: 3,
-  files: 12,
-  missing: 0,
-  size_bytes: 240_000_000,
-  sha256: "ab".repeat(32),
-  error: null,
-  requested_by: "Priya Admin",
-  created_at: "2026-11-11T09:00:00Z",
-  finished_at: "2026-11-11T09:01:00Z",
-  expires_at: "2026-11-12T09:01:00Z",
-  downloads: 0,
-  last_downloaded_at: null,
 };
 
 const project = {
@@ -107,6 +98,7 @@ const project = {
   ],
   retention_rules: [],
   accepts_new_work: false,
+  updated_at: "2026-11-20T10:00:00Z",
 };
 
 describe("project detail", () => {
@@ -179,16 +171,15 @@ describe("project detail", () => {
         recording_reminders: project.recording_reminders,
         ...TARGETS, // D-148: and the audio, progress and target settings
         ...DELIVERY, // D-149: and how exports are laid out and named
+        // The version read just before saving: the server refuses a save over a newer one.
+        expected_updated_at: "2026-11-20T10:00:00Z",
       }),
     );
   });
 
   it("loads the rules one section at a time and saves each with the rest as it is (D-145, D-150)", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "projects.manage"], {
-        "GET /api/v1/projects/p1": () => [200, project],
-        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
-      }),
+      signedInAs(["projects.view", "projects.manage"], projectApi(project)),
     );
     // The Rules page's own address opens its first section.
     const router = renderAt("/projects/p1/rules");
@@ -345,10 +336,7 @@ describe("project detail", () => {
 
   it("edits the QC checklist and saves it with the rules (D-146)", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "projects.manage"], {
-        "GET /api/v1/projects/p1": () => [200, project],
-        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
-      }),
+      signedInAs(["projects.view", "projects.manage"], projectApi(project)),
     );
     renderAt("/projects/p1/rules/qc-checklist");
     const card = await screen.findByRole("region", { name: "QC checklist" });
@@ -421,10 +409,10 @@ describe("project detail", () => {
       ],
     });
 
-    // Remove one; then put the client's list back.
+    // Remove one; then put the default list back.
     await userEvent.click(within(card).getByRole("button", { name: "Remove music" }));
     expect(within(card).queryByRole("group", { name: "3. music" })).toBeNull();
-    await userEvent.click(within(card).getByRole("button", { name: "Reset to the client's list" }));
+    await userEvent.click(within(card).getByRole("button", { name: "Reset to the default list" }));
     expect(within(card).getByText("28 questions (at most 60).")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
     await waitFor(() => expect(patches()).toHaveLength(2));
@@ -435,10 +423,7 @@ describe("project detail", () => {
 
   it("asks the device details ticked on the Rules tab (D-147)", async () => {
     const { calls } = fakeApi(
-      signedInAs(["projects.view", "projects.manage"], {
-        "GET /api/v1/projects/p1": () => [200, project],
-        "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
-      }),
+      signedInAs(["projects.view", "projects.manage"], projectApi(project)),
     );
     renderAt("/projects/p1/rules/devices");
     const card = await screen.findByRole("region", { name: "Device details" });
@@ -474,14 +459,11 @@ describe("project detail", () => {
   });
 
   it(
-    "edits the moderator's reminders and puts back the client's text (D-147)",
+    "edits the moderator's reminders and puts back the default text (D-147)",
     { timeout: 15000 },
     async () => {
       const { calls } = fakeApi(
-        signedInAs(["projects.view", "projects.manage"], {
-          "GET /api/v1/projects/p1": () => [200, project],
-          "PATCH /api/v1/projects/p1": (body) => [200, { ...project, ...(body as object) }],
-        }),
+        signedInAs(["projects.view", "projects.manage"], projectApi(project)),
       );
       renderAt("/projects/p1/rules/reminders");
       const card = await screen.findByRole("region", { name: "Reminders for moderators" });
@@ -529,7 +511,7 @@ describe("project detail", () => {
       });
 
       await userEvent.click(
-        within(card).getByRole("button", { name: "Reset to the client's text" }),
+        within(card).getByRole("button", { name: "Reset to the default text" }),
       );
       expect(topics).toHaveValue(CLIENT_REMINDERS.topics.join("\n"));
       expect(speakerId).toBeChecked();
@@ -625,12 +607,50 @@ describe("project detail", () => {
     );
   });
 
-  it("shows a read-only project to a member without manage rights", async () => {
-    fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects/p1": () => [200, project] }));
+  it("shows a member without manage rights the project in a few words, not a settings form", async () => {
+    fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects/p1": () => [
+          200,
+          { ...project, description: "Everyday talk in Hindi.\nTwo speakers each time." },
+        ],
+      }),
+    );
     renderAt("/projects/p1");
     await screen.findByRole("heading", { name: "HINDI · Hindi conversations" });
-    expect(await screen.findByLabelText(/^Name/)).toBeDisabled(); // the tab has loaded
+    const about = await screen.findByRole("region", { name: "About this project" });
+    const facts = within(about)
+      .getAllByRole("term")
+      .map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+    expect(facts).toEqual([
+      ["Name", "Hindi conversations"],
+      ["Description", "Everyday talk in Hindi.\nTwo speakers each time."],
+      ["Recording type", "Phone call"],
+      ["Daily target", "10 h a day"],
+      ["New work", "This project does not accept new work until it is active."],
+    ]);
+    // Nothing to fill in, and nothing internal: who sees phone numbers, the consent policy.
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText(/phone numbers/i)).toBeNull();
+    expect(screen.queryByText(/Consent policy/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Make active" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save project" })).toBeNull();
+  });
+
+  it("says so when a member's project has no description and no daily target", async () => {
+    fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects/p1": () => [
+          200,
+          { ...project, target_telephony_hours_per_day: "0.00", accepts_new_work: true },
+        ],
+      }),
+    );
+    renderAt("/projects/p1");
+    const about = await screen.findByRole("region", { name: "About this project" });
+    expect(about).toHaveTextContent("DescriptionNo description");
+    expect(about).toHaveTextContent("Daily targetNo daily target");
+    expect(about).toHaveTextContent("New workThis project accepts new work.");
   });
 
   it("renders each tab", async () => {
@@ -650,9 +670,98 @@ describe("project detail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
     // Each box shows a faded example under it, tied to the box for screen readers (D-086).
-    expect(screen.getByLabelText("Consent recordings")).toHaveAccessibleDescription(
-      "Example: 1825 (five years)",
+    expect(screen.getByLabelText("Phone call 16 kHz WAV")).toHaveAccessibleDescription(
+      "Example: 365 (one year)",
     );
+  });
+
+  it("keeps only the kinds a rule can delete, and says the deletion is automatic (PROJ-01)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(MANAGER, {
+        // A rule saved before for a kind no rule can delete is not shown, and not sent back.
+        "GET /api/v1/projects/p1": () => [
+          200,
+          {
+            ...project,
+            retention_rules: [
+              { asset_kind: "BROWSER_ORIGINAL", retain_days: 90 },
+              { asset_kind: "EXPORT_PACKAGE", retain_days: 30 },
+            ],
+          },
+        ],
+        "PUT /api/v1/projects/p1/retention": (body) => [
+          200,
+          { ...project, retention_rules: (body as { rules: unknown[] }).rules },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/retention");
+    const form = await screen.findByRole("form", { name: "Days to keep each kind of file" });
+    expect(within(form).getAllByRole("spinbutton")).toHaveLength(4);
+    for (const kind of [
+      "Browser original captures",
+      "Face-to-face 16 kHz WAV",
+      "Phone system mixed recordings",
+      "Phone call 16 kHz WAV",
+    ])
+      expect(within(form).getByRole("spinbutton", { name: kind })).toBeInTheDocument();
+    expect(form).toHaveTextContent(/An automatic job deletes a file permanently/);
+    expect(form).toHaveTextContent(/Only the files of closed tasks/);
+    expect(within(form).queryByLabelText(/Export packages/)).toBeNull();
+    expect(screen.getByLabelText("Browser original captures")).toHaveValue(90);
+    // 0 days is not a rule: said, and nothing is sent.
+    await userEvent.type(screen.getByLabelText("Phone call 16 kHz WAV"), "0");
+    expect(screen.getByLabelText("Phone call 16 kHz WAV")).toHaveAccessibleDescription(
+      /Type a whole number of days, 1 or more, or leave it empty\./,
+    );
+    expect(screen.getByRole("button", { name: "Save retention" })).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText("Phone call 16 kHz WAV"));
+    await userEvent.type(screen.getByLabelText("Phone call 16 kHz WAV"), "365");
+    await userEvent.click(screen.getByRole("button", { name: "Save retention" }));
+    expect(await screen.findByText("Retention saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+      rules: [
+        { asset_kind: "BROWSER_ORIGINAL", retain_days: 90 },
+        { asset_kind: "TELEPHONY_DERIVED_PCM", retain_days: 365 },
+      ],
+    });
+  });
+
+  it("asks before removing a team member to reassign their open tasks first (PROJ-06)", async () => {
+    fakeApi(
+      signedInAs([...MANAGER, "projects.members"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/members": () => [
+          200,
+          [
+            {
+              user_id: "m1",
+              email: "mona@example.org",
+              display_name: "Mona Moderator",
+              roles: ["MODERATOR"],
+              status: "ACTIVE",
+              added_at: "2026-11-09T00:00:00Z",
+            },
+          ],
+        ],
+        "DELETE /api/v1/projects/p1/members/m1": () => [
+          409,
+          {
+            error: {
+              code: "MEMBER_HAS_OPEN_TASKS",
+              message: "Mona Moderator still has 1 open task in this project (T000001).",
+            },
+          },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/team");
+    await userEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove Mona Moderator from HINDI?" });
+    expect(dialog).toHaveTextContent(/must have those tasks reassigned first/);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+    // The server's refusal is said in the window, which stays open.
+    expect(await within(dialog).findByText(/still has 1 open task/)).toBeInTheDocument();
   });
 
   it("goes back to the project list with a note after creating a project", async () => {
@@ -712,146 +821,6 @@ describe("project detail", () => {
       "href",
       "/projects/p9",
     );
-  });
-
-  it("prepares a bundle with the chosen filters and follows it until it is ready (D-105)", async () => {
-    const jobs: Record<string, unknown>[] = [];
-    let looks = 0;
-    const { calls } = fakeApi(
-      signedInAs(["projects.view", "projects.manage", "exports.create"], {
-        "GET /api/v1/projects/p1": () => [200, project],
-        "GET /api/v1/projects/p1/export/summary": () => [200, SUMMARY],
-        "GET /api/v1/projects/p1/exports": () => {
-          // The first look after asking finds it being prepared, the next one ready.
-          if (jobs[0]) jobs[0].state = ++looks === 1 ? "RUNNING" : "READY";
-          return [200, { items: jobs, total: jobs.length, page: 1, page_size: 20 }];
-        },
-        "POST /api/v1/projects/p1/exports": (body) => {
-          const choice = body as Record<string, unknown>;
-          jobs.unshift({ ...JOB, ...choice, filters: choice, state: "QUEUED" });
-          return [202, jobs[0]];
-        },
-        "POST /api/v1/projects/p1/exports/x1/download-link": () => [
-          200,
-          { url: "#bundle", valid_seconds: 300, file_name: JOB.file_name, sha256: JOB.sha256 },
-        ],
-        "DELETE /api/v1/projects/p1/exports/x1": () => {
-          jobs.length = 0;
-          return [200, { ...JOB, state: "EXPIRED" }];
-        },
-      }),
-    );
-    renderAt("/projects/p1/export");
-    expect(await screen.findByText("3 recordings")).toBeInTheDocument();
-    expect(screen.getByText(/2 face-to-face, 1 phone call · about 240 MB of audio/)).toBeVisible();
-    expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("radio", { name: /Audio only/ }));
-    await userEvent.selectOptions(screen.getByLabelText("Which recordings"), "finished");
-    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "TELEPHONY");
-    await userEvent.selectOptions(screen.getByLabelText("Language"), "hi");
-    await userEvent.selectOptions(screen.getByLabelText("Tables as"), "tsv");
-    await userEvent.click(screen.getByRole("checkbox", { name: /original recordings/ }));
-    // The count follows the choice.
-    await waitFor(() =>
-      expect(
-        calls.some((c) =>
-          c.path.includes("content=audio&scope=finished&mode=TELEPHONY&language=hi&originals=true"),
-        ),
-      ).toBe(true),
-    );
-    await userEvent.click(await screen.findByRole("button", { name: "Prepare export" }));
-    await waitFor(() =>
-      expect(
-        calls.find((c) => c.path === "/api/v1/projects/p1/exports" && c.method === "POST")?.body,
-      ).toEqual({
-        content: "audio",
-        scope: "finished",
-        table_format: "tsv",
-        mode: "TELEPHONY",
-        language: "hi",
-        recorded_from: null,
-        recorded_to: null,
-        originals: true,
-        contact: false,
-      }),
-    );
-    const list = await screen.findByRole("table", { name: "Prepared exports" });
-    expect(await within(list).findByText("Being prepared")).toBeInTheDocument();
-    expect(list).toHaveTextContent(
-      "Audio only · every finished recording · Phone call · Hindi (hi) · with originals · TSV",
-    );
-    expect(within(list).queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
-    // It is looked at again by itself until it is ready.
-    expect(await within(list).findByText("Ready", {}, { timeout: 8000 })).toBeInTheDocument();
-    expect(list).toHaveTextContent("about 240 MB");
-
-    await userEvent.click(within(list).getByRole("button", { name: `Download ${JOB.file_name}` }));
-    expect(
-      await screen.findByText(`Downloading ${JOB.file_name}. The link works for 5 minutes.`),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: `Remove ${JOB.file_name}` }));
-    await userEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Remove" }),
-    );
-    expect(await screen.findByText(`${JOB.file_name} removed.`)).toBeInTheDocument();
-    expect(await screen.findByText(/No export has been prepared yet/)).toBeInTheDocument();
-  }, 20000);
-
-  it("gives reports as CSV or TSV, and says why an export failed or cannot be asked for", async () => {
-    fakeApi(
-      signedInAs(["projects.view", "projects.manage", "exports.create"], {
-        "GET /api/v1/projects/p1": () => [200, project],
-        "GET /api/v1/projects/p1/export/summary": (_b, url) => [
-          200,
-          url.searchParams.get("mode") === "FACE_TO_FACE"
-            ? { ...SUMMARY, recordings: 0, face_to_face: 0, telephony: 0, audio_bytes: 0 }
-            : SUMMARY,
-        ],
-        "GET /api/v1/projects/p1/exports": () => [
-          200,
-          {
-            items: [
-              {
-                ...JOB,
-                state: "FAILED",
-                error: "A stored file of T000004 does not match its checksum: export stopped",
-              },
-            ],
-            total: 1,
-            page: 1,
-            page_size: 20,
-          },
-        ],
-      }),
-    );
-    renderAt("/projects/p1/export");
-    expect(await screen.findByRole("link", { name: "Progress report as CSV" })).toHaveAttribute(
-      "href",
-      "/api/v1/projects/p1/export?content=progress&format=csv",
-    );
-    expect(screen.getByRole("link", { name: "Participant minutes as TSV" })).toHaveAttribute(
-      "href",
-      "/api/v1/projects/p1/export?content=participants&format=tsv",
-    );
-    // A failed export says why, and has nothing to download.
-    const list = await screen.findByRole("table", { name: "Prepared exports" });
-    expect(list).toHaveTextContent("Failed");
-    expect(list).toHaveTextContent("A stored file of T000004 does not match its checksum");
-    expect(within(list).queryByRole("button", { name: /Download|Remove/ })).toBeNull();
-    // Personal data is offered only to people who may export it.
-    expect(screen.getByRole("checkbox", { name: /original recordings/ })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: /phone numbers/ })).not.toBeInTheDocument();
-    // Nothing fits: said in words, and nothing to prepare.
-    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "FACE_TO_FACE");
-    expect(await screen.findByText(/Nothing to export/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Prepare export" })).toBeDisabled();
-    // Days the wrong way round are caught before anything is asked.
-    await userEvent.selectOptions(screen.getByLabelText("Recording type"), "");
-    await userEvent.type(screen.getByLabelText("Recorded from"), "2026-11-10");
-    await userEvent.type(screen.getByLabelText("Recorded to"), "2026-11-01");
-    expect(await screen.findByText("Must not be before the first day")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Prepare export" })).toBeDisabled();
   });
 
   it("has a Tasks tab listing every task of the project (D-117)", async () => {
@@ -978,5 +947,444 @@ describe("one recording type per project (D-153)", () => {
       "Face-to-face",
       "Phone call, Face-to-face",
     ]);
+  });
+});
+
+describe("saving one part of the project (FEA-02, PROJ-03)", () => {
+  /** The project as this page read it first; every later read gives it as another tab saved it. */
+  function changedElsewhere(change: Record<string, unknown>) {
+    let reads = 0;
+    const later = { ...project, ...change, updated_at: "2026-11-21T09:00:00Z" };
+    return fakeApi(
+      signedInAs(MANAGER, {
+        "GET /api/v1/projects/p1": () => [200, ++reads === 1 ? project : later],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...later, ...(body as object) }],
+      }),
+    );
+  }
+
+  it("keeps what another tab saved when the Targets are saved", async () => {
+    const { calls } = changedElsewhere({ speaker_min_age: 25, consent_mode: "UPLOAD" });
+    renderAt("/projects/p1/rules/targets");
+    await userEvent.type(await screen.findByRole("spinbutton", { name: "Hours completed" }), "800");
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    expect(patches(calls)).toHaveLength(1);
+    expect(patches(calls)[0]).toMatchObject({
+      target_hours: "800", // this section's own field, as typed
+      speaker_min_age: 25, // another section's, as saved in the other tab
+      consent_mode: "UPLOAD",
+      name: "Hindi conversations",
+      expected_updated_at: "2026-11-21T09:00:00Z", // the version read just before saving
+    });
+  });
+
+  it("keeps what another tab saved when the Overview is saved", async () => {
+    const { calls } = changedElsewhere({ speaker_min_age: 25, consent_mode: "UPLOAD" });
+    renderAt("/projects/p1");
+    await userEvent.type(await screen.findByLabelText("Description"), "Daily talk.");
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    expect(await screen.findByText("Saved.")).toBeInTheDocument();
+    expect(patches(calls)).toHaveLength(1);
+    expect(patches(calls)[0]).toMatchObject({
+      description: "Daily talk.",
+      speaker_min_age: 25,
+      consent_mode: "UPLOAD",
+      expected_updated_at: "2026-11-21T09:00:00Z",
+    });
+  });
+
+  it("says so, and sends nothing, when the same rules were changed meanwhile", async () => {
+    const { calls } = changedElsewhere({ target_speakers: 800 });
+    renderAt("/projects/p1/rules/targets");
+    const speakers = await screen.findByRole("spinbutton", { name: "Speakers" });
+    await userEvent.clear(speakers);
+    await userEvent.type(speakers, "600");
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(
+      await screen.findByText(
+        "Someone else saved this project after you opened it. Reload the page to see their changes, then save again.",
+      ),
+    ).toBeInTheDocument();
+    expect(patches(calls)).toHaveLength(0);
+    expect(speakers).toHaveValue(600); // what was typed stays
+  });
+
+  it("says so on the Overview too, when its settings were changed meanwhile", async () => {
+    const { calls } = changedElsewhere({ consent_text: "A newer consent form." });
+    renderAt("/projects/p1");
+    await userEvent.type(await screen.findByLabelText("Description"), "Daily talk.");
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    expect(
+      await screen.findByText(/^Someone else saved this project after you opened it/),
+    ).toBeVisible();
+    expect(patches(calls)).toHaveLength(0);
+    expect(screen.getByLabelText("Description")).toHaveValue("Daily talk.");
+  });
+});
+
+describe("changes not saved yet (FEA-04)", () => {
+  const leave = () => screen.findByRole("dialog", { name: "Leave without saving?" });
+
+  it("asks before a Rules section is left: Stay keeps the change, Leave drops it", async () => {
+    const { calls } = fakeApi(signedInAs(MANAGER, projectApi(project)));
+    const router = renderAt("/projects/p1/rules/speakers");
+    const youngest = await screen.findByRole("spinbutton", { name: "Youngest speaker age" });
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "33");
+    await userEvent.click(within(sections()).getByRole("link", { name: "Consent" }));
+    const ask = await leave();
+    expect(ask).toHaveTextContent("Your changes on this page are not saved.");
+    await userEvent.click(within(ask).getByRole("button", { name: "Stay" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/speakers");
+    expect(youngest).toHaveValue(33);
+
+    await userEvent.click(within(sections()).getByRole("link", { name: "Consent" }));
+    await userEvent.click(within(await leave()).getByRole("button", { name: "Leave" }));
+    expect(
+      await screen.findByRole("group", { name: "How participants give consent" }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/consent");
+    await userEvent.click(within(sections()).getByRole("link", { name: "Speakers" }));
+    expect(await screen.findByRole("spinbutton", { name: "Youngest speaker age" })).toHaveValue(20);
+    expect(patches(calls)).toHaveLength(0);
+  });
+
+  it("does not ask once the changes are saved", async () => {
+    const { calls } = fakeApi(signedInAs(MANAGER, projectApi(project)));
+    const router = renderAt("/projects/p1/rules/speakers");
+    const youngest = await screen.findByRole("spinbutton", { name: "Youngest speaker age" });
+    await userEvent.clear(youngest);
+    await userEvent.type(youngest, "33");
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    await userEvent.click(within(sections()).getByRole("link", { name: "Consent" }));
+    expect(
+      await screen.findByRole("group", { name: "How participants give consent" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(router.state.location.pathname).toBe("/projects/p1/rules/consent");
+    expect(patches(calls)[0]).toMatchObject({ speaker_min_age: 33 });
+  });
+
+  it("keeps what is typed on the Overview through a status change, and asks before it is left", async () => {
+    let current = { ...project, status: "ACTIVE", accepts_new_work: true };
+    fakeApi(
+      signedInAs(MANAGER, {
+        "GET /api/v1/projects/p1": () => [200, current],
+        "POST /api/v1/projects/p1/status": (body) => {
+          current = { ...current, status: (body as { status: string }).status };
+          return [200, current];
+        },
+      }),
+    );
+    const router = renderAt("/projects/p1");
+    await userEvent.type(await screen.findByLabelText("Description"), "Still typing");
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Pause" }),
+    );
+    expect(await screen.findByText("Status changed to Paused.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toHaveValue("Still typing");
+
+    await userEvent.click(within(sections()).getByRole("link", { name: "Audio rules" }));
+    await userEvent.click(within(await leave()).getByRole("button", { name: "Leave" }));
+    expect(await screen.findByRole("group", { name: "Phone call" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/projects/p1/audio");
+  });
+
+  it("asks before the audio rules and the retention are left with changes", async () => {
+    fakeApi(signedInAs(MANAGER, { "GET /api/v1/projects/p1": () => [200, project] }));
+    const router = renderAt("/projects/p1/audio");
+    const rate = await screen.findByLabelText("Sample rate (Hz)");
+    await userEvent.clear(rate);
+    await userEvent.type(rate, "8000");
+    await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
+    await userEvent.click(within(await leave()).getByRole("button", { name: "Stay" }));
+    expect(router.state.location.pathname).toBe("/projects/p1/audio");
+    // Back to what is saved: nothing to ask.
+    await userEvent.clear(rate);
+    await userEvent.type(rate, "16000");
+    await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
+    const days = await screen.findByLabelText("Face-to-face 16 kHz WAV");
+    expect(router.state.location.pathname).toBe("/projects/p1/retention");
+    await userEvent.type(days, "30");
+    await userEvent.click(within(sections()).getByRole("link", { name: "Languages" }));
+    expect(await leave()).toBeInTheDocument();
+  });
+});
+
+describe("an archived project (PROJ-05)", () => {
+  it("keeps its settings, audio rules, languages and retention read only until it is reopened", async () => {
+    const { calls } = fakeApi(
+      signedInAs([...MANAGER, "projects.members"], {
+        "GET /api/v1/projects/p1": () => [200, { ...project, status: "ARCHIVED" }],
+      }),
+    );
+    renderAt("/projects/p1");
+    const note = "Read only. Reopen the project to change it.";
+    // The Overview says why, not that only an administrator could change it.
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    expect(screen.queryByText(/Only a project administrator/)).toBeNull();
+    expect(screen.getByLabelText(/^Name/)).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save project" })).toBeNull();
+
+    await userEvent.click(within(sections()).getByRole("link", { name: "Audio rules" }));
+    expect(await screen.findByLabelText("Sample rate (Hz)")).toBeDisabled();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save audio rules" })).toBeNull();
+
+    await userEvent.click(within(sections()).getByRole("link", { name: "Languages" }));
+    expect(await screen.findByRole("row", { name: /Hindi \(hi\) Awadhi/ })).toBeInTheDocument();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add language" })).toBeNull();
+
+    await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
+    expect(await screen.findByLabelText("Browser original captures")).toBeDisabled();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save retention" })).toBeNull();
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+});
+
+describe("rules and settings in words", () => {
+  it("warns that uploaded forms stop counting when consent goes back to online (PROJ-02)", async () => {
+    fakeApi(signedInAs(MANAGER, projectApi({ ...project, consent_mode: "UPLOAD" })));
+    renderAt("/projects/p1/rules/consent");
+    const consent = await screen.findByRole("group", { name: "How participants give consent" });
+    const warning = /^Signed forms uploaded so far stop counting while the project is Online/;
+    expect(screen.queryByText(warning)).toBeNull();
+    await userEvent.click(within(consent).getByRole("radio", { name: /^Online/ }));
+    expect(screen.getByText(warning)).toHaveTextContent(
+      "those people cannot be put on tasks or recorded until they agree on their personal page. Switch back to Upload and the forms count again.",
+    );
+    expect(consent).toHaveAccessibleDescription(/stop counting while the project is Online/);
+    // Back to Upload: nothing to warn about.
+    await userEvent.click(within(consent).getByRole("radio", { name: /^Upload/ }));
+    expect(screen.queryByText(warning)).toBeNull();
+    // Saved as Online: the project is online now, so there is nothing left to warn about.
+    await userEvent.click(within(consent).getByRole("radio", { name: /^Online/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
+    expect(screen.queryByText(warning)).toBeNull();
+  });
+
+  it("adds a language that is not in the list by its code (POL-02)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(MANAGER, {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "PUT /api/v1/projects/p1/languages": (body) => [
+          200,
+          { ...project, languages: (body as { languages: unknown[] }).languages },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/languages");
+    const language = await screen.findByRole("combobox", { name: "Language" });
+    expect(within(language).getAllByRole("option").at(-1)).toHaveTextContent(
+      "Other (type the code)",
+    );
+    const add = screen.getByRole("button", { name: "Add language" });
+    expect(screen.queryByRole("textbox", { name: "Language code" })).toBeNull();
+    await userEvent.selectOptions(language, "Other (type the code)");
+    expect(add).toBeDisabled();
+    const code = screen.getByRole("textbox", { name: "Language code" });
+    await userEvent.type(code, "Swahili");
+    expect(code).toHaveAccessibleDescription(/like sw or en-US/);
+    expect(add).toBeDisabled();
+    await userEvent.clear(code);
+    await userEvent.type(code, "sw");
+    expect(add).toBeEnabled();
+    await userEvent.type(screen.getByRole("textbox", { name: "Dialect" }), "Coastal");
+    await userEvent.click(add);
+    expect(await screen.findByText("Language added.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+      languages: [
+        { language_code: "hi", dialect: "Awadhi" },
+        { language_code: "sw", dialect: "Coastal" },
+      ],
+    });
+    // The form starts again for the next one.
+    expect(language).toHaveValue("");
+    expect(screen.queryByRole("textbox", { name: "Language code" })).toBeNull();
+  });
+});
+
+describe("the project's Participants page", () => {
+  /** The progress answer with this many speakers still needed. */
+  const stillNeeded = (n: number) => {
+    const speakers = PROGRESS.still_needed.speakers;
+    return {
+      ...PROGRESS,
+      still_needed: {
+        ...PROGRESS.still_needed,
+        speakers: {
+          ...speakers,
+          total: { ...speakers.total, total: { ...speakers.total.total, still_needed: n } },
+        },
+      },
+    };
+  };
+
+  it("reads the Still needed line again after someone is added (FEA-09)", async () => {
+    let still = 495;
+    const { calls } = fakeApi(
+      signedInAs([...MANAGER, "participants.view", "participants.manage"], {
+        ...worldHandlers(),
+        "GET /api/v1/projects/p1/progress": () => [200, stillNeeded(still)],
+        "GET /api/v1/projects/p1/participants/link-candidates": () => [
+          200,
+          [
+            {
+              id: "c9",
+              participant_code: "P000009",
+              display_label: "Chitra",
+              language_code: "hi",
+              dialect: "",
+            },
+          ],
+        ],
+        "POST /api/v1/projects/p1/participants/link": () => {
+          still = 494;
+          return [
+            200,
+            {
+              ...PARTICIPANT,
+              id: "c9",
+              participant_code: "P000009",
+              consent_email: "Consent form emailed.",
+            },
+          ];
+        },
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    expect(await screen.findByText("Still needed: 495 speakers")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add existing participant" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Add P000009" }));
+    expect(await screen.findByText("Still needed: 494 speakers")).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/projects/p1/progress")).toHaveLength(2);
+  });
+
+  it("still shows the participants when the progress answer has no Still needed figures (FEA-01)", async () => {
+    // An older server during a deploy answers without `still_needed`.
+    fakeApi(
+      signedInAs([...MANAGER, "participants.view", "participants.manage"], {
+        ...worldHandlers(),
+        "GET /api/v1/projects/p1/progress": () => [200, { project_id: "p1" }],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    expect(await screen.findByText("P000001")).toBeInTheDocument();
+    expect(screen.queryByText(/Still needed|No more speakers/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Add participant" })).toBeInTheDocument();
+  });
+
+  it("marks a missing phone with a dash, and a search without a match says so (UXA-12, UXA-13)", async () => {
+    fakeApi(
+      signedInAs([...MANAGER, "participants.view", "participants.manage"], {
+        ...worldHandlers(),
+        "GET /api/v1/projects/p1/participants": (_body, url) => [
+          200,
+          url.searchParams.get("search")
+            ? { items: [], total: 0, page: 1, page_size: 25 }
+            : {
+                items: [{ ...PARTICIPANT, phone: null, has_phone: false }],
+                total: 1,
+                page: 1,
+                page_size: 25,
+              },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    const row = (await screen.findByText("P000001")).closest("tr") as HTMLTableRowElement;
+    expect(row.cells[2]).toHaveTextContent(/^-$/);
+    expect(within(row).queryByText("None")).toBeNull();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search by code or name" }), "zz");
+    expect(await screen.findByRole("heading", { name: "No participants match" })).toBeVisible();
+    expect(screen.getByText("Try another code or name.")).toBeInTheDocument();
+    expect(screen.queryByText("No participants yet")).toBeNull();
+  });
+});
+
+describe("the project list", () => {
+  /** Projects PRJ0001 to PRJ0060, 25 a page, as the server pages them. */
+  const pages = (_body: unknown, url: URL): [number, unknown] => {
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const first = (page - 1) * 25;
+    const items = Array.from({ length: Math.min(25, 60 - first) }, (_, i) => ({
+      ...project,
+      id: `q${first + i + 1}`,
+      code: `PRJ${String(first + i + 1).padStart(4, "0")}`,
+      name: `Project ${first + i + 1}`,
+    }));
+    return [200, { items, total: 60, page, page_size: 25 }];
+  };
+
+  it("keeps its search, status and page in the address, so Back returns to them (FEA-07)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects": pages,
+        "GET /api/v1/projects/q26": () => [200, { ...project, id: "q26", code: "PRJ0026" }],
+      }),
+    );
+    const router = renderAt("/projects");
+    await userEvent.selectOptions(await screen.findByLabelText("Status"), "DRAFT");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search" }), "Project");
+    await waitFor(() =>
+      expect(new URLSearchParams(router.state.location.search).get("search")).toBe("Project"),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Page 2 of 3 (60 total)")).toBeInTheDocument();
+    const params = new URLSearchParams(router.state.location.search);
+    expect([params.get("search"), params.get("status"), params.get("page")]).toEqual([
+      "Project",
+      "DRAFT",
+      "2",
+    ]);
+
+    await userEvent.click(await screen.findByRole("link", { name: "PRJ0026" }));
+    expect(
+      await screen.findByRole("heading", { name: "PRJ0026 · Hindi conversations" }),
+    ).toBeVisible();
+    await act(() => router.navigate(-1));
+    expect(await screen.findByText("Page 2 of 3 (60 total)")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search" })).toHaveValue("Project");
+    expect(screen.getByLabelText("Status")).toHaveValue("DRAFT");
+    expect(calls.at(-1)?.path).toBe(
+      "/api/v1/projects?search=Project&status=DRAFT&page=2&page_size=25",
+    );
+  });
+
+  it("says when nothing matches the filters and clears them in one click (UXA-12)", async () => {
+    fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects": (_body, url) =>
+          url.searchParams.get("status") === "ARCHIVED"
+            ? [200, { items: [], total: 0, page: 1, page_size: 25 }]
+            : pages(_body, url),
+      }),
+    );
+    const router = renderAt("/projects?status=ARCHIVED");
+    expect(await screen.findByRole("heading", { name: "No projects match" })).toBeVisible();
+    expect(screen.getByText("Try another search or status.")).toBeInTheDocument();
+    expect(screen.queryByText(/not a member/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByRole("link", { name: "PRJ0001" })).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
+    expect(screen.getByLabelText("Status")).toHaveValue("");
+  });
+
+  it("titles the page without an icon tile and lists plain codes (UXA-14)", async () => {
+    fakeApi(signedInAs(["projects.view"], { "GET /api/v1/projects": pages }));
+    renderAt("/projects");
+    const code = await screen.findByRole("link", { name: "PRJ0001" });
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Projects" }).querySelector(".tile"),
+    ).toBeNull();
+    expect(code.closest("td")).toHaveTextContent(/^PRJ0001$/);
   });
 });

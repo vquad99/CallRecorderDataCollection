@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import select
 
 from app.api.deps import AppSettings, Mailer
@@ -21,6 +21,8 @@ from app.modules.users import service
 
 router = APIRouter(tags=["users"])
 Admin = Annotated[Principal, Depends(require(Perm.USERS_MANAGE))]
+# A name with something in it: spaces alone are refused, as the CSV import refuses them.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
 class UserOut(BaseModel):
@@ -76,7 +78,7 @@ def list_users(
 
 class CreateUserBody(BaseModel):
     email: str = Field(min_length=3, max_length=320)
-    display_name: str = Field(min_length=1, max_length=200)
+    display_name: Name
     roles: list[str] = Field(min_length=1, max_length=6)
 
 
@@ -191,7 +193,7 @@ def get_user(user_id: uuid.UUID, _: Admin, db: DbSession) -> UserOut:
 
 class UpdateUserBody(BaseModel):
     email: str | None = Field(default=None, min_length=3, max_length=320)
-    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    display_name: Name | None = None
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)

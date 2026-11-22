@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 from pydantic import BaseModel, Field
 
-from app.api.deps import AppSettings, Cipher
+from app.api.deps import AppSettings, Cipher, Mailer
 from app.core.config import Settings
 from app.core.errors import AppError, forbidden, not_found
 from app.core.security import CSRF_COOKIE, SESSION_COOKIE
@@ -114,6 +114,7 @@ def login(
     db: DbSession,
     settings: AppSettings,
     cipher: Cipher,
+    mailer: Mailer,
 ) -> MeOut:
     result = service.login(
         db,
@@ -124,6 +125,7 @@ def login(
         totp_code=body.totp_code,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        mailer=mailer,
     )
     max_age = settings.session_absolute_hours * 3600
     _set_cookie(response, settings, SESSION_COOKIE, result.token, http_only=True, max_age=max_age)
@@ -143,7 +145,10 @@ def logout(
     db: DbSession,
     settings: AppSettings,
 ) -> None:
-    service.logout(db, principal.session_id, principal.user_id, client_ip(request))
+    # While viewing as someone (D-100), it is the Super Admin's own session that ends: the entry
+    # names them, not the person whose view it was.
+    who = principal.viewer_id or principal.user_id
+    service.logout(db, principal.session_id, who, client_ip(request))
     _clear_cookies(response, settings)
 
 
@@ -281,7 +286,8 @@ class SessionOut(BaseModel):
 
 
 @router.get("/sessions", response_model=list[SessionOut])
-def sessions(principal: CurrentPrincipal, db: DbSession) -> list[SessionOut]:
+def sessions(principal: CurrentPrincipal, db: DbSession, settings: AppSettings) -> list[SessionOut]:
+    """The caller's sessions that still work (ended, expired and idle ones are left out)."""
     return [
         SessionOut(
             id=s.id,
@@ -292,7 +298,7 @@ def sessions(principal: CurrentPrincipal, db: DbSession) -> list[SessionOut]:
             user_agent=s.user_agent,
             current=s.id == principal.session_id,
         )
-        for s in service.list_sessions(db, principal.user_id)
+        for s in service.list_sessions(db, principal.user_id, settings.session_idle_minutes)
     ]
 
 
@@ -335,7 +341,15 @@ class CodeBody(BaseModel):
 def mfa_confirm(
     body: CodeBody, request: Request, principal: CurrentPrincipal, db: DbSession, cipher: Cipher
 ) -> None:
-    service.mfa_confirm(db, cipher, principal.user_id, body.code, client_ip(request))
+    """Turns two-step sign-in on; every other session of the account ends (D-106)."""
+    service.mfa_confirm(
+        db,
+        cipher,
+        principal.user_id,
+        body.code,
+        client_ip(request),
+        session_id=principal.session_id,
+    )
 
 
 class MfaDisableBody(BaseModel):

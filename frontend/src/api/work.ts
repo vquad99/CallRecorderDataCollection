@@ -110,6 +110,14 @@ export interface TaskSummary {
   created_at: string;
 }
 
+/** A row of the task list (UXW-05): who holds the task and the codes of its two people. Older
+ * fixtures may leave them out. */
+export interface TaskListItem extends TaskSummary {
+  moderator_name?: string | null;
+  participant_a_code?: string;
+  participant_b_code?: string;
+}
+
 export interface Party {
   id: string;
   participant_code: string;
@@ -134,7 +142,8 @@ export interface ConsentFix {
   comment: string;
   by: string | null;
   at: string;
-  /** The people whose form QC found not right; `replaced`: a new one is on file since. */
+  /** The people whose form QC found not right; `replaced`: a new one is on file since (or, when
+   * `by_upload` is false, the person has agreed online). */
   participants: {
     side: "A" | "B";
     participant_id: string;
@@ -142,12 +151,22 @@ export interface ConsentFix {
     replaced: boolean;
   }[];
   forms_replaced: boolean;
+  /** The project takes signed forms now. False: it was switched to Online since, a signed form
+   * no longer counts, and each person agrees on their personal page instead (SECB-03). */
+  by_upload: boolean;
   /** The caller may send the task back to QC (its moderator, or someone who assigns tasks). */
   can_send_back: boolean;
 }
 
 export interface TaskDetail extends TaskSummary {
+  /** The project the task belongs to (UXW-04). */
+  project_code?: string;
+  project_name?: string;
   held_from: TaskStatus | null;
+  /** A rejected or cancelled task: the status it stopped at (FEW-11), or null. */
+  ended_from?: TaskStatus | null;
+  /** The caller may delete the task now: nothing has happened on it (FEW-12, D-115). */
+  can_delete?: boolean;
   reason_code: string | null;
   participant_a: Party;
   participant_b: Party;
@@ -240,7 +259,7 @@ export const consentHistory = (projectId: string, id: string) =>
   apiRequest<Consent[]>(`${pp(projectId)}/${id}/consent`);
 
 export const listTasks = (params: Params) =>
-  apiRequest<Page<TaskSummary>>(`/api/v1/tasks${query(params)}`);
+  apiRequest<Page<TaskListItem>>(`/api/v1/tasks${query(params)}`);
 export const getTask = (id: string) => apiRequest<TaskDetail>(`/api/v1/tasks/${id}`);
 export const createTask = (body: {
   project_id: string;

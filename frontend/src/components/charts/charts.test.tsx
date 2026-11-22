@@ -110,6 +110,37 @@ describe("dashboard figures", () => {
     expect(ticks.slice(0, 3)).toEqual(["0", "10", "20"]);
   });
 
+  it("writes an axis under an hour in minutes, and under a minute in seconds, with room for it", () => {
+    const chart = (busiest: number) => (
+      <DayChart
+        title="Hours per day"
+        days={[
+          { day: "2026-11-01", h: busiest },
+          { day: "2026-11-02", h: busiest / 4 },
+        ]}
+        series={[{ label: "Recorded", className: "series--recorded", value: (d) => d.h }]}
+        columns={[{ label: "Recorded", value: (d) => d.h }]}
+        emptyText="Nothing yet."
+      />
+    );
+    /** The axis' numbers, each with how far right of the drawing's left edge it ends. */
+    const axis = () =>
+      Array.from(document.querySelectorAll('text.chart__tick[text-anchor="end"]')).map((t) => ({
+        text: t.textContent ?? "",
+        x: Number(t.getAttribute("x")),
+      }));
+    // 0.02 h a day is 1.2 minutes: not "0.025" and "0.0125" cut off at the edge.
+    const { rerender } = render(chart(0.02));
+    expect(axis().map((t) => t.text)).toEqual(["0", "1 min", "2 min"]);
+    // Each number is written right-aligned at x and needs about 7 px a character.
+    for (const t of axis()) expect(t.x).toBeGreaterThanOrEqual(6.5 * t.text.length);
+    rerender(chart(0.5));
+    expect(axis().map((t) => t.text)).toEqual(["0", "25 min", "50 min"]);
+    rerender(chart(0.004)); // about 14 seconds
+    expect(axis().map((t) => t.text)).toEqual(["0", "10 s", "20 s"]);
+    for (const t of axis()) expect(t.x).toBeGreaterThanOrEqual(6.5 * t.text.length);
+  });
+
   it("shows a key figure's bar to its target", () => {
     render(
       <KpiStrip label="Key figures">

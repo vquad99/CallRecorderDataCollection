@@ -6,9 +6,10 @@
  * Content keeps KoboToolbox's greys and blue, and Roboto. The signed-out pages keep the
  * paper-and-teal look the owner chose (D-087), scoped under .public. Styles used by one feature
  * only live in that feature's own file. Icons: Phosphor.
- * D-154: pages are plain. A page is its title row, one filter row, then sections: a heading over
- * a table, a chart or plain fields, a thin line between sections. Only a table has a frame (its
- * own border); no boxes around sections, no tile per number.
+ * D-156 (after D-154's plain pages): a page is its title row, one filter row, then sections. Each
+ * section is a white panel with a thin frame on the light grey page, its title on a bar of its
+ * own, then a table, a chart or fields; a table runs edge to edge inside it. Never a panel inside
+ * a panel, and no tile per number.
  */
 
 /* ---------- Tokens ---------- */
@@ -25,6 +26,11 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  /* The page behind the sections (D-156): light grey, so each white section stands out. */
+  --page-bg: #f3f5f9;
+  /* A section's inner space: top and bottom, left and right (smaller on a phone). */
+  --card-py: 16px;
+  --card-px: 16px;
 
   --font-sans: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -58,7 +64,8 @@
   --primary-text: #ffffff;
   --focus-ring: 0 0 0 3px rgb(25 119 194 / 0.3);
 
-  --ok: #178949;
+  /* 5.5:1 on its light green and 6.2:1 on white, for the words of badges and notices. */
+  --ok: #13703c;
   --ok-soft: #e3f9db;
   --warn: #803f00;
   --warn-soft: #ffe8cc;
@@ -81,7 +88,7 @@
   --amber-soft: #ffe8cc;
   --rose: #9d0000;
   --rose-soft: #ffe9e9;
-  --green: #178949;
+  --green: #13703c;
   --green-soft: #e3f9db;
   --slate: #5a627d;
   --slate-soft: #edeef2;
@@ -203,6 +210,11 @@ summary:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+/* A file picker styled as a button (a label round a hidden input) shows the focus of its input. */
+label:has(> input[type="file"]:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -321,30 +333,6 @@ summary:focus-visible {
   background: var(--tint-slate);
   color: var(--icon-slate);
 }
-.avatar--blue {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-.avatar--teal {
-  background: var(--teal-soft);
-  color: var(--teal);
-}
-.avatar--violet {
-  background: var(--violet-soft);
-  color: var(--violet);
-}
-.avatar--amber {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-.avatar--rose {
-  background: var(--rose-soft);
-  color: var(--rose);
-}
-.avatar--green {
-  background: var(--green-soft);
-  color: var(--green);
-}
 /* A page title's tile is a little rounder than the rest (D-141). */
 h1 > .tile {
   border-radius: 8px;
@@ -358,10 +346,35 @@ h1 > .tile {
   height: 30px;
   border-radius: 50%;
   background: var(--blue-soft);
-  color: var(--blue);
+  color: #135991;
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+/* The tones come after the base rule so they apply; their initials are 5.5:1 or more. */
+.avatar--blue {
+  background: var(--blue-soft);
+  color: #135991;
+}
+.avatar--teal {
+  background: var(--teal-soft);
+  color: #1b5e64;
+}
+.avatar--violet {
+  background: var(--violet-soft);
+  color: #4f3fa8;
+}
+.avatar--amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.avatar--rose {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+.avatar--green {
+  background: var(--green-soft);
+  color: var(--green);
 }
 .avatar--square {
   border-radius: 6px;
@@ -373,6 +386,14 @@ h1 > .tile {
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
   grid-template-columns: var(--sidenav-w) minmax(0, 1fr);
   min-height: 100vh;
+}
+/* No menu yet (two-step sign-in to set up, D-106): one centred column. */
+.shell--bare {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shell--bare .shell__content {
+  max-width: 760px;
+  margin-inline: auto;
 }
 .topbar {
   position: sticky;
@@ -519,11 +540,11 @@ h1 > .tile {
   background: var(--k-500);
   content: "";
 }
-/* Ready: a darker green than --ok so its words are 5.3:1 on the light green. */
+/* Ready: green words, 5.5:1 on the light green. */
 .phone-line[data-status="ready"] {
   border-color: color-mix(in srgb, var(--ok) 30%, transparent);
   background: var(--ok-soft);
-  color: #14733e;
+  color: var(--ok);
 }
 .phone-line[data-status="ready"]::before {
   background: var(--ok);
@@ -616,16 +637,20 @@ h1 > .tile {
   font-size: 0.75rem;
   font-weight: 500;
 }
+/* Behind the open small-screen menu: dims the page and closes the menu when tapped. */
+.sidenav__backdrop {
+  display: none;
+}
 .shell__column {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-/* The content area is white (D-154): sections sit on it without boxes of their own. */
+/* The content area is light grey (D-156): each section is a white panel on it. */
 .shell__main {
   flex: 1;
   min-width: 0;
-  background: var(--surface);
+  background: var(--page-bg);
 }
 .shell__content {
   max-width: 1440px;
@@ -771,6 +796,17 @@ h1 > .tile {
   .sidenav[data-open] {
     display: flex;
   }
+  /* Under the top bar (so its close button stays in reach), over the page, under the menu. */
+  .sidenav__backdrop {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 35;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: rgb(15 23 42 / 0.35);
+    cursor: default;
+  }
   .topbar {
     gap: 8px;
     padding: 0 var(--gutter);
@@ -778,9 +814,6 @@ h1 > .tile {
   .topbar__menu {
     display: inline-flex;
     flex: none;
-  }
-  .topbar__who {
-    display: none;
   }
   .topbar__account {
     padding: 2px;
@@ -791,12 +824,13 @@ h1 > .tile {
   .phone-line__words {
     max-width: 18ch;
   }
-  /* A phone's top bar: the product as its mark, Sign out as its icon, the phone line as its dot
-     and state (D-141); the full words stay for screen readers. */
+  /* A phone's top bar: the product as its mark, the account as its initials, Sign out as its
+     icon, the phone line as its dot and state (D-141); the full words stay for screen readers. */
   .topbar__signout {
     padding: 0 9px;
   }
   .topbar__brand .brand__name,
+  .topbar__who,
   .topbar__signout-words,
   .phone-line:has(.phone-line__short) .phone-line__words {
     position: absolute;
@@ -1206,23 +1240,151 @@ h1 > .tile {
   align-items: center;
   gap: 8px;
 }
-/* A section (D-154): no box. A thin line parts it from what comes before it; its heading, then
-   its table, chart or plain fields. Only a table keeps a frame (its own border). */
+/* A section (D-156): a white panel with a thin frame on the grey page, its title on a bar of its
+   own, then its table, chart or fields. Never a panel inside a panel: a section inside a section
+   is plain. */
 .card {
   min-width: 0;
+  padding: var(--card-py) var(--card-px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.05);
+}
+.card .card {
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-* + .card {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
+.card > h2:first-child,
+.card > h3:first-child,
+.card
+  > :is(
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child {
+  margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
+  padding: 12px var(--card-px);
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: #fafbfd;
 }
 .card > h2,
 .card > h3 {
   margin-bottom: var(--space-3);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+/* A title with buttons beside it on the bar: the title the same size as any other. */
+.card
+  > :is(
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child
+  :is(h2, h3) {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+/* A filter on the bar: its label beside it and a compact box, so the bar stays one line. */
+.card
+  > :is(
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child
+  .field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.card
+  > :is(
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child
+  .field__input {
+  width: auto;
+  min-height: 30px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+/* In a section whose parts are spaced by a gap, the gap is part of the space under the bar. */
+.card.stack
+  > :is(
+    h2,
+    h3,
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child {
+  margin-bottom: calc(var(--card-py) - var(--space-4));
+}
+.card.stack--tight
+  > :is(
+    h2,
+    h3,
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child {
+  margin-bottom: calc(var(--card-py) - var(--space-2));
+}
+/* A table right under the title bar starts at the bar's line. */
+.card
+  > :is(
+    h2,
+    h3,
+    .card__head,
+    .rules-card__head,
+    .side-card__head,
+    .calls-list__head,
+    .pick__head
+  ):first-child
+  + .table-wrap {
+  margin-top: calc(-1 * var(--card-py));
+  border-top: 0;
+}
+/* A table directly in a section runs edge to edge under the title bar. */
+.card > .table-wrap {
+  margin-inline: calc(-1 * var(--card-px));
+  border-width: 1px 0;
+  border-radius: 0;
+}
+.card > .table-wrap:last-child {
+  margin-bottom: calc(-1 * var(--card-py));
+  border-bottom: 0;
+  border-radius: 0 0 8px 8px;
+}
+.card > .table-wrap .table :is(th, td):first-child {
+  padding-left: var(--card-px);
+}
+.card > .table-wrap .table :is(th, td):last-child {
+  padding-right: var(--card-px);
+}
+@media (max-width: 640px) {
+  :root {
+    --card-py: 12px;
+    --card-px: 12px;
+  }
 }
 /* Two short sections side by side on a wide screen, under one line. */
 .section-pair {
@@ -1232,21 +1394,8 @@ h1 > .tile {
   gap: var(--space-4) var(--space-6);
   container-type: inline-size;
 }
-* + .section-pair {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-}
-.section-pair > .card {
-  padding-top: 0;
-  border-top: 0;
-}
+
 /* One under the other when narrow: the line between them again. */
-@container (max-width: 783px) {
-  .section-pair > .card + .card {
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
-  }
-}
 /* Loading and empty: plain lines on the page. A failure keeps a light red frame. */
 .state {
   padding: var(--space-3) 0;
@@ -1264,11 +1413,14 @@ fieldset.card {
    in it (floated out of the border). */
 fieldset.card > legend {
   float: left;
-  width: 100%;
-  margin-bottom: var(--space-3);
-  padding: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  width: calc(100% + 2 * var(--card-px));
+  margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
+  padding: 12px var(--card-px);
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: #fafbfd;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 fieldset.card > legend + * {
   clear: both;
@@ -1450,6 +1602,30 @@ input[type="search"].field__input {
 textarea.field__input {
   resize: vertical;
 }
+/* A file box: its button looks like the app's secondary buttons, not the browser's own. */
+.field__input[type="file"] {
+  padding: 3px 6px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button {
+  min-height: 28px;
+  margin-right: 10px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+input[type="file"]:hover::file-selector-button {
+  border-color: var(--k-500);
+  background: var(--surface-hover);
+}
 /* Read-only: a field the user may not change must look it. */
 .field__input:disabled,
 fieldset:disabled .field__input {
@@ -1523,16 +1699,21 @@ input[type="radio"] {
 .shell__content form .field:has(> input[type="date"]) {
   max-width: 280px;
 }
-/* Short fields side by side; their boxes line up even when only some have a hint. */
+/* Short fields side by side: labels and boxes line up because hints and examples go under the box
+   (after an error, which stays right under it); the order in the page is unchanged for screen
+   readers. */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
-  align-items: end;
+  align-items: start;
   gap: 0 20px;
   max-width: 900px;
 }
 .form-grid .field {
   max-width: none;
+}
+.form-grid > .field > .field__hint {
+  order: 1;
 }
 /* A group of choices laid out like a field (checkboxes under one label). */
 fieldset.field {
@@ -1920,6 +2101,9 @@ button.tabs__link {
   color: var(--text);
   box-shadow: var(--shadow-lg);
 }
+.dialog--medium {
+  width: min(800px, calc(100vw - 2 * var(--gutter)));
+}
 .dialog--wide {
   width: min(1100px, calc(100vw - 2 * var(--gutter)));
 }
@@ -1992,12 +2176,15 @@ form.dialog__body > h2 {
   flex-basis: 100%;
 }
 
-/* The sign-out warning (D-122): a strip under the top bar, like View as. */
-.idle-warning {
+/* The sign-out warning (D-122), and a sign-out that did not reach the server: strips under the
+   top bar, like View as. */
+.idle-warning,
+.signout-failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
+  margin: 0;
   padding: 8px 24px;
   background: var(--warn-soft);
   color: var(--warn);
@@ -2008,11 +2195,21 @@ form.dialog__body > h2 {
   margin-left: auto;
   padding: 4px 12px;
 }
+.signout-failed {
+  flex-wrap: nowrap;
+}
 @media (max-width: 900px) {
   .idle-warning,
+  .signout-failed,
   .view-as {
     padding: 8px var(--gutter);
   }
+}
+/* A page that failed to display with nothing of the app around it (RouteError). */
+.route-error {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 0 var(--gutter);
 }
 
 /* ---------- Notices and page states ---------- */
@@ -2038,6 +2235,16 @@ form.dialog__body > h2 {
   border-color: color-mix(in srgb, var(--info) 35%, transparent);
   background: var(--info-soft);
   color: var(--info);
+}
+.notice--warning {
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+/* A link inside a notice takes the notice's colour, underlined so it still reads as a link. */
+.notice a {
+  color: inherit;
+  text-decoration: underline;
 }
 .state {
   display: flex;
@@ -2187,4 +2394,46 @@ form.dialog__body > h2 {
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
+}
+
+/* ---------- Printed, or saved as PDF (UXA-02) ----------
+   Any page prints as its content: the menus and bars around it are left out, the page takes the
+   whole width on white paper, and a long table shows all its rows instead of a frame that scrolls.
+   The Progress tab adds its own report rules (progress.css). */
+@media print {
+  :root,
+  body {
+    background: #fff;
+  }
+  :is(
+    .topbar,
+    .sidenav,
+    .sidenav__backdrop,
+    .section-panel,
+    .skip-link,
+    .view-as,
+    .idle-warning,
+    .signout-failed
+  ) {
+    display: none !important;
+  }
+  :is(.shell, .section-layout) {
+    display: block;
+    min-height: 0;
+  }
+  :is(.shell__content, .section-layout__main) {
+    max-width: none;
+    padding: 0;
+    animation: none;
+  }
+  .table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+  thead th {
+    position: static;
+  }
+  tr {
+    break-inside: avoid;
+  }
 }

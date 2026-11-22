@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import NamedTuple
 
 from sqlalchemy import exists, func, or_, select, text
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, forbidden, not_found
@@ -32,6 +33,16 @@ from app.modules.users.service import display_names
 
 # Statuses in which the moderator may still be changed.
 REASSIGNABLE = frozenset({"DRAFT", "ASSIGNED", "ON_HOLD"})
+# Statuses in which the task page offers Delete (D-115), to people who assign tasks, while nothing
+# has happened on the task (work_on).
+DELETABLE = frozenset({"DRAFT", "ASSIGNED", "CANCELLED"})
+# The task has ended: where it stopped is read from its history (ended_from).
+ENDED = frozenset({"REJECTED", "CANCELLED"})
+# A task's row is locked FOR NO KEY UPDATE while its status or moderator changes (TASK-005): two
+# changes at once are made one after the other, and the second sees the status the first left.
+# It does not wait for rows that only point at the task (QC results, assignments), which a plain
+# FOR UPDATE would, so two decisions sent at once cannot deadlock.
+ROW_LOCK = {"key_share": True}
 
 
 class _RoleWords(NamedTuple):
@@ -170,6 +181,61 @@ def list_tasks(
     return paginate(db, query.order_by(Task.created_at.desc()), page, page_size)
 
 
+def moderator_names(db: Session, task_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """The active moderator's name of each of these tasks, in one query (the task list, UXW-05)."""
+    if not task_ids:
+        return {}
+    rows = db.execute(
+        select(TaskAssignment.task_id, User.display_name)
+        .join(User, User.id == TaskAssignment.user_id)
+        .where(
+            TaskAssignment.task_id.in_(task_ids),
+            TaskAssignment.role_code == Role.MODERATOR.value,
+            TaskAssignment.active.is_(True),
+        )
+    )
+    return {task_id: name for task_id, name in rows}
+
+
+def participant_codes(db: Session, tasks: list[Task]) -> dict[uuid.UUID, str]:
+    """The participant codes of both people of each of these tasks, in one query (UXW-05)."""
+    ids = {t.participant_a_id for t in tasks} | {t.participant_b_id for t in tasks}
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(Participant.id, Participant.participant_code).where(Participant.id.in_(ids))
+    )
+    return {pid: code for pid, code in rows}
+
+
+def ended_from(db: Session, task: Task) -> str | None:
+    """Where a rejected or cancelled task stopped (FEW-11): the status it left last, or, for a
+    task cancelled while on hold, the status it was held from. None for a task still going."""
+    if task.status not in ENDED:
+        return None
+    return db.scalar(
+        select(TaskStatusHistory.from_status)
+        .where(
+            TaskStatusHistory.task_id == task.id,
+            TaskStatusHistory.from_status.is_not(None),
+            TaskStatusHistory.from_status != "ON_HOLD",
+        )
+        .order_by(TaskStatusHistory.created_at.desc())
+        .limit(1)
+    )
+
+
+def lock_task(db: Session, task: Task) -> None:
+    """Locks the task's row until the transaction ends and reads it again (TASK-005); 404 when
+    the task was deleted meanwhile. Call it before checking the status and before adding rows
+    that point at the task, so a second change sent at the same moment waits and then sees the
+    status the first one left."""
+    try:
+        db.refresh(task, with_for_update=ROW_LOCK)
+    except InvalidRequestError:
+        raise not_found("Task") from None
+
+
 def _record_transition(
     db: Session,
     task: Task,
@@ -220,16 +286,21 @@ def transition(
     comment: str = "",
     ip: str | None = None,
 ) -> Task:
-    """The only way a task's status changes; status, history and audit commit together."""
-    workflow.check(
-        task.status,
-        target,
-        actor,
-        held_from=task.held_from,
-        reason_code=reason_code,
-        comment=comment,
-    )
+    """The only way a task's status changes; status, history and audit commit together. The task's
+    row is locked and read again first (TASK-005), so the change is checked against the status as
+    it is now: an admin's Cancel and a moderator's Start sent at once are made one after the other,
+    and the second is refused (409) instead of bringing a cancelled task back. A refused change
+    leaves nothing behind: whatever the caller added for it is rolled back with it."""
     try:
+        lock_task(db, task)
+        workflow.check(
+            task.status,
+            target,
+            actor,
+            held_from=task.held_from,
+            reason_code=reason_code,
+            comment=comment,
+        )
         _record_transition(db, task, target, actor_id, reason_code, comment, ip)
         if target == "AUDIO_QC":
             auto_assign_qc(db, task)
@@ -565,22 +636,27 @@ def assign_moderator(
     task = get_task(db, principal, task_id)
     if not principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id):
         raise forbidden()
-    if task.status not in REASSIGNABLE:
-        raise AppError(
-            f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
-        )
-    people = [
-        db.get_one(Participant, pid) for pid in (task.participant_a_id, task.participant_b_id)
-    ]
-    require_agreed(db, task.project_id, people, status_code=409)
-    user = require_member_with_role(db, task.project_id, user_id, Role.MODERATOR)
-    qc = active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
-    if qc is not None and qc.user_id == user.id:
-        # The QC Executive of a task cannot also record it, whichever was assigned first (D-088).
-        raise AppError(
-            "The person who checks a session cannot record it", code="SAME_PERSON", status_code=422
-        )
     try:
+        # Locked and read again (TASK-005): a cancel or a start made meanwhile is seen here.
+        lock_task(db, task)
+        if task.status not in REASSIGNABLE:
+            raise AppError(
+                f"A {task.status} task cannot be reassigned", code="TASK_LOCKED", status_code=409
+            )
+        people = [
+            db.get_one(Participant, pid) for pid in (task.participant_a_id, task.participant_b_id)
+        ]
+        require_agreed(db, task.project_id, people, status_code=409)
+        user = require_member_with_role(db, task.project_id, user_id, Role.MODERATOR)
+        qc = active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
+        if qc is not None and qc.user_id == user.id:
+            # The QC Executive of a task cannot also record it, whichever was assigned first
+            # (D-088).
+            raise AppError(
+                "The person who checks a session cannot record it",
+                code="SAME_PERSON",
+                status_code=422,
+            )
         replace_assignee(db, principal, task, user, Role.MODERATOR, reason, ip)
         if task.status == "DRAFT":
             workflow.check(
@@ -594,6 +670,10 @@ def assign_moderator(
             _record_transition(
                 db, task, "ASSIGNED", principal.user_id, None, "Moderator assigned", ip
             )
+        elif task.status == "ON_HOLD" and task.held_from == "DRAFT":
+            # Put on hold before anyone was assigned (TASK-07): it now has a moderator, so
+            # resuming brings it back as Assigned, where the moderator can start it.
+            task.held_from = "ASSIGNED"
         db.commit()
     except Exception:
         db.rollback()
@@ -601,10 +681,18 @@ def assign_moderator(
     return task
 
 
-def consent_missing_error(missing: list[str]) -> AppError:
+# Statuses with a recording made: consent missing there stops the recording's approval.
+_RECORDED = frozenset({"RECORDED", "AUDIO_QC", "CONSENT_FIX", "ADMIN_REVIEW"})
+
+
+def consent_missing_error(missing: list[str], *, approving: bool = False) -> AppError:
+    who = f"Participant {' and '.join(missing)} {'has' if len(missing) == 1 else 'have'}"
     return AppError(
-        f"Participant {' and '.join(missing)} has not agreed on the consent form yet. Calling "
-        "and recording wait until both have agreed.",
+        f"{who} no consent that counts in this project now. The recording is passed or approved "
+        "only once both have agreed."
+        if approving
+        else f"{who} not agreed on the consent form yet. Calling and recording wait until both "
+        "have agreed.",
         code="CONSENT_MISSING",
         status_code=409,
         details=[{"missing": missing}],
@@ -612,10 +700,12 @@ def consent_missing_error(missing: list[str]) -> AppError:
 
 
 def require_consent(db: Session, task: Task) -> None:
-    """Recording needs consent from both participants first (D-119)."""
+    """Recording needs consent from both participants first (D-119), and so does passing or
+    approving the recording (SECB-03): a project switched from signed forms to online consent
+    while the task was in QC can leave a person with no consent that counts."""
     missing = consent.missing(consent.for_task(db, task))
     if missing:
-        raise consent_missing_error(missing)
+        raise consent_missing_error(missing, approving=task.status in _RECORDED)
 
 
 def add_comment(
@@ -637,32 +727,45 @@ def add_comment(
     return comment
 
 
-def delete_task(
-    db: Session, principal: Principal, task_id: uuid.UUID, reason: str, ip: str | None
-) -> str:
-    """Removes a task made by mistake (D-115): only by people who assign tasks, and only while
-    nothing has happened on it: no recording, no phone call, no consent noted, no QC result. A
-    task with work on it is cancelled instead, so its history stays. Returns the task code."""
+def work_on(db: Session, task: Task) -> list[str]:
+    """What has happened on the task that keeps it for the record (D-115), in one query: a
+    recording, a phone call, consent noted on it, an audio check. Empty: it may be deleted."""
     from app.modules.audio_qc.models import AudioQcResult
     from app.modules.recordings.models import Recording
     from app.modules.telephony.models import Call
 
-    task = get_task(db, principal, task_id)
-    if not principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id):
-        raise forbidden()
-    if not reason.strip():
-        raise AppError("Say why the task is deleted", code="REASON_REQUIRED", status_code=422)
     work = [
         ("a recording", exists().where(Recording.task_id == task.id)),
         ("a phone call", exists().where(Call.task_id == task.id)),
         ("consent noted", exists().where(ConsentRecord.task_id == task.id)),
         ("an audio check", exists().where(AudioQcResult.task_id == task.id)),
     ]
-    found = [what for what, there in work if db.scalar(select(there))]
+    found = db.execute(select(*(there for _, there in work))).one()
+    return [what for (what, _), there in zip(work, found, strict=True) if there]
+
+
+def can_delete(db: Session, actor: workflow.Actor, task: Task) -> bool:
+    """The task page offers Delete (FEW-12): to people who assign tasks, on a Draft, Assigned or
+    Cancelled task with nothing on it. The work is only looked up when the rest holds."""
+    return actor.can_assign and task.status in DELETABLE and not work_on(db, task)
+
+
+def delete_task(
+    db: Session, principal: Principal, task_id: uuid.UUID, reason: str, ip: str | None
+) -> str:
+    """Removes a task made by mistake (D-115): only by people who assign tasks, and only while
+    nothing has happened on it: no recording, no phone call, no consent noted, no QC result. A
+    task with work on it is cancelled instead, so its history stays. Returns the task code."""
+    task = get_task(db, principal, task_id)
+    if not principal.can_in_project(Perm.TASKS_ASSIGN, task.project_id):
+        raise forbidden()
+    if not reason.strip():
+        raise AppError("Say why the task is deleted", code="REASON_REQUIRED", status_code=422)
+    found = work_on(db, task)
     if found:
         raise AppError(
-            f"This task already has {' and '.join(found)}, so it is kept for the record. "
-            "Cancel it instead.",
+            f"This task already has {' and '.join(found)}, so it is kept for the record."
+            + ("" if task.status == "CANCELLED" else " Cancel it instead."),
             code="TASK_HAS_WORK",
             status_code=409,
         )

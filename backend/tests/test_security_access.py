@@ -361,6 +361,11 @@ def _project_body(_: Estate, __: Side, ___: str) -> dict[str, Any]:
     return {"name": "Renamed", "allows_telephony": True, "allows_face_to_face": True}
 
 
+def _payments_path(who: str, suffix: str) -> Callable[[Estate, Side], str]:
+    """The path of one payments page (or its download) for the project of a side."""
+    return lambda e, s: f"/api/v1/payments/{who}{suffix}?project_id={s.project}"
+
+
 def _csv(_: Estate, __: Side, who: str) -> dict[str, str]:
     return {
         "csv": f"email,display_name,roles\nimported.{who.lower()}@example.org,Imported,MODERATOR\n"
@@ -542,6 +547,14 @@ CASES: list[Case] = [
         "GET",
         P + "/progress",
         lambda e, s: f"/api/v1/projects/{s.project}/progress",
+        {SA, PA},
+        Perm.PROJECTS_VIEW,
+    ),
+    # Its download (Excel or CSV): the same people as the tab.
+    case(
+        "GET",
+        P + "/progress/export",
+        lambda e, s: f"/api/v1/projects/{s.project}/progress/export?format=csv",
         {SA, PA},
         Perm.PROJECTS_VIEW,
     ),
@@ -742,9 +755,7 @@ CASES: list[Case] = [
         case(
             "GET",
             f"/api/v1/payments/{who}{suffix}",
-            lambda e, s, who=who, suffix=suffix: (
-                f"/api/v1/payments/{who}{suffix}?project_id={s.project}"
-            ),
+            _payments_path(who, suffix),
             {SA, PA},
             Perm.PAYMENTS_MANAGE,
         )

@@ -10,12 +10,14 @@ its consent form afterwards (D-129, by the router after the answer).
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -31,8 +33,15 @@ from app.modules.participants.models import ParticipantPortalLink
 from app.modules.projects.models import Project
 from app.modules.projects.service import get_manageable
 
+logger = logging.getLogger(__name__)
+
 MAX_IMPORT_ROWS = 500
 MAX_BULK = 200
+# The longest values a row may hold, as on the form (participants/router.ParticipantBody).
+MAX_NAME = 200
+MAX_LANGUAGE = 35
+MAX_DIALECT = 100
+ROW_NOT_SAVED = "This row could not be saved: a value is too long or not valid"
 # The speaker details (D-143) after the first six; `district` is the native district.
 SPEAKER_COLUMNS = tuple(name for name in speakers.FIELDS if name != "district")
 COLUMNS = ("name", "phone", "email", "language", "dialect", "district", *SPEAKER_COLUMNS)
@@ -69,7 +78,10 @@ def import_csv(
     language,dialect[,district and the speaker details] (phone, dialect and the speaker details
     may be empty; email may not, D-128). A speaker detail that is given is checked as on the form
     (D-143), an age against the project's speaker ages (D-145); a row without the details the
-    project needs is added, and its result says they are missing."""
+    project needs is added, and its result says they are missing. The check finds what Add would
+    refuse (PART-05): a phone number someone already has, someone already in the project (same
+    name and email), and a person or number repeated in the file. Each added row is saved on its
+    own, so one that cannot be saved never undoes the others (PART-06)."""
     project = get_manageable(db, principal, project_id, Perm.PARTICIPANTS_MANAGE)
     rows = read_rows(
         text,
@@ -80,6 +92,7 @@ def import_csv(
     )
     results: list[RowResult] = []
     seen_phones: set[str] = set()
+    seen_people: set[tuple[str, str]] = set()
     for csv_row in rows:
         i, row = csv_row.line, csv_row.values
         name = row.get("name", "")
@@ -88,12 +101,17 @@ def import_csv(
                 raise _bad("This line has more values than the first line has columns")
             if not name:
                 raise _bad("Name is missing")
-            if len(name) > 200:
+            if len(name) > MAX_NAME:
                 raise _bad("Name is too long")
-            language = row.get("language", "")
+            language, dialect = row.get("language", ""), row.get("dialect", "")
             if not _LANGUAGE.match(language):
                 raise _bad("Language code is not valid")
-            service.check_language(project, language, row.get("dialect", ""))
+            # The limits of the form and the database (participants/router.ParticipantBody).
+            if len(language) > MAX_LANGUAGE:
+                raise _bad(f"Language code is too long (at most {MAX_LANGUAGE} characters)")
+            if len(dialect) > MAX_DIALECT:
+                raise _bad(f"Dialect is too long (at most {MAX_DIALECT} characters)")
+            service.check_language(project, language, dialect)
             phone = normalize_phone(row["phone"]) if row.get("phone") else None
             if phone:
                 if phone in seen_phones:
@@ -101,7 +119,11 @@ def import_csv(
                 seen_phones.add(phone)
             if not row.get("email"):
                 raise _bad("Email is missing")
-            clean_email(row["email"])
+            email = clean_email(row["email"])
+            person = (name.casefold(), email.casefold())
+            if person in seen_people:
+                raise _bad("This person is repeated in this file")
+            seen_people.add(person)
             given = {field: row.get(field, "") for field in speakers.FIELDS}
             details = speakers.clean_all(given)
             age = details.get("age")
@@ -110,6 +132,12 @@ def import_csv(
             if speakers.missing(details, project):
                 ready, added = f"{ready} ({DETAILS_MISSING})", f"{added} ({DETAILS_MISSING})"
             if not confirm:
+                # What Add checks against the people already saved (it checks again itself).
+                if phone:
+                    service.refuse_duplicate_phone(
+                        db, principal, service.phone_hash(settings, phone)
+                    )
+                service.refuse_same_person(db, cipher, project, name, email)
                 results.append(RowResult(i, name, True, ready))
                 continue
             created = service.create_participant(
@@ -122,7 +150,7 @@ def import_csv(
                     display_label=name,
                     phone=row.get("phone") or None,
                     language_code=language,
-                    dialect=row.get("dialect", ""),
+                    dialect=dialect,
                     notes="",
                     email=row.get("email") or None,
                     speaker=given,
@@ -133,6 +161,12 @@ def import_csv(
         except AppError as exc:
             db.rollback()
             results.append(RowResult(i, name, False, exc.message))
+        except DataError:
+            # A value the database cannot hold that no check above caught: this row is not
+            # added, the others are (and are emailed their consent form).
+            db.rollback()
+            logger.warning("participant_import_row_refused", extra={"line": i})
+            results.append(RowResult(i, name, False, ROW_NOT_SAVED))
     return results
 
 

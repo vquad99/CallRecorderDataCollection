@@ -1,21 +1,40 @@
 // Import users from CSV with a preview before anything is written (USER-005).
 import { useState } from "react";
 
-import { confirmImport, previewImport, type ImportRow } from "../../api/admin";
+import { confirmImport, previewImport, ROLE_CODES, type ImportRow } from "../../api/admin";
 import { BackLink } from "../../components/BackLink";
 import { Button } from "../../components/form/Button";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import { DataTable } from "../../components/DataTable";
+import { plural } from "../../lib/format";
+
+const SAMPLE =
+  "email,display_name,roles\n" +
+  "moderator@example.org,Asha Rao,MODERATOR\n" +
+  "reviewer@example.org,Ravi Kumar,QC_EXECUTIVE;CLIENT_VIEWER\n";
+
+/** Save the sample as a CSV file the admin fills in, as for tasks (D-085). */
+function downloadSample() {
+  const url = URL.createObjectURL(new Blob([SAMPLE], { type: "text/csv" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "users_template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export function UserImportPage() {
   const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
   const [rows, setRows] = useState<ImportRow[] | null>(null);
   const { busy, error, message, run, setMessage } = useAction();
 
   async function loadFile(file: File | undefined) {
     if (!file) return;
     setCsv(await file.text());
+    setFileName(file.name);
     setRows(null);
     setMessage(null);
   }
@@ -26,21 +45,37 @@ export function UserImportPage() {
       <BackLink to="/admin/users">All users</BackLink>
       <h1 id="import-title">Import users</h1>
       <p>
-        CSV with the header <code>email,display_name,roles</code>. Separate several roles with a
-        semicolon.
+        A CSV file with the header <code>email,display_name,roles</code> and one person per row.
+        Separate several roles with a semicolon. Each new account is sent an invitation to set its
+        password. Nothing is written until you check the rows and import them.
       </p>
-      <div className="field">
-        <label htmlFor="csv-file" className="field__label">
-          CSV file
+      <p>
+        Role codes:
+        {ROLE_CODES.map((code) => (
+          <span key={code}>
+            {" "}
+            <code>{code}</code>
+          </span>
+        ))}
+      </p>
+      <div className="actions">
+        <Button variant="secondary" icon="fileCsv" onClick={downloadSample}>
+          Download sample CSV
+        </Button>
+        <label className="button button--secondary">
+          <Icon name="fileUp" size={16} />
+          Choose a CSV file
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="sr-only"
+            onChange={(e) => void loadFile(e.target.files?.[0])}
+          />
         </label>
-        <input
-          id="csv-file"
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => void loadFile(e.target.files?.[0])}
-        />
-      </div>
-      <span>
+        {/* Outside the label, so the file box keeps one name for screen readers. */}
+        <span className="muted" aria-live="polite">
+          {fileName ?? "No file chosen"}
+        </span>
         <Button
           icon="eye"
           disabled={!csv}
@@ -49,7 +84,7 @@ export function UserImportPage() {
         >
           Preview
         </Button>
-      </span>
+      </div>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       {rows ? (
@@ -89,15 +124,16 @@ export function UserImportPage() {
                   const done = await confirmImport(csv);
                   setRows(null);
                   return (
-                    `${done.created} user(s) created, ${done.skipped.length} skipped` +
+                    `${plural(done.created, "user")} created, ${done.skipped.length} skipped.` +
                     (done.invites_failed
-                      ? `, ${done.invites_failed} invitation email(s) failed.`
-                      : ".")
+                      ? ` ${plural(done.invites_failed, "invitation email")} could not be sent:` +
+                        ` use "Send password link" on the user's page.`
+                      : "")
                   );
                 }, "import")
               }
             >
-              Import {valid} valid row(s)
+              Import {plural(valid, "valid row")}
             </Button>
           </span>
         </>

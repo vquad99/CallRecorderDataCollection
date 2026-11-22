@@ -1,7 +1,7 @@
 // Adding, editing and looking at one participant, the same on the Participants page and on a
 // project's Participants tab: the form, the consent history, the details and the documents open in
 // a window next to the row that was clicked (D-104, D-144).
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import type { ApiError } from "../../api/client";
 import type { ConsentMode, Language } from "../../api/projects";
@@ -32,7 +32,14 @@ import {
   type SpeakerKey,
   type SpeakerRules,
 } from "../../lib/speakers";
-import { COUNTRY_CODES, languageOptions, PHONE_DIGITS, splitPhone } from "../projects/choices";
+import {
+  COUNTRY_CODES,
+  languageOptions,
+  OTHER_CODE,
+  phoneHint,
+  phoneProblem,
+  splitPhone,
+} from "../projects/choices";
 import { DOCUMENT_WORDS, DocumentsPanel, FileField, sendDocument } from "./Documents";
 import { ParticipantDetails } from "./ParticipantDetails";
 import "./participants.css";
@@ -161,7 +168,7 @@ function SpeakerFields({
       {isNew ? (
         <p className="field__hint">
           {rules.required.length > 0
-            ? "Those marked * are needed: a task is made only for people who have them."
+            ? "Those marked * are needed to add them: a task is made only for people who have them."
             : "None are needed in this project: fill in what you know."}
         </p>
       ) : missing.length > 0 ? (
@@ -223,34 +230,46 @@ export function ParticipantForm({
 }) {
   const [f, setF] = useState(initial);
   const [files, setFiles] = useState<AddFiles>(NO_FILES);
+  const waitsId = useId();
   const scans = isNew && consentMode !== undefined;
   const needsForm = scans && consentMode === "UPLOAD";
-  const filesWrong =
-    Boolean(work.documentProblem(files.consentForm)) ||
-    Boolean(work.documentProblem(files.addressProof)) ||
-    (needsForm && !files.consentForm);
   const [phone, setPhone] = useState(() => splitPhone(initial.phone));
-  const phoneError =
-    phone.digits && phone.digits.length !== PHONE_DIGITS
-      ? `Type exactly ${PHONE_DIGITS} digits (you typed ${phone.digits.length}).`
-      : undefined;
+  const typedPhone = phone.digits ? `${phone.cc}${phone.digits}` : null;
+  // A saved number left as it is goes back as it is, unchecked: the file import keeps any
+  // international number (D-083), and the rest of the person can still be edited.
+  const phoneKept = Boolean(initial.phone) && typedPhone === initial.phone;
+  const phoneError = (!phoneKept && phoneProblem(phone.cc, phone.digits)) || undefined;
   // A wrong speaker detail stops the form; a missing one only for someone new, and only one the
   // project needs (D-143, D-145).
   const speakerWrong =
     Boolean(ageError(f, initial.age, rules)) ||
     [f.current_pincode, f.native_pincode, f.recording_pincode].some((pin) => pincodeProblem(pin));
-  const speakerMissing = isNew && missingSpeakerDetails(f, rules.required).length > 0;
+  // What the button waits for, said next to it rather than left to the asterisks (UXW-09).
+  const missing = [
+    f.display_label.trim() ? null : "Name or label",
+    initial.email !== undefined && !f.email?.trim() ? "Email address" : null,
+    f.language_code.trim() ? null : "Language",
+    ...(isNew ? missingSpeakerDetails(f, rules.required) : []),
+    needsForm && !files.consentForm ? "Signed consent form (scan)" : null,
+  ].filter((name): name is string => name !== null);
+  const wrong =
+    Boolean(phoneError) ||
+    speakerWrong ||
+    Boolean(work.documentProblem(files.consentForm)) ||
+    Boolean(work.documentProblem(files.addressProof));
+  const waits =
+    missing.length > 0
+      ? `Still to fill: ${missing.join(", ")}.`
+      : wrong
+        ? "Correct the fields marked in red."
+        : null;
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (phoneError) return;
+        if (waits !== null) return;
         onSubmit(
-          {
-            ...f,
-            phone: phone.digits ? `${phone.cc}${phone.digits}` : null,
-            email: f.email?.trim(),
-          },
+          { ...f, phone: phoneKept ? initial.phone : typedPhone, email: f.email?.trim() },
           files,
         );
       }}
@@ -261,22 +280,36 @@ export function ParticipantForm({
         value={f.display_label}
         onChange={(e) => setF({ ...f, display_label: e.target.value })}
       />
-      <Select
-        label="Country code"
-        value={phone.cc}
-        onChange={(e) => setPhone({ ...phone, cc: e.target.value })}
-        options={COUNTRY_CODES.map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }))}
-      />
-      <TextField
-        label="Phone number"
-        hint={`${PHONE_DIGITS} digits, without the country code. Needed for phone call tasks.`}
-        inputMode="numeric"
-        autoComplete="tel-national"
-        maxLength={PHONE_DIGITS}
-        value={phone.digits}
-        {...(phoneError ? { error: phoneError } : {})}
-        onChange={(e) => setPhone({ ...phone, digits: e.target.value.replace(/\D/g, "") })}
-      />
+      <div className="form-grid phone-fields">
+        <Select
+          label="Country code"
+          value={phone.cc}
+          onChange={(e) => setPhone({ ...phone, cc: e.target.value })}
+          options={COUNTRY_CODES.map((c) => ({
+            value: c.code,
+            label: c.code === OTHER_CODE ? c.name : `${c.code} ${c.name}`,
+          }))}
+        />
+        <TextField
+          label="Phone number"
+          hint={phoneHint(phone.cc)}
+          inputMode="tel"
+          autoComplete={phone.cc === OTHER_CODE ? "tel" : "tel-national"}
+          // Room for a number pasted with spaces; the digits are checked, never cut.
+          maxLength={20}
+          value={phone.digits}
+          {...(phoneError ? { error: phoneError } : {})}
+          onChange={(e) => {
+            const raw = e.target.value;
+            // A whole number pasted with its "+" brings its country code with it.
+            setPhone(
+              raw.trim().startsWith("+")
+                ? splitPhone(raw)
+                : { ...phone, digits: raw.replace(/\D/g, "") },
+            );
+          }}
+        />
+      </div>
       {/* Every participant needs an email: the consent form is sent there (D-128). A saved email
           this user may not see stays as it is when the box is left empty. */}
       <TextField
@@ -337,17 +370,17 @@ export function ParticipantForm({
       ) : null}
       <ErrorNotice error={error} />
       <div className="dialog__actions">
+        {/* Not a live region: the Edit form's "Missing:" notice is the form's status. */}
+        {waits ? (
+          <p id={waitsId} className="form-waits">
+            {waits}
+          </p>
+        ) : null}
         <Button
           type="submit"
           busy={busy}
-          disabled={
-            !f.display_label.trim() ||
-            !f.language_code.trim() ||
-            Boolean(phoneError) ||
-            speakerWrong ||
-            speakerMissing ||
-            filesWrong
-          }
+          disabled={waits !== null}
+          aria-describedby={waits ? waitsId : undefined}
         >
           {submitLabel}
         </Button>
@@ -355,6 +388,10 @@ export function ParticipantForm({
     </form>
   );
 }
+
+/** Where the link an answer came in on was emailed, masked ("ka•••@example.org"), as the server
+ * notes it (SECB-02); nothing on answers from before. */
+const emailedTo = (note: string) => /\(link emailed to ([^()]+)\)\s*$/.exec(note)?.[1];
 
 /** Every consent answer of this participant, newest first; older ones may have been noted by a
  * moderator (before D-129). */
@@ -376,6 +413,7 @@ export function ConsentList({
     <ul className="list">
       {state.data.map((c) => {
         const answer = consentAnswer(c.status);
+        const sentTo = emailedTo(c.note);
         return (
           <li key={c.id}>
             <StatusBadge tone={answer.tone} label={answer.label} />{" "}
@@ -383,6 +421,7 @@ export function ConsentList({
             <div className="muted">
               {when(c.created_at)} · form version {c.policy_version}
               {c.captured_by === null ? " · answered by the participant" : ""}
+              {c.captured_by === null && sentTo ? ` (link emailed to ${sentTo})` : ""}
             </div>
           </li>
         );
@@ -418,6 +457,73 @@ async function uploadChosen(projectId: string, participantId: string, files: Add
   return { done, failed };
 }
 
+/** The Add or Edit window, with a busy state and an error of its own: each opening starts clean,
+ * never showing what went wrong in the window before (FEW-09). */
+function ParticipantFormWindow({
+  projectId,
+  editing,
+  languages,
+  consentMode,
+  rules,
+  onSaved,
+  close,
+  open,
+}: {
+  projectId: string;
+  /** The person edited; null to add someone. */
+  editing: work.Participant | null;
+  languages: readonly Language[];
+  consentMode: ConsentMode | undefined;
+  rules: SpeakerRules;
+  onSaved: (message: string) => void;
+  close: () => void;
+  /** Opens another window in its place (their documents, after an upload failed). */
+  open: (next: Opened) => void;
+}) {
+  const { busy, error, run } = useAction();
+  const add = async (fields: work.ParticipantFields, files: AddFiles) => {
+    const added = await work.createParticipant(projectId, fields);
+    const { done, failed } = await uploadChosen(projectId, added.id, files);
+    // In a project that takes signed forms the server's word is about emails; the uploads say
+    // more.
+    const told = consentMode === "UPLOAD" && done.length > 0 ? "" : ` ${added.consent_email}`;
+    onSaved(`${added.participant_code} added.${told}${done.map((d) => ` ${d}`).join("")}`);
+    if (failed.length === 0) return close();
+    // The person stays added; their documents window says what failed, to upload it again.
+    open({
+      kind: "documents",
+      participant: added,
+      problem: `${added.participant_code} was added, but this could not be uploaded: ${failed.join(" ")} Upload it here.`,
+    });
+  };
+  return (
+    <Modal
+      title={editing ? `Edit ${editing.participant_code}` : "Add participant"}
+      onClose={close}
+      wide
+    >
+      <ParticipantForm
+        initial={editing ? fieldsOf(editing) : EMPTY_PARTICIPANT}
+        languages={languages}
+        isNew={!editing}
+        consentMode={consentMode}
+        rules={rules}
+        submitLabel={editing ? "Save changes" : "Add participant"}
+        busy={busy !== null}
+        error={error}
+        onSubmit={(fields, files) =>
+          void run(async () => {
+            if (!editing) return add(fields, files);
+            const saved = await work.correctParticipant(projectId, editing.id, fields);
+            close();
+            onSaved(`${saved.participant_code} saved.`);
+          })
+        }
+      />
+    </Modal>
+  );
+}
+
 /** The windows for one project's participants. `open(...)` shows one; render `dialog`. */
 export function useParticipantWindows({
   projectId,
@@ -437,51 +543,22 @@ export function useParticipantWindows({
   onSaved: (message: string) => void;
 }) {
   const [opened, setOpened] = useState<Opened | null>(null);
-  const { busy, error, run } = useAction();
   const close = () => setOpened(null);
-  const add = async (fields: work.ParticipantFields, files: AddFiles) => {
-    const added = await work.createParticipant(projectId, fields);
-    const { done, failed } = await uploadChosen(projectId, added.id, files);
-    // In a project that takes signed forms the server's word is about emails; the uploads say
-    // more.
-    const told = consentMode === "UPLOAD" && done.length > 0 ? "" : ` ${added.consent_email}`;
-    onSaved(`${added.participant_code} added.${told}${done.map((d) => ` ${d}`).join("")}`);
-    if (failed.length === 0) return close();
-    // The person stays added; their documents window says what failed, to upload it again.
-    setOpened({
-      kind: "documents",
-      participant: added,
-      problem: `${added.participant_code} was added, but this could not be uploaded: ${failed.join(" ")} Upload it here.`,
-    });
-  };
   let dialog: ReactNode = null;
   if (opened?.kind === "add" || opened?.kind === "edit") {
     const editing = opened.kind === "edit" ? opened.participant : null;
     dialog = (
-      <Modal
-        title={editing ? `Edit ${editing.participant_code}` : "Add participant"}
-        onClose={close}
-        wide
-      >
-        <ParticipantForm
-          initial={editing ? fieldsOf(editing) : EMPTY_PARTICIPANT}
-          languages={languages}
-          isNew={!editing}
-          consentMode={consentMode}
-          rules={rules}
-          submitLabel={editing ? "Save changes" : "Add participant"}
-          busy={busy !== null}
-          error={error}
-          onSubmit={(fields, files) =>
-            void run(async () => {
-              if (!editing) return add(fields, files);
-              const saved = await work.correctParticipant(projectId, editing.id, fields);
-              close();
-              onSaved(`${saved.participant_code} saved.`);
-            })
-          }
-        />
-      </Modal>
+      <ParticipantFormWindow
+        key={editing ? editing.id : "add"}
+        projectId={projectId}
+        editing={editing}
+        languages={languages}
+        consentMode={consentMode}
+        rules={rules}
+        onSaved={onSaved}
+        close={close}
+        open={setOpened}
+      />
     );
   } else if (opened?.kind === "history") {
     dialog = (
@@ -490,6 +567,7 @@ export function useParticipantWindows({
       </Modal>
     );
   } else if (opened?.kind === "details") {
+    const code = opened.participant.participant_code;
     dialog = (
       <Modal title="Participant details" onClose={close} wide>
         <ParticipantDetails
@@ -497,12 +575,18 @@ export function useParticipantWindows({
           participantId={opened.participant.id}
           consentMode={consentMode}
           required={rules.required}
+          // An upload in the details reloads the list behind and says so (FEW-13).
+          onChanged={() => onSaved(`Documents of ${code} updated.`)}
         />
       </Modal>
     );
   } else if (opened?.kind === "documents") {
     dialog = (
-      <Modal title={`Documents of ${opened.participant.participant_code}`} onClose={close}>
+      <Modal
+        title={`Documents of ${opened.participant.participant_code}`}
+        onClose={close}
+        size="medium"
+      >
         <DocumentsPanel
           projectId={projectId}
           participantId={opened.participant.id}

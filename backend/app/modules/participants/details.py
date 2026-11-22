@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.permissions import Perm, Role
@@ -222,19 +222,30 @@ def get(
             )
         )
 
-    # Phone calls ring participant A: the calls of the sessions where this person is A.
-    as_a = (Call.project_id == project.id, Task.participant_a_id == participant.id)
+    # Phone calls ring participant A, and ring B too once the moderator rings them into the call
+    # (D-111): this person's calls are those of their sessions as A, and those as B in which they
+    # were rung, each at the time this person was rung.
+    pid = participant.id
+    theirs = (
+        Call.project_id == project.id,
+        or_(
+            Task.participant_a_id == pid,
+            and_(Task.participant_b_id == pid, Call.b_dial_attempts > 0),
+        ),
+    )
+    rung_at = case((Task.participant_a_id == pid, Call.dialled_at), else_=Call.b_dialled_at)
     total, recorded_calls = db.execute(
         select(func.count(), func.count().filter(Call.state == "RECORDED"))
         .select_from(Call)
         .join(Task, Task.id == Call.task_id)
-        .where(*as_a)
+        .where(*theirs)
     ).one()
     last = db.execute(
-        select(Call.dialled_at, Call.state)
+        select(rung_at, Call.state)
+        .select_from(Call)
         .join(Task, Task.id == Call.task_id)
-        .where(*as_a)
-        .order_by(Call.dialled_at.desc())
+        .where(*theirs)
+        .order_by(rung_at.desc().nulls_last())
         .limit(1)
     ).first()
     calls = (

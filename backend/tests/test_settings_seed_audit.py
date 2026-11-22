@@ -3,6 +3,7 @@
 Requirements: CAP-001, CAP-002, FND-027, SEC-001
 """
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,7 +11,7 @@ from sqlalchemy import select, text
 
 from app.cli import SeedRefused, create_admin, seed_dev
 from app.modules.auth.models import User
-from tests.conftest import Api, build_settings, make_user
+from tests.conftest import Api, build_settings, link_token, make_user, read_outbox
 
 pytestmark = pytest.mark.db
 
@@ -84,7 +85,9 @@ def test_a_hosted_check_copy_may_seed_only_when_asked_and_with_a_long_password(
     assert len(seed_dev(staging, "a-much-longer-demo-password")) == 5
 
 
-def test_the_first_admin_is_created_once_in_any_environment(migrated_db: str, new_api: Any) -> None:
+def test_the_first_admin_is_created_once_in_any_environment(
+    migrated_db: str, new_api: Any, outbox: Path
+) -> None:
     settings = build_settings(app_env="staging", database_url=migrated_db)
     with pytest.raises(SeedRefused, match="valid email"):
         create_admin(settings, "not an email", "long-enough-password", reset=False)
@@ -96,10 +99,21 @@ def test_the_first_admin_is_created_once_in_any_environment(migrated_db: str, ne
     assert create_admin(settings, "boss@example.org", "other-password-456", reset=False) == "exists"
     api: Api = new_api()
     assert api.login("boss@example.org", "first-password-123").status_code == 200, "kept"
+    api.post("/api/v1/auth/password/forgot", json={"email": "boss@example.org"})
+    mailed = link_token(read_outbox(outbox)[-1])
+
+    # The emergency reset on the server (runbook: no Super Admin left) works like a reset by
+    # email: whoever used the old password is signed out, and links mailed before stop working.
     assert (
         create_admin(settings, "boss@example.org", "other-password-456", reset=True)
-        == "password reset"
+        == "password reset; 1 session(s) ended"
     )
+    assert api.get("/api/v1/auth/me").status_code == 401
+    late = api.post(
+        "/api/v1/auth/password/reset",
+        json={"token": mailed, "new_password": "attackers-own-password"},
+    )
+    assert late.json()["error"]["code"] == "INVALID_TOKEN"
     assert new_api().login("boss@example.org", "other-password-456").status_code == 200
 
 

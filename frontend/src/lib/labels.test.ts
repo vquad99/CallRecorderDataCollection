@@ -2,7 +2,7 @@
 // Codes in words, dates in Indian English and India time, browsers by name (UI review 2026-11-17).
 import { describe, expect, it } from "vitest";
 
-import { clock, day, duration, when } from "./format";
+import { clock, day, duration, typedDay, when } from "./format";
 import {
   CONSENT_METHOD_LABELS,
   consentAnswer,
@@ -65,11 +65,17 @@ describe("labels", () => {
 });
 
 describe("dates and lengths", () => {
-  it("shows times in India time, whatever the computer's own zone", () => {
+  it("shows times in India time, whatever the computer's own zone, and says so", () => {
     // 08:27 UTC is 1:57 pm in India.
-    expect(when("2026-11-17T08:27:00Z")).toMatch(/^17 Nov 2026, 1:57\s?pm$/);
+    expect(when("2026-11-17T08:27:00Z")).toMatch(/^17 Nov 2026, 1:57\s?pm IST$/);
     expect(day("2026-11-17T20:00:00Z")).toBe("18 Nov 2026");
     expect(when(null)).toBe("-");
+  });
+
+  it("takes a typed day once its year is typed, not the zeros a browser fills in before", () => {
+    for (const halfTyped of ["0002-11-01", "0020-11-01", "0202-11-01", "", null, undefined])
+      expect(typedDay(halfTyped)).toBe("");
+    expect(typedDay("2026-11-01")).toBe("2026-11-01");
   });
 
   it("shows lengths in seconds, minutes or hours", () => {

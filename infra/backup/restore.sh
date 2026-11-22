@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Database restore (owner's list, O9): replaces the database with a stored backup. The backup is
-# checked against its SHA-256 before anything is touched; the backend and worker are stopped while
+# checked against its SHA-256 before anything is touched; the backend and both workers are stopped while
 # the database is replaced and started again afterwards.
 #
 #   infra/backup/restore.sh backups/db/ccp-20261110T020000Z.dump
@@ -12,7 +12,7 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 $C exec -T backend python -m app.cli backup-download "$key" > "$tmp"
 test -s "$tmp"
-$C stop backend worker
+$C stop backend worker exports-worker
 $C exec -T db pg_restore --username=ccp --dbname=ccp --clean --if-exists --no-owner --exit-on-error < "$tmp"
-$C start backend worker
+$C start backend worker exports-worker
 echo "restore: $key restored"

@@ -71,6 +71,89 @@ def test_a_file_is_checked_first_and_only_good_rows_are_added(world: dict[str, A
     assert world["mod"].post(f"{base}/import", json={"csv": CSV}).status_code == 403
 
 
+def test_the_check_finds_what_add_would_refuse_and_a_second_import_adds_nobody(
+    world: dict[str, Any],
+) -> None:
+    """PART-05: the file check fails a phone number someone already has, someone already in the
+    project (same name and email), and a person repeated in the file, as Add does. The same
+    file sent again adds nobody a second time."""
+    pa, base = world["pa"], _base(world)
+    make_participant(pa, world["project"].id, "Kiran", phone="+919811100001")
+    pa.post(
+        base, json={"display_label": "Lata", "language_code": "hi", "email": "lata@example.org"}
+    )
+    csv = (
+        "name,phone,email,language\n"
+        "Kiran Again,+919811100001,kiran.again@example.org,hi\n"
+        "lata,,LATA@example.org,hi\n"
+        "Tara Naik,,tara@example.org,hi\n"
+        "Tara Naik,,tara@example.org,hi\n"
+        "Usha Naik,,tara@example.org,hi\n"
+    )
+    before = pa.get(base).json()["total"]
+    preview = pa.post(f"{base}/import", json={"csv": csv}).json()
+    rows = [(r["ok"], r["message"]) for r in preview["rows"]]
+    lata = next(p for p in pa.get(base).json()["items"] if p["display_label"] == "Lata")
+    assert rows[0] == (False, "A participant with this phone number already exists")
+    assert rows[1] == (False, f"Already in this project as {lata['participant_code']}")
+    assert rows[2][0] is True
+    assert rows[3] == (False, "This person is repeated in this file")
+    assert rows[4][0] is True, "a family may share one address"
+    done = pa.post(f"{base}/import", json={"csv": csv, "confirm": True}).json()
+    assert [r["ok"] for r in done["rows"]] == [False, False, True, False, True]
+    assert done["created"] == 2
+    again = pa.post(f"{base}/import", json={"csv": csv, "confirm": True}).json()
+    assert again["created"] == 0
+    assert {r["message"].split(" as ")[0] for r in again["rows"] if not r["ok"]} >= {
+        "Already in this project"
+    }
+    assert pa.get(base).json()["total"] == before + 2
+
+
+def test_a_value_too_long_for_the_file_fails_its_row_only(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PART-06: the file has the form's limits, so a row the database could not hold fails on
+    its own at the check; the other rows are added and emailed their consent form."""
+    from sqlalchemy.exc import DataError
+
+    from app.modules.participants import service
+
+    pa, base = world["pa"], _base(world)
+    _with_form(world)
+    csv = (
+        "name,email,language,dialect\n"
+        f"Asha,asha.k@example.org,hi,{'d' * 101}\n"
+        f"Bina,bina.k@example.org,hi-{'x' * 8}-{'y' * 8}-{'z' * 8}-{'w' * 8},\n"
+        "Chitra,chitra.k@example.org,hi,\n"
+    )
+    for confirm in (False, True):
+        rows = pa.post(f"{base}/import", json={"csv": csv, "confirm": confirm}).json()["rows"]
+        assert [(r["ok"], r["message"].split(".")[0]) for r in rows[:2]] == [
+            (False, "Dialect is too long (at most 100 characters)"),
+            (False, "Language code is too long (at most 35 characters)"),
+        ]
+        assert rows[2]["ok"] is True
+    assert rows[2]["message"].endswith("Consent form emailed.")
+    # Should the database still refuse a row, that row fails and the others stay added.
+    real = service.create_participant
+
+    def refuse_dana(*args: Any, **kwargs: Any) -> Any:
+        if args[5].display_label == "Dana":
+            raise DataError("INSERT", {}, Exception("value too long"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(service, "create_participant", refuse_dana)
+    two = "name,email,language\nDana,dana@example.org,hi\nEla,ela@example.org,hi\n"
+    done = pa.post(f"{base}/import", json={"csv": two, "confirm": True})
+    assert done.status_code == 200, done.text
+    assert [r["ok"] for r in done.json()["rows"]] == [False, True]
+    assert done.json()["rows"][0]["message"] == (
+        "This row could not be saved: a value is too long or not valid"
+    )
+    assert done.json()["rows"][1]["message"].endswith("Consent form emailed.")
+
+
 def test_bulk_assign_and_remove_report_each_participant(world: dict[str, Any]) -> None:
     db, pa, base = world["db"], world["pa"], _base(world)
     other = make_project(db, "SECOND")

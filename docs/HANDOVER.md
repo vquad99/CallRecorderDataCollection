@@ -162,7 +162,8 @@ invitation email.
 | Backups to a separate bucket | Open (B-14): needs a second Wasabi bucket with its own keys |
 | Two-step sign-in compulsory for admins | Owner decision open (B-15) |
 | Consent rules (withdrawal blocks recording?) and real consent wording | Owner/client decision open (B-16) |
-| File retention deletion | The `retention` command exists but is not scheduled on Render |
+| File retention deletion | Ready, off by default (D-155): with `RETENTION_SWEEP_ENABLED=true` the web processes apply the retention rules once an hour, to files of closed tasks only. **To turn it on**: the owner checks the live projects' Retention tabs (or `SELECT p.code, r.asset_kind, r.retain_days FROM project_retention_rules r JOIN projects p ON p.id = r.project_id`), then sets `RETENTION_SWEEP_ENABLED=true` on `ccp-api`. The first sweep deletes every file of a closed task past its rule. |
+| Exports queue | Export bundles go to the queue `EXPORTS_QUEUE` names, Celery's default queue unless it is set (DEPLOYMENT.md). Render's `ccp-worker` takes `-Q celery,exports` (render.yaml), so either works; Docker Compose and AWS set `EXPORTS_QUEUE=exports` and run `exports-worker` (D-155) |
 | Install as an app (PWA), transcription | Not started |
 
 ## 10. Handing the code and system over

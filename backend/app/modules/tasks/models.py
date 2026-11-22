@@ -63,11 +63,13 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     held_from: Mapped[str | None] = mapped_column(String(30))
     priority: Mapped[str] = mapped_column(String(10), nullable=False, server_default="NORMAL")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A participant's tasks are found as participant_a_id = X OR participant_b_id = X (details,
+    # personal page, pairing tally, minutes, delete check): an index on each side (PERF-10, 0040).
     participant_a_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     participant_b_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("participants.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     reason_code: Mapped[str | None] = mapped_column(String(50))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

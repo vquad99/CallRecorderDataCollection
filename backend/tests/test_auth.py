@@ -3,6 +3,7 @@
 Requirements: AUTH-001, AUTH-002, AUTH-003, AUTH-004, AUTH-005, AUTH-006, AUTH-007, AUTH-008, AUTH-009, AUTH-010, AUTH-012, AUTH-013, AUTH-014, AUTH-015, SEC-007
 """
 
+import json
 import time
 import types
 from datetime import UTC, datetime, timedelta
@@ -247,6 +248,24 @@ def test_user_lists_and_revokes_own_sessions(db: Any, new_api: Any) -> None:
     assert laptop.get("/api/v1/auth/me").status_code == 200
 
 
+def test_sessions_that_ended_from_idleness_are_not_listed(db: Any, new_api: Any) -> None:
+    """Signed-in devices shows only sessions that still work (security review 2026-11-22)."""
+    user = make_user(db, "idle@example.org", ["MODERATOR"])
+    here, left_open = new_api(), new_api()
+    here.login(user.email)
+    left_open.login(user.email)
+    token = left_open.client.cookies.get("ccp_session") or ""
+    db.execute(
+        update(UserSession)
+        .where(UserSession.token_hash == security.hash_token(token))
+        .values(last_seen_at=datetime.now(UTC) - timedelta(hours=5))
+    )
+    db.commit()
+    assert left_open.get("/api/v1/auth/me").json()["error"]["code"] == "SESSION_EXPIRED"
+    listed = here.get("/api/v1/auth/sessions").json()
+    assert [s["current"] for s in listed] == [True]
+
+
 def test_mfa_enrol_confirm_login_and_disable(
     db: Any, new_api: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -287,6 +306,29 @@ def test_failed_logins_are_audited(db: Any, new_api: Any) -> None:
     user = make_user(db, "audit@example.org", ["MODERATOR"])
     new_api().login(user.email, "wrong-password-123")
     assert "auth.login_failed" in _actions(db, user.id)
+
+
+def test_text_typed_as_the_email_is_kept_only_when_it_names_an_account(
+    db: Any, new_api: Any
+) -> None:
+    """A password typed into the email box must never reach the audit log (security review
+    2026-11-22); a failure on a known account still names it."""
+    user = make_user(db, "known@example.org", ["MODERATOR"])
+    pasted = "Tr0ub4dor&3-pasted-password"
+    for _ in range(2):
+        assert new_api().login(pasted, "x").status_code == 401
+    assert new_api().login(user.email, "wrong-password-123").status_code == 401
+    db.expire_all()
+    entries = db.scalars(select(AuditLog).where(AuditLog.action == "auth.login_failed")).all()
+    assert len(entries) == 3
+    stored = " ".join(f"{e.before_summary} {e.after_summary}" for e in entries)
+    assert pasted.lower() not in stored.lower()
+    known = [json.loads(e.after_summary or "") for e in entries if e.entity_id == str(user.id)]
+    assert known == [{"email": "known@example.org", "reason": "credentials"}]
+    unknown = [json.loads(e.after_summary or "") for e in entries if e.entity_id is None]
+    assert [u["email"] for u in unknown] == [None, None]
+    assert len(unknown[0]["fingerprint"]) == 16
+    assert unknown[0]["fingerprint"] == unknown[1]["fingerprint"], "the same text, the same mark"
 
 
 def test_emails_are_unique_ignoring_case(db: Any) -> None:

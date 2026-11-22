@@ -264,7 +264,7 @@ def _record_talk(world: dict[str, Any]) -> str:
 def _delivery(world: dict[str, Any], rid: str) -> AudioAsset:
     db = world["db"]
     db.expire_all()
-    asset = db.scalar(
+    asset: AudioAsset | None = db.scalar(
         select(AudioAsset).where(
             AudioAsset.recording_id == uuid.UUID(rid), AudioAsset.kind == "FTF_DERIVED_PCM"
         )

@@ -90,12 +90,14 @@ describe("signed consent forms and documents (D-144)", () => {
     expect(scan).toBeRequired();
     expect(proof).not.toBeRequired();
     expect(scan).toHaveAttribute("accept", expect.stringContaining("application/pdf"));
-    // Required in an Upload project: nothing is added without it.
+    // Required in an Upload project: nothing is added without it, and the button says so.
     expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription("Still to fill: Signed consent form (scan).");
     // A wrong type or a file over 10 MB is said under the box before anything is sent.
     await user.upload(scan, new File(["hello"], "notes.txt", { type: "text/plain" }));
     expect(form.getByText("Choose a PDF, JPEG or PNG file.")).toBeInTheDocument();
     expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription("Correct the fields marked in red.");
     const big = pdf("huge.pdf");
     Object.defineProperty(big, "size", { value: 10 * 1024 * 1024 + 1 });
     await user.upload(scan, big);
@@ -336,6 +338,66 @@ describe("signed consent forms and documents (D-144)", () => {
     expect(await within(block).findByText("asha-consent.pdf")).toBeInTheDocument();
     expect(within(block).getByText("Address proof missing")).toBeInTheDocument();
   });
+
+  it("uploads from the details in place: the window keeps its word and the list is reloaded", async () => {
+    const details = (proof: boolean) => ({
+      participant: { ...PARTICIPANT, consent_status: "UPLOADED", has_address_proof: proof },
+      updated_at: "2026-11-12T10:00:00Z",
+      added_by: null,
+      projects: [],
+      removed: null,
+      link: null,
+      consent_form: null,
+      sessions: [],
+      sessions_total: 0,
+      minutes: null,
+      calls: null,
+    });
+    let uploaded = false;
+    const { calls } = serve({
+      "GET /api/v1/projects/p1/participants/a1/details": () => [200, details(uploaded)],
+      "GET /api/v1/projects/p1/participants/a1/documents": () => [
+        200,
+        {
+          ...NO_DOCUMENTS,
+          consent_mode: "UPLOAD",
+          consent_form: DOCUMENT,
+          address_proof: uploaded
+            ? { ...DOCUMENT, id: "d2", kind: "ADDRESS_PROOF", file_name: "proof.png" }
+            : null,
+        },
+      ],
+      "POST /api/v1/projects/p1/participants/a1/documents/address-proof": () => {
+        uploaded = true;
+        return [201, { ...DOCUMENT, id: "d2", kind: "ADDRESS_PROOF", file_name: "proof.png" }];
+      },
+    });
+    const user = userEvent.setup({ applyAccept: false, delay: null });
+    renderAt("/participants");
+    await user.selectOptions(await screen.findByLabelText("Project"), "p1");
+    const row = (await screen.findByText("P000001")).closest("tr") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "View" }));
+    const panel = within(await screen.findByRole("dialog", { name: "Participant details" }));
+    const block = panel.getByRole("region", { name: "Documents" });
+    await user.upload(
+      await within(block).findByLabelText("Upload address proof"),
+      new File(["\x89PNG"], "proof.png", { type: "image/png" }),
+    );
+    // The details stay on screen (no loading in between), with the upload's own message.
+    expect(await within(block).findByText("Address proof uploaded.")).toBeInTheDocument();
+    expect(await within(block).findByText("proof.png")).toBeInTheDocument();
+    expect(panel.queryByText("Loading the participant")).toBeNull();
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.path === "/api/v1/projects/p1/participants/a1/details"),
+      ).toHaveLength(2),
+    );
+    // The list behind is loaded again, with a word for the person.
+    expect(await screen.findByText("Documents of P000001 updated.")).toBeInTheDocument();
+    expect(
+      calls.filter((c) => c.path.startsWith("/api/v1/projects/p1/participants?")).length,
+    ).toBeGreaterThan(1);
+  }, 20000);
 });
 
 describe("signed consent forms on the task page (D-144)", () => {

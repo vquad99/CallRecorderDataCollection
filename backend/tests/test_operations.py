@@ -126,6 +126,38 @@ def test_orphan_files_are_found_and_removed_but_records_and_backups_are_kept(
     assert (checked, problems) == (2, []), "every recorded file is still there"
 
 
+def test_an_export_bundle_still_to_download_is_not_an_orphan(
+    world: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CALL-05: a READY export bundle is a file a record points to; storage-orphans --delete
+    leaves it, so its download link keeps working."""
+    from sqlalchemy import select
+
+    from app.modules.exports.models import ExportJob
+
+    _recorded(world)
+    pa = world["pa"]
+    asked = pa.post(f"/api/v1/projects/{world['project'].id}/exports", json={"scope": "finished"})
+    assert asked.status_code == 202, asked.text
+    db, storage = world["db"], world["app"].state.storage
+    db.expire_all()
+    job = db.scalar(select(ExportJob).where(ExportJob.id == asked.json()["id"]))
+    assert (job.state, job.error) == ("READY", None)
+    assert job.storage_key
+    assert storage.head(job.storage_key) is not None
+    assert job.storage_key not in [
+        o.key for o in service.storage_orphans(db, storage, timedelta(0))
+    ]
+    monkeypatch.setattr(cli, "load_settings", lambda: world["app"].state.settings)
+    assert cli.main(["storage-orphans", "--older-than-hours", "0", "--delete"]) == 0
+    assert "0 file(s), 0 bytes, deleted" in capsys.readouterr().out
+    assert storage.head(job.storage_key) is not None, "the bundle can still be downloaded"
+    link = pa.post(f"/api/v1/projects/{world['project'].id}/exports/{job.id}/download-link")
+    assert link.status_code == 200, link.text
+
+
 def test_scratch_folders_left_by_a_stopped_process_are_removed(world: dict[str, Any]) -> None:
     settings = world["app"].state.settings
     work = Path(settings.media_work_dir)

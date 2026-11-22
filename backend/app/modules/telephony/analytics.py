@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.csvio import write_table
 from app.core.days import start_of
-from app.core.errors import forbidden, not_found
+from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
 from app.db.paging import paginate
 from app.modules.audio_qc.models import AudioQcResult
@@ -352,20 +352,22 @@ def analytics(
 def _target_minutes(
     db: Session, principal: Principal, project_id: uuid.UUID | None
 ) -> float | None:
-    """The telephony target for a day, in minutes, for the projects this person manages. None
-    for people who only see their own calls: a project's target is not theirs alone."""
-    if principal.is_super_admin:
-        condition: ColumnElement[bool] = Project.status == "ACTIVE"
-    else:
+    """The telephony target for a day, in minutes, of the projects this person manages (every
+    project for a Super Admin): the chosen project's own, or else the live (ACTIVE) projects'
+    together, as on the dashboard. None for people who only see their own calls: a project's
+    target is not theirs alone."""
+    conditions: list[ColumnElement[bool]] = [Project.allows_telephony.is_(True)]
+    if not principal.is_super_admin:
         managed = _managed(principal)
         if not managed:
             return None
-        condition = Project.id.in_(managed)
-    query = select(func.coalesce(func.sum(Project.target_telephony_hours_per_day), 0)).where(
-        condition, Project.allows_telephony.is_(True)
+        conditions.append(Project.id.in_(managed))
+    conditions.append(
+        Project.id == project_id if project_id is not None else Project.status == "ACTIVE"
     )
-    if project_id is not None:
-        query = query.where(Project.id == project_id)
+    query = select(func.coalesce(func.sum(Project.target_telephony_hours_per_day), 0)).where(
+        *conditions
+    )
     return round(float(db.scalar(query) or 0) * 60, 1)
 
 
@@ -537,8 +539,11 @@ def calls_csv(
     days: int,
     now: datetime | None = None,
 ) -> tuple[str, int]:
-    """Every call of the period as a CSV (newest first, at most MAX_CSV_ROWS) and the row count.
-    Times are in the report time zone. No phone numbers: the last two digits only."""
+    """Every call of the period as a CSV (newest first) and the row count. Times are in the
+    report time zone. No phone numbers: the last two digits only. A period with more than
+    MAX_CSV_ROWS calls is refused (422 TOO_LARGE), never cut short without a word. The file
+    starts with the mark that makes spreadsheet software read it as UTF-8 (EXP-007), so names
+    and notes in any script show as written."""
     _check_manager(principal)
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)
@@ -548,9 +553,16 @@ def calls_csv(
             select(Call)
             .where(*_call_scope(principal, project_id), Call.dialled_at >= start_of(first_day, tz))
             .order_by(Call.dialled_at.desc())
-            .limit(MAX_CSV_ROWS)
+            .limit(MAX_CSV_ROWS + 1)
         )
     )
+    if len(calls) > MAX_CSV_ROWS:
+        raise AppError(
+            f"More than {MAX_CSV_ROWS:,} calls in this period: choose a project or a shorter "
+            "period",
+            code="TOO_LARGE",
+            status_code=422,
+        )
 
     def local(value: datetime | None) -> str:
         return value.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S") if value else ""
@@ -585,7 +597,7 @@ def calls_csv(
         ]
 
     rows = _rows(db, calls, _stale_before(settings, now))
-    return write_table(CSV_COLUMNS, (line(r) for r in rows)), len(calls)
+    return write_table(CSV_COLUMNS, (line(r) for r in rows), bom=True), len(calls)
 
 
 def day_range(days: int, tz_name: str, now: datetime | None = None) -> tuple[date, date]:

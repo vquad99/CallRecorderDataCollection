@@ -1,6 +1,7 @@
 // Project detail tabs. Forms appear only for roles that may change the project; the server
-// enforces the same rules (PROJ-002..011, USER-003).
-import { useState } from "react";
+// enforces the same rules (PROJ-002..011, USER-003). An archived project is read only: its
+// settings, audio rules, languages and retention wait until it is reopened (PROJ-010).
+import { useState, type ReactNode } from "react";
 
 import { ROLE_LABELS } from "../../api/admin";
 import * as api from "../../api/projects";
@@ -15,10 +16,19 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { labelFor, MODE_LABELS, PROJECT_STATUS_LABELS } from "../../lib/labels";
 import { LANGUAGES, languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
 import { ProjectForm } from "./ProjectForm";
+import "./overview.css";
+
+/** Said on a page an archived project keeps read only, to someone who could change it otherwise. */
+const ARCHIVED_NOTE = "Read only. Reopen the project to change it.";
+const accepts = (p: api.Project) =>
+  p.accepts_new_work
+    ? "This project accepts new work."
+    : "This project does not accept new work until it is active.";
 
 /** The button for each status move, and what it does in a sentence. */
 function statusMove(from: api.ProjectStatus, to: api.ProjectStatus) {
@@ -62,11 +72,7 @@ function ProjectStatus() {
   return (
     <section className="card stack stack--tight" aria-labelledby="status-title">
       <h2 id="status-title">Status</h2>
-      <p>
-        {project.accepts_new_work
-          ? "This project accepts new work."
-          : "This project does not accept new work until it is active."}
-      </p>
+      <p>{accepts(project)}</p>
       {project.status_reason ? (
         <p className="muted">Reason given last: {project.status_reason}</p>
       ) : null}
@@ -88,34 +94,83 @@ function ProjectStatus() {
   );
 }
 
+/** "10 h a day", or for a project made before D-153 with both types, each type's. */
+function dailyTarget(p: api.Project): string {
+  const days = [
+    ["FACE_TO_FACE", p.allows_face_to_face, p.target_face_to_face_hours_per_day],
+    ["TELEPHONY", p.allows_telephony, p.target_telephony_hours_per_day],
+  ] as const;
+  const set = days.filter(([, allowed, hours]) => allowed && Number(hours) > 0);
+  if (set.length === 0) return "No daily target";
+  const text = (hours: string) => `${Number(hours).toLocaleString("en-IN")} h a day`;
+  return set.length === 1 && set[0]
+    ? text(set[0][2])
+    : set.map(([mode, , hours]) => `${MODE_LABELS[mode]}: ${text(hours)}`).join(", ");
+}
+
+/** The project in a few words, for members who do not manage it (Moderator, QC Executive, Client
+ * Viewer): no settings form to look at, and nothing internal (who sees phone numbers, the consent
+ * policy). */
+function ProjectSummary({ project }: { project: api.Project }) {
+  const types = [
+    project.allows_telephony ? MODE_LABELS.TELEPHONY : "",
+    project.allows_face_to_face ? MODE_LABELS.FACE_TO_FACE : "",
+  ].filter(Boolean);
+  const rows: [string, ReactNode][] = [
+    ["Name", project.name],
+    [
+      "Description",
+      project.description.trim() ? (
+        <span className="project-summary__text">{project.description}</span>
+      ) : (
+        <span className="muted">No description</span>
+      ),
+    ],
+    ["Recording type", types.length > 0 ? types.join(", ") : <span className="muted">-</span>],
+    ["Daily target", dailyTarget(project)],
+    ["New work", accepts(project)],
+  ];
+  return (
+    <section className="card project-summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">About this project</h2>
+      <dl className="project-summary__list">
+        {rows.map(([term, value]) => (
+          <div key={term} className="project-summary__row">
+            <dt>{term}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 export function OverviewTab() {
   const { project, replace } = useProject();
   const { can } = useAuth();
   const canManage = can("projects.manage");
   const { busy, error, message, run } = useAction();
+  // Each save starts the form again from what the server kept (hours "2" come back as "2.00"),
+  // so nothing saved still counts as an unsaved change; a status change keeps what is typed.
+  const [saves, setSaves] = useState(0);
+  if (!canManage) return <ProjectSummary project={project} />;
   return (
     <div className="stack">
-      {canManage ? (
-        <ProjectStatus />
-      ) : (
-        <p>
-          {project.accepts_new_work
-            ? "This project accepts new work."
-            : "This project does not accept new work until it is active."}
-        </p>
-      )}
+      <ProjectStatus />
       <ProjectForm
-        key={project.status}
+        key={saves}
         initial={api.projectSettings(project)}
         submitLabel="Save project"
         busy={busy !== null}
-        disabled={!canManage || project.status === "ARCHIVED"}
+        disabled={project.status === "ARCHIVED"}
+        readOnlyNote={ARCHIVED_NOTE}
+        guardUnsaved
         onSubmit={(fields) =>
           void run(async () => {
-            // The rules are kept as they are: they are changed on the Rules tab (D-145).
-            replace(
-              await api.updateProject(project.id, { ...api.projectRules(project), ...fields }),
-            );
+            // Only the settings are this page's: the rules go back as they are now, including
+            // what someone else saved on the Rules tab meanwhile (D-145).
+            replace(await api.saveProjectPart(project, api.SETTINGS_KEYS, fields));
+            setSaves((n) => n + 1);
             return "Saved.";
           })
         }
@@ -138,7 +193,8 @@ export function TeamTab() {
   const remove = (m: api.Member) =>
     confirm.ask({
       title: `Remove ${m.display_name} from ${project.code}?`,
-      message: "They no longer see this project or its tasks. Their account stays.",
+      message:
+        "They no longer see this project or its tasks; their account stays. Someone with open tasks here (to record, call or check) must have those tasks reassigned first.",
       confirmLabel: "Remove",
       danger: true,
       action: async () => {
@@ -262,117 +318,137 @@ export function AudioRulesTab() {
   const { project, replace } = useProject();
   const { can } = useAuth();
   const canManage = can("projects.manage");
+  const canEdit = canManage && project.status !== "ARCHIVED";
   const [rules, setRules] = useState<api.AudioRule[]>(project.audio_rules);
   const { busy, error, message, run } = useAction();
+  const leaveGuard = useUnsavedChanges(
+    canEdit && busy === null && !api.sameValue(rules, project.audio_rules),
+  );
   const update = (i: number, patch: Partial<api.AudioRule>) =>
     setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
-    <form
-      className="stack"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void run(async () => {
-          const saved = await api.setAudioRules(project.id, rules);
-          replace(saved);
-          setRules(saved.audio_rules);
-          return "Audio rules saved.";
-        });
-      }}
-    >
-      {rules.map((r, i) => (
-        <fieldset key={r.mode} className="card" disabled={!canManage}>
-          <legend>{labelFor(MODE_LABELS, r.mode)}</legend>
-          <div className="form-grid">
-            <TextField
-              label="Sample rate (Hz)"
-              type="number"
-              value={String(r.sample_rate)}
-              onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
-            />
-            <Select
-              label="Bit depth"
-              value={String(r.bit_depth)}
-              onChange={(e) =>
-                update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
-              }
-              options={[
-                { value: "16", label: "16-bit" },
-                { value: "24", label: "24-bit" },
-                { value: "32", label: "32-bit" },
-              ]}
-            />
-            <Select
-              label="Channels"
-              value={String(r.channels)}
-              onChange={(e) =>
-                update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
-              }
-              options={[
-                { value: "1", label: "Mono (1)" },
-                { value: "2", label: "Stereo (2)" },
-              ]}
-            />
-            <TextField
-              label="Maximum silence (%)"
-              type="number"
-              min={0}
-              max={100}
-              value={r.max_silence_pct}
-              onChange={(e) => update(i, { max_silence_pct: e.target.value })}
-            />
-            <TextField
-              label="Maximum clipping (%)"
-              hint="Leave empty for no limit."
-              type="number"
-              min={0}
-              max={100}
-              value={r.max_clipping_pct ?? ""}
-              onChange={(e) =>
-                update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
-              }
-            />
-            <TextField
-              label="Minimum duration (seconds)"
-              type="number"
-              min={0}
-              value={String(r.min_duration_seconds)}
-              onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
-            />
-            <TextField
-              label="Maximum duration (seconds)"
-              hint="Leave empty for no limit."
-              type="number"
-              min={1}
-              value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
-              onChange={(e) =>
-                update(i, {
-                  max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
-                })
-              }
-            />
-          </div>
-        </fieldset>
-      ))}
-      {canManage ? (
-        <Button type="submit" busy={busy !== null}>
-          Save audio rules
-        </Button>
-      ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </form>
+    <>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run(async () => {
+            const saved = await api.setAudioRules(project.id, rules);
+            replace(saved);
+            setRules(saved.audio_rules);
+            return "Audio rules saved.";
+          });
+        }}
+      >
+        {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
+        {rules.map((r, i) => (
+          <fieldset key={r.mode} className="card" disabled={!canEdit}>
+            <legend>{labelFor(MODE_LABELS, r.mode)}</legend>
+            <div className="form-grid">
+              <TextField
+                label="Sample rate (Hz)"
+                type="number"
+                value={String(r.sample_rate)}
+                onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
+              />
+              <Select
+                label="Bit depth"
+                value={String(r.bit_depth)}
+                onChange={(e) =>
+                  update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
+                }
+                options={[
+                  { value: "16", label: "16-bit" },
+                  { value: "24", label: "24-bit" },
+                  { value: "32", label: "32-bit" },
+                ]}
+              />
+              <Select
+                label="Channels"
+                value={String(r.channels)}
+                onChange={(e) =>
+                  update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
+                }
+                options={[
+                  { value: "1", label: "Mono (1)" },
+                  { value: "2", label: "Stereo (2)" },
+                ]}
+              />
+              <TextField
+                label="Maximum silence (%)"
+                type="number"
+                min={0}
+                max={100}
+                value={r.max_silence_pct}
+                onChange={(e) => update(i, { max_silence_pct: e.target.value })}
+              />
+              <TextField
+                label="Maximum clipping (%)"
+                hint="Leave empty for no limit."
+                type="number"
+                min={0}
+                max={100}
+                value={r.max_clipping_pct ?? ""}
+                onChange={(e) =>
+                  update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
+                }
+              />
+              <TextField
+                label="Minimum duration (seconds)"
+                type="number"
+                min={0}
+                value={String(r.min_duration_seconds)}
+                onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
+              />
+              <TextField
+                label="Maximum duration (seconds)"
+                hint="Leave empty for no limit."
+                type="number"
+                min={1}
+                value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
+                onChange={(e) =>
+                  update(i, {
+                    max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </fieldset>
+        ))}
+        {canEdit ? (
+          <Button type="submit" busy={busy !== null}>
+            Save audio rules
+          </Button>
+        ) : null}
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
+      </form>
+      {leaveGuard}
+    </>
   );
 }
+
+/** The last choice of the language list: a code typed by hand, for a language the list does not
+ * have (POL-02). Not a language code itself: those have no colon. */
+const OTHER_LANGUAGE = "other:";
+/** A language code as the server takes it (BCP 47 style): two or three small letters, then any
+ * parts after a dash, like sw, fil or en-US. */
+const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 export function LanguagesTab() {
   const { project, replace } = useProject();
   const { can } = useAuth();
   const canManage = can("projects.manage");
-  const [code, setCode] = useState("");
+  const canEdit = canManage && project.status !== "ARCHIVED";
+  const [choice, setChoice] = useState("");
+  const [typed, setTyped] = useState("");
   const [dialect, setDialect] = useState("");
   const { busy, error, message, run, setMessage } = useAction();
   const confirm = useConfirm(setMessage);
+  const other = choice === OTHER_LANGUAGE;
+  const code = other ? typed.trim() : choice;
+  const codeOk = other ? LANGUAGE_CODE.test(code) : code !== "";
   const name = (l: api.Language) =>
     `${languageLabel(l.language_code)}${l.dialect ? `, ${l.dialect}` : ""}`;
   const remove = (l: api.Language) =>
@@ -394,6 +470,7 @@ export function LanguagesTab() {
 
   return (
     <div className="stack">
+      {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
       {project.languages.length === 0 ? (
         <EmptyState title="No languages yet" />
       ) : (
@@ -402,7 +479,7 @@ export function LanguagesTab() {
             <tr>
               <th scope="col">Language</th>
               <th scope="col">Dialect</th>
-              {canManage ? (
+              {canEdit ? (
                 <th scope="col">
                   <span className="sr-only">Action</span>
                 </th>
@@ -414,7 +491,7 @@ export function LanguagesTab() {
               <tr key={`${l.language_code}/${l.dialect}`}>
                 <td>{languageLabel(l.language_code)}</td>
                 <td>{l.dialect || <span className="muted">-</span>}</td>
-                {canManage ? (
+                {canEdit ? (
                   <td className="actions">
                     <Button
                       variant="secondary"
@@ -431,20 +508,22 @@ export function LanguagesTab() {
           </tbody>
         </DataTable>
       )}
-      {canManage ? (
+      {canEdit ? (
         <form
           className="card"
           aria-labelledby="add-language-title"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!codeOk) return;
             void run(async () => {
               const languages = [
                 ...project.languages,
-                { language_code: code.trim(), dialect: dialect.trim() },
+                { language_code: code, dialect: dialect.trim() },
               ];
               replace(await api.setLanguages(project.id, languages));
               // Cleared only when saved: after a failure what was typed can be corrected.
-              setCode("");
+              setChoice("");
+              setTyped("");
               setDialect("");
               return "Language added.";
             }, "add");
@@ -454,20 +533,40 @@ export function LanguagesTab() {
           <Select
             label="Language"
             required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
+            value={choice}
+            onChange={(e) => setChoice(e.target.value)}
             options={[
               { value: "", label: "Choose a language" },
               ...LANGUAGES.map((l) => ({ value: l.code, label: languageLabel(l.code) })),
+              { value: OTHER_LANGUAGE, label: "Other (type the code)" },
             ]}
           />
+          {other ? (
+            <TextField
+              label="Language code"
+              required
+              hint="For example sw (Swahili), fil (Filipino) or en-US (English as spoken in the United States)."
+              value={typed}
+              maxLength={35}
+              autoCapitalize="off"
+              autoComplete="off"
+              spellCheck={false}
+              {...(typed.trim() !== "" && !codeOk
+                ? {
+                    error:
+                      "Type two or three small letters, then any parts after a dash, like sw or en-US.",
+                  }
+                : {})}
+              onChange={(e) => setTyped(e.target.value)}
+            />
+          ) : null}
           <TextField
             label="Dialect"
             hint="Optional."
             value={dialect}
             onChange={(e) => setDialect(e.target.value)}
           />
-          <Button type="submit" icon="plus" busy={busy === "add"} disabled={!code.trim()}>
+          <Button type="submit" icon="plus" busy={busy === "add"} disabled={!codeOk}>
             Add language
           </Button>
         </form>
@@ -479,76 +578,104 @@ export function LanguagesTab() {
   );
 }
 
-const KIND_LABELS: Record<string, string> = {
-  PROVIDER_ORIGINAL_TRACK: "Phone system original tracks",
-  PROVIDER_ORIGINAL_MIXED: "Phone system mixed recordings",
-  TELEPHONY_FINAL_STEREO: "Final phone call WAV",
-  CONSENT_RECORDING: "Consent recordings",
+type AssetKind = (typeof api.ASSET_KINDS)[number];
+
+const KIND_LABELS: Record<AssetKind, string> = {
   BROWSER_ORIGINAL: "Browser original captures",
   FTF_DERIVED_PCM: "Face-to-face 16 kHz WAV",
+  PROVIDER_ORIGINAL_MIXED: "Phone system mixed recordings",
   TELEPHONY_DERIVED_PCM: "Phone call 16 kHz WAV",
-  TRANSCRIPT_FILE: "Transcript files",
-  EXPORT_PACKAGE: "Export packages",
 };
 
 /** Example periods shown faded under each box (D-086); nothing is filled in for the admin. */
-const KIND_EXAMPLES: Record<string, string> = {
-  PROVIDER_ORIGINAL_TRACK: "Example: 30 (one month)",
-  PROVIDER_ORIGINAL_MIXED: "Example: 30 (one month)",
-  TELEPHONY_FINAL_STEREO: "Example: 365 (one year)",
-  CONSENT_RECORDING: "Example: 1825 (five years)",
+const KIND_EXAMPLES: Record<AssetKind, string> = {
   BROWSER_ORIGINAL: "Example: 30 (one month)",
   FTF_DERIVED_PCM: "Example: 365 (one year)",
+  PROVIDER_ORIGINAL_MIXED: "Example: 30 (one month)",
   TELEPHONY_DERIVED_PCM: "Example: 365 (one year)",
-  TRANSCRIPT_FILE: "Example: 365 (one year)",
-  EXPORT_PACKAGE: "Example: 90 (three months)",
 };
+
+/** The days of each kind as the project has them saved, as typed text. */
+const daysOf = (p: api.Project): Partial<Record<string, string>> =>
+  Object.fromEntries(p.retention_rules.map((r) => [r.asset_kind, String(r.retain_days)]));
+
+/** What is wrong with typed days, or undefined: a whole number from 1, or nothing. */
+const daysProblem = (value: string) =>
+  value === "" || (/^\d+$/.test(value) && Number(value) >= 1)
+    ? undefined
+    : "Type a whole number of days, 1 or more, or leave it empty.";
 
 export function RetentionTab() {
   const { project, replace } = useProject();
   const { can } = useAuth();
   const canManage = can("projects.manage");
-  const initial = Object.fromEntries(
-    project.retention_rules.map((r) => [r.asset_kind, String(r.retain_days)]),
-  );
-  const [days, setDays] = useState<Record<string, string>>(initial);
+  const canEdit = canManage && project.status !== "ARCHIVED";
+  const [days, setDays] = useState(() => daysOf(project));
   const { busy, error, message, run } = useAction();
+  const saved = daysOf(project);
+  const typed = (kind: AssetKind) => (days[kind] ?? "").trim();
+  const dirty = api.ASSET_KINDS.some((kind) => typed(kind) !== (saved[kind] ?? ""));
+  const leaveGuard = useUnsavedChanges(canEdit && busy === null && dirty);
+  const wrong = api.ASSET_KINDS.some((kind) => daysProblem(typed(kind)) !== undefined);
 
   return (
-    <form
-      className="card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void run(async () => {
-          const rules = Object.entries(days)
-            .filter(([, v]) => v.trim() !== "")
-            .map(([asset_kind, v]) => ({ asset_kind, retain_days: Number(v) }));
-          replace(await api.setRetention(project.id, rules));
-          return "Retention saved.";
-        });
-      }}
-    >
-      <fieldset disabled={!canManage} className="plain-fieldset">
-        <p>Days to keep each kind of file. Leave empty when no rule is set yet.</p>
-        {api.ASSET_KINDS.map((kind) => (
-          <TextField
-            key={kind}
-            label={KIND_LABELS[kind] ?? kind}
-            {...(KIND_EXAMPLES[kind] ? { example: KIND_EXAMPLES[kind] } : {})}
-            type="number"
-            min={1}
-            value={days[kind] ?? ""}
-            onChange={(e) => setDays({ ...days, [kind]: e.target.value })}
-          />
-        ))}
-        {canManage ? (
-          <Button type="submit" busy={busy !== null}>
-            Save retention
-          </Button>
-        ) : null}
-      </fieldset>
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </form>
+    <>
+      <form
+        className="card retention"
+        aria-labelledby="retention-title"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (wrong) return;
+          void run(async () => {
+            // Only the kinds a rule can delete are sent: an older rule for another kind goes.
+            const rules = api.ASSET_KINDS.filter((kind) => typed(kind) !== "").map((kind) => ({
+              asset_kind: kind,
+              retain_days: Number(typed(kind)),
+            }));
+            const result = await api.setRetention(project.id, rules);
+            replace(result);
+            setDays(daysOf(result));
+            return "Retention saved.";
+          });
+        }}
+      >
+        <h2 id="retention-title">Days to keep each kind of file</h2>
+        <p className="field__hint retention__note">
+          An automatic job deletes a file permanently once it is older than the days set for its
+          kind, counted from when it was stored. Only the files of closed tasks (approved, rejected
+          or cancelled) are deleted. Leave a box empty to keep that kind of file.
+        </p>
+        {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
+        <fieldset disabled={!canEdit} className="plain-fieldset">
+          <div className="form-grid">
+            {api.ASSET_KINDS.map((kind) => {
+              const problem = daysProblem(typed(kind));
+              return (
+                <TextField
+                  key={kind}
+                  label={KIND_LABELS[kind]}
+                  example={KIND_EXAMPLES[kind]}
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={days[kind] ?? ""}
+                  {...(problem ? { error: problem } : {})}
+                  onChange={(e) => setDays({ ...days, [kind]: e.target.value })}
+                />
+              );
+            })}
+          </div>
+          {canEdit ? (
+            <Button type="submit" busy={busy !== null} disabled={wrong}>
+              Save retention
+            </Button>
+          ) : null}
+        </fieldset>
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
+      </form>
+      {leaveGuard}
+    </>
   );
 }

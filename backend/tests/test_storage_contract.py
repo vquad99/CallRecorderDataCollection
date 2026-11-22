@@ -31,7 +31,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 from moto import mock_aws
 
-from app.core.storage import S3Storage
+from app.core.storage import STREAM_TRANSFER, S3Storage
 from tests.conftest import build_settings
 
 LIVE = {
@@ -137,8 +137,11 @@ def test_large_file_round_trip_uses_multipart_and_stays_intact(
 def test_a_stream_is_stored_as_it_is_produced_and_a_broken_one_leaves_nothing(
     store: Store,
 ) -> None:
-    """An export bundle goes to storage while it is written (D-105)."""
-    parts = [os.urandom(5 * 1024 * 1024) for _ in range(4)]  # 20 MB: more than one upload part
+    """An export bundle goes to storage while it is written (D-105), in parts of
+    STREAM_TRANSFER's size."""
+    part = STREAM_TRANSFER.multipart_chunksize
+    parts = [os.urandom(9 * 1024 * 1024) for _ in range(4)]  # 36 MB: more than one upload part
+    assert sum(len(p) for p in parts) > part
     size, digest = store.storage.put_stream(
         "exports/bundle.zip", iter(parts), content_type="application/zip"
     )
@@ -152,7 +155,7 @@ def test_a_stream_is_stored_as_it_is_produced_and_a_broken_one_leaves_nothing(
     assert small == (4, _sha(b"PK-x"))
 
     def broken() -> Iterator[bytes]:
-        yield os.urandom(17 * 1024 * 1024)
+        yield os.urandom(part + 1024 * 1024)  # a part on its way, then the failure
         raise RuntimeError("the bundle could not be written")
 
     with pytest.raises(RuntimeError, match="could not be written"):

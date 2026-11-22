@@ -53,7 +53,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | participants | participant_code (P + 6 digits, from `participant_code_seq`), display_label (S), phone_e164_enc (S), phone_hash (S), phone_hint (last 2 digits), language_code, dialect, notes (S), created_by, deleted_at, deleted_by, deletion_reason | unique participant_code; index phone_hash (duplicate detection) | soft delete |
 | participant_project_links | participant_id, project_id | unique pair | restrict |
 | consent_records | participant_id, project_id, task_id, status, method, policy_version, captured_by, note (call_session_id and consent_asset_id arrive with Phases 4-6) | index (participant_id, task_id) | restrict |
-| tasks | task_code (T + 6 digits, from `task_code_seq`), project_id, recording_mode, status, held_from, priority, due_at, participant_a_id, participant_b_id (must differ), reason_code, created_by | index (project_id, status), (due_at) | restrict |
+| tasks | task_code (T + 6 digits, from `task_code_seq`), project_id, recording_mode, status, held_from, priority, due_at, participant_a_id, participant_b_id (must differ), reason_code, created_by | index (project_id, status), (due_at), (participant_a_id), (participant_b_id) (migration 0040) | restrict |
 | task_assignments | task_id, user_id, role_code, active, assigned_by, reason, assigned_at, ended_at | partial unique (task_id, role_code) where active | restrict |
 | task_status_history | task_id, from_status, to_status, actor_id, reason_code, comment, at | index (task_id, at) | restrict |
 | task_comments | task_id, author_id, body, internal (bool) | index (task_id) | restrict |
@@ -330,3 +330,10 @@ defaults: the client's format is the owner's rule for every project.
 bundle does not have (the rows of its `MISSING.csv`), counted when asked for and again when made.
 The layout a job was asked in is kept in its `filters` (`layout`; a job from before reads
 `PLATFORM`). Going back to 0038 drops the columns.
+
+## Task participant indexes (migration 0040, D-155)
+
+`tasks`: indexes `ix_tasks_participant_a_id` (participant_a_id) and `ix_tasks_participant_b_id`
+(participant_b_id), so a participant's tasks (`participant_a_id = X OR participant_b_id = X`) are
+found through an index on each side: the pairing rules, the consent checks, a participant's
+details and the New task search all ask this. Nothing else changes. Going back to 0039 drops both.

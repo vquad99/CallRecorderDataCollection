@@ -30,7 +30,8 @@ export function devicesWait(task: work.TaskDetail): string | null {
     : null;
 }
 
-/** Statuses with device details: filled while In progress or Recorded, read only after. */
+/** Statuses with device details: filled while In progress or Recorded, read only after. A
+ * cancelled task keeps what was filled (FEW-10); its card shows only when something was. */
 const SHOWS_DEVICES: readonly string[] = [
   "IN_PROGRESS",
   "RECORDED",
@@ -39,6 +40,7 @@ const SHOWS_DEVICES: readonly string[] = [
   "ADMIN_REVIEW",
   "APPROVED",
   "REJECTED",
+  "CANCELLED",
 ];
 
 /** The task's device details, loaded once for the card and the participants matrix; nothing is
@@ -271,6 +273,10 @@ function DeviceCard({
       onSaved?.();
       return "Device details saved.";
     });
+  // A cancelled task: the card only when someone filled the details before it ended (FEW-10).
+  const filled =
+    state.status === "loaded" && Boolean(state.data?.participants.some((p) => p.filled_at));
+  if (task.status === "CANCELLED" && state.status !== "failed" && !filled) return null;
   return (
     <section className="card devices-card" aria-labelledby={titleId}>
       <h2 id={titleId}>Device details</h2>

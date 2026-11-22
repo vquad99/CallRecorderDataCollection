@@ -9,7 +9,7 @@ Website: **https://dubdesk.live**. Use a current Google Chrome or Microsoft Edge
 Words in **bold** are the exact labels you see on screen. In a table, a row's actions are small
 icons: point at one to see its name (for example the pencil is **Edit**).
 
-Dates and times are in India time, written the Indian way, for example 17 Nov 2026, 1:57 pm.
+Dates and times are in India time, written the Indian way, for example 17 Nov 2026, 1:57 pm IST.
 
 ---
 
@@ -28,11 +28,12 @@ People only see projects they have been added to. The Super Admin sees every pro
 
 A project has its own menu beside the side menu (Progress, Team, Participants, Tasks, Audio rules,
 Rules, Languages, Retention, Export; on a phone, a row of buttons at the top) for the Super Admin
-and Project Admin only. Everyone else sees the project's **Overview**.
+and Project Admin only. Everyone else sees the project's **Overview**: a short summary (name,
+description, recording type, daily target, and whether it accepts new work).
 
-Pages are plain: the title with its buttons, one row of filters, then tables under their headings,
-with a thin line between parts. Where this guide says a **card** (for example the **Device details**
-card), it means that part of the page: its heading and what is under it.
+Each page is its title with its buttons, one row of filters, then its parts, each in a white
+panel with its title on a bar at the top and its table, chart or fields under it. Where this guide
+says a **card** (for example the **Device details** card), it means one of these panels.
 
 ---
 
@@ -43,12 +44,24 @@ subject **"You have been invited to Conversation Collection"**. Click the link (
 hours), type a password twice (12 to 128 characters, not your email) and click **Set password**.
 Then sign in at https://dubdesk.live with your email and password.
 
+**Typing mistakes.** An empty box, or an email without @, is pointed out under the box before
+anything is sent: **Enter your email address.**, **Enter your password.**, **Enter your full
+email address, for example name@example.org.** A wrong password says **Invalid email or
+password**.
+
 **Forgot your password.** On the sign-in page click **Forgot your password?**, type your email,
 click **Send reset link**. The emailed link works for 30 minutes. At most 3 links per hour.
+A link that has expired or was used already says **This link is invalid or has expired**; click
+**Request a new link** on that page.
 
 **Signed out by itself.** After 3 hours without use, and after 12 hours in any case. An open recording or phone call keeps you signed in.
-One minute before, a strip says **You will be signed out in 1 minute.** Click **Stay signed in**
-to carry on.
+Two minutes before, a strip says **You will be signed out in under 2 minutes.** Click **Stay
+signed in** to carry on. If the session has already ended, the sign-in page opens and says
+**Your session has expired**.
+
+**The server is away for a moment** (an update, a lost connection): instead of the sign-in page
+you see **Cannot reach the server. You are still signed in. Try again in a moment.** The page
+tries again by itself every 5 seconds; **Try again** asks at once.
 
 **Locked out.** After 5 wrong passwords in 15 minutes the account waits 15 minutes. You see
 **"Too many failed sign-in attempts. Try again later."**
@@ -61,17 +74,24 @@ authenticator app on your phone (Google Authenticator, Microsoft Authenticator o
   In the authenticator app choose to add an account and **scan the code** on the page. (No
   camera? Click **Cannot scan? Type the key instead**: type the key shown, or **Copy key**; on a
   phone, **Open in an authenticator app on this device** adds it for you.) Type the 6-digit code
-  the app shows and click **Confirm**. The application opens.
+  the app shows and click **Confirm**. The application opens. Until it is set up the page has no
+  menu.
 - **Everyone else may turn it on**: click your name at the top right, then **My account →
   Two-step sign-in**, and do the same.
 - **New phone:** on **My account**, turn it off with your password and a current code, then set
   it up again with the new phone.
+- Type the code with or without the space the app shows.
+- Turning it on signs you out on your other devices.
+- If someone enters your password with a wrong code, you get an email. If it was not you, change
+  your password (**Forgot your password?**). After 10 wrong codes in 15 minutes the account
+  waits 15 minutes, even with the right code.
 - **Lost phone:** ask a Super Admin. On your user page they click **Reset two-step sign-in**. You
   are signed out everywhere; sign in with your password and set it up again. (For the last Super
   Admin, the person who runs the server uses `python -m app.cli reset-mfa <email>`.)
 
 **My account** also has **Change password** and **Signed-in devices**: each device is shown like
-"Edge on Windows · 127.0.0.1"; **Sign out** signs out another device.
+"Edge on Windows · 127.0.0.1"; **Sign out** signs out another device. **Signed-in devices** lists
+only devices that are still signed in.
 
 **Phone seat** (moderators who make phone calls): **My account** shows your **Seat number** and
 your **Seat password**, hidden. Click **Show** to see the password, **Hide** to cover it again.
@@ -91,7 +111,19 @@ offline**; click **Try again** when it is back.
 bottom says **A new version of the application is ready**. Click **Reload** when you are not in
 the middle of a recording, or **Later**.
 
-**Sign out**: the **Sign out** button at the top right.
+**Sign out**: the **Sign out** button at the top right. It signs you out in every tab of the
+browser. If the server cannot be reached you stay signed in, and a strip says **You are still
+signed in: the server could not be reached. Try Sign out again.**
+
+**Page names.** Each page names itself in the browser tab, for example **Audit log ·
+Conversation Collection**. A project's pages add its code (**Progress · HINDI · Conversation
+Collection**), so several open tabs can be told apart.
+
+**On a phone**, **Menu** opens the side menu over the page. Tap beside it, press Escape or choose
+a page to close it.
+
+**Printing.** Any page prints without the menus, and long tables print all their rows. The
+**Progress** page prints as a report (section 4).
 
 ---
 
@@ -127,7 +159,7 @@ to record a rejected conversation again, create a new task.
 
 **Users → Add user**: type **Email** and **Name**, tick one or more **Roles**, click **Add and send
 invitation**. The person gets the invitation email and sets their own password. You never see or
-set it.
+set it. A name of spaces alone is not accepted.
 
 **Users → Import CSV** adds many people. The file's first line must be exactly:
 
@@ -136,13 +168,15 @@ email,display_name,roles
 ```
 
 Roles are written as codes: `SUPER_ADMIN`, `PROJECT_ADMIN`, `MODERATOR`, `QC_EXECUTIVE`,
-`CLIENT_VIEWER`. Separate several roles with a semicolon. Click **Preview**, check the problems
-column, then **Import N valid row(s)**. Up to 1000 rows.
+`CLIENT_VIEWER` (the page lists them too). Separate several roles with a semicolon. **Download
+sample CSV** gives a file to fill in. Click **Choose a CSV file**, then **Preview**, check the
+problems column, then click **Import N valid rows**. Up to 1000 rows.
 
 Click a name to open the user. There you can change the name, email or roles (**Save changes**),
 **Disable account** / **Enable account**, **Send password link** (a new invitation, or a reset link
-if the password is already set), and **Sign out everywhere**. Users are never deleted, only
-disabled.
+if the password is already set), and **Sign out everywhere** (it says how many sessions it signed
+out). Users are never deleted, only disabled. The **Users** list keeps its search, filters and
+page when you open a person and go back.
 
 **Phone calls → Phone seat** (moderators only): on the moderator's user page, under **Phone
 calls**, type the seat number TxContact gave for them (for example `80003`) in **Seat number**,
@@ -174,7 +208,7 @@ consent buttons.
 **Projects → New project** (only the Super Admin can create projects):
 
 - The **project code** is given by the platform: `PRJ0001`, `PRJ0002`, and so on. You do not type it.
-- **Name**, **Description**.
+- **Name** (one line), **Description**.
 - **Recording type**: choose **Face-to-face** or **Phone call**. A project records one type; for
   the other, make another project (the client's mix of face-to-face and phone is two projects).
   **Create project** waits until one is chosen. Phone calls are new: read section 11 first.
@@ -201,6 +235,13 @@ The **Status** card has a button for each next step: **Make active**, **Pause**,
 completed**, **Archive**, and **Reopen** for a completed or archived project. Each asks you to
 confirm; archiving or reopening also needs a reason.
 
+An archived project is read only: its **Overview**, **Rules**, **Audio rules**, **Languages** and
+**Retention** say **Read only. Reopen the project to change it.** Its team can still be changed.
+
+The project list keeps its search, status and page in the address: open a project and use the
+browser's Back button to come back to the same list. When nothing matches, the list says **No
+projects match** and offers **Clear filters**.
+
 The project's menu:
 
 - **Overview**: the project settings and its status.
@@ -209,7 +250,10 @@ The project's menu:
   approval, what QC checks, what the moderator fills and reads, long pauses and the targets
   (below). Everyone in the project can read them; only admins change them.
 - **Team**: add people with **Add people**. A person's roles come from their account, so give a
-  person the right role under Users first.
+  person the right role under Users first. **Remove** asks first. You cannot remove someone whose
+  tasks here still need them: a moderator with a task not yet sent to QC (assigned, in progress,
+  recorded, on hold, or a consent form to fix), or a QC Executive with a recording still to
+  check. The window names the tasks: reassign them first, or let them reach QC.
 - **Participants**: the project's participants (section 5).
 - **Tasks**: every task of this project, with the same search, status and recording type filters
   as the Tasks page. **New task** here starts with this project already chosen.
@@ -218,9 +262,18 @@ The project's menu:
   stereo). Both allow at most 25 % silence. A phone recording with one channel fails the check
   with "A track is missing".
 - **Languages**: the languages allowed for participants, chosen from a list (for example Hindi,
-  Tamil, English (India)). When a project has languages, every participant must match one.
-- **Retention**: how many days to keep each kind of file. Each box shows a faded example under it
-  (for example `365` for one year); leave a box empty when there is no rule yet.
+  Tamil, English (India)). For a language the list does not have, choose **Other (type the
+  code)** at the end of the list and type its code in **Language code** (for example `sw` for
+  Swahili, `fil` for Filipino or `en-US`). **Add language** waits until the code is well
+  formed. When a project has languages, every participant must match one.
+- **Retention**: **Days to keep each kind of file**, for the four kinds the platform keeps per
+  recording: **Browser original captures** and **Face-to-face 16 kHz WAV** (face to face),
+  **Phone system mixed recordings** and **Phone call 16 kHz WAV** (phone calls). Once an hour the
+  platform deletes, for good, a file older than its kind's days (counted from when it was
+  stored), but only when its task is closed (approved, rejected or cancelled): a file of a task
+  still open is kept whatever the rule says. Each deletion is in the audit log. Leave a box empty
+  to keep that kind of file. Each box shows a faded example under it (for example `365` for one
+  year).
 
 ### Rules (project admins)
 
@@ -229,6 +282,14 @@ under it (Speakers, Consent, Approval, QC checklist, Device details, Reminders f
 Audio and progress, Targets, Export format), change what you need and click **Save rules** at the
 top of the section. Each section is saved on its own. A new project starts with the values below,
 and older projects have them too. Every change is saved in the audit log with the project.
+
+**Save rules** saves only that section. The other sections and the Overview stay as they are
+saved now, even when someone changed them in another tab after you opened the page. If someone
+saved the same section after you opened it, nothing is saved and the page says **Someone else
+saved this project after you opened it. Reload the page to see their changes, then save again.**
+Leaving a section (or the Overview, Audio rules or Retention) with changes not saved yet asks
+**Leave without saving?**: **Stay** keeps them, **Leave** drops them. Closing or reloading the
+browser tab asks too.
 
 - **Speakers**
   - **Youngest speaker age** and **Oldest speaker age** (20 and 60 at the start; any of 1 to
@@ -250,23 +311,28 @@ and older projects have them too. Every change is saved in the audit log with th
     you scan it and upload it when you add them (section 5, **Signed consent forms**). The
     uploaded form is their consent.
   Switching back to Online keeps the uploaded forms on file, but then people need to agree online.
+  Choosing Online in a project that takes uploads shows, before you save: **Signed forms uploaded
+  so far stop counting while the project is Online: those people cannot be put on tasks or
+  recorded until they agree on their personal page. Switch back to Upload and the forms count
+  again.**
 - **Approval**: **QC pass is the final approval (no admin review)**. Leave it empty to keep the
   admin's final approval. Tick it and a recording the QC Executive passes is **Approved** at
   once. Tasks already waiting in **Admin review** stay there; approve them as usual.
 - **QC checklist**: the questions the QC Executive answers **Yes** or **No** for every
-  recording (section 8). It starts with the client's 28 questions: 13 about the conversation
-  (for example "The conversation is between exactly two speakers"), where **No** fails the
-  recording, and 15 about each speaker (for example "Is speech intelligible?"), which are only
-  noted. Each question is a block with:
+  recording (section 8). It starts with the default 28 questions (the first client's): 13 about
+  the conversation (for example "The conversation is between exactly two speakers"), where **No**
+  fails the recording, and 15 about each speaker (for example "Is speech intelligible?"), which
+  are only noted. Each question is a block with:
   - **Question**: the words QC reads (at most 200 characters).
-  - **Applies to**: **The conversation (answered once)** or **Each speaker (answered for both)**.
-  - **The recording fails when the answer is**: **No**, **Yes** or **Never (observation only)**.
+  - **Applies to**: **Conversation** (answered once) or **Each speaker** (answered for both).
+  - **Fails when the answer is**: **No**, **Yes** or **Never** (an observation: the answer is only
+    noted).
   - **Required (answered before Pass)**.
   - The arrows move it up or down; the bin removes it.
   To add one, type its **Key** (lowercase letters, digits and _, like `speech_intelligible`; it
   names the answer in the delivery and cannot be changed later) and the **New question**, then
   click **Add question** (it starts as a conversation question that fails on No; change it in its
-  block). **Reset to the client's list** puts the 28 questions back. At most 60 questions. The
+  block). **Reset to the default list** puts the 28 questions back. At most 60 questions. The
   list is saved with **Save rules**; answers already given keep the questions as they read then.
 - **Device details**: what the moderator fills for each speaker of every conversation before
   **Send to QC** (sections 7 and 7a). Under **Asked for each speaker**, a box for **Device make**,
@@ -279,14 +345,14 @@ and older projects have them too. Every change is saved in the audit log with th
   - **Ask each speaker to start with their first name and speaker ID** (ticked at the start):
     the note shows "I am <first name> and speaker ID P000123" for each of the task's two people.
   - **Talk about**, **Avoid**, **Face-to-face tips**, **Phone call tips**: one entry per line (at
-    most 20 lines, 200 characters each). They start with the client's text: talk about daily
+    most 20 lines, 200 characters each). They start with the default text: talk about daily
     activities, education, agriculture, food and cooking, travel, shopping, health and fitness in
     general, weather, work and hobbies; avoid politics, religion, obscene talk, hate or killing,
     other sensitive topics and personal information; face-to-face: a quiet place, both stay in
     one place, the recording device between the two speakers no more than 2.5 feet from each
     mouth; phone: a quiet place, the handset near the mouth with the loudspeaker off, no
     ringtones or notification sounds.
-  - **Reset to the client's text** puts that text back.
+  - **Reset to the default text** puts that text back.
 - **Audio and progress**:
   - **Long pause (seconds)** (3 at the start; 1 to 30): a silence inside the conversation longer
     than this is a long pause. The automatic check counts them (**Long pauses**, section 8).
@@ -297,39 +363,40 @@ and older projects have them too. Every change is saved in the audit log with th
     completed for approved conversations. Payments always count the full length.
   The longest recording allowed stays on the **Audio rules** page.
 - **Targets**: what the **Progress** page compares the project with. An empty box is no target.
-  - **Hours completed** (empty at the start), counted as **Completed minutes count** says;
+  - **Hours completed** (empty at the start; above 0, at most two decimals), counted as
+    **Completed minutes count** says;
     **Speakers** (500) and **Conversations** (600).
   - **Age bands (percent of speakers)**: a line per band with **From age**, **To age** and
-    **Percent**; the client's bands at the start: 20-30 40 %, 30-40 30 %, 40-50 20 %, 50-60
-    10 %. A band takes the ages from its first age up to, but not including, its last; the band
+    **Percent**; the default bands at the start: 20-30 40%, 30-40 30%, 40-50 20%, 50-60
+    10%. A band takes the ages from its first age up to, but not including, its last; the band
     that ends highest also takes its last age (a speaker of 30 is in 30-40, one of 60 in 50-60).
     The percents must add up to 100. **Add age band**, the bin to remove one, **Reset to the
-    client's age bands**.
+    default age bands**.
   - **Gender (percent of speakers)**: **Male (%)** and **Female (%)**, 50 and 50 at the start;
     both empty for no gender target.
   - **Face-to-face and phone (percent of approved conversations)**: shown only for a project made
     before one type per project that still records both; 50 and 50 at the start.
   - **Districts (by native district)**: a line per district with its **State**. None at the start;
-    **Use the client's Konkani districts** fills in North Goa and South Goa (Goa), Uttara
+    **Use the Konkani-region districts** fills in North Goa and South Goa (Goa), Uttara
     Kannada, Udupi and Dakshina Kannada (Karnataka), Sindhudurg, Ratnagiri and Raigad
     (Maharashtra). Each listed district is expected to give an equal share of the speakers
-    (12.5 % each for 8). **Add district** adds one; the bin removes one.
+    (12.5% each for 8). **Add district** adds one; the bin removes one.
   The line under a wrong list says what is wrong (for example "The percents add up to 90, not
   100."), and **Save rules** waits until it is right.
 - **Export format**: how the project's exports are laid out and named (see **Export a project**).
-  - **Layout of an export**: **The client's delivery format** (at the start, for every project)
+  - **Layout of an export**: **Speaker-pair format** (at the start, for every project)
     or **The platform's own layout** (a folder per kind of recording with each recording's details
     file and consent record, as before).
   - **Speaker IDs**: **Number (P000123 is 123)** (at the start; at least 3 digits, so P000007 is
     007) or **Participant code (P000123)**.
-  - **Conversation IDs**: **CON and number (T000045 is CON045)** (at the start) or **Task code
-    (T000045)**.
+  - **Conversation IDs**: **CON + number (CON045)** (at the start; T000045 is CON045) or **Task
+    code (T000045)**.
   - **Audio file name**: made of `{a}` and `{b}` (the two speakers' IDs), `{a_pin}` and
     `{b_pin}` (their native PIN codes) and `{conversation}` (the conversation ID), with letters,
-    digits, `_` and `-` between them. It starts as the client's
+    digits, `_` and `-` between them. It starts as
     `{a}_{b}_{a_pin}_{b_pin}_{conversation}`. It must hold `{conversation}`, so every name is
     unique. The line under it shows an example, such as "e.g. 001_002_570001_576101_CON001.wav".
-  - **Reset to the client's format** puts all four back.
+  - **Reset to the default format** puts all four back.
   Exports already prepared keep the layout they were made in.
 
 Tasks made before a change stay as they are.
@@ -337,7 +404,18 @@ Tasks made before a change stay as they are.
 ### Progress (project admins)
 
 Open the project and click **Progress** (right after **Overview**). Only the people who run the
-project see it. It is plain tables under headings, from the top:
+project see it.
+
+**Download or print.** At the top, **Figures as of …** says when the figures were read; reload the
+page for newer ones. **Download Excel** saves a workbook with a sheet for each table: About, Key
+figures, Speakers by age and gender, Speakers by district, Conversations to make, Capacity,
+Balance, Conversations by status and Completed. **Download CSV** saves the same figures as one
+table, for other tools. **Print or save as PDF** opens the browser's print: the page prints as a
+report, with no menus or buttons, every row, the definitions included, and the project and the
+time on top. Choose **Save as PDF** as the printer to keep a file. Each download is recorded in
+the audit log. The Export page's **Progress report** is a different file, with one row per task.
+
+The page is plain tables under headings, from the top:
 
 - One line of figures: **Completed** (the approved conversations' effective speech, or their full
   length, as the project's **Completed minutes count** says, against **Hours completed**),
@@ -364,8 +442,8 @@ project see it. It is plain tables under headings, from the top:
 - **Balance against the targets**: one table with a section each for **Age bands**,
   **Gender**, **Face-to-face and phone** (only in a project that records both) and **Districts**.
   For each group: under **Actual** the count, the percent and a bar with a tick at the target;
-  under **Target** the target percent and the **Variance**: actual minus target, "+4 %" above
-  (green), "−6 %" below (red). Age, gender and districts are shares of the speakers with an
+  under **Target** the target percent and the **Variance**: actual minus target, "+4%" above
+  (green), "−6%" below (red). Age, gender and districts are shares of the speakers with an
   approved conversation, each counted once, with their details as they are now (district: native
   district); people without that detail are under **Not given**. Face-to-face and phone are shares
   of the approved conversations. The first 10 districts are shown; **Show all** shows the rest.
@@ -383,13 +461,15 @@ largest fractions (the first in order on a tie; 500 over 8 districts is 63 for t
 62 for the others). **Still needed** is the target less those done and those registered, never
 below 0. A total adds up its groups: extra people in one group do not fill another, and people
 without an age or gender fill none. **Conversations still to make** is the target less the
-approved conversations and the open tasks. Each conversation needs two speakers, and each speaker
-gives at most the project's **Conversations per speaker**, so the page says when the registered
-people cannot give them all and how many more speakers that needs.
+approved conversations and the open tasks. The line under **Still needed** says whether the
+registered people can give the conversations still to make: each conversation takes two people,
+each person gives at most the project's **Conversations per speaker** and, when the project says
+so, each pair talks only once. If they cannot, it says how many more speakers are needed.
+**Registered** counts how many registered people reached the limit.
 
 The project's **Participants** page says the same in one line for the people who recruit:
 "Still needed: 495 speakers to recruit for the target of 500. Which ages, genders and districts:
-see Progress."
+see Progress." The line is read again each time someone is added, edited or deleted on that page.
 
 **Effective speech** is the time someone speaks: the recording without its silences (quieter than
 −50 dBFS on every channel; on a phone call, speech on either side counts once). Gaps under 0.3 s
@@ -400,17 +480,22 @@ as no effective speech and the page says how many.
 
 ### Settings, System status, Audit log
 
-- **Settings** (page title **Capacity targets**): planning targets. Only **Staff accounts** is
-  enforced; it stops new accounts above the number.
+- **Settings** (page title **Capacity targets**): **Staff accounts**, under **Account limit**
+  (marked **Enforced**), refuses new or re-enabled accounts above the number. The figures under
+  **Planning figures** are for reference only; nothing is limited by them. **Participants per
+  conversation** is fixed at 2 and shown only. A value outside its bounds is refused on the page,
+  and the message names the field.
 - **System status**: shows whether the database, the work queue (redis) and file storage are
   reachable. Click **Check again** to refresh.
   **Needs attention** lists what the platform found wrong at its last look (it looks every
   minute): failed recordings, phone calls waiting for a person, failed exports, storage or the
   work queue not answering. When an alert address is set on the server, the same goes out
   by email.
-- **Audit log**: every change, who made it and when. Read only. Narrow it with **Area**, **About**
-  and **Action**; the values before and after a change are in a closed **Before and after**
-  section on each row.
+- **Audit log**: every change, who made it and when, in words (for example **Tasks: Status
+  changed**), with its key under it (**task.status_changed**: the value the **Action** box
+  takes). Read only. Narrow it with **Area** (including Payments, Call lists and Audio files),
+  **About** and **Action**. **Before and after** lists only what changed, one line per field:
+  **Status: DRAFT → ASSIGNED**. An entry with one side only shows its fields under **Details**.
 
 ---
 
@@ -419,12 +504,17 @@ as no effective speech and the page says how many.
 **Participants → Add participant** (opens a window; choose the project first):
 
 - **Name or label** (required).
-- **Country code** (choose from the list; India +91 is first) and **Phone number** (optional;
-  exactly 10 digits, without the country code).
+- **Country code** (choose from the list; India +91 is first) and **Phone number** (optional),
+  on one row: type the number without the country code. India (+91): exactly 10 digits. Other
+  countries: the form says how many digits it takes (for example 6 to 13 for +65 Singapore). For
+  a country not in the list choose **Other (type the country code too)** and type the whole
+  number starting with its country code; pasting a number that starts with + picks its country
+  code. Nothing you type is cut off: a wrong length is said under the box. A number saved
+  earlier (for example by **Add many**) stays as it is when you change other details.
 - **Email address** (required): the consent form is sent there. It cannot be removed; someone
   added before emails were required gets one the next time they are edited.
-- **Language** (required; choose from the list. When the project has languages, only those
-  are listed).
+- **Language** (required; choose from the list of 47, which has all 22 scheduled languages of
+  India. When the project has languages, only those are listed).
 - **Dialect**, **Internal notes** (optional).
 - **Speaker details** (the ones the project needs are marked * and required for someone new;
   a task can only be made for people who have them. Which ones, and the ages, are set on the
@@ -442,7 +532,9 @@ as no effective speech and the page says how many.
 
   States are chosen from the list of Indian states and union territories. A PIN code has 6
   digits and does not start with 0. **Add participant** stays grey until every needed detail is
-  filled in; a wrong age or PIN code is named under its box.
+  filled in; a wrong age or PIN code is named under its box. A line beside the button says what
+  it waits for (**Still to fill: Email address, Age, ...**) or **Correct the fields marked in
+  red.**
 - **Documents** (PDF, JPEG or PNG, at most 10 MB each):
   - **Signed consent form (scan)**: only in a project whose **Consent** is **Upload**, and
     required there.
@@ -456,6 +548,9 @@ as no effective speech and the page says how many.
 
 Each participant gets a code such as `P000123`. The speaker details belong to the person: they are
 the same in every project they are in.
+
+Someone already in the project with the same name and email is not added again (**Already in
+this project as P000123**). A family sharing one address, with different names, can be added.
 
 To change someone's details, click **Edit** on their row. A window **Edit P000123** opens; change
 the details and click **Save changes**. Someone added before speaker details existed can be saved
@@ -488,8 +583,10 @@ task with that person. Write `gender` as `male` or `female`; `education` as `pri
 `secondary`, `higher_secondary`, `diploma`, `bachelors`, `masters`, `phd` or `other`;
 `education_medium` as `english` or `non_english`; states in full (for example `Goa`); PIN codes
 as 6 digits. A wrong value, or an age outside the project's speaker ages, fails its row with the
-same words as the form.
-Click **Check rows**, then **Add N participants**. Up to 500 rows.
+same words as the form. **Check rows** also finds what **Add participant** would refuse: a phone
+number someone already has, someone already in the project, and a person repeated in the file.
+Click **Check rows**, then **Add N participants** (**Add 1 participant** for one). Up to 500
+rows.
 
 ### Consent
 
@@ -508,7 +605,8 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
 5. Email lost? Click **Email consent form again** on the participant's row. It is only there
    until they agree. For many at once: tick them, then click **Email consent form again** in the
    bar that appears; people who already agreed are skipped and named.
-6. **Consent history** shows earlier answers, in a window.
+6. **Consent history** shows earlier answers, in a window. An answer shows where its link was
+   emailed, masked (ka•••@example.org).
 7. You can make a task only with people who have agreed (see section 6).
 
 ### Signed consent forms (projects whose Consent is Upload)
@@ -521,6 +619,11 @@ Click **Check rows**, then **Add N participants**. Up to 500 rows.
    project was switched to Upload) still counts.
 3. Without either, the row shows **Consent form missing**, and no task can be made with them.
 4. **Email consent form again** is not offered in these projects.
+5. A project admin uploads or replaces a signed consent form at any time, except while a task
+   with the person is being checked by QC: the form stays as QC sees it until QC decides. A
+   moderator uploads it on their task before the recording goes to QC, or when QC sends the task
+   back for its consent form. Once QC has passed a task with the person, only a project admin
+   replaces it.
 
 ### Documents
 
@@ -559,7 +662,9 @@ in this project**, **Personal link**, **Consent form** and **Documents** on the 
   were last changed, and the projects they are in. **Details missing** at the top means a task
   cannot be made with them yet.
 - **Work in this project**: sessions, recorded and approved conversations and minutes, payable
-  minutes, phone calls made to them, calls with a recording, and the last call.
+  minutes, phone calls made to them, calls with a recording, and the last call. **Phone calls to
+  them** counts the calls that rang the person: as A every call, as B the calls in which the
+  moderator rang them in.
 - **Personal link**: whether it works, who made it and when, until when it works, when it was
   last opened, and whether it was emailed or passed on by staff.
 - **Consent form**: the answer, when, the form version and earlier answers; click **Form text
@@ -577,7 +682,13 @@ same person.
 
 - **Also add them to another project**: choose the other project and click **Add to that project**. They stay in this project too, with the same code and consent history. Each one is emailed the other project's consent form; the list under the buttons says what happened to each.
 - **Remove**: deletes the person's name, phone, email, notes and speaker details everywhere.
-  Not possible while they are on an open task.
+  Not possible while they are on an open task. It names how many (for example **Remove 2
+  participants?**).
+
+Ticks belong to the list on screen: another search, page or project clears them, so **Remove**
+and the other actions reach only people you can see. A search that finds no one says **No
+participants match**. On a project's **Participants** page, a participant without a phone shows
+a dash.
 
 ---
 
@@ -588,6 +699,11 @@ same person.
 before one type per project that still allows both asks you to choose it. Then choose
 **Participant A** and **Participant B** (two different people), **Priority**, **Moderator** (choose
 now and the task starts as **Assigned**, or **Assign later**) and **Due date**, then **Create task**. Each task gets a code such as `T000045`.
+
+Each participant list shows the first 25 people by code. **Find participant (code or name)**
+finds anyone else; people you have already chosen stay chosen while you search. A line under the
+box says, for example, **Showing 25 of 150: type a code or name to find others.** In a phone-call
+project, people without a phone number are greyed out (**no phone number**).
 
 Only people who agreed to the project's consent form can be chosen. When someone is left out,
 the page says **Only people who agreed to the consent form can be chosen.** If the project has
@@ -624,7 +740,13 @@ that allows both), and the other type is refused on its row ("This project recor
 only"), `priority` is `low`, `normal`, `high` or `urgent` (empty means
 normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
 leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
-rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
+rows to fill in. The button reads **Add tasks** until the rows are checked, then **Add 1 task** or
+**Add N tasks**. Up to 500 rows.
+
+**The Tasks list.** People who assign tasks see two more columns: **Participants** ("P000196 ·
+P000197") and **Moderator** (the name, or **Not assigned**). A moderator's own list is
+unchanged. On the **Tasks** tab of a project that records one type there is no **Recording
+type** filter; the column shows only for an older task of the other type.
 
 The task page is laid out so the status, both people and your next step show without
 scrolling. Under the title, a small row of steps shows where the task is (Draft, Assigned, In
@@ -633,14 +755,21 @@ your next step and its button (or, when there is nothing for you to do, one line
 next, for example "Waiting for QC: Ravi checks the recording."), then the task's records (Audio
 quality, Device details, Recordings, Phone calls). On the right, staying in view as you scroll:
 
-- **Summary**: status, recording type, priority, moderator, QC Executive and dates.
+- **Summary**: the **Project** first (its code opens the project), then status, recording type,
+  priority, moderator, QC Executive and dates.
 - **Participants**: one table with a column for **Participant A** and one for **Participant B**
   and a row each for **Code**, **Name**, **Consent**, **Consent form** (Upload projects: the file
   opens when you click its name; the upload icon uploads or replaces it), **Device details**
   (**Filled** or **Missing**) and, for admins, **Speaker details** → **View** (everything about
   the person, in a window).
-- **History**: the newest three entries first; **Show all** lists the rest. Add a comment with
-  **Add comment**.
+- **History**: the comment box first (**Add comment**), then the newest three entries; **Show
+  all** lists the rest.
+
+When QC sends a task back for a consent form, the **Participants** table shows **New form
+needed** and a red mark on that file until a new form is uploaded. An upload from a participant's
+details window updates the task at once (**Documents of P000150 updated.**). The progress line of
+a rejected or cancelled task stops at the step where the task ended. A cancelled task keeps its
+recordings, audio check and device details visible, read only, if it had any.
 
 On a phone everything is in one column, your work first.
 
@@ -650,10 +779,13 @@ On a phone everything is in one column, your work first.
   **Summary** and give a reason.
 - **Buttons at the top of the task page**: **Put on hold** and **Cancel task** each open a window
   with a **Reason** and a **Comment** (**Go back** closes it without a change). A task on hold
-  shows **Resume task**, which puts it back where it was.
-- **Delete task** (also at the top): for a task made by mistake. Type the reason. Only a
-  task with no recording, phone call or consent noted on it can be deleted; otherwise cancel it
-  instead.
+  shows **Resume task**, which puts it back where it was. A Draft put on hold and then given a
+  moderator resumes as **Assigned**. If a task is put on hold while its recording is being saved
+  (face to face or a phone call), the recording is kept and **Resume task** takes the task to
+  **Recorded**, so nothing is recorded again.
+- **Delete task** (also at the top): for a task made by mistake. Type the reason. It appears only
+  while the task can still be deleted: a task with no recording, phone call, consent noted on it
+  or audio check; otherwise cancel it instead.
 - **QC is assigned by itself**: when the recording reaches Audio QC, the platform gives it to the
   project's active QC Executive with the fewest tasks waiting (in turn when equal), never the
   moderator or whoever recorded. If the project has no QC Executive free, nobody is set.
@@ -726,6 +858,12 @@ payments. QC Executives see only the newest one.
     people's details are saved. After **Send to QC** the task page says **Sent to QC. A QC
     Executive checks it next.**
 
+If the recording has more silence than the project allows, the recorder says so at once under the
+result (for example "92.2% of this recording is silence; this project allows at most 25%.").
+Listen, and record again while both speakers are still there if it is not good. If a recording
+could not be prepared (**Processing failed**), **Record again** starts a new one; the uploaded
+audio is kept for your admin.
+
 The platform checks the sound within about a minute of saving; **Send to QC** works once that
 check is done. Once the task is with QC the device details are read only (QC and admins see them,
 with who filled them in and when).
@@ -745,10 +883,21 @@ then shows **Consent form to fix**, and its page has a **Consent form to fix** c
 
 A project admin can do the same, or **Cancel task** if no form can be had.
 
+If the project's **Consent** is changed to **Online** while a task waits here, a signed form no
+longer counts: the card says so, each person shows **Not agreed yet** (then **Agreed
+online**), and the task can go back to QC once the person has agreed on their personal page
+(**They agree on their personal page first.**). QC can pass it only when both people have
+agreed.
+
 If the internet drops, recording carries on and the saved parts are sent when it comes back. If
-the tab closes by mistake, open the recorder again: it offers **Keep the saved m:ss** or **Discard
-it** (it asks you to confirm; the saved audio is then deleted). A recording can be up to 4 hours
-long.
+the microphone stops or is unplugged during a recording, or saving fails, the recorder says **The
+recording stopped** and how much audio reached the server, and offers **Keep the saved m:ss** or
+**Discard it**. If the tab closes by mistake, open the recorder again: it says **An earlier
+recording did not finish** and offers the same buttons (**Discard it** asks you to confirm; the
+saved audio is then deleted). **Keep** prepares the saved audio like any recording: **Recording
+saved**, **Listen**, **Send to QC** and **Record again** follow on the same screen. If the task
+was given to you while another moderator's recording was still open, you can keep or discard it
+the same way. A recording can be up to 4 hours long.
 
 ---
 
@@ -764,7 +913,8 @@ app. The top of every page shows:
 - **Phone line: Ready**: you can start a call.
 - **Phone line: Connecting…**: wait a few seconds.
 - **Phone line: On a call**: a call is open. When you close or cancel it, the line is ready again
-  for the next call.
+  for the next call. If the call is ended somewhere else (for example cancelled on the **Phone
+  calls** page), the line notices within 15 seconds and is ready again.
 - **Phone line not connected:** and the reason: click **Try again**. If it fails again, ask your
   admin to check your seat number and password.
 
@@ -829,7 +979,9 @@ rest. The **Figures** tab is plain tables under their headings, with one chart:
 - **By project** when you look at all your projects.
 
 The **All calls** tab lists every call with a link to its task; **Show** filters it (for example
-**Needs a person**). **Download calls (CSV)** saves the period's calls as a spreadsheet.
+**Needs a person**). **Download calls (CSV)** saves the period's calls as a spreadsheet, times in
+India time (IST). A period with more than 20,000 calls is refused: choose a project or a shorter
+period.
 
 Moderators have no figures, charts or CSV: only the list of their own calls. No page shows a
 full phone number: the last two digits only.
@@ -872,12 +1024,13 @@ in the project's metadata export) carries the same history in its **call** secti
      platform recorded it: there is nothing to check.
 6. **Your decision** stays at the bottom of the screen while you work down the questions. Its
    line says what your answers allow, and why **Pass** is grey when it is (for example **3
-   questions still to answer.**). Click:
+   questions and 2 consent forms still to answer.**). Click:
    - **Pass** → the task becomes **Admin review** (the admin gives final approval). In a project
      where **QC pass is the final approval**, Pass makes it **Approved** at once; the card then
      says **Pass approves the task: this project has no admin review.** Pass works only when
      every required question is answered, no answer fails and (Upload projects) both consent
-     forms are **Yes**.
+     forms are **Yes**. Both people must also have consent as it counts now: after a project
+     was switched to **Online**, a signed form no longer counts and Pass waits until they agree.
    - **Reject** → **Rejected** (final). Possible at any time; your answers so far are kept.
    - **Send back for consent** (Upload projects) → **Consent form to fix**: the recording is
      fine but a form is not. It works when every required question is answered, none fails and
@@ -891,7 +1044,7 @@ in the project's metadata export) carries the same history in its **call** secti
 Everyone who sees the task (the admin at **Admin review** too) finds the newest decision's
 answers under **QC checklist**: what was decided, by whom and when; **Show every answer** shows
 the same tables, each answer with a tick (it lets the recording pass) or a red cross and
-**Fails**.
+**Fails**; an observation shows the word only.
 
 **Check the stored file again** repeats the automatic check on the stored file.
 
@@ -923,31 +1076,36 @@ page). A bar appears with:
 Open the project and click **Export** in its menu (Super Admin and Project Admin).
 
 **Recordings** are exported as one ZIP, prepared in the background. Under **Recordings** the page
-says which layout the ZIP takes: **the client's delivery format** (every project starts with it)
-or **the platform's own layout**, with an example audio file name and a link to change it under
+says which layout the ZIP takes: **the speaker-pair delivery format** (every project starts with
+it) or **the platform's own layout**, with an example audio file name and a link to change it under
 **Rules** (section **Export format**).
 
 1. Choose **What to export**: **Audio + metadata**, **Audio only** or **Metadata only**.
 2. Choose **Which recordings**: **Approved tasks only** (the delivery) or **Every finished
-   recording**. You can narrow it by **Recording type** (face-to-face or phone calls), **Language**,
-   and the days it was recorded (**Recorded from**, **Recorded to**; days in India time).
-3. Choose **Tables as** CSV or TSV.
+   recording**. You can narrow it by **Recording type** (only in a project that still allows both
+   types), **Language**, and the days it was recorded (**Recorded from**, **Recorded to**; days in
+   India time).
+3. Choose **Tables as** **CSV** or **TSV**.
 4. Optional: **Also include the original recordings** (as recorded, before any processing; much
    larger). Super Admin only: **Also include names, phone numbers and email addresses**. Without
    it, participants appear by code only.
-5. The page shows how many recordings fit and how much audio, and in the client's format how
-   many values and files are not on file ("3 items missing", or "Nothing missing"). Click
-   **Prepare export**. A missing piece never stops the export; the list is in `MISSING.csv`.
+5. The page counts the recordings that fit a moment after you stop changing the choice
+   (**Counting the recordings**) and shows how much audio; a project of one recording type shows
+   them without a split by type. In the speaker-pair format it also says how many values and
+   files are not on file ("3 items missing", or "Nothing missing"). Click **Prepare export**. A
+   missing piece never stops the export; the list is in `MISSING.csv`. An export of more than
+   300 GB of audio is refused: narrow it by language or days.
 6. The export appears under **Prepared exports**: **Waiting**, **Being prepared**, then **Ready**.
    The page checks by itself; you can leave it and come back.
 7. Click **Download**. The link works for 5 minutes; click again for a new one. A prepared
    export is kept for 24 hours, then removed. **Remove** takes it away sooner.
 
-If an export shows **Failed**, the reason is written under its name. Prepare it again; if it
-fails again, tell the Super Admin. A prepared export in the client's format also shows how many
-items it is missing, under the number of recordings.
+If an export shows **Failed**, the reason is written under its name: it names the task or speaker
+whose file does not match its checksum or is missing from storage. Prepare it again; if it fails
+again, tell the Super Admin. A prepared export in the speaker-pair format (marked **Speaker-pair
+format**) also shows how many items it is missing, under the number of recordings.
 
-**What is in the ZIP in the client's delivery format** (the example: speakers P000001 and
+**What is in the ZIP in the speaker-pair delivery format** (the example: speakers P000001 and
 P000002 with native PIN codes 570001 and 576101, tasks T000001 by phone and T000002 face to face):
 
 | Folder or file | What it is |
@@ -963,8 +1121,8 @@ P000002 with native PIN codes 570001 and 576101, tasks T000001 by phone and T000
 
 **Audio only** holds the audio folders and the tables; **Metadata only** has no audio. In the
 JSON files a value not on file is empty (`""`), and a native PIN code not on file is `000000` in
-file names; both are listed in `MISSING.csv`. The client's files hold no names, phone numbers or
-email addresses. They do hold the speakers' age, gender and PIN codes, so only the project's
+file names; both are listed in `MISSING.csv`. The speaker-pair format's files hold no names,
+phone numbers or email addresses. They do hold the speakers' age, gender and PIN codes, so only the project's
 admins prepare and download an export in this format (a Client Viewer cannot).
 
 **What is in the ZIP in the platform's own layout:**
@@ -979,7 +1137,9 @@ admins prepare and download an export in this format (a Client Viewer cannot).
 
 There are no transcripts in an export: this version makes none.
 
-**Reports** are one table each, saved at once as **CSV** or **TSV**:
+**Reports** are one table each, saved as **CSV** or **TSV** with the button in its row; if the
+download is refused, the reason shows above the table. The **Progress report**'s times are in
+India time (IST). File names carry the day in India time.
 
 | Report | You get |
 |---|---|
@@ -1020,6 +1180,9 @@ because each project has its own rate. The **Total** line adds them up. A projec
 shows the minutes and **No rate set** instead of an amount; the Total line says how many
 minutes have no rate.
 
+A long list shows 50 rows a page (**Previous**, **Next**); the **Total** line and **Download CSV**
+always cover every row. A new choice or search starts again at the first page.
+
 **Download CSV** saves the tab as a spreadsheet with the same rows and a **Total** line.
 
 Moderators, QC Executives and Client Viewers do not see payments.
@@ -1034,7 +1197,10 @@ speech or the full length; several projects add up their own), today's hours aga
 target, and an hours-per-day chart. Choose a **Project** and a **Period** (last 7,
 30 or 90 days, or **Choose dates (from – to)**). You can narrow it by **Recording
 type**, **Language** (and **Dialect**, when the project has any) and **District**. Days are counted in India
-Standard Time.
+Standard Time. A task recorded again counts once, with its newest recording (**Moderator output**
+still shows every take). The daily target is the chosen project's own; with **All my projects**
+it adds the active projects' targets only. When the busiest day has less than an hour, **Hours
+per day** is marked in minutes.
 
 ### Dashboard filters (everyone)
 
@@ -1078,7 +1244,10 @@ The participant opens the link from the consent email. No login is needed. The p
   each accepted conversation).
 - **Consent form**: read it, tick **I have read and understood this form**, click **I agree** or
   **I do not agree**. After agreeing the page says **You agreed on <date>.** with no buttons: the
-  answer is final. After **I do not agree** they can still agree later.
+  answer is final, and the page shows the text and version they agreed to, even if the project's
+  form changes later. After **I do not agree** they can still agree later. A form still to answer
+  comes first on the page. Where the project takes signed forms and theirs is on file, the page
+  says **The project team has your signed consent form (received on <date>).** and asks nothing.
 - **Your sessions**: each session and its state (**Planned**, **Recorded, being checked**,
   **Accepted**, **Not used**).
 
@@ -1107,10 +1276,12 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. In an Upload project, upload their signed consent form with **Documents**. |
 | An upload says "Only PDF, JPEG or PNG files can be uploaded" or "larger than 10 MB" | Scan the page again as a PDF or a photo (JPEG or PNG), at a lower resolution if it is large. |
 | New task: a participant is greyed out | The reason is after their name: **details missing** (add them with **Edit**), **3 conversations already**, or **already paired with the chosen A**. See section 6. |
-| "Unexpected Application Error" / "Failed to fetch dynamically imported module" | The site was updated while the page was open. The page now reloads by itself; if the message stays, press Ctrl+Shift+R (Cmd+Shift+R on a Mac). |
+| **This page could not be shown** | Click **Try again** (it reloads the page) or **Go to the start page**. The menu stays, so you can also choose another page. If it keeps happening, tell your administrator. |
+| **Cannot reach the server** | The server is restarting or the connection dropped. You are still signed in; the page tries again by itself. |
+| **You are still signed in: the server could not be reached** | Click **Sign out** again once the connection is back. |
 | "The task must be in progress to record" | Moderator: open the task and click **Start session**. If the task is on hold, ask the Project Admin to click **Resume task**. |
 | **Send to QC** is grey: "Fill in the device details of P000123 first" | Moderator: fill the **Device details** card for both speakers (only the boxes shown) and click **Save device details**. After **Send to QC** they cannot be changed. |
-| "This link is invalid or has expired" | Ask for a new link: **Forgot your password?**, or the admin's **Send password link**. |
+| "This link is invalid or has expired" | Click **Request a new link** on that page, or ask the admin for **Send password link**. |
 | "Too many failed sign-in attempts" | Wait 15 minutes, then try again or reset the password. |
 | No invitation or consent email | Check spam. Emails come from no-reply@dubdesk.live. For a consent form, click **Email consent form again**. |
 | "No access" | Your role does not include that page. Ask an administrator. |

@@ -1,7 +1,7 @@
 // Requirements: FND-016
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiDownload, apiRequest, UNAUTHENTICATED_EVENT } from "./client";
 
 function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -80,6 +80,54 @@ describe("apiRequest", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(503, { status: "not_ready" })));
     await expect(apiRequest("/health/ready", { acceptStatuses: [503] })).resolves.toEqual({
       status: "not_ready",
+    });
+  });
+});
+
+describe("an ended session (AUTH-016)", () => {
+  const ended = () =>
+    jsonResponse(401, { error: { code: "UNAUTHENTICATED", message: "Sign in required" } });
+
+  /** The codes of the sign-out events raised while `act` runs. */
+  async function signOuts(act: () => Promise<unknown>): Promise<string[]> {
+    const seen: string[] = [];
+    const listen = (e: Event) => seen.push((e as CustomEvent<{ code: string }>).detail.code);
+    window.addEventListener(UNAUTHENTICATED_EVENT, listen);
+    try {
+      await act().catch(() => undefined);
+    } finally {
+      window.removeEventListener(UNAUTHENTICATED_EVENT, listen);
+    }
+    return seen;
+  }
+
+  it("is announced by a request and by a download, so the page goes to sign-in", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(ended())),
+    );
+    expect(await signOuts(() => apiRequest("/api/v1/tasks"))).toEqual(["UNAUTHENTICATED"]);
+    expect(await signOuts(() => apiDownload("/api/v1/projects/p1/export"))).toEqual([
+      "UNAUTHENTICATED",
+    ]);
+    // A wrong password at sign-in is not a session that ended.
+    expect(await signOuts(() => apiRequest("/api/v1/auth/login", { method: "POST" }))).toEqual([]);
+  });
+
+  it("gives a refused download as an error the page can show", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(422, { error: { code: "TOO_LARGE", message: "Too many", request_id: "r" } }),
+        ),
+    );
+    await expect(apiDownload("/api/v1/calls/export")).rejects.toMatchObject({
+      status: 422,
+      code: "TOO_LARGE",
+      message: "Too many",
+      requestId: "r",
     });
   });
 });

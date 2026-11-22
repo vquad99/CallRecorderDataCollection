@@ -11,12 +11,34 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Passwords: Argon2id with per-password salt; never logged or returned (AUTH-006, AUTH-015).
 - Idle and absolute session expiry, configurable; revocation per session and per user (AUTH-005, AUTH-010).
 - Failed-login throttling per account and per IP, counted in PostgreSQL `login_attempts` (AUTH-009, D-027).
+  The count for one address is read under a lock for that address, so a burst sent at once cannot
+  pass it. Wrong authenticator codes given with the right password are counted per account from
+  every address: 10 per window. Then sign-in and turning two-step sign-in off wait out the window.
+  The owner is emailed at the first wrong code in a window (D-155).
 - Password reset: random token, stored hashed, single use, short expiry; same response whether the email
   exists or not (AUTH-004).
-- Optional TOTP MFA (AUTH-008); each code is accepted once only (D-050).
+- Optional TOTP MFA (AUTH-008); each code is accepted once only (D-050). Spaces in a typed code are
+  ignored; turning it on ends the account's other sessions (D-155).
 - Password checks through a signed-in session (password change, MFA off) are throttled like sign-in (D-050).
 - Audit events: login success/failure, logout, password change/reset, disable/enable, role and
-  membership changes (AUTH-014, USER-007).
+  membership changes (AUTH-014, USER-007). A failed sign-in whose typed text is not an account
+  keeps only a keyed fingerprint of it in the audit log, never the text (a password pasted into
+  the email box is never stored there, D-155).
+- Signing out reaches every tab of the browser (BroadcastChannel `ccp-auth`): the other tabs show
+  the sign-in page at once, and a moderator's phone line goes offline in each (D-133). Signing in
+  in one tab opens the others (D-155).
+- A sign-out whose request fails (network, 5xx, 429) keeps the person signed in on screen and says
+  so: "You are still signed in: the server could not be reached. Try Sign out again." Only a
+  confirmed sign-out or a 401 clears the page, so a shared computer is never left with a live
+  session behind a sign-in page (D-155).
+- Only a 401 signs a page out. A server that cannot be reached at start shows "Cannot reach the
+  server" and retries every 5 s, so nobody signs in again and adds a session (D-155).
+- The idle warning comes 2 minutes before the page's count (`last_seen_at` is written at most
+  once a minute). Its check when the time is up is a background request (`X-Background-Request`),
+  so it never extends a session; with the session kept alive by another tab it asks at most once
+  a minute (D-155).
+- Error references (request ids) show in form messages only for server faults (5xx). A page that
+  fails to display never shows the error text or stack (D-155).
 
 ## 2. Authorization
 
@@ -34,7 +56,24 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Consent records separate from profiles, readable only by permitted roles (PART-006, SEC-010).
 - Exports exclude phone numbers by default; including personal data needs an explicit grant and is
   audited (EXP-004).
-- Retention rules per project and asset kind; deletion jobs and requests audited (STOR-009, PART-009).
+- Retention rules per project and asset kind, applied by the platform once an hour to files of
+  closed tasks only (PROJ-01, D-155); deletion jobs and requests audited (STOR-009, PART-009).
+- `participant.corrected` entries hold no participant names and no native districts. They say
+  which fields changed (`name_changed`, `phone_changed`, `email_changed`, `speaker_details_changed`)
+  and keep only the language and dialect. Email addresses appear only as keyed fingerprints
+  (HMAC-SHA256 with the secret key, first 16 hex characters) in `participant.corrected` (when the
+  email changes), `participant.portal_link_emailed` (`to`) and `consent.self_recorded`
+  (`emailed_to`): the log proves where a consent link went without holding an address. Entries
+  written before this change keep what they recorded: the audit log is append-only (trigger
+  `audit_logs_no_update_delete`, migration 0002) and is not rewritten. Removing a participant also
+  renames their removed address proofs to `address_proof` (D-155).
+- Consent: a signed consent form cannot be replaced while a task with the person is at Audio QC,
+  and a moderator replaces it only before QC or at a QC send-back (SECB-01). An online answer
+  records the masked address its link was emailed to (SECB-02), so an answer given through an
+  address staff put on file for a while shows in the consent history and the audit log. A QC
+  pass, and an approval, needs both people's consent as it counts at that moment (SECB-03): a
+  project switched from signed forms to online consent while a task was in QC cannot have it
+  approved without consent (D-155).
 - Evidence and test data never contain real personal data (GEN-006).
 - AI transcription sends participant audio to Deepgram only for projects that switch it on (ASR-010);
   whether the client and consent text allow this is open (DECISIONS.md B-07).
@@ -76,17 +115,33 @@ TEL-012..013, TEL-035, PWA-004, PWA-007, OPS-003.
 - Web server content policy allows media only from the site and the storage service named by
   `MEDIA_ORIGINS` (D-061); security headers stay on cached files (caching uses `expires`).
 - CORS allowlist from configuration (FND-011).
+- Spreadsheet downloads: CSV/TSV cells that start with `=`, `+`, `-`, `@`, a tab or a carriage
+  return get a `'` in front (`core/csvio.safe_cell`); numbers the server computed are written as
+  numbers. The Progress tab's Excel download (`core/xlsx.py`) writes all text as inline strings,
+  never formulas, and drops characters XML refuses. It is limited to the people who manage the
+  project, and every download is audited (`project.exported`). Project names are one line, and
+  email subjects are made one line, so no header can carry a line break (D-155).
+- Downloads (project reports, the Progress download, payments, calls and participant CSVs, task
+  ZIPs) are fetched by the page with the session cookie (`apiDownload`), never as plain links. A
+  refusal is shown on the page, and a 401 signs the page out like any other request (AUTH-016,
+  D-155).
+- Task status changes lock the task row, so a Cancel and a Start sent at once can never both
+  succeed, and a cancelled task cannot come back (TASK-05, D-155).
 
 ## 7. Secrets and supply chain
 
 - Secrets only in environment / cloud secret manager; `.env.example` holds names and safe values (FND-025).
-- Secret scanner and dependency vulnerability scan in CI (SEC-004, SEC-015).
+- Secret scanner and dependency vulnerability scan in CI (SEC-004, SEC-015). Both run even when an
+  earlier step of their job failed. Dependabot (`.github/dependabot.yml`) proposes updates of
+  images, actions and packages every week; the uv version pins are moved by hand (D-155).
 - Pinned dependencies with lockfiles (ARCH-003).
 
 ## 8. Infrastructure
 
 - TLS everywhere; encryption at rest for database, storage and backups (SEC-002, SEC-003).
-- Least-privilege cloud roles per component (SEC-014).
+- Least-privilege cloud roles per component (SEC-014). On AWS the server's role (S3) is for the API
+  and the workers. web (nginx) and caddy, which face the internet, are blocked from the instance
+  metadata address (`deploy/aws/systemd/ccp-imds-guard.service`, D-155).
 - Backups encrypted; restore tested (SEC-008).
 - Audit log append-only; integrity reviewed (SEC-001).
 - Monitoring, alerting and log retention (OPS-006).
@@ -240,6 +295,13 @@ start, change or cancel a call (every change is refused while viewing).
 | Looking at the app as someone else needs the Super Admin's own two-step sign-in | The check is on the person who is really signed in | test_admin_mfa.py |
 | A lost authenticator is reset only by people who manage users, never for one's own account, and ends every session of that person | `POST /users/{id}/mfa/reset`; audited as `user.mfa_reset` | test_admin_mfa.py, test_security_access.py |
 | The last Super Admin has a way back that needs the server, not the application | `python -m app.cli reset-mfa <email>`; audited with no actor | test_admin_mfa.py |
+| Turning two-step sign-in on ends every other session, so a session opened with the password alone never becomes a full admin session (D-155) | `service.mfa_confirm`; audit `auth.mfa_enabled` after `sessions_revoked` | test_admin_mfa.py |
+| With the password, at most 10 codes per window from any number of addresses; the owner is emailed (D-155) | `MFA:<email>` rows in `login_attempts`, checked at sign-in and when turning it off | test_security_auth.py |
+| A code typed as "123 456" works and is not counted as a failure (D-155) | `security.totp_step` | test_security_auth.py |
+| A burst from one address checks no more passwords than its limit (D-155) | lock per address in `ensure_not_throttled` | test_security_review_2.py |
+| A password typed into the email box never reaches the audit log (D-155) | `auth.login_failed` | test_auth.py |
+| Signing out while viewing as someone is recorded as the Super Admin's own (D-155) | auth router | test_view_as.py |
+| The emergency reset on the server signs the account out and voids unused links (D-155) | `cli.create_admin` | test_settings_seed_audit.py |
 
 The set-up shows the authenticator link as a QR code made in the browser by the application's
 own code (D-107): the secret is sent to no other service to draw it.

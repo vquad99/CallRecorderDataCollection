@@ -28,6 +28,6 @@ Everyday commands (as the `ccp` user: `sudo -iu ccp`, then `cd /opt/ccp`):
 ```sh
 deploy/aws/deploy.sh status                 # what runs, which images are kept
 deploy/aws/deploy.sh rollback               # back to the previous deploy
-deploy/aws/compose.sh logs -f --tail 100 api worker
+deploy/aws/compose.sh logs -f --tail 100 api worker exports-worker
 journalctl -u ccp-deploy -n 100             # what the deploy timer did
 ```

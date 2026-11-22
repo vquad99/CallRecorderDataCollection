@@ -2,16 +2,16 @@
 // without a rate, the filters and search sent to the server, the CSV download, and each project's
 // rates changed in a window.
 // Requirements: DASH-002, EXP-007, ROLE-003
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, RATES, worldHandlers } from "../../test/world";
+import { fakeApi, renderAt, signedInAs, type Handler } from "../../test/fakeApi";
+import { ALL_PERMISSIONS, PARTICIPANT_PAY, RATES, worldHandlers } from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function open() {
+function open(extra: Record<string, Handler> = {}) {
   vi.stubGlobal(
     "URL",
     Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }),
@@ -21,6 +21,7 @@ function open() {
       ...worldHandlers(),
       "GET /api/v1/payments/moderators/export": () => [200, "project,moderator\n"],
       "PUT /api/v1/payments/rates/p1": (body) => [200, { ...RATES, ...(body as object) }],
+      ...extra,
     }),
   );
 }
@@ -83,6 +84,69 @@ describe("payments page", () => {
     await userEvent.type(screen.getByLabelText("Approved to"), "2026-11-01");
     expect(await screen.findByText("Must not be before the first day")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "Moderator payments" })).toBeNull();
+  });
+
+  it("waits for a typed year before asking for the days (Edge fills it with zeros first)", async () => {
+    const { calls } = open();
+    renderAt("/payments");
+    await screen.findByText("Mona Moderator", {}, { timeout: 5000 });
+    const asked = () => calls.filter((c) => c.path.startsWith("/api/v1/payments/moderators?"));
+    fireEvent.change(screen.getByLabelText("Approved to"), { target: { value: "2026-11-10" } });
+    await waitFor(() => expect(asked()).toHaveLength(1));
+    // The first day's year half typed: nothing asked, no error, and the table stays.
+    for (const halfTyped of ["0002-11-01", "0020-11-01", "0202-11-01"])
+      fireEvent.change(screen.getByLabelText("Approved from"), { target: { value: halfTyped } });
+    await new Promise((done) => setTimeout(done, 400));
+    expect(asked()).toHaveLength(1);
+    expect(screen.queryByText("Must not be before the first day")).toBeNull();
+    expect(screen.getByRole("table", { name: "Moderator payments" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Approved from"), { target: { value: "2026-11-01" } });
+    await waitFor(() => expect(asked()).toHaveLength(2));
+    expect(asked()[1]?.path).toBe(
+      "/api/v1/payments/moderators?date_from=2026-11-01&date_to=2026-11-10",
+    );
+  });
+
+  it("shows a long list fifty rows a page, with the totals of every row", async () => {
+    const rows = Array.from({ length: 120 }, (_, i) => ({
+      ...PARTICIPANT_PAY.rows[0],
+      participant_id: `a${i}`,
+      participant_code: `P${String(i + 1).padStart(6, "0")}`,
+      name: `Person ${i + 1}`,
+    }));
+    const totals = { ...PARTICIPANT_PAY.totals, count: 120 };
+    const { calls } = open({
+      "GET /api/v1/payments/participants": () => [200, { ...PARTICIPANT_PAY, rows, totals }],
+    });
+    renderAt("/payments?view=participants");
+    const table = () => screen.getByRole("table", { name: "Participant payments" });
+    const pages = () => screen.getByRole("navigation", { name: "Pages" });
+    const codes = () =>
+      within(table())
+        .getAllByText(/^P\d{6}$/)
+        .map((c) => c.textContent);
+    await screen.findByRole("table", { name: "Participant payments" }, { timeout: 5000 });
+    expect(codes()).toHaveLength(50);
+    expect(codes()[0]).toBe("P000001");
+    // The totals are of every row, not of the page.
+    expect(
+      within(table()).getByRole("rowheader", { name: "Total" }).closest("tr"),
+    ).toHaveTextContent("120");
+    expect(pages()).toHaveTextContent("Page 1 of 3 (120 total)");
+    await userEvent.click(within(pages()).getByRole("button", { name: /Next/ }));
+    await userEvent.click(within(pages()).getByRole("button", { name: /Next/ }));
+    expect(codes()).toEqual(rows.slice(100).map((r) => r.participant_code));
+    // The rows come once: a page is not asked for again.
+    expect(calls.filter((c) => c.path.startsWith("/api/v1/payments/participants"))).toHaveLength(1);
+    // A search starts again at the first page.
+    await userEvent.type(screen.getByLabelText("Search by code or name"), "Person");
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === "/api/v1/payments/participants?search=Person")).toBe(
+        true,
+      ),
+    );
+    await waitFor(() => expect(pages()).toHaveTextContent("Page 1 of 3"));
+    expect(codes()[0]).toBe("P000001");
   });
 
   it("changes a project's rates and loads the amounts again", async () => {

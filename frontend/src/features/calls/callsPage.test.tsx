@@ -8,7 +8,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
-import { ALL_PERMISSIONS, CALL_ANALYTICS, CALL_ROW, worldHandlers } from "../../test/world";
+import {
+  ALL_PERMISSIONS,
+  CALL_ANALYTICS,
+  CALL_ROW,
+  PROJECT,
+  worldHandlers,
+} from "../../test/world";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -18,11 +24,16 @@ describe("phone calls page", () => {
     renderAt("/calls");
     expect(await screen.findByText("Calls per day", {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText("50% of calls")).toBeInTheDocument();
-    expect(screen.getByText("Busiest hour: 11:00 (3 call(s)).")).toBeInTheDocument();
+    expect(screen.getByText("Busiest hour: 11:00 (3 calls).")).toBeInTheDocument();
     expect(screen.getByText("TxContact refused the call")).toBeInTheDocument();
     // Today against the daily target, and tasks nobody has called yet.
     expect(screen.getByText(/4% of the daily target \(10\.0 h\)/)).toBeInTheDocument();
-    expect(screen.getByText("1 task(s) called more than once")).toBeInTheDocument();
+    expect(screen.getByText("1 task called more than once")).toBeInTheDocument();
+    expect(screen.getByText("1.3 calls for each task")).toBeInTheDocument();
+    // The times on the page and in the CSV are India time, and say so.
+    expect(
+      screen.getByText(/Times are in India time \(IST\), here and in the CSV\./),
+    ).toBeInTheDocument();
     // From call to approval: every step with its share of the calls started.
     const funnel = screen.getByRole("region", { name: "From call to approval" });
     expect(within(funnel).getByText("Recording stored")).toBeInTheDocument();
@@ -123,6 +134,67 @@ describe("phone calls page", () => {
     await waitFor(() =>
       expect(api.calls.some((c) => c.path === "/api/v1/calls/export?days=30")).toBe(true),
     );
+  });
+
+  it("says why the calls CSV could not be made", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/calls/export": () => [
+          422,
+          {
+            error: {
+              code: "TOO_LARGE",
+              message:
+                "More than 20,000 calls in this period: choose a project or a shorter period",
+              request_id: "r1",
+            },
+          },
+        ],
+      }),
+    );
+    renderAt("/calls");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Download calls (CSV)" }, { timeout: 5000 }),
+    );
+    expect(
+      await screen.findByText(
+        "More than 20,000 calls in this period: choose a project or a shorter period",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("offers every project in the picker, not only the newest hundred", async () => {
+    const newest = Array.from({ length: 100 }, (_, i) => ({
+      ...PROJECT,
+      id: `n${i}`,
+      code: `NEW${i}`,
+      name: `Newer ${i}`,
+    }));
+    const oldest = { ...PROJECT, id: "old", code: "OLDEST", name: "The first project" };
+    const api = fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/projects": (_b, url) => [
+          200,
+          {
+            items: url.searchParams.get("page") === "2" ? [oldest] : newest,
+            total: 101,
+            page: Number(url.searchParams.get("page") ?? 1),
+            page_size: 100,
+          },
+        ],
+      }),
+    );
+    renderAt("/calls");
+    const picker = await screen.findByLabelText("Project", {}, { timeout: 5000 });
+    expect(
+      await within(picker).findByRole("option", { name: "OLDEST · The first project" }),
+    ).toBeInTheDocument();
+    expect(within(picker).getAllByRole("option")).toHaveLength(102); // with "All my projects"
+    expect(
+      api.calls.some((c) => c.path.startsWith("/api/v1/projects?") && c.path.includes("page=2")),
+    ).toBe(true);
   });
 
   it("starts the list again at its first page when the project changes", async () => {

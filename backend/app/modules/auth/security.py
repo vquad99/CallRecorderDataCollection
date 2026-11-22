@@ -94,8 +94,9 @@ def _totp_at(secret: str, step: int) -> str:
 
 def totp_step(secret: str, code: str, at: float | None = None) -> int | None:
     """RFC 6238 with one step of clock drift either way. Returns the time step the code belongs to,
-    so the caller can refuse a code whose step was already used (RFC 6238 section 5.2)."""
-    code = code.strip()
+    so the caller can refuse a code whose step was already used (RFC 6238 section 5.2). Spaces
+    are ignored: authenticator apps show a code as two groups, "123 456"."""
+    code = "".join(code.split())
     # isascii first: isdigit() also accepts other scripts' digits, which compare_digest rejects.
     if not (code.isascii() and code.isdigit() and len(code) == TOTP_DIGITS):
         return None

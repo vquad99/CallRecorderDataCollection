@@ -16,16 +16,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from botocore.exceptions import EndpointConnectionError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app import cli
 from app.main import create_app
+from app.modules.audio_qc.models import AudioQcResult
+from app.modules.audit.models import AuditLog
+from app.modules.projects.models import ProjectRetentionRule
 from app.modules.recordings import service, worker_dispatch
-from app.modules.recordings.models import AudioAsset, Recording
+from app.modules.recordings.models import AudioAsset, Recording, RecordingChunk
 from tests import audio_fixtures as fx
-from tests import test_recordings
+from tests import test_audio_qc, test_recordings
 from tests.conftest import Api
 from tests.test_recordings import START, put
 
@@ -148,6 +151,233 @@ def test_two_processes_on_one_recording_produce_one_result(
         )
     ).all()
     assert len(derived) == 1, "processed exactly once"
+
+
+def _versions_and_checks(db: Any, rid: str) -> tuple[list[int], int]:
+    db.expire_all()
+    versions = db.scalars(
+        select(AudioAsset.version)
+        .where(AudioAsset.recording_id == uuid.UUID(rid), AudioAsset.kind == "FTF_DERIVED_PCM")
+        .order_by(AudioAsset.version)
+    ).all()
+    checks = db.scalar(
+        select(func.count()).where(
+            AudioQcResult.recording_id == uuid.UUID(rid), AudioQcResult.automated.is_(True)
+        )
+    )
+    return list(versions), int(checks or 0)
+
+
+def test_a_job_sent_again_for_a_finished_recording_changes_nothing(
+    world: dict[str, Any],
+) -> None:
+    """TASK-02: a job re-delivered, or sent again by the sweep while it waited in the queue,
+    finds the recording READY and leaves it so: no second file, no second check, never
+    PROCESSING again."""
+    rid = _start(world)
+    put(world["mod"], rid, 0, CHUNK)
+    world["mod"].post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 1})
+    db, a = world["db"], world["app"]
+    assert _state(db, rid) == "READY"
+    assert _versions_and_checks(db, rid) == ([1], 1)
+    for _ in range(3):
+        again = service.process(db, a.state.settings, a.state.storage, uuid.UUID(rid))
+        assert again.state == "READY"
+    assert _state(db, rid) == "READY"
+    assert _versions_and_checks(db, rid) == ([1], 1), "nothing made again"
+    worker_dispatch.run_inline(a, uuid.UUID(rid))
+    assert _versions_and_checks(db, rid) == ([1], 1)
+
+
+def test_a_job_delivered_again_after_a_stop_moves_the_task_only(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-02: the worker stopped right after the recording was saved, before the task moved (a
+    deploy); its job, delivered again, moves the task and makes nothing again. Once the task has
+    moved on (Record again), such a job changes nothing."""
+    rid = _start(world)
+    put(world["mod"], rid, 0, CHUNK)
+    _complete_without_processing(world, rid, monkeypatch)
+    a, db = world["app"], world["db"]
+    tid = world["task"]["id"]
+
+    def stopped(*_: Any, **__: Any) -> None:
+        raise RuntimeError("worker stopped")
+
+    with monkeypatch.context() as m:
+        m.setattr(service, "task_recorded", stopped)
+        with pytest.raises(RuntimeError, match="worker stopped"):
+            service.process(db, a.state.settings, a.state.storage, uuid.UUID(rid))
+    assert _state(db, rid) == "READY"
+    assert world["mod"].get(f"/api/v1/tasks/{tid}").json()["status"] == "IN_PROGRESS"
+
+    service.process(db, a.state.settings, a.state.storage, uuid.UUID(rid))  # delivered again
+    assert world["mod"].get(f"/api/v1/tasks/{tid}").json()["status"] == "RECORDED"
+    assert _versions_and_checks(db, rid) == ([1], 0), "nothing made again"
+    assert worker_dispatch.check_pending_audio(a) == 1, "the sweep checks it"
+
+    again = world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+    assert again.status_code == 200, again.text
+    service.process(db, a.state.settings, a.state.storage, uuid.UUID(rid))
+    assert world["mod"].get(f"/api/v1/tasks/{tid}").json()["status"] == "IN_PROGRESS"
+
+
+def test_a_storage_error_while_removing_parts_keeps_the_finished_recording(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-01: the files are saved before any uploaded part is removed; a storage error while
+    removing them (SlowDown after every retry) leaves the recording READY with both files and
+    the task Recorded. The parts left behind are found as orphans."""
+    rid = _start(world)
+    for seq in range(4):
+        assert put(world["mod"], rid, seq, CHUNK).status_code == 200
+    with monkeypatch.context() as m:
+        m.setattr(worker_dispatch, "run_inline", lambda *_: None)
+        done = world["mod"].post(f"/api/v1/recordings/{rid}/complete", json={"chunk_count": 4})
+        assert done.status_code == 200
+    a = world["app"]
+    storage = a.state.storage
+    real = storage.delete
+    seen: list[str] = []
+
+    def slow_down(key: str) -> None:
+        seen.append(key)
+        if len(seen) == 3:
+            raise ClientError({"Error": {"Code": "SlowDown", "Message": "Slow down"}}, "Delete")
+        real(key)
+
+    monkeypatch.setattr(storage, "delete", slow_down)
+    db = world["db"]
+    rec = service.process(db, a.state.settings, storage, uuid.UUID(rid))
+    assert rec.state == "READY"
+    assert _state(db, rid) == "READY", "never FAILED for a part that could not be removed"
+    kinds = sorted(
+        db.scalars(select(AudioAsset.kind).where(AudioAsset.recording_id == uuid.UUID(rid)))
+    )
+    assert kinds == ["BROWSER_ORIGINAL", "FTF_DERIVED_PCM"]
+    assert world["mod"].get(f"/api/v1/tasks/{world['task']['id']}").json()["status"] == "RECORDED"
+    removed = db.scalars(
+        select(RecordingChunk.object_deleted)
+        .where(RecordingChunk.recording_id == uuid.UUID(rid))
+        .order_by(RecordingChunk.seq)
+    ).all()
+    assert removed == [True, True, False, False], "stopped at the first error"
+    monkeypatch.setattr(storage, "delete", real)
+    left = {o.key for o in service.storage_orphans(db, storage, timedelta(0))}
+    assert {k.rsplit("/", 1)[-1] for k in left} == {"000002.f32", "000003.f32"}
+    assert service.verify_assets(db, storage) == (2, []), "both files intact"
+
+
+def _closed_task_with_an_expired_original(world: dict[str, Any]) -> tuple[str, str]:
+    """The world's task recorded and cancelled, and a second task of the project recorded and
+    still open; both originals two days old, the project keeping originals one day."""
+    pa: Api = world["pa"]
+    first = test_audio_qc._record(world, 2, send=False)
+    tid = world["task"]["id"]
+    cancelled = pa.post(
+        f"/api/v1/tasks/{tid}/transition", json={"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"}
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    other = test_audio_qc._second_task(world)
+    world["mod"].post(f"/api/v1/tasks/{other}/transition", json={"to": "IN_PROGRESS"})
+    second = test_audio_qc._record(world, 3, other, send=False)
+    db = world["db"]
+    db.add(
+        ProjectRetentionRule(
+            project_id=world["project"].id, asset_kind="BROWSER_ORIGINAL", retain_days=1
+        )
+    )
+    db.execute(
+        update(AudioAsset)
+        .where(AudioAsset.kind == "BROWSER_ORIGINAL")
+        .values(created_at=datetime.now(UTC) - timedelta(days=2))
+    )
+    db.commit()
+    return first, second
+
+
+def _original_deleted(db: Any, rid: str) -> bool:
+    db.expire_all()
+    deleted = db.scalar(
+        select(AudioAsset.deleted_at).where(
+            AudioAsset.recording_id == uuid.UUID(rid), AudioAsset.kind == "BROWSER_ORIGINAL"
+        )
+    )
+    return deleted is not None
+
+
+def _retention_on(world: dict[str, Any]) -> None:
+    """The sweep deletes nothing unless RETENTION_SWEEP_ENABLED is on (off by default)."""
+    a = world["app"]
+    a.state.settings = a.state.settings.model_copy(update={"retention_sweep_enabled": True})
+
+
+def test_the_retention_sweep_is_off_by_default(world: dict[str, Any]) -> None:
+    a, db = world["app"], world["db"]
+    assert a.state.settings.retention_sweep_enabled is False
+    closed, _ = _closed_task_with_an_expired_original(world)
+    assert worker_dispatch.apply_retention_when_due(a) is None
+    worker_dispatch.recover(a)
+    assert not _original_deleted(db, closed), "nothing is deleted until it is turned on"
+
+
+def test_the_sweep_applies_retention_to_closed_tasks_only(world: dict[str, Any]) -> None:
+    _retention_on(world)
+    """PROJ-01: the retention rules act by themselves, from the sweep; a file of a task still
+    open is kept whatever the rule says."""
+    closed, open_ = _closed_task_with_an_expired_original(world)
+    a, db = world["app"], world["db"]
+    worker_dispatch.recover(a)
+    assert _original_deleted(db, closed)
+    assert not _original_deleted(db, open_), "the open task's file is kept"
+    key = db.scalar(
+        select(AudioAsset.storage_key).where(
+            AudioAsset.recording_id == uuid.UUID(closed), AudioAsset.kind == "BROWSER_ORIGINAL"
+        )
+    )
+    assert a.state.storage.head(key) is None
+    entries = db.scalars(select(AuditLog).where(AuditLog.action == "asset.deleted_by_retention"))
+    assert [e.actor_id for e in entries] == [None]
+    assert service.verify_assets(db, a.state.storage)[1] == [], "every record is still true"
+
+
+def test_the_retention_sweep_runs_once_an_hour(world: dict[str, Any]) -> None:
+    _retention_on(world)
+    a, db = world["app"], world["db"]
+    now = datetime.now(UTC)
+    assert worker_dispatch.apply_retention_when_due(a, now) == 0, "nothing to delete yet"
+    closed, _ = _closed_task_with_an_expired_original(world)
+    assert worker_dispatch.apply_retention_when_due(a, now + timedelta(minutes=30)) is None
+    assert not _original_deleted(db, closed), "not due yet"
+    assert worker_dispatch.apply_retention_when_due(a, now + timedelta(minutes=61)) == 1
+    assert _original_deleted(db, closed)
+
+
+def test_the_retention_sweep_can_be_turned_off(world: dict[str, Any]) -> None:
+    a, db = world["app"], world["db"]
+    a.state.settings = a.state.settings.model_copy(update={"retention_sweep_enabled": False})
+    closed, _ = _closed_task_with_an_expired_original(world)
+    assert worker_dispatch.apply_retention_when_due(a) is None
+    worker_dispatch.recover(a)
+    assert not _original_deleted(db, closed)
+    # By hand it still works.
+    assert service.apply_retention(db, a.state.storage) == 1
+    assert _original_deleted(db, closed)
+
+
+def test_a_batch_of_retention_goes_on_at_the_next_sweep(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    closed, _ = _closed_task_with_an_expired_original(world)
+    _retention_on(world)
+    a = world["app"]
+    monkeypatch.setattr(worker_dispatch, "RETENTION_BATCH", 1)
+    now = datetime.now(UTC)
+    assert worker_dispatch.apply_retention_when_due(a, now) == 1
+    assert a.state.retention_due_at == now, "a full batch: more may wait"
+    assert worker_dispatch.apply_retention_when_due(a, now) == 0
+    assert a.state.retention_due_at == now + worker_dispatch.RETENTION_EVERY
+    assert _original_deleted(world["db"], closed)
 
 
 def test_storage_failing_during_an_upload_asks_the_browser_to_retry(

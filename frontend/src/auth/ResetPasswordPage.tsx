@@ -1,4 +1,5 @@
-// Set a new password from an emailed link (reset or invitation) (AUTH-004).
+// Set a new password from an emailed link (reset or invitation) (AUTH-004). A link that is
+// incomplete, used or expired offers a new one instead of the form.
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -42,20 +43,20 @@ export function ResetPasswordPage() {
     }
   }
 
-  if (!token) {
+  // An incomplete, used or expired link: the form cannot help, a new link can.
+  const deadLink = !token
+    ? new ApiError({ status: 400, code: "INVALID_TOKEN", message: "This link is incomplete." })
+    : error?.code === "INVALID_TOKEN"
+      ? error
+      : null;
+  if (deadLink) {
     return (
       <div className="auth-page">
         <h1>Set a new password</h1>
-        <ErrorNotice
-          error={
-            new ApiError({
-              status: 400,
-              code: "INVALID_TOKEN",
-              message: "This link is incomplete.",
-            })
-          }
-        />
-        <Link to="/forgot-password">Request a new link</Link>
+        <ErrorNotice error={deadLink} />
+        <p>
+          <Link to="/forgot-password">Request a new link</Link>
+        </p>
       </div>
     );
   }

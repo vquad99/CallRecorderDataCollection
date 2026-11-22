@@ -5,12 +5,14 @@ Requirements: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-0
 """
 
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import func, select
 
+from app.core.errors import AppError
 from app.modules.audit import service as audit_service
 from app.modules.participants.models import ConsentRecord
 from app.modules.tasks import service, workflow
@@ -486,3 +488,240 @@ def test_a_task_made_by_mistake_is_deleted_but_one_with_work_is_kept(
     assert (refused.status_code, refused.json()["error"]["code"]) == (409, "TASK_HAS_WORK")
     assert "consent noted" in refused.json()["error"]["message"]
     assert pa.get(f"/api/v1/tasks/{kept}").status_code == 200
+
+
+def _history(db: Any, tid: str) -> list[str]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(TaskStatusHistory.to_status)
+            .where(TaskStatusHistory.task_id == uuid.UUID(tid))
+            .order_by(TaskStatusHistory.created_at)
+        )
+    )
+
+
+def test_a_status_change_is_checked_against_the_status_as_it_is_now(
+    world: dict[str, Any], db: Any
+) -> None:
+    """Audit TASK-05: the task's row is locked and read again before its status changes, so a
+    Start worked out from a task read before an admin's Cancel is refused (409) and the task
+    stays cancelled, with nothing written for the refused change."""
+    tid = _create(world).json()["id"]
+    world["pa"].post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    db.expire_all()
+    stale = db.get(Task, tid)
+    assert stale.status == "ASSIGNED"
+    cancel = {"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"}
+    assert world["pa"].post(f"/api/v1/tasks/{tid}/transition", json=cancel).status_code == 200
+    assert stale.status == "ASSIGNED", "the copy read before the cancel"
+    with pytest.raises(AppError) as refused:
+        service.transition(
+            db,
+            stale,
+            "IN_PROGRESS",
+            workflow.Actor(is_moderator=True),
+            actor_id=world["mod_user"].id,
+        )
+    assert (refused.value.code, refused.value.status_code) == ("INVALID_TRANSITION", 409)
+    assert _history(db, tid) == ["DRAFT", "ASSIGNED", "CANCELLED"]
+    assert db.get(Task, tid).status == "CANCELLED"
+    # Nothing is left locked: the task page still answers, and the moderator's Start is refused.
+    start = world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+    assert start.status_code in (403, 404, 409)
+    assert world["pa"].get(f"/api/v1/tasks/{tid}").json()["status"] == "CANCELLED"
+    # A task deleted meanwhile (made by mistake, D-115): not found, not a server error.
+    gone = _create(world).json()["id"]
+    db.expire_all()
+    stale = db.get(Task, gone)
+    assert stale.status == "DRAFT"
+    deleted = world["pa"].post(f"/api/v1/tasks/{gone}/delete", json={"reason": "Made twice"})
+    assert deleted.status_code == 204
+    with pytest.raises(AppError) as missing:
+        service.transition(
+            db,
+            stale,
+            "CANCELLED",
+            workflow.Actor(can_assign=True),
+            actor_id=None,
+            reason_code="OTHER",
+        )
+    assert (missing.value.code, missing.value.status_code) == ("NOT_FOUND", 404)
+
+
+def test_a_draft_put_on_hold_and_then_assigned_resumes_as_assigned(
+    world: dict[str, Any],
+) -> None:
+    """Audit TASK-07: a Draft put on hold gets a moderator while on hold; resuming brings it back
+    as Assigned, where its moderator can start it (it used to come back as a Draft nobody could
+    start)."""
+    pa, tid = world["pa"], _create(world).json()["id"]
+
+    def move(api: Any, body: dict[str, Any]) -> Any:
+        return api.post(f"/api/v1/tasks/{tid}/transition", json=body)
+
+    held = move(pa, {"to": "ON_HOLD", "reason_code": "WAITING_FOR_PARTICIPANT"}).json()
+    assert (held["status"], held["held_from"]) == ("ON_HOLD", "DRAFT")
+    assert held["can_reassign"] is True
+    assigned = pa.post(
+        f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)}
+    ).json()
+    assert (assigned["status"], assigned["held_from"]) == ("ON_HOLD", "ASSIGNED")
+    assert assigned["moderator_name"] == "mod"
+    assert assigned["allowed_transitions"] == ["ASSIGNED", "CANCELLED"]
+    resumed = move(pa, {"to": "ASSIGNED"}).json()
+    assert (resumed["status"], resumed["held_from"]) == ("ASSIGNED", None)
+    mine = world["mod"].get(f"/api/v1/tasks/{tid}").json()
+    assert mine["allowed_transitions"] == ["IN_PROGRESS"]
+    assert move(world["mod"], {"to": "IN_PROGRESS"}).json()["status"] == "IN_PROGRESS"
+
+
+def test_approval_needs_both_people_s_consent_as_it_counts_now(
+    world: dict[str, Any], db: Any
+) -> None:
+    """Audit SECB-03: at admin review, approval is refused (409 CONSENT_MISSING) while a person
+    has no consent that counts in the project now (here withdrawn, as a project switched from
+    signed forms to online consent can leave them); who may approve is checked first."""
+    pa, mod = world["pa"], world["mod"]
+    tid = _create(world, mode="FACE_TO_FACE", b="c").json()["id"]
+    pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    set_status(db, tid, "ADMIN_REVIEW")
+    db.add(
+        ConsentRecord(
+            participant_id=uuid.UUID(world["c"]["id"]),
+            project_id=world["project"].id,
+            task_id=None,
+            status="WITHDRAWN",
+            method="DIGITAL",
+            policy_version="1",
+            captured_by=None,
+        )
+    )
+    db.commit()
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["consent_missing"] == ["B"]
+
+    def approve(api: Any) -> Any:
+        return api.post(f"/api/v1/tasks/{tid}/transition", json={"to": "APPROVED"})
+
+    assert approve(mod).status_code == 403, "who may approve comes first"
+    refused = approve(pa)
+    assert (refused.status_code, refused.json()["error"]["code"]) == (409, "CONSENT_MISSING")
+    assert refused.json()["error"]["message"].startswith(
+        "Participant B has no consent that counts in this project now."
+    )
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["status"] == "ADMIN_REVIEW"
+    assert "APPROVED" not in _history(db, tid)
+    agree(pa, world["project"].id, world["c"]["id"])
+    assert approve(pa).json()["status"] == "APPROVED"
+
+
+def test_the_task_page_knows_its_project_and_whether_it_can_be_deleted(
+    world: dict[str, Any], db: Any
+) -> None:
+    """Audit UXW-04 and FEW-12: GET /tasks/{id} names the project, and says whether Delete can
+    work: for people who assign tasks, on a Draft, Assigned or Cancelled task with nothing on it;
+    not on a cancelled task with a recording, nor for its moderator."""
+    from app.modules.recordings.models import Recording
+
+    pa, mod = world["pa"], world["mod"]
+    tid = _create(world).json()["id"]
+    draft = pa.get(f"/api/v1/tasks/{tid}").json()
+    assert (draft["project_code"], draft["project_name"]) == ("VOICE", "Project VOICE")
+    assert draft["can_delete"] is True
+    pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["can_delete"] is True
+    assert mod.get(f"/api/v1/tasks/{tid}").json()["can_delete"] is False
+    assert mod.post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"}).is_success
+    assert pa.get(f"/api/v1/tasks/{tid}").json()["can_delete"] is False, "not In progress"
+    db.add(
+        Recording(
+            task_id=uuid.UUID(tid),
+            mode="TELEPHONY",
+            state="READY",
+            created_by=world["mod_user"].id,
+            native_sample_rate=16000,
+            channel_count=1,
+            channel_handling="mono as recorded",
+            started_at=datetime(2026, 11, 1, tzinfo=UTC),
+        )
+    )
+    db.commit()
+    cancel = {"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"}
+    cancelled = pa.post(f"/api/v1/tasks/{tid}/transition", json=cancel).json()
+    assert (cancelled["status"], cancelled["can_delete"]) == ("CANCELLED", False)
+    refused = pa.post(f"/api/v1/tasks/{tid}/delete", json={"reason": "test"}).json()["error"]
+    assert refused["code"] == "TASK_HAS_WORK"
+    assert refused["message"] == (
+        "This task already has a recording, so it is kept for the record."
+    ), "no 'Cancel it instead' on a task already cancelled"
+    # A task cancelled before anything happened on it can still be deleted (D-115).
+    empty = _create(world).json()["id"]
+    gone = pa.post(f"/api/v1/tasks/{empty}/transition", json=cancel).json()
+    assert (gone["status"], gone["can_delete"]) == ("CANCELLED", True)
+
+
+def test_an_ended_task_says_where_it_stopped(world: dict[str, Any], db: Any) -> None:
+    """Audit FEW-11: a rejected or cancelled task reports the status it stopped at, for the page's
+    progress line: rejected at QC, cancelled from hold (the status it was held from), cancelled
+    from a consent form to fix. A task still going reports none."""
+    pa, mod_id = world["pa"], str(world["mod_user"].id)
+
+    def task_at(path: list[str]) -> str:
+        tid: str = _create(world).json()["id"]
+        pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": mod_id})
+        world["mod"].post(f"/api/v1/tasks/{tid}/transition", json={"to": "IN_PROGRESS"})
+        db.expire_all()
+        task = db.get(Task, tid)
+        for target in path:
+            reason = "AUDIO_QUALITY" if target == "REJECTED" else None
+            service.system_transition(db, task, target, reason_code=reason)
+        return tid
+
+    def ended(tid: str) -> Any:
+        return pa.get(f"/api/v1/tasks/{tid}").json()["ended_from"]
+
+    rejected = task_at(["RECORDED", "AUDIO_QC", "REJECTED"])
+    assert ended(rejected) == "AUDIO_QC"
+    going = task_at(["RECORDED"])
+    assert ended(going) is None
+
+    held = _create(world).json()["id"]
+    pa.post(f"/api/v1/tasks/{held}/assign", json={"user_id": mod_id})
+    for body in (
+        {"to": "ON_HOLD", "reason_code": "WAITING_FOR_PARTICIPANT"},
+        {"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"},
+    ):
+        assert pa.post(f"/api/v1/tasks/{held}/transition", json=body).status_code == 200
+    assert ended(held) == "ASSIGNED"
+
+    fixing = task_at(["RECORDED", "AUDIO_QC", "CONSENT_FIX"])
+    cancel = {"to": "CANCELLED", "reason_code": "CLIENT_REQUEST"}
+    assert pa.post(f"/api/v1/tasks/{fixing}/transition", json=cancel).status_code == 200
+    assert ended(fixing) == "CONSENT_FIX"
+
+
+def test_the_task_list_names_the_moderator_and_both_people(world: dict[str, Any]) -> None:
+    """Audit UXW-05: each row of GET /tasks says who holds the task (none before a moderator is
+    assigned) and the codes of its two people."""
+    pa = world["pa"]
+    tid = _create(world).json()["id"]
+
+    def row() -> Any:
+        return next(t for t in pa.get("/api/v1/tasks").json()["items"] if t["id"] == tid)
+
+    first = row()
+    assert first["moderator_name"] is None
+    assert (first["participant_a_code"], first["participant_b_code"]) == (
+        world["a"]["participant_code"],
+        world["b"]["participant_code"],
+    )
+    pa.post(f"/api/v1/tasks/{tid}/assign", json={"user_id": str(world["mod_user"].id)})
+    assert row()["moderator_name"] == "mod"
+    moved = pa.post(
+        f"/api/v1/tasks/{tid}/assign",
+        json={"user_id": str(world["mod2_user"].id), "reason": "mod is on leave"},
+    )
+    assert moved.status_code == 200
+    assert row()["moderator_name"] == "mod2", "only the active moderator"
+    mine = world["mod2"].get("/api/v1/tasks").json()["items"]
+    assert [(t["task_code"], t["moderator_name"]) for t in mine] == [(first["task_code"], "mod2")]

@@ -1,6 +1,8 @@
-// User list with search, filters, pagination and CSV export (USER-004, USER-006).
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+// User list with search, filters, pagination and CSV export (USER-004, USER-006). The search,
+// filters and page live in the address (?role=MODERATOR&page=2), so opening a user and coming back
+// with the browser's Back button finds the list as it was.
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { apiDownload } from "../../api/client";
 import { listUsers, ROLE_CODES, ROLE_LABELS } from "../../api/admin";
@@ -21,10 +23,32 @@ import { DataTable } from "../../components/DataTable";
 const PAGE_SIZE = 25;
 
 export function UsersPage() {
-  const [search, setSearch] = useState("");
-  const [role, setRole] = useState("");
-  const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
+  const [params, setParams] = useSearchParams();
+  const search = params.get("search") ?? "";
+  const role = params.get("role") ?? "";
+  const status = params.get("status") ?? "";
+  const page = Number(params.get("page") ?? "1") || 1;
+  /** Change filters in the address; any change of filter starts again at page 1. */
+  const setFilter = (patch: Record<string, string>) =>
+    setParams(
+      (now) => {
+        const next = new URLSearchParams(now);
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
+        if (!("page" in patch)) next.delete("page");
+        return next;
+      },
+      { replace: true },
+    );
+  const [typed, setTyped] = useState(search);
+  // The address keeps the search once typing pauses (O7).
+  const settled = useDebounced(typed.trim());
+  useEffect(() => {
+    if (settled !== search) setFilter({ search: settled });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled]);
   const { busy, error, run } = useAction();
   const { user: me, viewAs } = useAuth();
   const navigate = useNavigate();
@@ -36,10 +60,9 @@ export function UsersPage() {
       await viewAs(id);
       void navigate("/");
     }, id);
-  const query = useDebounced(search.trim());
   const { state, reload } = useResource(
-    () => listUsers({ search: query, role, status, page, page_size: PAGE_SIZE }),
-    [query, role, status, page],
+    () => listUsers({ search, role, status, page, page_size: PAGE_SIZE }),
+    [search, role, status, page],
   );
 
   return (
@@ -72,19 +95,13 @@ export function UsersPage() {
         <TextField
           label="Search"
           type="search"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
         />
         <Select
           label="Role"
           value={role}
-          onChange={(e) => {
-            setRole(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setFilter({ role: e.target.value })}
           options={[
             { value: "", label: "All roles" },
             ...ROLE_CODES.map((c) => ({ value: c, label: ROLE_LABELS[c] ?? c })),
@@ -93,10 +110,7 @@ export function UsersPage() {
         <Select
           label="Status"
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setFilter({ status: e.target.value })}
           options={[
             { value: "", label: "All" },
             { value: "ACTIVE", label: "Active" },
@@ -165,7 +179,12 @@ export function UsersPage() {
               ))}
             </tbody>
           </DataTable>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={state.data.total} onPage={setPage} />
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={state.data.total}
+            onPage={(n) => setFilter({ page: String(n) })}
+          />
         </>
       ) : null}
     </section>

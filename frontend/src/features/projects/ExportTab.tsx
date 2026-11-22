@@ -1,11 +1,11 @@
 // A project's Export tab (D-094, D-105): reports as one table (CSV or TSV), and recordings as a
 // bundle that is prepared in the background, listed here with its state, and downloaded through a
 // link that works for a few minutes. A bundle is laid out as the project's Rules tab says (D-149):
-// the client's delivery format, with what is not on file counted, or the platform's own layout.
+// the speaker-pair delivery format, with what is not on file counted, or the platform's own layout.
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { apiBase } from "../../api/client";
+import { apiDownload } from "../../api/client";
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -18,20 +18,24 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge, type Tone } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
+import { useDebounced } from "../../hooks/useDebounced";
 import { usePolling } from "../../hooks/usePolling";
 import { useResource } from "../../hooks/useResource";
-import { plural, when } from "../../lib/format";
+import { plural, typedDay, when } from "../../lib/format";
 import { labelFor, MODE_LABELS } from "../../lib/labels";
 import { languageLabel } from "./choices";
 import { exampleAudioName } from "./delivery";
 import { useProject } from "./ProjectDetailPage";
+import { onlyMode } from "./recordingType";
 import "./export.css";
 
 const REPORTS: { value: api.ReportContent; label: string; detail: string }[] = [
   {
     value: "progress",
     label: "Progress report",
-    detail: "One row per task: status, people, length, checks, approval date, phone calls.",
+    detail:
+      "One row per task: status, people, length, checks, approval date, phone calls. " +
+      "Times in India time (IST).",
   },
   {
     value: "participants",
@@ -76,8 +80,11 @@ const CONTENT_WORDS: Record<string, string> = {
   metadata: "Metadata only",
 };
 const POLL_MS = 3000;
+/** The count is asked for once the choice has stopped changing for this long: counting a large
+ * project takes the server a second or more. */
+const COUNT_PAUSE_MS = 400;
 
-/** "3 items missing" in the client's delivery format (the rows of its MISSING.csv). */
+/** "3 items missing" in the speaker-pair delivery format (the rows of its MISSING.csv). */
 const missingWords = (n: number) => `${n} ${n === 1 ? "item" : "items"} missing`;
 
 const megabytes = (n: number) =>
@@ -91,7 +98,7 @@ const megabytes = (n: number) =>
 function chosen(job: api.ExportJob): string {
   const f = job.filters;
   return [
-    f.layout === "CLIENT" ? "Client's format" : null,
+    f.layout === "CLIENT" ? "Speaker-pair format" : null,
     CONTENT_WORDS[job.content] ?? job.content,
     job.scope === "approved" ? "approved tasks" : "every finished recording",
     f.mode ? labelFor(MODE_LABELS, f.mode) : null,
@@ -107,36 +114,49 @@ function chosen(job: api.ExportJob): string {
     .join(" · ");
 }
 
+/** The reports, each saved as one table. Fetched like any request, so a refusal (or a session
+ * that ended) is said on the page instead of a failed browser download. */
 function Reports({ projectId }: { projectId: string }) {
+  const { busy, error, run } = useAction();
   return (
     <section className="card stack stack--tight" aria-labelledby="export-reports">
       <h2 id="export-reports">Reports</h2>
-      <DataTable label="Reports">
+      <ErrorNotice error={error} />
+      {/* What a report holds is written under its name, so its downloads stay in view on a
+          phone too. */}
+      <DataTable label="Reports" className="export__reports">
         <thead>
           <tr>
             <th scope="col">Report</th>
-            <th scope="col">What it holds</th>
             <th scope="col">Download</th>
           </tr>
         </thead>
         <tbody>
           {REPORTS.map((r) => (
             <tr key={r.value}>
-              <th scope="row">{r.label}</th>
-              <td className="export__detail">{r.detail}</td>
+              <th scope="row">
+                {r.label}
+                <span className="export__detail">{r.detail}</span>
+              </th>
               <td className="actions">
-                {(["csv", "tsv"] as const).map((format) => (
-                  <a
-                    key={format}
-                    className="button button--secondary"
-                    href={`${apiBase()}${api.reportPath(projectId, r.value, format)}`}
-                    download
-                    aria-label={`${r.label} as ${format.toUpperCase()}`}
-                  >
-                    <Icon name={TABLE_ICON[format]} size={16} />
-                    {format.toUpperCase()}
-                  </a>
-                ))}
+                {(["csv", "tsv"] as const).map((format) => {
+                  const key = `${r.value}-${format}`;
+                  return (
+                    <Button
+                      key={format}
+                      variant="secondary"
+                      icon={TABLE_ICON[format]}
+                      busy={busy === key}
+                      disabled={busy !== null}
+                      aria-label={`${r.label} as ${format.toUpperCase()}`}
+                      onClick={() =>
+                        void run(() => apiDownload(api.reportPath(projectId, r.value, format)), key)
+                      }
+                    >
+                      {format.toUpperCase()}
+                    </Button>
+                  );
+                })}
               </td>
             </tr>
           ))}
@@ -161,7 +181,7 @@ function LayoutNote() {
       <span>
         {client ? (
           <>
-            Laid out in the <strong>client&apos;s delivery format</strong>: face_to_face/ and
+            Laid out in the <strong>speaker-pair delivery format</strong>: face_to_face/ and
             telephonic/ audio named like <span className="mono">{example}</span>, a metadata file
             per speaker and per speaker of each conversation, consent forms and address proofs under
             speakers/, and MISSING.csv listing what is not on file.
@@ -191,36 +211,79 @@ const START: api.ExportChoice = {
   contact: false,
 };
 
+/** What an export's count depends on: the values the summary sends. The tables' format and the
+ * contact details change the files, not which recordings go in. */
+type Counted = Omit<api.ExportChoice, "table_format" | "contact">;
+
+const counted = (c: api.ExportChoice): Counted => ({
+  content: c.content,
+  scope: c.scope,
+  mode: c.mode,
+  language: c.language,
+  recorded_from: c.recorded_from,
+  recorded_to: c.recorded_to,
+  originals: c.originals,
+});
+
+const backwardsDays = (c: Pick<api.ExportChoice, "recorded_from" | "recorded_to">) =>
+  c.recorded_from !== null && c.recorded_to !== null && c.recorded_from > c.recorded_to;
+
 function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
   const { project } = useProject();
   const { can } = useAuth();
   const [choice, setChoice] = useState<api.ExportChoice>(START);
   const { busy, error, run } = useAction();
   const set = (patch: Partial<api.ExportChoice>) => setChoice((c) => ({ ...c, ...patch }));
-  const backwards =
-    choice.recorded_from !== null &&
-    choice.recorded_to !== null &&
-    choice.recorded_from > choice.recorded_to;
-  // Originals go with the audio; a details-only export cannot carry them.
-  const originals = choice.originals && choice.content !== "metadata";
-  const asked = { ...choice, originals };
-  const summary = useResource(
-    () => (backwards ? Promise.resolve(null) : api.exportSummary(project.id, asked)),
-    [project.id, JSON.stringify(asked), backwards],
+  // A project of one recording type (D-153) has nothing to choose between.
+  const bothTypes = onlyMode(project) === null;
+  // The days as asked: a year still being typed (0002, 0020, 0202) is no day yet.
+  const asked: api.ExportChoice = {
+    ...choice,
+    recorded_from: typedDay(choice.recorded_from) || null,
+    recorded_to: typedDay(choice.recorded_to) || null,
+    // Originals go with the audio; a details-only export cannot carry them.
+    originals: choice.originals && choice.content !== "metadata",
+  };
+  const typing = [choice.recorded_from, choice.recorded_to].some(
+    (d) => d !== null && typedDay(d) === "",
   );
-  const ready = summary.state.status === "loaded" ? summary.state.data : null;
+  const backwards = backwardsDays(asked);
+  const key = JSON.stringify(counted(asked));
+  const settled = useDebounced(key, COUNT_PAUSE_MS);
+  const summary = useResource(() => {
+    const c = JSON.parse(settled) as Counted;
+    return backwardsDays(c)
+      ? Promise.resolve(null)
+      : api.exportSummary(project.id, { ...START, ...c });
+  }, [project.id, settled]);
+  // The count shown is always for the choice on screen: while it is asked again, it waits.
+  const counting = !backwards && (settled !== key || summary.state.status === "loading");
+  const ready = !counting && summary.state.status === "loaded" ? summary.state.data : null;
   const empty = ready !== null && ready.recordings === 0;
+  // "2 face-to-face, 1 phone call · about 240 MB of audio"; no split by type in a project of one.
+  const detail = ready
+    ? [
+        bothTypes
+          ? `${ready.face_to_face} face-to-face, ${plural(ready.telephony, "phone call")}`
+          : null,
+        asked.content !== "metadata" && ready.audio_bytes > 0
+          ? `${megabytes(ready.audio_bytes)} of audio`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
   const languages = [...new Set(project.languages.map((l) => l.language_code))];
 
   const prepare = () => void run(async () => onAsked(await api.requestExport(project.id, asked)));
 
   return (
     <section className="card stack" aria-labelledby="export-bundle">
+      <h2 id="export-bundle">Recordings</h2>
       <div>
-        <h2 id="export-bundle">Recordings</h2>
         <p className="muted">
-          One ZIP with a folder for face-to-face recordings and one for phone calls, a table of the
-          recordings, and a list of every file with its checksum.
+          One ZIP file: each recording&apos;s files, a table of the recordings, and a list of every
+          file with its checksum.
         </p>
         <LayoutNote />
       </div>
@@ -250,19 +313,21 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
           onChange={(e) => set({ scope: e.target.value as api.ExportScope })}
           options={[
             { value: "approved", label: "Approved tasks only" },
-            { value: "finished", label: "Every finished recording, approved or not" },
+            { value: "finished", label: "Every finished recording" },
           ]}
         />
-        <Select
-          label="Recording type"
-          value={choice.mode ?? ""}
-          onChange={(e) => set({ mode: (e.target.value || null) as api.ExportChoice["mode"] })}
-          options={[
-            { value: "", label: "Every recording type" },
-            { value: "FACE_TO_FACE", label: "Face-to-face only" },
-            { value: "TELEPHONY", label: "Phone calls only" },
-          ]}
-        />
+        {bothTypes ? (
+          <Select
+            label="Recording type"
+            value={choice.mode ?? ""}
+            onChange={(e) => set({ mode: (e.target.value || null) as api.ExportChoice["mode"] })}
+            options={[
+              { value: "", label: "Every recording type" },
+              { value: "FACE_TO_FACE", label: "Face-to-face only" },
+              { value: "TELEPHONY", label: "Phone calls only" },
+            ]}
+          />
+        ) : null}
         <Select
           label="Language"
           value={choice.language ?? ""}
@@ -287,11 +352,12 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
         />
         <Select
           label="Tables as"
+          name="table_format"
           value={choice.table_format}
           onChange={(e) => set({ table_format: e.target.value as api.TableFormat })}
           options={[
-            { value: "csv", label: "CSV (comma separated)" },
-            { value: "tsv", label: "TSV (tab separated)" },
+            { value: "csv", label: "CSV" },
+            { value: "tsv", label: "TSV" },
           ]}
         />
       </div>
@@ -301,7 +367,7 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
             <label className="checkbox">
               <input
                 type="checkbox"
-                checked={originals}
+                checked={asked.originals}
                 disabled={choice.content === "metadata"}
                 onChange={(e) => set({ originals: e.target.checked })}
               />
@@ -329,23 +395,14 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
       <ErrorNotice error={error} />
       <div className="export__go">
         <div>
-          {summary.state.status === "loading" ? (
-            <LoadingState label="Counting the recordings" />
-          ) : null}
-          {summary.state.status === "failed" ? (
+          {counting ? <LoadingState label="Counting the recordings" /> : null}
+          {!counting && summary.state.status === "failed" ? (
             <ErrorState error={summary.state.error} onRetry={summary.reload} />
           ) : null}
           {ready ? (
             <p className="export__summary">
               <strong>{plural(ready.recordings, "recording")}</strong>
-              {ready.recordings > 0 ? (
-                <span>
-                  {ready.face_to_face} face-to-face, {plural(ready.telephony, "phone call")}
-                  {choice.content !== "metadata" && ready.audio_bytes > 0
-                    ? ` · ${megabytes(ready.audio_bytes)} of audio`
-                    : ""}
-                </span>
-              ) : null}
+              {ready.recordings > 0 && detail ? <span>{detail}</span> : null}
               {ready.recordings > 0 && ready.layout === "CLIENT" ? (
                 <span className={ready.missing > 0 ? "export__missing" : "muted"}>
                   {ready.missing > 0 ? missingWords(ready.missing) : "Nothing missing"}
@@ -363,7 +420,7 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
         <Button
           icon="fileZip"
           busy={busy !== null}
-          disabled={!ready || empty || backwards}
+          disabled={!ready || empty || backwards || typing}
           onClick={prepare}
         >
           Prepare export

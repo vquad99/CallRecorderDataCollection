@@ -26,7 +26,14 @@ if settings.redis_url is None:
     raise SystemExit("The worker needs REDIS_URL")
 celery_app = Celery("ccp", broker=settings.redis_url.get_secret_value())
 celery_app.conf.update(
-    task_acks_late=True, worker_prefetch_multiplier=1, task_reject_on_worker_lost=True
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
+    task_reject_on_worker_lost=True,
+    # Export bundles go to EXPORTS_QUEUE (CALL-04): the web app names it when it sends one
+    # (worker_dispatch.dispatch_export). By default it is the default queue; on AWS it is
+    # `exports`, with one worker on `-Q celery` for recordings, phone calls and emails and one on
+    # `-Q exports --concurrency=1`, so a long export never holds the slots the others need.
+    task_routes={"exports.build": {"queue": settings.exports_queue}},
 )
 _sessions = make_session_factory(create_db_engine(settings))
 _storage = build_storage(settings)

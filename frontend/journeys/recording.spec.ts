@@ -272,7 +272,9 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await expect(admin.getByRole("button", { name: "Prepare export" })).toBeDisabled();
     await admin.getByLabel("Which recordings").selectOption("finished");
     await expect(admin.getByText("1 recording", { exact: true })).toBeVisible();
-    await expect(admin.getByText(/1 face-to-face, 0 phone calls/)).toBeVisible();
+    // A project of one recording type (D-153): the count has no split by type.
+    await expect(admin.getByText(/ of audio$/)).toBeVisible();
+    await expect(admin.getByText(/face-to-face, 0 phone calls/)).toHaveCount(0);
     await admin.getByRole("button", { name: "Prepare export" }).click();
     const list = admin.getByRole("table", { name: "Prepared exports" });
     await expect(list.getByText("Ready", { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -297,7 +299,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     // A report is one table, saved straight away.
     const [report] = await Promise.all([
       admin.waitForEvent("download"),
-      admin.getByRole("link", { name: "Progress report as TSV" }).click(),
+      admin.getByRole("button", { name: "Progress report as TSV" }).click(),
     ]);
     expect(report.suggestedFilename()).toMatch(/^progress_PRJ\d+_\d{8}\.tsv$/);
     const table = readFileSync(await report.path()).toString("utf8");

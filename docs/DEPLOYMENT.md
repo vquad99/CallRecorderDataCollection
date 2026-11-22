@@ -17,7 +17,7 @@ SEC-008, SEC-014. Cloud provider, account and region are open (DECISIONS.md B-04
 |---|---|---|
 | Frontend (static build) | Vite dev server / Nginx | Nginx or CDN behind TLS |
 | Backend (FastAPI) | container | containers, 2+ replicas |
-| Workers (Celery: recording processing now; webhooks, QC, exports later) | `worker` container | containers, scaled per queue (D-043) |
+| Workers (Celery) | `worker` container: default queue `celery` (recordings, phone-call recordings, emails); `exports-worker`: queue `exports` (`EXPORTS_QUEUE=exports`), one bundle at a time (D-155) | containers, scaled per queue (D-043) |
 | ASR worker | same worker image, `asr` queue | same; calls the Deepgram API (key in secret manager); idle when AI transcription is off (D-018) |
 | PostgreSQL | container with volume | managed PostgreSQL, automated encrypted backups |
 | Redis | container | managed Redis |
@@ -57,7 +57,8 @@ Singapore region, address `https://dubdesk.live`, `APP_ENV=production`:
 - `ccp-web` (public; nginx serving the app and forwarding /api to the API);
 - `ccp-api` (private service; only reachable over Render's private network);
 - `ccp-worker` (background worker: turns uploads into delivery files and runs the automatic audio
-  check; copies its settings from the API, so the two cannot disagree);
+  check; copies its settings from the API, so the two cannot disagree). It takes both queues
+  (`-Q celery,exports`, D-155);
 - `ccp-redis` (private Key Value: the work queue and shared sign-in limits; never evicts a queued
   job);
 - `ccp-db` (PostgreSQL 16, private network only).
@@ -122,13 +123,13 @@ Commands (run where the backend's settings are available):
 |---|---|---|
 | (no command) | every minute, by itself | The API looks for things that need a person and emails `ALERT_EMAIL` (set it on `ccp-api`; D-109). What each message means: OPERATIONS_RUNBOOK.md section 4 |
 | `python -m app.cli reset-mfa <email>` | when an admin has lost their authenticator and no other Super Admin can reset it | Turns off that account's two-step sign-in and signs it out everywhere; they set it up again at the next sign-in (D-106) |
-| `python -m app.cli retention` | daily (scheduler) | Deletes stored files older than each project's retention rules, with audit entries |
+| `python -m app.cli retention` | by hand (the web processes also run it once an hour when `RETENTION_SWEEP_ENABLED` is on; off by default) | Deletes stored files of closed tasks (approved, rejected, cancelled) older than their project's retention rules, each with an audit entry `asset.deleted_by_retention`; files of open tasks are kept (D-155) |
 | `python -m app.cli recover-recordings` | on demand | Sends every recording left half-done by a stopped process to processing again; the web processes also do this at start-up and every `RECOVERY_INTERVAL_SECONDS` (D-055) |
 
 | `python -m app.cli verify-assets [--deep N]` | weekly | Checks every stored file's presence, size and checksum label; with `--deep N` downloads N at random and hashes them again; exit code 1 when anything is wrong (D-056) |
-| `python -m app.cli storage-orphans [--delete]` | monthly | Lists (or deletes) stored files no record points to, older than 24 h; backups are never touched (D-056) |
+| `python -m app.cli storage-orphans [--delete]` | monthly | Lists (or deletes) stored files no record points to, older than 24 h; backups are never touched (D-056). Export bundles that can still be downloaded are kept; parts left behind by a saved (READY) recording are listed (D-155) |
 | `infra/backup/backup.sh` (`KEEP_DAYS=N` to prune) | daily | Database dump into the private storage under `backups/db/` with its SHA-256 (D-058) |
-| `infra/backup/restore.sh <key>` | when needed | Checks the backup, stops backend and worker, restores, starts them again (D-058) |
+| `infra/backup/restore.sh <key>` | when needed | Checks the backup, stops backend, worker and exports-worker, restores, starts them again (D-058) |
 
 Scaling (D-059): `WEB_CONCURRENCY` (web processes), `WORKER_CONCURRENCY` (processing slots per
 worker container), `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` (connections per web process). Monitoring
@@ -138,6 +139,20 @@ storage. Web server: `MEDIA_ORIGINS` names where recordings play from (Wasabi by
 
 Recovery settings: `PROCESSING_PICKUP_SECONDS` (60), `PROCESSING_STALE_MINUTES` (15),
 `RECOVERY_INTERVAL_SECONDS` (60; 0 = start-up only).
+
+`RETENTION_SWEEP_ENABLED` (false): true makes the recovery sweep apply the retention rules once
+an hour in each web process (one process at a time, at most 500 files a run). Off by default,
+because deleting is permanent: nothing is deleted by itself. Before turning it on, check every
+live project's retention rules: the first run deletes every file of a closed task past its rule
+(D-155).
+
+Celery queues (D-155): `celery` (recording processing, phone-call fetches, consent and
+invitation emails) and the queue `EXPORTS_QUEUE` names for export bundles (default `celery`, the
+same queue). For a worker of their own, set `EXPORTS_QUEUE=exports` on the API and the workers
+and run `celery -A app.worker worker -Q celery` plus a one-slot
+`celery -A app.worker worker -Q exports --concurrency=1 -n exports@%h` (stop grace 2 minutes), or
+one worker with `-Q celery,exports`. Docker Compose and AWS do this. With `EXPORTS_QUEUE=exports`
+and no worker on `exports`, exports stay QUEUED.
 
 | Item | Requirement | Status |
 |---|---|---|

@@ -1,7 +1,7 @@
-// The moderator's reminders on a project's Rules tab (D-147): the first client's text (Konkani,
-// NLTM), which "Reset to the client's text" puts back, and the checks a list must pass before it
-// is saved (the server checks again). The same text is written once more in the server
-// (projects/moderation.py); a backend test checks that the two match.
+// The moderator's reminders on a project's Rules tab (D-147): the default text (the first
+// client's, Konkani NLTM), which "Reset to the default text" puts back, and the checks a list must
+// pass before it is saved (the server checks again). The same text is written once more in the
+// server (projects/moderation.py); a backend test checks that the two match.
 import type { Reminders } from "../../api/projects";
 
 export const CLIENT_REMINDERS: Reminders = {

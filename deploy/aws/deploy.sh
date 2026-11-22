@@ -92,7 +92,7 @@ deploy_here() {
 
   say "starting $tag"
   if ! IMAGE_TAG="$tag" compose up -d "${WAIT[@]}" --no-build --remove-orphans; then
-    IMAGE_TAG="$tag" compose logs --no-color --tail 40 api worker web || true
+    IMAGE_TAG="$tag" compose logs --no-color --tail 40 api worker exports-worker web || true
     if [ -n "$live" ] && [ "$live" != "$tag" ]; then
       IMAGE_TAG="$live" compose up -d "${WAIT[@]}" --no-build || true
       say "started $live again"

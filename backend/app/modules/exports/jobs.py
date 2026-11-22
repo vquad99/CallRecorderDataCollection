@@ -71,6 +71,14 @@ def create(
             code="NOTHING_TO_EXPORT",
             status_code=422,
         )
+    # Said now, not after an hour of writing: storage would refuse the end of a larger bundle.
+    if bundle.audio_bytes(sel, entries) > bundle.MAX_BUNDLE_BYTES:
+        raise AppError(
+            f"This export would be larger than {bundle.MAX_BUNDLE_BYTES // bundle.GIB} GB: narrow "
+            "it by mode, language or days",
+            code="TOO_LARGE",
+            status_code=422,
+        )
     open_jobs = db.scalar(
         select(func.count())
         .select_from(ExportJob)

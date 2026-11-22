@@ -1,5 +1,7 @@
 // Route table (FND-015). Pages need sign-in; admin pages also need a permission (usability only).
-import { lazy, Suspense, type ComponentType, type ReactElement } from "react";
+// Every page route names its page for the browser tab (`handle.title`, see routeTitle.ts); a page
+// that fails to display shows RouteError, inside the shell where there is one.
+import { lazy, Suspense, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { Navigate, type RouteObject } from "react-router";
 
 import { useAuth } from "../auth/AuthContext";
@@ -9,6 +11,8 @@ import { LoginPage } from "../auth/LoginPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { AppShell } from "../layouts/AppShell";
 import { NotFoundPage } from "../routes/NotFoundPage";
+import { RouteError } from "./RouteError";
+import { useRouteTitle, type RouteHandle } from "./routeTitle";
 import { loadFresh } from "./staleBuild";
 
 /** A page loaded on first visit, so the first screen does not wait for every page (O11). */
@@ -24,7 +28,15 @@ function page<K extends string>(
   );
 }
 
+/** A page outside the shell still gets its tab title. */
+function Titled({ children }: { children: ReactNode }) {
+  useRouteTitle();
+  return children;
+}
+
 const tabs = () => import("../features/projects/tabs");
+const titled = (title: string): { handle: RouteHandle } => ({ handle: { title } });
+const failed = <RouteError />;
 
 /** The start page: the dashboard for everyone who has one, otherwise the project list. */
 function Home(): ReactElement {
@@ -36,27 +48,37 @@ export const routes: RouteObject[] = [
   // A participant's personal page: opened from a private link, outside the staff application.
   {
     path: "/portal",
-    element: page(() => import("../features/portal/PortalPage"), "PortalPage"),
+    ...titled("Your participation"),
+    element: <Titled>{page(() => import("../features/portal/PortalPage"), "PortalPage")}</Titled>,
+    errorElement: <RouteError standalone />,
   },
   {
     path: "/",
     element: <AppShell />,
+    errorElement: <RouteError standalone />,
     children: [
-      { path: "login", element: <LoginPage /> },
+      { path: "login", ...titled("Sign in"), element: <LoginPage />, errorElement: failed },
       {
         path: "forgot-password",
+        ...titled("Reset your password"),
         element: page(() => import("../auth/ForgotPasswordPage"), "ForgotPasswordPage"),
+        errorElement: failed,
       },
       {
         path: "reset-password",
+        ...titled("Set a new password"),
         element: page(() => import("../auth/ResetPasswordPage"), "ResetPasswordPage"),
+        errorElement: failed,
       },
       {
+        // A page that fails shows its error here: the top bar and the menu stay.
         element: <RequireAuth />,
+        errorElement: failed,
         children: [
           { index: true, element: <Home /> },
           {
             path: "two-step-setup",
+            ...titled("Set up two-step sign-in"),
             element: page(() => import("../auth/TwoStepSetupPage"), "TwoStepSetupPage"),
           },
           {
@@ -64,6 +86,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "dashboard",
+                ...titled("Dashboard"),
                 element: page(() => import("../features/dashboard/DashboardPage"), "DashboardPage"),
               },
             ],
@@ -74,20 +97,24 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "status",
+                ...titled("System status"),
                 element: page(() => import("../features/status/StatusPage"), "StatusPage"),
               },
             ],
           },
           {
             path: "account",
+            ...titled("My account"),
             element: page(() => import("../features/account/AccountPage"), "AccountPage"),
           },
           {
             element: <RequirePermission permission="projects.view" />,
             children: [
-              { path: "projects", element: <ProjectsPage /> },
+              { path: "projects", ...titled("Projects"), element: <ProjectsPage /> },
               {
+                // The page adds the project's code once it has loaded (ProjectDetailPage).
                 path: "projects/:projectId",
+                ...titled("Project"),
                 element: page(
                   () => import("../features/projects/ProjectDetailPage"),
                   "ProjectDetailPage",
@@ -97,11 +124,13 @@ export const routes: RouteObject[] = [
                   {
                     // Collected against the project's targets (D-148).
                     path: "progress",
+                    ...titled("Progress"),
                     element: page(() => import("../features/projects/ProgressTab"), "ProgressTab"),
                   },
-                  { path: "team", element: page(tabs, "TeamTab") },
+                  { path: "team", ...titled("Team"), element: page(tabs, "TeamTab") },
                   {
                     path: "participants",
+                    ...titled("Participants"),
                     element: page(
                       () => import("../features/projects/ParticipantsTab"),
                       "ParticipantsTab",
@@ -109,16 +138,22 @@ export const routes: RouteObject[] = [
                   },
                   {
                     path: "tasks",
+                    ...titled("Tasks"),
                     element: page(
                       () => import("../features/projects/ProjectTasksTab"),
                       "ProjectTasksTab",
                     ),
                   },
-                  { path: "audio", element: page(tabs, "AudioRulesTab") },
+                  {
+                    path: "audio",
+                    ...titled("Audio rules"),
+                    element: page(tabs, "AudioRulesTab"),
+                  },
                   {
                     // The project's rules (D-145): one section at a time (D-150); the Rules
                     // page's own address opens the first.
                     path: "rules",
+                    ...titled("Rules"),
                     children: [
                       { index: true, element: <Navigate to="speakers" replace /> },
                       {
@@ -127,10 +162,19 @@ export const routes: RouteObject[] = [
                       },
                     ],
                   },
-                  { path: "languages", element: page(tabs, "LanguagesTab") },
-                  { path: "retention", element: page(tabs, "RetentionTab") },
+                  {
+                    path: "languages",
+                    ...titled("Languages"),
+                    element: page(tabs, "LanguagesTab"),
+                  },
+                  {
+                    path: "retention",
+                    ...titled("Retention"),
+                    element: page(tabs, "RetentionTab"),
+                  },
                   {
                     path: "export",
+                    ...titled("Export"),
                     element: page(() => import("../features/projects/ExportTab"), "ExportTab"),
                   },
                 ],
@@ -138,6 +182,7 @@ export const routes: RouteObject[] = [
               {
                 // A participant's own page as they see it; the API answers Super Admins only.
                 path: "projects/:projectId/participants/:participantId/page",
+                ...titled("Participant page"),
                 element: page(
                   () => import("../features/portal/ParticipantPagePreview"),
                   "ParticipantPagePreview",
@@ -150,6 +195,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "participants",
+                ...titled("Participants"),
                 element: page(
                   () => import("../features/participants/ParticipantsPage"),
                   "ParticipantsPage",
@@ -162,14 +208,17 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "tasks",
+                ...titled("Tasks"),
                 element: page(() => import("../features/tasks/TasksPage"), "TasksPage"),
               },
               {
                 path: "tasks/:taskId",
+                ...titled("Task"),
                 element: page(() => import("../features/tasks/TaskDetailPage"), "TaskDetailPage"),
               },
               {
                 path: "tasks/:taskId/record",
+                ...titled("Recorder"),
                 element: page(() => import("../features/recording/RecorderPage"), "RecorderPage"),
               },
             ],
@@ -179,6 +228,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "calls",
+                ...titled("Phone calls"),
                 element: page(() => import("../features/calls/CallsPage"), "CallsPage"),
               },
             ],
@@ -188,6 +238,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "tasks/new",
+                ...titled("New task"),
                 element: page(() => import("../features/tasks/TaskCreatePage"), "TaskCreatePage"),
               },
             ],
@@ -198,6 +249,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "payments",
+                ...titled("Payments"),
                 element: page(() => import("../features/payments/PaymentsPage"), "PaymentsPage"),
               },
             ],
@@ -207,6 +259,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "admin/audit",
+                ...titled("Audit log"),
                 element: page(() => import("../features/audit/AuditPage"), "AuditPage"),
               },
             ],
@@ -216,6 +269,7 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "projects/new",
+                ...titled("New project"),
                 element: page(
                   () => import("../features/projects/ProjectCreatePage"),
                   "ProjectCreatePage",
@@ -228,18 +282,22 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "admin/users",
+                ...titled("Users"),
                 element: page(() => import("../features/users/UsersPage"), "UsersPage"),
               },
               {
                 path: "admin/users/new",
+                ...titled("Add user"),
                 element: page(() => import("../features/users/UserCreatePage"), "UserCreatePage"),
               },
               {
                 path: "admin/users/import",
+                ...titled("Import users"),
                 element: page(() => import("../features/users/UserImportPage"), "UserImportPage"),
               },
               {
                 path: "admin/users/:userId",
+                ...titled("User"),
                 element: page(() => import("../features/users/UserDetailPage"), "UserDetailPage"),
               },
             ],
@@ -249,11 +307,12 @@ export const routes: RouteObject[] = [
             children: [
               {
                 path: "admin/settings",
+                ...titled("Settings"),
                 element: page(() => import("../features/settings/SettingsPage"), "SettingsPage"),
               },
             ],
           },
-          { path: "*", element: <NotFoundPage /> },
+          { path: "*", ...titled("Page not found"), element: <NotFoundPage /> },
         ],
       },
     ],

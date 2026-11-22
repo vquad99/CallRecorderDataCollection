@@ -155,6 +155,9 @@ def test_someone_saved_before_has_none_and_a_correction_keeps_what_it_leaves_out
     )
     assert '"speaker_details_changed": ["age", "district"]' in (entry.after_summary or "")
     assert "North Goa" not in (entry.after_summary or ""), "names of fields, not values"
+    # Nor the native district before the change: the log cannot be erased later (PART-07).
+    assert "North Goa" not in (entry.before_summary or "")
+    assert "Old" not in (entry.before_summary or "") + (entry.after_summary or "")
 
 
 def test_speaker_details_are_seen_like_the_name(world: dict[str, Any]) -> None:
@@ -234,6 +237,21 @@ def test_the_file_takes_the_details_and_checks_them_as_the_form(world: dict[str,
     assert pa.post(f"{base}/import", json={"csv": short}).json()["rows"][0]["ok"] is True
     header = pa.post(f"{base}/import", json={"csv": "label\nx\n"}).json()["error"]["message"]
     assert header.endswith(f"name,phone,email,language,dialect,district,{columns}")
+
+
+def test_an_age_is_read_as_int_reads_it(world: dict[str, Any]) -> None:
+    """PART-06: digits int() reads, in any script, make an age; a character that only looks like
+    a digit ("²") fails its row like any wrong age, instead of failing the whole file."""
+    assert speakers.clean("age", "२५") == 25
+    assert speakers.clean("age", " 34 ") == 34
+    with pytest.raises(Exception, match="Age must be a whole number"):
+        speakers.clean("age", "²")
+    csv = "name,email,language,age\nRavi,ravi@example.org,hi,²\nUma,uma@example.org,hi,34\n"
+    preview = world["pa"].post(f"{world['base']}/import", json={"csv": csv})
+    assert preview.status_code == 200, preview.text
+    rows = [(r["ok"], r["message"]) for r in preview.json()["rows"]]
+    assert rows[0] == (False, "Age must be a whole number from 1 to 120")
+    assert rows[1][0] is True
 
 
 def test_the_form_offers_the_same_lists_the_server_checks() -> None:

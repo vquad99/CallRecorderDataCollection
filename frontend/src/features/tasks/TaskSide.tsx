@@ -1,9 +1,10 @@
-// The task page's side column (D-152): a compact summary (status, recording type, priority,
-// moderator, QC), the two participants as one matrix (code, name, consent, signed form, device
-// details, speaker details) with uploading and opening the signed forms in its cells, and the
-// history, the newest three entries first with "Show all". On a wide screen it stays in view
-// beside the work; on a phone it comes after the work.
+// The task page's side column (D-152): a compact summary (project, status, recording type,
+// priority, moderator, QC), the two participants as one matrix (code, name, consent, signed form,
+// device details, speaker details) with uploading and opening the signed forms in its cells, and
+// the history with its comment box on top, the newest three entries first with "Show all". On a
+// wide screen it stays in view beside the work; on a phone it comes after the work.
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
 
 import { listMembers } from "../../api/projects";
 import * as work from "../../api/work";
@@ -160,7 +161,26 @@ export function Assignment({
   );
 }
 
-/** Status, recording type, priority, moderator, QC Executive, dates: one line each. */
+/** The project the task belongs to (UXW-04): its code, a link to it for people who may open
+ * projects, and its name. */
+function ProjectFact({ task }: { task: work.TaskDetail }) {
+  const { can } = useAuth();
+  if (!task.project_code) return null;
+  return (
+    <Fact label="Project">
+      {can("projects.view") ? (
+        <Link className="fact-code" to={`/projects/${task.project_id}`}>
+          {task.project_code}
+        </Link>
+      ) : (
+        <span className="fact-code">{task.project_code}</span>
+      )}
+      {task.project_name ? ` · ${task.project_name}` : null}
+    </Fact>
+  );
+}
+
+/** Project, status, recording type, priority, moderator, QC Executive, dates: one line each. */
 export function TaskSummary({
   task,
   audio,
@@ -171,9 +191,12 @@ export function TaskSummary({
   onChange: OnTaskChange;
 }) {
   const qcView = audio.state.status === "loaded" ? audio.state.data : null;
+  // A task cancelled before it reached QC has nobody to name there.
+  const showsQc = qcView !== null && (task.status !== "CANCELLED" || qcView.qc_name !== null);
   return (
     <SideCard id="task-summary-title" title="Summary">
       <dl className="facts">
+        <ProjectFact task={task} />
         <Fact label="Status">
           <StatusBadge status={task.status} label={status(task.status)} />
           {task.status === "ON_HOLD" && task.held_from ? (
@@ -194,9 +217,9 @@ export function TaskSummary({
         <Fact label="Moderator">
           {task.moderator_name ?? <span className="muted">Not assigned</span>}
         </Fact>
-        {qcView ? (
+        {showsQc ? (
           <Fact label="QC Executive">
-            {qcView.qc_name ?? <span className="muted">Not assigned</span>}
+            {qcView?.qc_name ?? <span className="muted">Not assigned</span>}
           </Fact>
         ) : null}
         {task.due_at ? <Fact label="Due">{day(task.due_at)}</Fact> : null}
@@ -212,26 +235,33 @@ export function TaskSummary({
 
 type Sided = readonly ["A" | "B", work.Party];
 
-/** The signed consent form's cell: the file (opens it) or "Missing", and Upload or Replace. */
+/** The signed consent form's cell: the file (opens it) or "Missing", and Upload or Replace. A form
+ * QC sent back (`fault`: what QC found) is marked with a cross until a new one is uploaded. */
 function FormCell({
   party,
   busy,
+  fault,
   onView,
   onFile,
 }: {
   party: work.Party;
   busy: string | null;
+  fault: string | null;
   onView: (doc: work.ParticipantDocument) => void;
   onFile: (file: File) => void;
 }) {
   const doc = party.consent_form ?? null;
   return (
-    <span className="mx-file">
+    <span className={`mx-file${fault === null ? "" : " is-fault"}`}>
       {doc ? (
         <button
           type="button"
           className="mx-file__open"
-          title={`${doc.file_name} · ${uploadedText(doc)}`}
+          title={
+            fault === null
+              ? `${doc.file_name} · ${uploadedText(doc)}`
+              : `${doc.file_name} · QC: ${fault}`
+          }
           aria-label={`View the signed consent form of ${party.participant_code}`}
           disabled={busy !== null}
           onClick={() => onView(doc)}
@@ -239,7 +269,7 @@ function FormCell({
           {busy === `view-${doc.id}` ? (
             <span className="spinner" aria-hidden="true" />
           ) : (
-            <Icon name="ok" size={16} />
+            <Icon name={fault === null ? "ok" : "failed"} size={16} />
           )}
           <span className="mx-file__name">{doc.file_name}</span>
         </button>
@@ -281,6 +311,11 @@ export function ParticipantsMatrix({
     people.some(([, p]) => p.consent_form || p.can_upload_consent_form);
   const asksDevices = Boolean(task.device_fields?.length);
   const manages = can("participants.manage");
+  // D-146: whose signed form QC sent back and is not replaced yet, so the matrix agrees with the
+  // Consent form to fix card (UXW-03); what QC found, for the form's cell.
+  const fix = task.status === "CONSENT_FIX" ? (task.consent_fix ?? null) : null;
+  const toFix = (side: "A" | "B") =>
+    Boolean(fix?.participants.some((p) => p.side === side && !p.replaced));
   return (
     <SideCard id="task-people-title" title="Participants">
       <DataTable className="matrix people-matrix" label="Both participants">
@@ -316,7 +351,13 @@ export function ParticipantsMatrix({
           <tr>
             <th scope="row">Consent</th>
             {people.map(([side, p]) => {
-              const { label, tone } = consentAnswer(p.consent_status, task.consent_mode);
+              // SECB-03: in a project switched to Online since, the person agrees online instead.
+              const { label, tone } = toFix(side)
+                ? ({
+                    label: fix?.by_upload === false ? "Not agreed yet" : "New form needed",
+                    tone: "warning",
+                  } as const)
+                : consentAnswer(p.consent_status, task.consent_mode);
               return (
                 <td key={side} title={p.consent_at ? `Since ${when(p.consent_at)}` : undefined}>
                   <StatusBadge tone={tone} label={label} />
@@ -332,6 +373,7 @@ export function ParticipantsMatrix({
                   <FormCell
                     party={p}
                     busy={busy}
+                    fault={fix && toFix(side) ? fix.comment : null}
                     onView={(doc) => view(p, doc)}
                     onFile={upload(p)}
                   />
@@ -382,10 +424,17 @@ export function ParticipantsMatrix({
       <SuccessNotice message={message} />
       {opened ? (
         <Modal title="Participant details" onClose={() => setOpened(null)} wide>
+          {/* FEW-13: an upload here loads the task again quietly, so its consent, its consent
+              form to fix and this matrix follow at once; the window stays open. */}
           <ParticipantDetails
             projectId={task.project_id}
             participantId={opened.id}
             consentMode={task.consent_mode}
+            onChanged={() =>
+              void work
+                .getTask(task.id)
+                .then((t) => onChange(t, `Documents of ${opened.participant_code} updated.`))
+            }
           />
         </Modal>
       ) : null}
@@ -438,24 +487,7 @@ export function Timeline({ taskId, version }: { taskId: string; version: string 
         ) : null
       }
     >
-      {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? (
-        <ol className="list timeline timeline--compact">
-          {shown.map((e, i) => {
-            const { title, detail } = entryText(e);
-            return (
-              <li key={`${e.at}-${i}`}>
-                <div className="timeline__title">{title}</div>
-                {detail ? <div className="timeline__detail">{detail}</div> : null}
-                <span className="muted">
-                  {when(e.at)} · {e.actor ?? "Platform"} · {ENTRY_KIND[e.kind]}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
+      {/* The box first (UXW-11): in the column's first screen, the newest entries under it. */}
       <form
         className="comment-form"
         onSubmit={(e) => {
@@ -480,6 +512,24 @@ export function Timeline({ taskId, version }: { taskId: string; version: string 
       </form>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
+      {state.status === "loading" ? <LoadingState /> : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+      {state.status === "loaded" ? (
+        <ol className="list timeline timeline--compact">
+          {shown.map((e, i) => {
+            const { title, detail } = entryText(e);
+            return (
+              <li key={`${e.at}-${i}`}>
+                <div className="timeline__title">{title}</div>
+                {detail ? <div className="timeline__detail">{detail}</div> : null}
+                <span className="muted">
+                  {when(e.at)} · {e.actor ?? "Platform"} · {ENTRY_KIND[e.kind]}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
     </SideCard>
   );
 }

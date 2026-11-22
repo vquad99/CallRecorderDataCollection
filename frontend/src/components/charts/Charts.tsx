@@ -252,7 +252,7 @@ export interface DayColumn<T> {
   value: (day: T) => ReactNode;
 }
 
-const PAD_L = 36;
+const PAD_L = 36; // the least room left of the plot for the axis' numbers
 const PAD_B = 22;
 const PAD_R = 16;
 
@@ -261,6 +261,40 @@ function roundUp(n: number): number {
   const power = 10 ** Math.floor(Math.log10(n));
   const step = [1, 2, 2.5, 5, 10].find((f) => n <= f * power + 1e-9) ?? 10;
   return step * power;
+}
+
+interface Axis {
+  /** The top of the axis, in the chart's own unit (hours, or a count). */
+  top: number;
+  ticks: number[];
+  label: (tick: number) => string;
+}
+
+/** Round numbers on the axis: 0, half way (when it is a whole one, for counts and small units)
+ * and the top. Hours under one a day are written in minutes, and under a minute in seconds: an
+ * axis reads "2 min", never "0.033". */
+function axisFor(max: number, wholeNumbers: boolean): Axis {
+  const plain = (top: number): Axis => ({
+    top,
+    ticks: wholeNumbers && top % 2 !== 0 ? [0, top] : [0, top / 2, top],
+    label: String,
+  });
+  if (wholeNumbers || max <= 0) return plain(max > 0 ? roundUp(max * 1.1) : 1);
+  for (const [per, unit] of [
+    [3600, "s"],
+    [60, "min"],
+  ] as const) {
+    const top = roundUp(max * per * 1.1);
+    if (top <= 60) {
+      const ticks = Number.isInteger(top / 2) ? [0, top / 2, top] : [0, top];
+      return {
+        top: top / per,
+        ticks: ticks.map((t) => t / per),
+        label: (t) => (t === 0 ? "0" : `${Number((t * per).toFixed(2))} ${unit}`),
+      };
+    }
+  }
+  return plain(roundUp(max * 1.1));
 }
 
 /** The width of an element in pixels, followed as it changes (a first guess until measured, and
@@ -312,14 +346,14 @@ export function DayChart<T extends { day: string }>({
   const totals = days.map((d) => series.reduce((n, s) => n + s.value(d), 0));
   const max = Math.max(target, ...totals);
   const empty = totals.every((n) => n === 0);
-  const top = max > 0 ? roundUp(max * 1.1) : 1;
-  const plotW = W - PAD_L - PAD_R;
+  const { top, ticks, label } = axisFor(max, wholeNumbers);
+  // Room on the left for the longest number of the axis (about 7 px a character), so none is cut.
+  const padL = Math.max(PAD_L, 14 + 7 * Math.max(...ticks.map((t) => label(t).length)));
+  const plotW = W - padL - PAD_R;
   const plotH = H - PAD_B - 8;
   const slot = plotW / Math.max(1, days.length);
   const barW = Math.max(2, Math.min(16, slot * 0.62));
   const y = (v: number) => 8 + plotH - (v / top) * plotH;
-  // Round numbers on the axis: 0, half way and the top (no half way for a count that is odd).
-  const ticks = wholeNumbers && top % 2 !== 0 ? [0, top] : [0, top / 2, top];
   const labelEvery = days.length > 31 ? 14 : days.length > 14 ? 7 : 1;
   const shown = hover === null ? null : days[hover];
   const long = { weekday: "short", day: "numeric", month: "short" } as const;
@@ -352,14 +386,14 @@ export function DayChart<T extends { day: string }>({
         >
           {ticks.map((t) => (
             <g key={t}>
-              <line className="chart__grid" x1={PAD_L} x2={W - PAD_R} y1={y(t)} y2={y(t)} />
-              <text className="chart__tick" x={PAD_L - 8} y={y(t) + 4} textAnchor="end">
-                {t}
+              <line className="chart__grid" x1={padL} x2={W - PAD_R} y1={y(t)} y2={y(t)} />
+              <text className="chart__tick" x={padL - 8} y={y(t) + 4} textAnchor="end">
+                {label(t)}
               </text>
             </g>
           ))}
           {days.map((d, i) => {
-            const x = PAD_L + i * slot + (slot - barW) / 2;
+            const x = padL + i * slot + (slot - barW) / 2;
             let base = 0;
             return (
               <g
@@ -370,7 +404,7 @@ export function DayChart<T extends { day: string }>({
               >
                 <rect
                   className="chart__hit"
-                  x={PAD_L + i * slot}
+                  x={padL + i * slot}
                   y={8}
                   width={slot}
                   height={plotH}
@@ -402,11 +436,11 @@ export function DayChart<T extends { day: string }>({
               </g>
             );
           })}
-          <line className="chart__axis" x1={PAD_L} x2={W - PAD_R} y1={y(0)} y2={y(0)} />
+          <line className="chart__axis" x1={padL} x2={W - PAD_R} y1={y(0)} y2={y(0)} />
           {target > 0 ? (
             <line
               className="chart__target"
-              x1={PAD_L}
+              x1={padL}
               x2={W - PAD_R}
               y1={y(target)}
               y2={y(target)}
@@ -421,7 +455,7 @@ export function DayChart<T extends { day: string }>({
         {shown ? (
           <div
             className="chart__tooltip"
-            style={{ left: `${((PAD_L + (hover ?? 0) * slot + slot / 2) / W) * 100}%` }}
+            style={{ left: `${((padL + (hover ?? 0) * slot + slot / 2) / W) * 100}%` }}
             aria-hidden="true"
           >
             <strong>{dayLabel(shown.day, long)}</strong>

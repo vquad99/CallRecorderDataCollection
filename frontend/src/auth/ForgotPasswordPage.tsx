@@ -1,4 +1,5 @@
-// Request a password reset link (AUTH-004). The answer is the same for every address.
+// Request a password reset link (AUTH-004). The answer is the same for every address. An empty or
+// incomplete address is pointed out at the field before anything is sent.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
@@ -8,19 +9,24 @@ import { Button } from "../components/form/Button";
 import { TextField } from "../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../components/Notice";
 import { toApiError } from "../hooks/useResource";
+import { emailProblem, fieldError } from "./LoginPage";
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
+  const [problem, setProblem] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const found = emailProblem(email);
+    setProblem(found);
+    if (found) return;
     setBusy(true);
     setError(null);
     try {
-      setDone((await forgotPassword(email)).status);
+      setDone((await forgotPassword(email.trim())).status);
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -38,7 +44,11 @@ export function ForgotPasswordPage() {
           autoComplete="username"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          {...fieldError(problem)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setProblem(undefined);
+          }}
         />
         <ErrorNotice error={error} />
         <SuccessNotice message={done} />

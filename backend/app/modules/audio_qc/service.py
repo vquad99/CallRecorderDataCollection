@@ -62,6 +62,7 @@ from app.modules.recordings.models import (
     AudioAsset,
     Recording,
     current_recording_of,
+    current_recordings,
 )
 from app.modules.tasks import service as tasks
 from app.modules.tasks import workflow
@@ -327,10 +328,11 @@ def _same_person() -> AppError:
     )
 
 
-def _latest(db: Session, task_id: uuid.UUID, *, automated: bool) -> AudioQcResult | None:
+def _automatic_of(db: Session, recording_id: uuid.UUID) -> AudioQcResult | None:
+    """The newest automatic check of one recording."""
     return db.scalar(
         select(AudioQcResult)
-        .where(AudioQcResult.task_id == task_id, AudioQcResult.automated.is_(automated))
+        .where(AudioQcResult.recording_id == recording_id, AudioQcResult.automated.is_(True))
         .order_by(AudioQcResult.created_at.desc())
         .limit(1)
     )
@@ -457,6 +459,10 @@ def decide(
     task = tasks.get_task(db, principal, task_id)
     if not may_decide(db, principal, task):
         raise forbidden()
+    # Locked and read again (TASK-05, FOR NO KEY UPDATE as tasks.transition takes): of two
+    # decisions sent at once, the second waits for the first and is told the task has moved on,
+    # before anything of it is written.
+    tasks.lock_task(db, task)
     if task.status != "AUDIO_QC":
         raise AppError(
             "This task is not waiting for an audio check", code="TASK_NOT_IN_QC", status_code=409
@@ -478,8 +484,15 @@ def decide(
             code="CONSENT_ONLINE",
             status_code=409,
         )
-    automatic = _latest(db, task.id, automated=True)
-    if automatic is None:
+    if outcome == "PASS":
+        # Nothing passes QC (or is approved by the pass, D-138) without both people's consent as
+        # it counts now: in a project switched to Online, a signed form no longer counts (SECB-03).
+        tasks.require_consent(db, task)
+    # The decision is about the task's current recording, the one QC listens to and an export
+    # delivers (D-135), and uses that recording's own automatic check (TASK-06).
+    rec = _latest_ready_recording(db, task)
+    automatic = _automatic_of(db, rec.id) if rec is not None else None
+    if rec is None or automatic is None:
         raise AppError("Run the automatic check first", code="NO_AUTOMATIC_CHECK", status_code=409)
     comment = comment.strip()
     items = checklist.items_of(project.qc_checklist)
@@ -504,11 +517,10 @@ def decide(
         reason_code=reason_code,
         comment=comment,
     )
-    rec = db.get_one(Recording, automatic.recording_id)
     snapshot = checklist.snapshot(items, given, sides, consent_check=uploads)
     result = AudioQcResult(
         id=uuid.uuid4(),
-        recording_id=automatic.recording_id,
+        recording_id=rec.id,
         task_id=task.id,
         project_id=task.project_id,
         asset_id=automatic.asset_id,
@@ -652,45 +664,55 @@ def save_draft(
     return draft
 
 
-def _consent_fix(db: Session, task: Task) -> tuple[AudioQcResult | None, list[dict[str, Any]]]:
-    """The newest send-back of the task and the people whose consent form it found not right,
-    each with `replaced`: a new form is on file since (D-146). In a project that no longer takes
-    signed forms there is nothing to replace."""
+def _consent_fix(
+    db: Session, task: Task
+) -> tuple[AudioQcResult | None, list[dict[str, Any]], bool]:
+    """The newest send-back of the task, the people whose consent form it found not right, and
+    whether the project takes signed forms now. Each person has `replaced`: where the project
+    takes signed forms, a new form is on file since (D-146); in a project switched to Online
+    since, they have agreed online, the only consent that counts there now (SECB-03)."""
     sent = db.scalar(
         select(AudioQcResult)
         .where(AudioQcResult.task_id == task.id, AudioQcResult.outcome == SEND_BACK)
         .order_by(AudioQcResult.created_at.desc())
         .limit(1)
     )
-    if sent is None:
-        return None, []
     project = db.get_one(Project, task.project_id)
     uploads = consent.takes_uploads(project)
+    if sent is None:
+        return None, [], uploads
     wrong = [p for p in (sent.checklist or {}).get("participants", []) if p.get("consent") == "no"]
     ids = [uuid.UUID(p["participant_id"]) for p in wrong]
     current = consent.signed_forms(db, task.project_id, ids) if uploads else {}
+    online = {} if uploads else consent.standings(db, project, ids)
     people = []
     for p in wrong:
-        form = current.get(uuid.UUID(p["participant_id"]))
-        new = form is not None and str(form.id) != p.get("consent_form_id")
+        pid = uuid.UUID(p["participant_id"])
+        form = current.get(pid)
+        if uploads:
+            replaced = form is not None and str(form.id) != p.get("consent_form_id")
+        else:
+            replaced = online[pid].consented
         people.append(
             {
                 "side": p["side"],
                 "participant_id": p["participant_id"],
                 "participant_code": p["participant_code"],
-                "replaced": new or not uploads,
+                "replaced": replaced,
                 "form_id": str(form.id) if form is not None else None,
             }
         )
-    return sent, people
+    return sent, people, uploads
 
 
 def consent_fix_view(db: Session, principal: Principal, task: Task) -> dict[str, Any] | None:
     """What the task page shows while a consent form is being fixed (D-146): QC's comment, whose
-    form, whether a new one is on file, and whether the caller may send the task back to QC."""
+    form, whether a new one is on file, and whether the caller may send the task back to QC.
+    `by_upload` false: the project switched to Online since, and `replaced` means the person has
+    agreed online (SECB-03)."""
     if task.status != CONSENT_FIX:
         return None
-    sent, people = _consent_fix(db, task)
+    sent, people, uploads = _consent_fix(db, task)
     if sent is None:
         return None
     actor = tasks.actor_for(db, principal, task)
@@ -704,6 +726,7 @@ def consent_fix_view(db: Session, principal: Principal, task: Task) -> dict[str,
             for p in people
         ],
         "forms_replaced": all(p["replaced"] for p in people),
+        "by_upload": uploads,
         "can_send_back": actor.is_moderator or actor.can_assign,
     }
 
@@ -715,6 +738,7 @@ def send_back_to_qc(
     found not right was replaced (D-146): the same recording, the same QC Executive; QC's earlier
     answers wait for them with the consent check cleared."""
     task = tasks.get_task(db, principal, task_id)
+    tasks.lock_task(db, task)  # one send-back at a time (TASK-05)
     if task.status != CONSENT_FIX:
         raise AppError(
             "This task is not waiting for a consent form",
@@ -726,7 +750,7 @@ def send_back_to_qc(
     workflow.check(
         task.status, "AUDIO_QC", actor, held_from=task.held_from, reason_code=None, comment=comment
     )
-    sent, people = _consent_fix(db, task)
+    sent, people, uploads = _consent_fix(db, task)
     if sent is None:
         raise AppError(
             "QC's request for a new consent form was not found: ask your admin.",
@@ -735,9 +759,13 @@ def send_back_to_qc(
         )
     waiting = [p["participant_code"] for p in people if not p["replaced"]]
     if waiting:
+        who = " and ".join(waiting)
         raise AppError(
-            f"Upload a new signed consent form for {' and '.join(waiting)} first: QC found a "
-            "problem with the one on file.",
+            f"Upload a new signed consent form for {who} first: QC found a problem with the one "
+            "on file."
+            if uploads
+            else f"Participant {who} has not agreed on the consent form online yet. This "
+            "project now takes consent online, so a signed form no longer counts.",
             code="CONSENT_FORM_NOT_REPLACED",
             status_code=409,
             details=[{"participants": waiting}],
@@ -782,7 +810,10 @@ def view(db: Session, principal: Principal, task_id: uuid.UUID) -> dict[str, Any
     task = tasks.get_task(db, principal, task_id)
     qc = tasks.active_assignee(db, task.id, Role.QC_EXECUTIVE.value)
     qc_user = db.get(User, qc.user_id) if qc else None
-    results = results_for(db, task.id)
+    # Automatic checks of the current recording only: the one QC listens to and decides on
+    # (TASK-06, D-135). Decisions stay, whichever recording they were about.
+    current = access.current_id(db, task.id)
+    results = [r for r in results_for(db, task.id) if not r.automated or r.recording_id == current]
     reviewers = (
         {
             u.id: u.display_name
@@ -1071,18 +1102,19 @@ def ensure_checked(db: Session, task: Task) -> None:
 
 
 def pending_automatic(db: Session, limit: int = 50) -> list[uuid.UUID]:
-    """READY recordings of a task at RECORDED that have no automatic check yet: the process
-    stopped in between. The recovery sweep checks them. (A task now waits at RECORDED for its
-    moderator, D-092, so a checked recording must not be checked again on every sweep.)"""
+    """The current recording of each task at RECORDED when it has no automatic check yet: the
+    process stopped in between. The recovery sweep checks them. (A task now waits at RECORDED for
+    its moderator, D-092, so a checked recording must not be checked again on every sweep.) A
+    replaced recording is never checked: QC never sees it (TASK-06, D-135)."""
+    current = current_recordings(select(Task.id).where(Task.status == "RECORDED"))
     checked = exists().where(
-        AudioQcResult.recording_id == Recording.id, AudioQcResult.automated.is_(True)
+        AudioQcResult.recording_id == current.c.recording_id, AudioQcResult.automated.is_(True)
     )
     return list(
         db.scalars(
-            select(Recording.id)
-            .join(Task, Task.id == Recording.task_id)
-            .where(Task.status == "RECORDED", Recording.state == "READY", ~checked)
-            .order_by(Recording.updated_at)
+            select(current.c.recording_id)
+            .where(~checked)
+            .order_by(current.c.started_at)
             .limit(limit)
         ).all()
     )

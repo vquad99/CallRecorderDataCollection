@@ -134,6 +134,16 @@ function errorFromBody(response: Response, body: unknown): ApiError {
   });
 }
 
+/** Tells the rest of the page what a refusal means for the session, whatever asked: a 401
+ * outside sign-in itself is a session that ended mid-use (AUTH-016), and an account that must
+ * set up two-step sign-in first is sent to do so (D-106). */
+function announce(error: ApiError, path: string): void {
+  if (error.status === 401 && !path.startsWith("/api/v1/auth/")) {
+    window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT, { detail: { code: error.code } }));
+  }
+  if (error.code === "MFA_SETUP_REQUIRED") window.dispatchEvent(new Event(MFA_SETUP_EVENT));
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
   const quiet = background > 0;
@@ -164,11 +174,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const body = await parseJson(response);
   if (response.ok || options.acceptStatuses?.includes(response.status)) return body as T;
   const error = errorFromBody(response, body);
-  if (error.status === 401 && !path.startsWith("/api/v1/auth/")) {
-    // Lets the sign-in state react when a session ends mid-use (AUTH-016).
-    window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT, { detail: { code: error.code } }));
-  }
-  if (error.code === "MFA_SETUP_REQUIRED") window.dispatchEvent(new Event(MFA_SETUP_EVENT));
+  announce(error, path);
   throw error;
 }
 
@@ -179,7 +185,8 @@ function attachmentName(response: Response): string | null {
 }
 
 /** Fetch a file (e.g. a CSV export) with the session cookie and hand it to the browser, under
- * `filename`, or else the name the server gave it. */
+ * `filename`, or else the name the server gave it. A refusal is an ApiError the page can show,
+ * and an ended session is announced as for any other request. */
 export async function apiDownload(path: string, filename?: string): Promise<void> {
   let response: Response;
   try {
@@ -188,7 +195,11 @@ export async function apiDownload(path: string, filename?: string): Promise<void
     throw new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Cannot reach the server" });
   }
   markApiActivity();
-  if (!response.ok) throw errorFromBody(response, await parseJson(response));
+  if (!response.ok) {
+    const error = errorFromBody(response, await parseJson(response));
+    announce(error, path);
+    throw error;
+  }
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;

@@ -1,5 +1,5 @@
-// The QC checklist on a project's Rules tab (D-146): the first client's list (Konkani, NLTM),
-// which "Reset to the client's list" puts back, and the checks a list must pass before it is
+// The QC checklist on a project's Rules tab (D-146): the default list (the first client's, Konkani
+// NLTM), which "Reset to the default list" puts back, and the checks a list must pass before it is
 // saved (the server checks again). The same list is written once more in the server
 // (audio_qc/checklist.py); a backend test checks that the two match.
 import type { ChecklistItem } from "../../api/projects";

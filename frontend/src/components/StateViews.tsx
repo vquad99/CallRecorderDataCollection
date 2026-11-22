@@ -27,15 +27,19 @@ export function EmptyState({
   title,
   message,
   action,
+  level = "h2",
 }: {
   title: string;
   message?: string;
   action?: ReactNode;
+  /** h1 when the state is the whole page (the not-found page), so the page has its title. */
+  level?: "h1" | "h2";
 }) {
+  const Title = level;
   return (
     <div className="state state--empty">
       <EmptyArt />
-      <h2 className="state__title">{title}</h2>
+      <Title className="state__title">{title}</Title>
       {message ? <p>{message}</p> : null}
       {action}
     </div>
@@ -48,6 +52,7 @@ export function ErrorState({
   requestId,
   error,
   onRetry,
+  action,
 }: {
   title?: string;
   message?: string;
@@ -55,8 +60,15 @@ export function ErrorState({
   /** An API failure: supplies the title, message and the server's reference. */
   error?: ApiError;
   onRetry?: () => void;
+  /** Another way on, beside Try again (a link). */
+  action?: ReactNode;
 }) {
   const reference = requestId ?? error?.requestId ?? null;
+  const retry = onRetry ? (
+    <Button variant="secondary" icon="refresh" onClick={onRetry}>
+      Try again
+    </Button>
+  ) : null;
   return (
     <div className="state state--error" role="alert">
       <h2 className="state__title">
@@ -64,11 +76,14 @@ export function ErrorState({
       </h2>
       <p>{message ?? error?.message ?? ""}</p>
       {reference ? <p className="state__meta">Reference: {reference}</p> : null}
-      {onRetry ? (
-        <Button variant="secondary" icon="refresh" onClick={onRetry}>
-          Try again
-        </Button>
-      ) : null}
+      {action ? (
+        <div className="actions">
+          {retry}
+          {action}
+        </div>
+      ) : (
+        retry
+      )}
     </div>
   );
 }

@@ -206,6 +206,33 @@ def test_the_hosted_settings_pass_the_production_rules(
     assert settings.txcontact_clock_ahead_minutes == 330
 
 
+# The Celery queues the app sends work to: the default one, and export bundles alone (CALL-04), so
+# a long export never holds up recordings, phone-call fetches or emails.
+QUEUES = {"celery", "exports"}
+
+
+def _consumed(command: str | list[str]) -> set[str]:
+    """The queues a `celery ... worker` command takes work from (none for any other command)."""
+    words = " ".join([command] if isinstance(command, str) else command).split()
+    if "celery" not in words or "worker" not in words:
+        return set()
+    if "-Q" not in words:
+        return {"celery"}
+    return set(words[words.index("-Q") + 1].split(","))
+
+
+def test_every_queue_has_a_worker_and_exports_run_one_at_a_time_on_their_own() -> None:
+    assert _consumed(_service("ccp-worker")["dockerCommand"]) == QUEUES, "Render: one worker"
+    for compose in ("deploy/aws/docker-compose.yml", "infra/docker-compose.yml"):
+        services = yaml.safe_load((ROOT / compose).read_text())["services"]
+        consumers = {name: _consumed(s.get("command", "")) for name, s in services.items()}
+        assert set().union(*consumers.values()) == QUEUES, compose
+        [exports] = [name for name, queues in consumers.items() if "exports" in queues]
+        assert consumers[exports] == {"exports"}, f"{compose}: exports have their own worker"
+        assert "--concurrency=1" in " ".join(services[exports]["command"]), compose
+        assert services[exports]["stop_grace_period"] == "2m", compose
+
+
 def test_the_worker_runs_the_same_code_with_the_api_settings() -> None:
     api, worker = _service("ccp-api"), _service("ccp-worker")
     assert worker["dockerfilePath"] == api["dockerfilePath"]

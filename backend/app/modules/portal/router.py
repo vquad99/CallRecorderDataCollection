@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from app.api.deps import AppSettings, Cipher, Mailer
 from app.core.permissions import Perm
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
-from app.modules.participants.models import ConsentStatus
 from app.modules.portal import service
 
 public_router = APIRouter(prefix="/portal", tags=["participant page"])
@@ -49,10 +48,13 @@ class PortalOut(BaseModel):
     phone_hint: str | None
     project_name: str
     language_code: str
+    # The form they agreed to when they agreed (D-068), otherwise the project's current one.
     consent_policy_version: str
     consent_text: str
-    # The answer as it counts now (D-129); empty when there is none yet.
-    consent_status: ConsentStatus | None
+    # Their consent as it counts now (D-129): their answer, or UPLOADED when staff uploaded their
+    # signed form in a project that takes them (D-144); empty when there is none yet. consent_at
+    # is when it was given (the answer, or the upload).
+    consent_status: Literal["GIVEN", "REFUSED", "WITHDRAWN", "UPLOADED"] | None
     consent_at: datetime | None
     sessions: list[SessionOut]
     accepted_minutes: float
@@ -72,8 +74,15 @@ class ConsentBody(BaseModel):
 
 
 @public_router.post("/consent", response_model=PortalOut)
-def answer_consent(body: ConsentBody, token: Token, request: Request, db: DbSession) -> PortalOut:
-    service.answer_consent(db, token, body.decision, client_ip(request))
+def answer_consent(
+    body: ConsentBody,
+    token: Token,
+    request: Request,
+    db: DbSession,
+    settings: AppSettings,
+    cipher: Cipher,
+) -> PortalOut:
+    service.answer_consent(db, settings, cipher, token, body.decision, client_ip(request))
     return PortalOut.model_validate(service.view(db, token), from_attributes=True)
 
 

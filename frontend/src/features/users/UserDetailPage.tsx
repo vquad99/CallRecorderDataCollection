@@ -13,7 +13,9 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useResource } from "../../hooks/useResource";
+import { plural } from "../../lib/format";
 import { RoleCheckboxes } from "./RoleCheckboxes";
 
 function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) => void }) {
@@ -55,7 +57,7 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
       message: "Every device they are signed in on is signed out.",
       confirmLabel: "Sign out everywhere",
       action: async () =>
-        `${(await admin.revokeUserSessions(user.id)).sessions_revoked} session(s) signed out.`,
+        `${plural((await admin.revokeUserSessions(user.id)).sessions_revoked, "session")} signed out.`,
     });
   const resetTwoStep = () =>
     confirm.ask({
@@ -132,7 +134,7 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
           onChange={(e) => setEmail(e.target.value)}
         />
         <RoleCheckboxes value={roles} onChange={setRoles} />
-        <Button type="submit" busy={busy === "save"} disabled={roles.length === 0}>
+        <Button type="submit" busy={busy === "save"} disabled={roles.length === 0 || !name.trim()}>
           Save changes
         </Button>
       </form>
@@ -206,6 +208,8 @@ function PhoneSeat({ user, onSaved }: { user: admin.User; onSaved: (u: admin.Use
 export function UserDetailPage() {
   const { userId = "" } = useParams();
   const { state, reload, replace } = useResource(() => admin.getUser(userId), [userId]);
+  // The tab names the person once their account has loaded (the route's "User" until then).
+  usePageTitle(state.status === "loaded" ? state.data.display_name : null);
   return (
     <section aria-labelledby="user-title" className="stack">
       <BackLink to="/admin/users">All users</BackLink>

@@ -68,7 +68,7 @@ def check_docs() -> list[str]:
 def production_files() -> list[Path]:
     files = sorted((ROOT / "backend/app").rglob("*.py"))
     for path in sorted((ROOT / "frontend/src").rglob("*")):
-        if path.suffix in {".ts", ".tsx"} and ".test." not in path.name and "/src/test/" not in str(path):
+        if path.suffix in {".ts", ".tsx"} and ".test." not in path.name and "/src/test/" not in path.as_posix():
             files.append(path)
     return files
 

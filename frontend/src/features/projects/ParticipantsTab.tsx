@@ -1,6 +1,7 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
 // them; the server decides what each role receives. Adding, editing, the consent history and the
-// details open in the same windows as on the Participants page.
+// details open in the same windows as on the Participants page. The "Still needed" line is read
+// again after each add, edit or delete (FEA-09).
 import { useState } from "react";
 
 import { apiDownload } from "../../api/client";
@@ -150,6 +151,8 @@ export function ParticipantsTab() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [addingExisting, setAddingExisting] = useState(false);
+  // Goes up after anyone is added, edited or deleted: the people on offer to add and the "Still
+  // needed" line are read again.
   const [refresh, setRefresh] = useState(0);
   const query = useDebounced(search.trim());
   const list = useResource(
@@ -168,6 +171,7 @@ export function ParticipantsTab() {
     onSaved: (text) => {
       setMessage(text);
       list.reload();
+      setRefresh((n) => n + 1);
     },
   });
 
@@ -185,6 +189,7 @@ export function ParticipantsTab() {
       action: async ({ comment }) => {
         await work.deleteParticipant(project.id, p.id, comment);
         list.reload();
+        setRefresh((n) => n + 1);
         return `${p.participant_code} deleted.`;
       },
     });
@@ -192,7 +197,7 @@ export function ParticipantsTab() {
   return (
     <div className="stack">
       {/* D-153: who the recruiters still need to find, from the targets. */}
-      <StillNeededLine projectId={project.id} />
+      <StillNeededLine projectId={project.id} version={refresh} />
       <div className="actions">
         {canManage ? (
           <Button icon="userPlus" onClick={() => windows.open({ kind: "add" })}>
@@ -271,7 +276,11 @@ export function ParticipantsTab() {
         <ErrorState error={list.state.error} onRetry={list.reload} />
       ) : null}
       {list.state.status === "loaded" && list.state.data.items.length === 0 ? (
-        <EmptyState title="No participants yet" />
+        query ? (
+          <EmptyState title="No participants match" message="Try another code or name." />
+        ) : (
+          <EmptyState title="No participants yet" />
+        )
       ) : null}
       {list.state.status === "loaded" && list.state.data.items.length > 0 ? (
         <>
@@ -316,7 +325,7 @@ export function ParticipantsTab() {
                     )}
                   </td>
                   <td>
-                    {p.phone ?? (p.has_phone ? <span className="muted">Hidden</span> : "None")}
+                    {p.phone ?? <span className="muted">{p.has_phone ? "Hidden" : "-"}</span>}
                   </td>
                   <td>
                     {languageLabel(p.language_code)}

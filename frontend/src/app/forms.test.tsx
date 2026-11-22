@@ -262,7 +262,7 @@ const FORMS: Record<string, FormSpec> = {
   "capacity targets": {
     source: "src/features/settings/SettingsPage.tsx",
     url: "/admin/settings",
-    ready: /Allowed: 1 to 100000/,
+    ready: /Allowed: 1 to 1,00,000/,
     fill: [type("Staff accounts", "60")],
     submit: "Save targets",
     write: "PATCH /api/v1/settings",

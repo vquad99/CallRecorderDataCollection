@@ -1,7 +1,9 @@
-// Capacity targets, editable without a deployment (CAP-002).
+// Capacity settings, editable without a deployment (CAP-002). Only the number of staff accounts is
+// a limit the platform keeps (D-059); the other figures are for planning and limit nothing.
 import { useState, type FormEvent } from "react";
 
 import { getSettings, updateSettings, type Setting } from "../../api/admin";
+import { ApiError } from "../../api/client";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
@@ -9,51 +11,98 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 
+const LIMIT = "capacity.staff_accounts";
+/** Names in the order the page shows them. */
 const LABELS: Record<string, string> = {
-  "capacity.staff_accounts": "Staff accounts",
-  "capacity.concurrent_conferences": "Simultaneous phone conferences",
-  "capacity.participants_per_conversation": "Participants per conversation",
+  [LIMIT]: "Staff accounts",
   "capacity.total_hours_per_day": "Total recording hours per day",
   "capacity.face_to_face_hours_per_day": "Face-to-face hours per day",
   "capacity.telephony_hours_per_day": "Phone call hours per day",
+  "capacity.concurrent_conferences": "Simultaneous phone conferences",
+  "capacity.participants_per_conversation": "Participants per conversation",
 };
+const ORDER = Object.keys(LABELS);
+const label = (s: Setting) => LABELS[s.key] ?? s.key;
+const place = (s: Setting) => (ORDER.includes(s.key) ? ORDER.indexOf(s.key) : ORDER.length);
+/** Figures as the rest of the app writes them: "1,00,000". */
+const count = (n: number) => n.toLocaleString("en-IN");
+const allowed = (s: Setting) => `Allowed: ${count(s.min_value)} to ${count(s.max_value)}.`;
+/** A setting with one possible value is shown, never edited or sent. */
+const fixed = (s: Setting) => s.min_value === s.max_value;
 
 function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting[]) => void }) {
+  const sorted = [...settings].sort((a, b) => place(a) - place(b));
+  const editable = sorted.filter((s) => !fixed(s));
+  const limit = editable.filter((s) => s.key === LIMIT);
+  const planning = editable.filter((s) => s.key !== LIMIT);
   const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(settings.map((s) => [s.key, String(s.value ?? "")])),
+    Object.fromEntries(editable.map((s) => [s.key, String(s.value ?? "")])),
   );
   const { busy, error, message, run } = useAction();
 
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
-      const changed = Object.fromEntries(
-        settings
-          .filter((s) => String(s.value ?? "") !== values[s.key])
-          .map((s) => [s.key, Number(values[s.key])]),
-      );
+      const changed: Record<string, number> = {};
+      for (const s of editable) {
+        const text = (values[s.key] ?? "").trim();
+        if (text === String(s.value ?? "")) continue;
+        const n = Number(text);
+        if (!/^\d+$/.test(text) || n < s.min_value || n > s.max_value) {
+          throw new ApiError({
+            status: 422,
+            code: "INVALID_VALUE",
+            message: `${label(s)}: enter a whole number from ${count(s.min_value)} to ${count(s.max_value)}.`,
+          });
+        }
+        if (n !== s.value) changed[s.key] = n;
+      }
       if (Object.keys(changed).length === 0) return "Nothing changed.";
       onSaved(await updateSettings(changed));
       return "Saved. New values apply immediately.";
     });
   }
 
+  const field = (s: Setting, hint: string) => (
+    <TextField
+      key={s.key}
+      label={label(s)}
+      hint={hint}
+      type="number"
+      inputMode="numeric"
+      min={s.min_value}
+      max={s.max_value}
+      step={1}
+      value={values[s.key] ?? ""}
+      onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
+    />
+  );
+
   return (
-    <form onSubmit={submit} noValidate className="card">
-      <div className="form-grid">
-        {settings.map((s) => (
-          <TextField
-            key={s.key}
-            label={LABELS[s.key] ?? s.key}
-            hint={`Allowed: ${s.min_value} to ${s.max_value}`}
-            type="number"
-            min={s.min_value}
-            max={s.max_value}
-            value={values[s.key] ?? ""}
-            onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
-          />
+    <form onSubmit={submit} noValidate className="stack">
+      {limit.length > 0 ? (
+        <fieldset className="card">
+          <legend>
+            Account limit <span className="badge badge--warning">Enforced</span>
+          </legend>
+          <div className="form-grid">
+            {limit.map((s) =>
+              field(s, `New or re-enabled accounts above this number are refused. ${allowed(s)}`),
+            )}
+          </div>
+        </fieldset>
+      ) : null}
+      <fieldset className="card">
+        <legend>Planning figures</legend>
+        <p className="muted">For reference only; nothing in the platform is limited by these.</p>
+        <div className="form-grid">{planning.map((s) => field(s, allowed(s)))}</div>
+        {sorted.filter(fixed).map((s) => (
+          <p key={s.key}>
+            {label(s)}: {s.value === null ? "-" : count(s.value)}{" "}
+            <span className="muted">(fixed)</span>
+          </p>
         ))}
-      </div>
+      </fieldset>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       <Button type="submit" busy={busy !== null}>
@@ -67,8 +116,13 @@ export function SettingsPage() {
   const { state, reload, replace } = useResource(getSettings, []);
   return (
     <section aria-labelledby="settings-title" className="stack">
-      <h1 id="settings-title">Capacity targets</h1>
-      <p>Targets used for planning and reports. They are goals, not proof of capacity.</p>
+      <div className="page-header__text">
+        <h1 id="settings-title">Capacity targets</h1>
+        <p className="page-header__lead">
+          The account limit and the daily figures the platform is planned for. Changes apply at
+          once.
+        </p>
+      </div>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? <Form settings={state.data} onSaved={replace} /> : null}

@@ -120,7 +120,9 @@ resource "aws_instance" "server" {
     bootstrap_b64 = filebase64("${path.module}/../../deploy/aws/bootstrap.sh")
   })
 
-  # IMDSv2 only. Hop limit 2: the containers (one network hop further) use the role too.
+  # IMDSv2 only. Hop limit 2: api and the workers, in containers one network hop further, use the
+  # role too. web and caddy, which face the internet, are kept off the metadata address by
+  # deploy/aws/systemd/ccp-imds-guard.service (bootstrap.sh turns it on).
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"

@@ -1,5 +1,5 @@
 /* Project export (D-094, D-105). Loaded with the Export tab, not with the first screen. Plain
-   choices and tables, no boxes (D-154). */
+   choices and tables inside the framed sections (D-156). */
 .export__choices {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -33,6 +33,10 @@
   align-items: center;
   gap: 8px;
 }
+/* CSV or TSV needs little room: the filters fit one line on a laptop. */
+.export .filters .field:has(> select[name="table_format"]) {
+  flex: 0 1 120px;
+}
 .export__go {
   display: flex;
   flex-wrap: wrap;
@@ -47,10 +51,18 @@
   gap: 4px 14px;
   margin: 0;
 }
-/* A report's words wrap; its two download links stay on one line. */
+/* A report's name with what it holds under it; its two downloads stay on one line beside it, in
+   view on a phone too. */
 .table .export__detail {
-  min-width: 220px;
+  display: block;
+  max-width: 72ch;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 400;
   white-space: normal;
+}
+.export__reports td.actions {
+  width: 1%;
 }
 .export__error {
   margin-top: 4px;

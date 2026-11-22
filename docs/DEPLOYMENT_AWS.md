@@ -12,7 +12,7 @@ VERIFIED. Correct this file when you walk through it.
 
 | Part | Where | Looked after by |
 |---|---|---|
-| Web (nginx: the app, `/api` to the API), API, worker, Redis, Caddy (HTTPS) | Docker containers on one EC2 server `ccp-server`: t3.medium (2 CPUs, 4 GB), Ubuntu 24.04 LTS, 40 GB encrypted disk, a fixed public address (Elastic IP) | us: `deploy/aws/` |
+| Web (nginx: the app, `/api` to the API), API, worker, exports worker, Redis, Caddy (HTTPS) | Docker containers on one EC2 server `ccp-server`: t3.medium (2 CPUs, 4 GB), Ubuntu 24.04 LTS, 40 GB encrypted disk, a fixed public address (Elastic IP) | us: `deploy/aws/` |
 | Database | RDS PostgreSQL 16 `ccp-db`: db.t4g.small, 20 GB encrypted (grows to 100 GB), automated backups 7 days, not public, reachable only from the server | AWS: patches, backups, disk |
 | Files (recordings, originals, exports, the app's own database dumps) | S3 bucket `ccp-recordings-<account id>`: private, encrypted, versioning; the server reaches it with its own role, no keys | AWS |
 | Logs | CloudWatch Logs: `/ccp/app` (containers), `/ccp/operations` (deploys, backups); 30 days | AWS |
@@ -303,6 +303,17 @@ After a week without problems:
 
 ## 9. S3 through the server's role (done)
 
+Queues (D-155): `worker` takes Celery's default queue `celery` (recordings, phone-call
+recordings, emails). `exports-worker` takes `exports` (env.example sets `EXPORTS_QUEUE=exports`,
+which sends export bundles there), one bundle at a time, with 2 minutes to finish on a restart.
+
+The API and the workers use the role (so do Docker's log driver and copy_files.sh's rclone
+container). `ccp-imds-guard.service`, which bootstrap.sh enables, runs after Docker and again
+with it. It drops traffic from web (172.30.58.10) and caddy (172.30.58.20) to 169.254.169.254;
+keep these addresses in step with deploy/aws/docker-compose.yml. Check with `sudo iptables -S
+DOCKER-USER`: it shows two DROP rules. On a server set up before this change, run `sudo
+ccp-bootstrap` again.
+
 The app reaches S3 with the server's own IAM role when `STORAGE_ACCESS_KEY_ID` and
 `STORAGE_SECRET_ACCESS_KEY` are both empty (`Settings.storage_keys`, test
 `test_storage_keys_are_both_or_neither`). Leave them empty on AWS. `storage_user_fallback` stays
@@ -339,9 +350,9 @@ deploys again at the next push, so a revert pushed to `main` is the lasting fix.
 
 ### 10.3 Logs
 
-- CloudWatch > Log groups > `/ccp/app` > stream `api`, `worker`, `web`, `caddy`, `redis`
-  (30 days). Logs Insights searches them.
-- On the server: `deploy/aws/compose.sh logs -f --tail 100 api worker`.
+- CloudWatch > Log groups > `/ccp/app` > stream `api`, `worker`, `exports-worker`, `web`,
+  `caddy`, `redis` (30 days). Logs Insights searches them.
+- On the server: `deploy/aws/compose.sh logs -f --tail 100 api worker exports-worker`.
 
 ### 10.4 Alarms
 

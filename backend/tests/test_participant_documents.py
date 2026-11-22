@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -479,6 +479,65 @@ def test_a_form_counts_only_while_the_project_takes_uploads(world: dict[str, Any
     assert pa.get(f"/api/v1/tasks/{task['id']}").json()["consent_missing"] == []
 
 
+def _instant(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _personal_link(world: dict[str, Any], participant_id: str) -> Api:
+    """A visitor holding the participant's personal link (one emailed while the project took
+    consent online: links last 30 days), with the link's secret in its header."""
+    from app.modules.participants.models import Participant
+    from app.modules.portal import service as portal
+
+    db = world["db"]
+    person = db.get_one(Participant, uuid.UUID(participant_id))
+    url, _ = portal._issue(
+        db, world["app"].state.settings, world["kok"], person, world["users"]["pa"].id, None
+    )
+    visitor = Api(TestClient(world["app"]))
+    visitor.client.get("/api/v1/auth/csrf")
+    visitor.client.headers["X-Portal-Token"] = url.split("#", 1)[1]
+    return visitor
+
+
+def test_the_personal_page_shows_a_signed_form_on_file_and_takes_no_answer_over_it(
+    world: dict[str, Any],
+) -> None:
+    """PART-01: a signed form counts like an online "I agree" (D-129, D-144). The person's page
+    says it is on file, and an online "I do not agree" cannot quietly sit beside it."""
+    from app.modules.participants.models import ConsentRecord
+
+    pa, db, kok = world["pa"], world["db"], world["kok"]
+    kok.consent_text = "I agree to be recorded."
+    db.commit()
+    p = make_participant(pa, kok.id, "Asha", agreed=False)
+    visitor = _personal_link(world, p["id"])
+    assert visitor.get("/api/v1/portal/me").json()["consent_status"] is None
+    form = put(pa, kok.id, p["id"], "consent-form", PDF)
+    assert form.status_code == 201, form.text
+    page = visitor.get("/api/v1/portal/me").json()
+    assert page["consent_status"] == "UPLOADED"
+    assert _instant(page["consent_at"]) == _instant(form.json()["uploaded_at"])
+    for decision in ("REFUSED", "GIVEN"):
+        refused = visitor.post("/api/v1/portal/consent", json={"decision": decision})
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "CONSENT_FORM_ON_FILE"
+    db.expire_all()
+    stored = db.scalars(
+        select(ConsentRecord).where(ConsentRecord.participant_id == uuid.UUID(p["id"]))
+    ).all()
+    assert stored == [], "nothing that changes nothing is kept"
+    row = pa.get(f"/api/v1/projects/{kok.id}/participants").json()["items"][0]
+    assert row["consent_status"] == "UPLOADED"
+    # Back to online consent: the form no longer counts, and the page asks for an answer.
+    kok.consent_mode = "ONLINE"
+    db.commit()
+    assert visitor.get("/api/v1/portal/me").json()["consent_status"] is None
+    answered = visitor.post("/api/v1/portal/consent", json={"decision": "REFUSED"})
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["consent_status"] == "REFUSED"
+
+
 def test_the_rule_is_the_same_in_the_consent_module(world: dict[str, Any]) -> None:
     db, kok = world["db"], world["kok"]
     a, b = signed_pair(world)
@@ -517,6 +576,69 @@ def test_the_task_moderator_sees_and_replaces_the_consent_form_but_not_the_addre
     detail = mod.get(f"/api/v1/tasks/{task['id']}").json()
     assert detail["participant_a"]["consent_form"]["id"] == replaced.json()["id"]
     assert detail["participant_a"]["can_upload_consent_form"] is True
+
+
+def _can_upload(api: Api, task_id: str, side: str = "participant_a") -> bool:
+    flag: bool = api.get(f"/api/v1/tasks/{task_id}").json()[side]["can_upload_consent_form"]
+    return flag
+
+
+def test_a_moderator_puts_a_form_right_only_before_qc_or_at_a_consent_fix(
+    world: dict[str, Any],
+) -> None:
+    """SECB-01: a form QC checked is not swapped behind QC's back. While a task with the person is
+    at Audio QC nobody replaces it (QC's decision records the form on file); after QC passed a
+    task with them, only an admin or QC's send-back does."""
+    pa, db, kok = world["pa"], world["db"], world["kok"].id
+    task, a, b = task_with_staff(world)
+    tid = uuid.UUID(task["id"])
+    mod = world["api"]("mod@example.org")
+    assert put(mod, kok, a["id"], "consent-form", PDF, name="before.pdf").status_code == 201
+    assert _can_upload(mod, task["id"]) is True, "Assigned: before the recording goes to QC"
+
+    set_status(db, tid, "AUDIO_QC")
+    frozen = put(mod, kok, a["id"], "consent-form", JPEG, name="swap.jpg")
+    assert (frozen.status_code, frozen.json()["error"]["code"]) == (409, "CONSENT_FORM_IN_QC")
+    assert frozen.json()["error"]["message"] == documents.FORM_IN_QC
+    admin = put(pa, kok, b["id"], "consent-form", JPEG, name="swap.jpg")
+    assert (admin.status_code, admin.json()["error"]["code"]) == (409, "CONSENT_FORM_IN_QC")
+    listed = mod.get(docs_url(kok, a["id"]))
+    assert listed.status_code == 200, "the moderator still sees the form"
+    assert listed.json()["consent_form"]["file_name"] == "before.pdf"
+    assert listed.json()["may_upload_consent_form"] is False
+    assert pa.get(docs_url(kok, a["id"])).json()["may_upload_consent_form"] is False
+    assert _can_upload(mod, task["id"]) is False
+    assert _can_upload(pa, task["id"], "participant_b") is False
+    # The address proof is not what QC checks: the admin still uploads it.
+    assert put(pa, kok, a["id"], "address-proof", PDF).status_code == 201
+
+    set_status(db, tid, "ADMIN_REVIEW")
+    late = put(mod, kok, a["id"], "consent-form", JPEG, name="swap.jpg")
+    assert late.status_code == 403, "QC passed it: only an admin replaces it now"
+    assert mod.get(docs_url(kok, a["id"])).json()["may_upload_consent_form"] is False
+    assert put(pa, kok, a["id"], "consent-form", PDF, name="admin.pdf").status_code == 201
+
+    set_status(db, tid, "CONSENT_FIX")
+    assert _can_upload(mod, task["id"]) is True, "QC sent the task back for its form"
+    assert put(mod, kok, a["id"], "consent-form", JPEG, name="fixed.jpg").status_code == 201
+
+    # Approved, then a second task with the same person and moderator: still no swap.
+    set_status(db, tid, "APPROVED")
+    c = make_participant(pa, kok, "Chitra", agreed=False)
+    assert put(pa, kok, c["id"], "consent-form", PDF).status_code == 201
+    second = new_task(world, a, c)
+    assert second.status_code == 201, second.text
+    assigned = pa.post(
+        f"/api/v1/tasks/{second.json()['id']}/assign",
+        json={"user_id": str(world["users"]["mod"].id)},
+    )
+    assert assigned.json()["status"] == "ASSIGNED", assigned.text
+    assert put(mod, kok, a["id"], "consent-form", PDF, name="after.pdf").status_code == 403
+    assert _can_upload(mod, second.json()["id"]) is False
+    assert _can_upload(mod, second.json()["id"], "participant_b") is True, "Chitra: nothing passed"
+    assert put(mod, kok, c["id"], "consent-form", PDF).status_code == 201
+    current = pa.get(docs_url(kok, a["id"])).json()["consent_form"]
+    assert current["file_name"] == "fixed.jpg"
 
 
 def test_the_moderator_loses_access_when_the_task_is_closed(world: dict[str, Any]) -> None:
@@ -614,7 +736,7 @@ def test_removing_a_participant_deletes_the_address_proof_and_keeps_the_signed_f
     pa, db, kok = world["pa"], world["db"], world["kok"].id
     p = make_participant(pa, kok, "Asha", agreed=False)
     form = put(pa, kok, p["id"], "consent-form", PDF).json()
-    put(pa, kok, p["id"], "address-proof", PDF)
+    put(pa, kok, p["id"], "address-proof", PDF, name="Aadhaar_Asha.pdf")
     put(pa, kok, p["id"], "address-proof", PNG, name="p.png", content_type="image/png")
     removed = pa.post(
         f"/api/v1/projects/{kok}/participants/{p['id']}/delete", json={"reason": "Asked to go"}
@@ -628,6 +750,8 @@ def test_removing_a_participant_deletes_the_address_proof_and_keeps_the_signed_f
     for d in proofs:
         with pytest.raises(Exception, match=r"NoSuchKey|Not Found|404"):
             s3.get_object(Bucket=BUCKET, Key=d.storage_key)
+    # The rows stay as the record; the file names, which often carry the name, go (PART-07).
+    assert {d.file_name for d in proofs} == {"address_proof"}
     kept = docs[uuid.UUID(form["id"])]
     assert kept.removed_at is None
     assert s3.get_object(Bucket=BUCKET, Key=kept.storage_key)["Body"].read() == PDF

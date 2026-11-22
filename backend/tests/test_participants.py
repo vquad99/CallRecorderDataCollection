@@ -133,9 +133,133 @@ def test_correction_is_audited_without_the_phone_number(world: dict[str, Any], d
     )
     db.expire_all()
     entry = db.scalars(select(AuditLog).where(AuditLog.action == "participant.corrected")).one()
-    assert '"Asha"' in (entry.before_summary or "")
+    logged = (entry.before_summary or "") + (entry.after_summary or "")
+    # The append-only log never holds the name: a removal must erase it everywhere (PART-07).
+    assert "Asha" not in logged
+    assert '"name_changed": true' in (entry.after_summary or "")
     assert '"phone_changed": true' in (entry.after_summary or "")
-    assert "9876500000" not in (entry.after_summary or "") + (entry.before_summary or "")
+    assert '"language_code": "hi"' in (entry.before_summary or "")
+    assert "9876500000" not in logged
+
+
+def test_the_same_person_is_not_added_twice(world: dict[str, Any]) -> None:
+    """PART-05: the phone is optional, so the same name with the same email is someone already in
+    the project; a family sharing one address (different names) is not."""
+    pid = world["project"].id
+    url = f"/api/v1/projects/{pid}/participants"
+    body = {"display_label": "Tara Naik", "language_code": "hi", "email": "tara.naik@example.org"}
+    first = world["pa"].post(url, json=body)
+    assert first.status_code == 201, first.text
+    for again in (body, {**body, "display_label": " tara naik ", "email": "Tara.Naik@EXAMPLE.org"}):
+        twice = world["pa"].post(url, json=again)
+        assert twice.status_code == 409, twice.text
+        error = twice.json()["error"]
+        assert error["code"] == "DUPLICATE_PARTICIPANT"
+        assert error["message"] == f"Already in this project as {first.json()['participant_code']}"
+        assert error["details"] == [{"participant_code": first.json()["participant_code"]}]
+    family = world["pa"].post(url, json={**body, "display_label": "Usha Naik"})
+    assert family.status_code == 201, "the same address with another name"
+    other_address = world["pa"].post(url, json={**body, "email": "tara.n@example.org"})
+    assert other_address.status_code == 201, "the same name with another address"
+    # The check is per project: elsewhere they are someone new there.
+    elsewhere = world["root"].post(f"/api/v1/projects/{world['other'].id}/participants", json=body)
+    assert elsewhere.status_code == 201, elsewhere.text
+    assert world["pa"].get(url).json()["total"] == 3
+
+
+def test_add_existing_offers_only_the_projects_dialects(world: dict[str, Any], db: Any) -> None:
+    """PART-10: the list offers only people Add would take: the project's exact language and
+    dialect pairs."""
+    from app.modules.projects.models import ProjectLanguage
+
+    root: Api = world["root"]
+    source, target = world["other"].id, world["project"].id
+    url = f"/api/v1/projects/{source}/participants"
+    people = {}
+    for name, dialect in (("Goan", "Goan"), ("Mangalorean", "Mangalorean"), ("Plain", "")):
+        made = root.post(
+            url,
+            json={
+                "display_label": name,
+                "language_code": "kok",
+                "dialect": dialect,
+                "email": f"{name.lower()}@example.org",
+            },
+        )
+        assert made.status_code == 201, made.text
+        people[name] = made.json()["participant_code"]
+    db.add(ProjectLanguage(project_id=target, language_code="kok", dialect="Goan"))
+    db.commit()
+    offered = root.get(f"/api/v1/projects/{target}/participants/link-candidates")
+    assert offered.status_code == 200, offered.text
+    assert [c["participant_code"] for c in offered.json()] == [people["Goan"]]
+    added = root.post(
+        f"/api/v1/projects/{target}/participants/link", json={"participant_code": people["Goan"]}
+    )
+    assert added.status_code == 201, added.text
+
+
+def test_a_consent_link_sent_to_an_address_put_on_file_for_a_while_shows(
+    world: dict[str, Any], db: Any, db_app: Any, new_api: Any, outbox: Any
+) -> None:
+    """SECB-02: staff can point a participant's email at their own mailbox, send the link, answer
+    and put the address back. Every step names the address as a keyed fingerprint, so the log
+    proves where the link went; the consent record names it masked."""
+    from app.modules.participants import service as participants
+    from tests.conftest import read_outbox
+
+    pa: Api = world["pa"]
+    pid = world["project"].id
+    db.execute(update(Project).where(Project.id == pid).values(consent_text="I agree."))
+    db.commit()
+    real, staff = "esha.real@example.org", "pa.mailbox@example.org"
+    made = pa.post(
+        f"/api/v1/projects/{pid}/participants",
+        json={"display_label": "Esha", "language_code": "hi", "email": real},
+    )
+    assert made.status_code == 201, made.text
+    base = f"/api/v1/projects/{pid}/participants/{made.json()['id']}"
+    plain = {"display_label": "Esha", "language_code": "hi"}
+    assert pa.patch(base, json={**plain, "email": staff}).status_code == 200
+    sent = pa.post(f"{base}/portal-link/email")
+    assert sent.status_code == 200, sent.text
+    [mail] = [m for m in read_outbox(outbox) if f"To: {staff}" in m]
+    token = mail.split("/portal#", 1)[1].split()[0]
+    visitor: Api = new_api()  # no session: a participant has no account
+    visitor.client.get("/api/v1/auth/csrf")
+    given = visitor.post(
+        "/api/v1/portal/consent", json={"decision": "GIVEN"}, headers={"X-Portal-Token": token}
+    )
+    assert given.status_code == 200, given.text
+    assert pa.patch(base, json={**plain, "email": real}).status_code == 200
+
+    settings = db_app.state.settings
+    real_fp = participants.address_fingerprint(settings, real)
+    staff_fp = participants.address_fingerprint(settings, staff)
+    db.expire_all()
+
+    def entries(action: str) -> list[AuditLog]:
+        return list(
+            db.scalars(
+                select(AuditLog).where(AuditLog.action == action).order_by(AuditLog.created_at)
+            )
+        )
+
+    away, back = entries("participant.corrected")
+    assert f'"email": "{real_fp}"' in (away.before_summary or "")
+    assert f'"email": "{staff_fp}"' in (away.after_summary or "")
+    assert f'"email": "{real_fp}"' in (back.after_summary or "")
+    assert [e.after_summary for e in entries("participant.portal_link_emailed")][-1] == (
+        f'{{"to": "{staff_fp}"}}'
+    )
+    [answer] = entries("consent.self_recorded")
+    assert f'"emailed_to": "{staff_fp}"' in (answer.after_summary or "")
+    for entry in db.scalars(select(AuditLog)):
+        text = (entry.before_summary or "") + (entry.after_summary or "")
+        assert real not in text, entry.action
+        assert staff not in text, entry.action
+    history = pa.get(f"{base}/consent").json()
+    assert history[0]["note"].endswith("(link emailed to pa•••@example.org)")
 
 
 def test_delete_removes_personal_data_and_is_blocked_by_open_tasks(world: dict[str, Any]) -> None:

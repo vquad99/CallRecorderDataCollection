@@ -10,6 +10,7 @@ import json
 import smtplib
 import ssl
 import uuid
+from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -97,7 +98,7 @@ async def _acall(
     """Calls the middleware the way a server would. Returns (status, error body, what the
     application received, how many body messages were read from the client)."""
     reads = 0
-    sent: list[dict[str, Any]] = []
+    sent: list[MutableMapping[str, Any]] = []
 
     async def receive() -> dict[str, Any]:
         nonlocal reads
@@ -111,7 +112,7 @@ async def _acall(
             }
         return {"type": "http.disconnect"}
 
-    async def send(message: dict[str, Any]) -> None:
+    async def send(message: MutableMapping[str, Any]) -> None:
         sent.append(message)
 
     scope = {

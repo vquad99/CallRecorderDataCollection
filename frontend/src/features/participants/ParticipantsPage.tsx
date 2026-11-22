@@ -2,10 +2,12 @@
 // once - add from a file, assign to another project, remove - and each participant's own answer
 // on the consent form. The form is emailed by itself to everyone who joins a project and an
 // answer counts at once (D-129); "Email consent form again" is for an email that was lost. In a
-// project that takes signed forms nothing is emailed: staff upload the scan (D-144).
+// project that takes signed forms nothing is emailed: staff upload the scan (D-144). A selection
+// belongs to the list it was made in: another project, search or page starts with none ticked, so
+// an action never reaches people who are not shown (FEW-05).
 import { useState } from "react";
 
-import { getProject, listProjects } from "../../api/projects";
+import { getProject, listAllProjects } from "../../api/projects";
 import * as work from "../../api/work";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
@@ -20,6 +22,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
+import { plural } from "../../lib/format";
 import { consentAnswer, FORM_MISSING } from "../../lib/labels";
 import { speakerRulesOf } from "../../lib/speakers";
 import { languageLabel } from "../projects/choices";
@@ -111,7 +114,7 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
           disabled={!result || result.ready === 0 || result.created > 0 || busy !== null}
           onClick={() => send(true)}
         >
-          Add {result?.ready ?? 0} participants
+          {result?.ready ? `Add ${plural(result.ready, "participant")}` : "Add participants"}
         </Button>
       </div>
       <ErrorNotice error={error} />
@@ -150,12 +153,18 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
 }
 
 export function ParticipantsPage() {
-  const projects = useResource(() => listProjects({ page: 1, page_size: 100 }), []);
+  // Every project the person can see, not only the newest 100 (PERF-09).
+  const projects = useResource(() => listAllProjects(), []);
   const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [bulkAdd, setBulkAdd] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  // The selection belongs to the list it was made in: another project, search or page starts
+  // empty, so Remove never deletes someone who is not on the screen.
+  const listKey = JSON.stringify([projectId, search.trim(), page]);
+  const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: "", ids: [] });
+  const selected = selection.key === listKey ? selection.ids : [];
+  const setSelected = (ids: string[]) => setSelection({ key: listKey, ids });
   const [target, setTarget] = useState("");
   const [outcome, setOutcome] = useState<(work.BulkResult & { action: BulkAction }) | null>(null);
 
@@ -224,7 +233,7 @@ export function ParticipantsPage() {
   const resendSelected = () => void run(() => bulkAction("send_consent"), "bulk-consent");
   const removeSelected = () =>
     confirm.ask({
-      title: `Remove ${selected.length} participant(s)?`,
+      title: `Remove ${plural(selected.length, "participant")}?`,
       message: "Their personal data is deleted. Their codes stay in the records.",
       askReason: "Why are they removed?",
       confirmLabel: "Remove",
@@ -381,10 +390,14 @@ export function ParticipantsPage() {
         <ErrorState error={list.state.error} onRetry={list.reload} />
       ) : null}
       {list.state.status === "loaded" && list.state.data && rows.length === 0 ? (
-        <EmptyState
-          title="No participants"
-          message="Add one, or add many from a file, to get started."
-        />
+        query ? (
+          <EmptyState title="No participants match" message="Try another name or code." />
+        ) : (
+          <EmptyState
+            title="No participants"
+            message="Add one, or add many from a file, to get started."
+          />
+        )
       ) : null}
       {rows.length > 0 && list.state.status === "loaded" && list.state.data ? (
         <>

@@ -157,7 +157,8 @@ services:
         sync: false
 
   # Processing and the automatic audio check. The same image as the API; settings are copied from
-  # the API so the two can never disagree.
+  # the API so the two can never disagree. It takes both queues: the default one and export
+  # bundles (`exports`), which the AWS server gives a worker of their own (CALL-04).
   - type: worker
     name: ccp-worker
     runtime: docker
@@ -165,7 +166,7 @@ services:
     plan: starter
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: celery -A app.worker worker --loglevel=INFO --concurrency=2
+    dockerCommand: celery -A app.worker worker -Q celery,exports --loglevel=INFO --concurrency=2
     autoDeployTrigger: commit
     buildFilter:
       paths:

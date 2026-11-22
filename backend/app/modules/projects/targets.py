@@ -233,7 +233,9 @@ def district_of(
 
 
 def hours_target(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
+    """The hours target as the Progress tab uses it; 0 (allowed before PROJ-12, still possible in
+    a project saved then) is no target, like null."""
+    return float(value) if value else None
 
 
 def split(total: int, weights: Sequence[int]) -> list[int]:

@@ -45,6 +45,23 @@ _MB = 1024 * 1024
 TRANSFER = TransferConfig(
     multipart_threshold=16 * _MB, multipart_chunksize=16 * _MB, max_concurrency=4
 )
+MAX_PARTS = 10_000  # S3 (and Wasabi) take at most this many parts for one object
+# A stream (an export bundle) has no size known in advance, so its part size cannot grow with it:
+# 32 MB parts allow 312.5 GiB (exports stop below that, bundle.MAX_BUNDLE_BYTES). At most 4 parts
+# wait in memory (about 128 MB), which a small worker can hold.
+STREAM_TRANSFER = TransferConfig(
+    multipart_threshold=32 * _MB, multipart_chunksize=32 * _MB, max_concurrency=4
+)
+# Not an argument of boto3's TransferConfig: set once made (the default, 10, is 320 MB here).
+STREAM_TRANSFER.max_in_memory_upload_chunks = 4
+STREAM_MAX_BYTES = STREAM_TRANSFER.multipart_chunksize * MAX_PARTS
+# What S3 answers for an object that is not there.
+MISSING_CODES = ("404", "NoSuchKey", "NotFound")
+
+
+def is_missing(exc: ClientError) -> bool:
+    """The storage answered that the object is not there."""
+    return exc.response.get("Error", {}).get("Code") in MISSING_CODES
 
 
 class ObjectStorage(Protocol):
@@ -149,14 +166,14 @@ class S3Storage:
     def put_stream(self, key: str, parts: Iterator[bytes], *, content_type: str) -> tuple[int, str]:
         """Stores an object that is produced while it is sent (an export bundle): nothing is
         held whole in memory or on disk. Returns its size and SHA-256. A failure while the parts
-        are produced ends the upload and leaves no object behind."""
+        are produced ends the upload and leaves no object behind. At most STREAM_MAX_BYTES."""
         reader = _PartsReader(parts)
         self._client.upload_fileobj(
             reader,
             self._bucket,
             self._key(key),
             ExtraArgs={"ContentType": content_type},
-            Config=TRANSFER,
+            Config=STREAM_TRANSFER,
         )
         return reader.size, reader.sha256
 
@@ -183,7 +200,7 @@ class S3Storage:
         try:
             meta = self._client.head_object(Bucket=self._bucket, Key=self._key(key))
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            if is_missing(exc):
                 return None
             raise
         return ObjectInfo(

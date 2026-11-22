@@ -69,6 +69,7 @@ const hidden = {
   phone: null,
   consent_visible: false,
 };
+const MANAGERS = ["projects.view", "projects.manage", "participants.view", "participants.manage"];
 
 describe("participants tab", () => {
   it("is not for people who do not manage the project: they have the overview only (D-104)", async () => {
@@ -180,7 +181,7 @@ describe("participants tab", () => {
     expect(calls.find((c) => c.path.endsWith("/delete"))?.body).toEqual({
       reason: "Asked to be removed",
     });
-  });
+  }, 20000);
 
   it("takes a 10-digit phone number with the country code chosen from a list", async () => {
     const { calls } = fakeApi(
@@ -206,7 +207,8 @@ describe("participants tab", () => {
     await userEvent.type(form.getByLabelText(/Phone number/), "98765-4");
     expect(form.getByText("Type exactly 10 digits (you typed 6).")).toBeInTheDocument();
     expect(form.getByRole("button", { name: "Add participant" })).toBeDisabled();
-    await userEvent.type(form.getByLabelText(/Phone number/), "32109");
+    expect(form.getByText("Correct the fields marked in red.")).toBeInTheDocument();
+    await userEvent.type(form.getByLabelText(/Phone number/), "3210");
     await userEvent.selectOptions(form.getByLabelText("Country code"), "+44");
     await userEvent.click(form.getByRole("button", { name: "Add participant" }));
     expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
@@ -214,6 +216,126 @@ describe("participants tab", () => {
       phone: "+449876543210",
       language_code: "ta",
     });
+  }, 20000);
+
+  it("checks a number by its country's length and never cuts a digit off (D-083)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(MANAGERS, {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+        "POST /api/v1/projects/p1/participants": () => [
+          201,
+          { ...asha, id: "c1", participant_code: "P000003", consent_email: EMAILED },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
+    const form = within(screen.getByRole("dialog", { name: "Add participant" }));
+    await userEvent.type(form.getByLabelText(/Name or label/), "Mei");
+    await userEvent.type(form.getByLabelText(/Email address/), "mei@example.org");
+    await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    await fillSpeakerDetails(form);
+    const phone = form.getByLabelText(/Phone number/);
+    const add = form.getByRole("button", { name: "Add participant" });
+    // India: exactly 10 digits. An eleventh is kept and said, not dropped without a word.
+    await userEvent.type(phone, "09876543210");
+    expect(phone).toHaveValue("09876543210");
+    expect(form.getByText("Type exactly 10 digits (you typed 11).")).toBeInTheDocument();
+    expect(add).toBeDisabled();
+    // China: an 11-digit mobile is whole.
+    await userEvent.selectOptions(form.getByLabelText("Country code"), "+86");
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "13812345678");
+    expect(phone).toHaveValue("13812345678");
+    expect(form.queryByText(/digits \(you typed/)).toBeNull();
+    expect(phone).toHaveAccessibleDescription("Without the country code.");
+    // Singapore: 8 digits; too few is said in the country's own terms.
+    await userEvent.selectOptions(form.getByLabelText("Country code"), "+65");
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "9123");
+    expect(form.getByText("Type 6 to 13 digits (you typed 4).")).toBeInTheDocument();
+    await userEvent.type(phone, "4567");
+    expect(add).toBeEnabled();
+    await userEvent.click(add);
+    expect(await screen.findByText("P000003 added. Consent form emailed.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ phone: "+6591234567" });
+  }, 20000);
+
+  it("keeps a saved number from an unlisted country as it is when other details change", async () => {
+    const polish = {
+      ...asha,
+      phone: "+48601234567",
+      email: "asha@example.org",
+      has_email: true,
+    };
+    const { calls } = fakeApi(
+      signedInAs(MANAGERS, {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [polish], total: 1, page: 1, page_size: 25 },
+        ],
+        "PATCH /api/v1/projects/p1/participants/a1": () => [200, polish],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const form = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    // Not relabelled as India: "Other" holds the whole number with its country code.
+    expect(form.getByLabelText("Country code")).toHaveValue("+");
+    expect(form.getByRole("option", { name: "Other (type the country code too)" })).toBeTruthy();
+    expect(form.getByLabelText(/Phone number/)).toHaveValue("48601234567");
+    expect(form.getByLabelText(/Phone number/)).toHaveAccessibleDescription(
+      "The whole number, starting with the country code.",
+    );
+    await userEvent.clear(form.getByLabelText(/Name or label/));
+    await userEvent.type(form.getByLabelText(/Name or label/), "Asha K");
+    await userEvent.click(form.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("P000001 saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+      display_label: "Asha K",
+      phone: "+48601234567",
+    });
+  });
+
+  it("opens each window clean, without the error of the window before", async () => {
+    const withEmail = { ...asha, email: "asha@example.org", has_email: true };
+    fakeApi(
+      signedInAs(MANAGERS, {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [withEmail], total: 1, page: 1, page_size: 25 },
+        ],
+        "PATCH /api/v1/projects/p1/participants/a1": () => [
+          409,
+          {
+            error: {
+              code: "DUPLICATE_PARTICIPANT",
+              message: "A participant with this phone number already exists",
+            },
+          },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const edit = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    await userEvent.click(edit.getByRole("button", { name: "Save changes" }));
+    expect(await edit.findByText(/phone number already exists/)).toBeInTheDocument();
+    await userEvent.click(edit.getByRole("button", { name: "Close" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add participant" }));
+    const add = within(screen.getByRole("dialog", { name: "Add participant" }));
+    expect(add.queryByText(/phone number already exists/)).toBeNull();
+    expect(add.queryByRole("alert")).toBeNull();
+    await userEvent.click(add.getByRole("button", { name: "Close" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const again = within(screen.getByRole("dialog", { name: "Edit P000001" }));
+    expect(again.queryByText(/phone number already exists/)).toBeNull();
   });
 
   it("adds an existing participant from another project (D-090)", async () => {
@@ -342,9 +464,15 @@ describe("participants tab", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Add participant" }));
     const form = within(screen.getByRole("dialog", { name: "Add participant" }));
     const add = form.getByRole("button", { name: "Add participant" });
+    const details = SPEAKER_INPUT.map((f) => f.label).join(", ");
+    // The button says what it waits for (UXW-09), and the line shrinks as the form fills.
+    expect(add).toHaveAccessibleDescription(
+      `Still to fill: Name or label, Email address, Language, ${details}.`,
+    );
     await userEvent.type(form.getByLabelText(/Name or label/), "Chitra");
     await userEvent.type(form.getByLabelText(/Email address/), "chitra@example.org");
     await userEvent.selectOptions(form.getByLabelText(/^Language/), "hi");
+    expect(add).toHaveAccessibleDescription(`Still to fill: ${details}.`);
     expect(form.getByRole("group", { name: "Speaker details" })).toBeInTheDocument();
     // Short fields side by side; every one is required.
     for (const f of SPEAKER_INPUT) expect(labelled(form, f.label)).toBeRequired();
@@ -378,11 +506,14 @@ describe("participants tab", () => {
     expect(add).toBeDisabled();
     await fillSpeakerDetails(form);
     expect(add).toBeEnabled();
+    expect(add).not.toHaveAccessibleDescription();
+    expect(form.queryByText(/^Still to fill/)).toBeNull();
     // A wrong age or PIN code is said under the box and stops the form.
     await userEvent.clear(labelled(form, "Age"));
     await userEvent.type(labelled(form, "Age"), "61");
     expect(form.getByText("Age must be a whole number from 20 to 60.")).toBeInTheDocument();
     expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription("Correct the fields marked in red.");
     await userEvent.clear(labelled(form, "Age"));
     await userEvent.type(labelled(form, "Age"), "20");
     await userEvent.clear(labelled(form, "Native PIN code"));
@@ -400,7 +531,7 @@ describe("participants tab", () => {
       ...SPEAKER_DETAILS,
       age: 20,
     });
-  });
+  }, 20000);
 
   it("saves someone added before without speaker details and says what is missing (D-143)", async () => {
     const old = {

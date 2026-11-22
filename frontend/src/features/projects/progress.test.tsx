@@ -1,200 +1,17 @@
-// The project's audio, progress and target settings on the Rules tab, and the Progress tab
-// (D-148, plain tables in D-153): completed minutes, conversations and speakers against the
-// targets, what is still needed (D-153), and the shares with their variance in one balance table.
-// Requirements: DASH-001, PROJ-001, PROJ-011
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+// The project's Progress tab (D-148, plain tables in D-153): completed minutes, conversations
+// and speakers against the targets, what is still needed (D-153), the shares with their variance
+// in one balance table, and the tab as a file: Excel, CSV, or printed (or saved as PDF) as a
+// clean report. The Rules tab's audio, progress and target settings: rulesTargets.test.tsx.
+// Requirements: DASH-001, PROJ-001, PROJ-011, EXP-002, EXP-007
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeApi, renderAt, signedInAs } from "../../test/fakeApi";
+import { fakeApi, renderAt, signedInAs, type Handler } from "../../test/fakeApi";
 import { PROGRESS, PROJECT } from "../../test/world";
 import { capacityText, variance } from "./ProgressTab";
-import { CLIENT_DISTRICTS } from "./targets";
 
 const MANAGER = ["projects.view", "projects.manage"];
-
-function rules(over: Record<string, unknown> = {}) {
-  return fakeApi(
-    signedInAs(MANAGER, {
-      "GET /api/v1/projects/p1": () => [200, { ...PROJECT, ...over }],
-      "PATCH /api/v1/projects/p1": (body) => [200, { ...PROJECT, ...(body as object) }],
-    }),
-  );
-}
-
-const card = (name: string) => screen.getByRole("region", { name });
-const patches = (calls: { method: string; body: unknown }[]) =>
-  calls.filter((c) => c.method === "PATCH").map((c) => c.body as Record<string, unknown>);
-
-describe("audio and progress rules", () => {
-  it("shows the client's defaults and saves the pause limit, the listen and what counts", async () => {
-    const { calls } = rules();
-    renderAt("/projects/p1/rules/audio-progress");
-    const limit = await screen.findByRole("spinbutton", { name: "Long pause (seconds)" });
-    const audio = card("Audio and progress");
-    expect(limit).toHaveValue(3);
-    const listen = within(audio).getByRole("checkbox", { name: "Long pauses need a listen" });
-    expect(listen).not.toBeChecked();
-    const counts = within(audio).getByRole("group", { name: "Completed minutes count" });
-    expect(within(counts).getByRole("radio", { name: /^Effective speech/ })).toBeChecked();
-    expect(counts).toHaveAccessibleDescription(/Payments always count the full length/);
-
-    await userEvent.clear(limit);
-    await userEvent.type(limit, "5");
-    await userEvent.click(listen);
-    await userEvent.click(within(counts).getByRole("radio", { name: /^Full length/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
-    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
-    expect(patches(calls)[0]).toMatchObject({
-      name: "Hindi conversations",
-      pause_limit_seconds: 5,
-      long_pauses_need_review: true,
-      progress_counts: "FULL",
-      // The targets go back as they are.
-      target_speakers: 500,
-      target_conversations: 600,
-      target_age_bands: PROJECT.target_age_bands,
-      target_gender: { MALE: 50, FEMALE: 50 },
-      target_modes: { FACE_TO_FACE: 50, TELEPHONY: 50 },
-      target_districts: [],
-      target_hours: null,
-    });
-  });
-
-  it("refuses a pause limit outside 1 to 30 seconds", async () => {
-    const { calls } = rules();
-    renderAt("/projects/p1/rules/audio-progress");
-    const limit = await screen.findByRole("spinbutton", { name: "Long pause (seconds)" });
-    await userEvent.clear(limit);
-    await userEvent.type(limit, "31");
-    expect(limit).toHaveAccessibleDescription(/Type a whole number of seconds from 1 to 30/);
-    expect(screen.getByRole("button", { name: "Save rules" })).toBeDisabled();
-    expect(patches(calls)).toHaveLength(0);
-  });
-});
-
-describe("targets", () => {
-  it("edits every target and saves them with the rules", async () => {
-    const { calls } = rules();
-    renderAt("/projects/p1/rules/targets");
-    const hours = await screen.findByRole("spinbutton", { name: "Hours completed" });
-    const targets = card("Targets");
-    expect(hours).toHaveAccessibleDescription(/counted as effective speech/);
-    const speakers = within(targets).getByRole("spinbutton", { name: "Speakers" });
-    expect(speakers).toHaveValue(500);
-    expect(within(targets).getByRole("spinbutton", { name: "Conversations" })).toHaveValue(600);
-    // The client's four age bands.
-    expect(within(targets).getAllByRole("spinbutton", { name: "Percent" })).toHaveLength(4);
-    expect(
-      within(targets)
-        .getAllByRole("spinbutton", { name: "From age" })
-        .map((b) => (b as HTMLInputElement).value),
-    ).toEqual(["20", "30", "40", "50"]);
-
-    await userEvent.type(hours, "1000");
-    await userEvent.clear(speakers);
-    // A band removed: the percents no longer add up, and nothing can be saved until they do.
-    await userEvent.click(within(targets).getByRole("button", { name: "Remove age band 50-60" }));
-    expect(within(targets).getByText("The percents add up to 90, not 100.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save rules" })).toBeDisabled();
-    const percents = within(targets).getAllByRole("spinbutton", { name: "Percent" });
-    await userEvent.clear(percents[0] as HTMLElement);
-    await userEvent.type(percents[0] as HTMLElement, "50");
-    // Gender 60/40; no target for face-to-face and phone.
-    const male = within(targets).getByRole("spinbutton", { name: "Male (%)" });
-    const female = within(targets).getByRole("spinbutton", { name: "Female (%)" });
-    await userEvent.clear(male);
-    await userEvent.type(male, "60");
-    await userEvent.clear(female);
-    await userEvent.type(female, "40");
-    await userEvent.clear(within(targets).getByRole("spinbutton", { name: "Face-to-face (%)" }));
-    await userEvent.clear(within(targets).getByRole("spinbutton", { name: "Phone call (%)" }));
-    // The client's eight districts, then one removed.
-    expect(
-      within(targets).getByText(/the Progress page shows the speakers' own districts/),
-    ).toBeInTheDocument();
-    await userEvent.click(
-      within(targets).getByRole("button", { name: "Use the client's Konkani districts" }),
-    );
-    expect(within(targets).getAllByRole("textbox", { name: "District" })).toHaveLength(8);
-    expect(within(targets).getByText(/12\.5 % each for 8/)).toBeInTheDocument();
-    await userEvent.click(within(targets).getByRole("button", { name: "Remove Raigad" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save rules" }));
-    expect(await screen.findByText("Rules saved.")).toBeInTheDocument();
-    expect(patches(calls)[0]).toMatchObject({
-      target_hours: "1000",
-      target_speakers: null,
-      target_conversations: 600,
-      target_age_bands: [
-        { from: 20, to: 30, percent: 50 },
-        { from: 30, to: 40, percent: 30 },
-        { from: 40, to: 50, percent: 20 },
-      ],
-      target_gender: { MALE: 60, FEMALE: 40 },
-      target_modes: {},
-      target_districts: CLIENT_DISTRICTS.slice(0, 7),
-    });
-  });
-
-  it("says what is wrong with the shares and the districts", async () => {
-    const { calls } = rules({ target_districts: [{ state: "Goa", district: "North Goa" }] });
-    renderAt("/projects/p1/rules/targets");
-    const targets = await screen.findByRole("region", { name: "Targets" });
-    const male = within(targets).getByRole("spinbutton", { name: "Male (%)" });
-    await userEvent.clear(male);
-    expect(
-      within(targets).getByText("Give both percents, or leave both empty for no target."),
-    ).toBeInTheDocument();
-    await userEvent.type(male, "70");
-    expect(within(targets).getByText("The percents add up to 120, not 100.")).toBeInTheDocument();
-    await userEvent.clear(male);
-    await userEvent.type(male, "50");
-    await userEvent.click(within(targets).getByRole("button", { name: "Add district" }));
-    expect(
-      within(targets).getByText("District 2: choose the state and type the district."),
-    ).toBeInTheDocument();
-    const states = within(targets).getAllByRole("combobox", { name: "State" });
-    await userEvent.selectOptions(states[1] as HTMLElement, "Goa");
-    await userEvent.type(
-      within(targets).getAllByRole("textbox", { name: "District" })[1] as HTMLElement,
-      "north  goa",
-    );
-    expect(within(targets).getByText("District 2: north goa is listed twice.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save rules" })).toBeDisabled();
-    // Overlapping bands.
-    await userEvent.click(within(targets).getByRole("button", { name: "Remove north goa" }));
-    const to = within(targets).getAllByRole("spinbutton", { name: "To age" });
-    await userEvent.clear(to[0] as HTMLElement);
-    await userEvent.type(to[0] as HTMLElement, "35");
-    expect(within(targets).getByText("Age bands 20-35 and 30-40 overlap.")).toBeInTheDocument();
-    await userEvent.click(
-      within(targets).getByRole("button", { name: "Reset to the client's age bands" }),
-    );
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save rules" })).toBeEnabled());
-    expect(patches(calls)).toHaveLength(0);
-  });
-
-  it("keeps the targets read only in an archived project", async () => {
-    rules({ status: "ARCHIVED" });
-    renderAt("/projects/p1/rules/targets");
-    const targets = await screen.findByRole("region", { name: "Targets" });
-    expect(within(targets).getByRole("spinbutton", { name: "Speakers" })).toBeDisabled();
-    expect(
-      within(targets).getByRole("button", { name: "Use the client's Konkani districts" }),
-    ).toBeDisabled();
-    await userEvent.click(
-      within(screen.getByRole("navigation", { name: "Project sections" })).getByRole("link", {
-        name: "Audio and progress",
-      }),
-    );
-    expect(
-      within(await screen.findByRole("region", { name: "Audio and progress" })).getByRole(
-        "spinbutton",
-        { name: "Long pause (seconds)" },
-      ),
-    ).toBeDisabled();
-  });
-});
 
 describe("the Progress tab", () => {
   function progress(body: unknown = PROGRESS, permissions = MANAGER, project: unknown = PROJECT) {
@@ -256,13 +73,13 @@ describe("the Progress tab", () => {
     renderAt("/projects/p1/progress");
     const done = await screen.findByRole("region", { name: "Completed" });
     expect(figure("Completed")).toHaveTextContent("11 min of 1 h");
-    expect(figure("Completed")).toHaveTextContent("18.3 % of the target, effective speech");
+    expect(figure("Completed")).toHaveTextContent("18.3% of the target, effective speech");
     expect(figure("Approved conversations")).toHaveTextContent("3 / 600");
-    expect(figure("Approved conversations")).toHaveTextContent("0.5 % of the target");
-    expect(figure("Speakers")).toHaveTextContent("5 / 5001 % of the target");
+    expect(figure("Approved conversations")).toHaveTextContent("0.5% of the target");
+    expect(figure("Speakers")).toHaveTextContent("5 / 5001% of the target");
     expect(figure("Registered")).toHaveTextContent("6");
     expect(figure("Registered")).toHaveTextContent("4 at the limit of 2 conversations");
-    expect(figure("Effective speech")).toHaveTextContent("71.9 %of the recorded audio");
+    expect(figure("Effective speech")).toHaveTextContent("71.9%of the recorded audio");
     // No boxes of figures: no progress bars, no tiles.
     expect(screen.queryByRole("progressbar")).toBeNull();
     // Completed: approved, and recorded but not yet approved, in one table.
@@ -408,6 +225,7 @@ describe("the Progress tab", () => {
   it("writes whether the registered speakers can give the conversations still to make", () => {
     const base = {
       limit: 3,
+      unique_pairs: false,
       registered: 200,
       places_left: 600,
       conversations_to_make: 300,
@@ -422,10 +240,44 @@ describe("the Progress tab", () => {
     expect(capacityText({ ...base, conversations_to_make: 0 })).toBe(
       "No more conversations are needed beyond the open tasks.",
     );
-    expect(capacityText({ ...base, limit: null })).toBe(
-      "No limit on conversations per speaker: the 200 registered speakers can give the 300 conversations still to make.",
-    );
     expect(capacityText({ ...base, conversations_to_make: null })).toBeNull();
+    // No limit per speaker (PROJ-09): the server's count says it all, never "can give" blindly.
+    const open = { ...base, limit: null, places_left: null };
+    expect(capacityText(open)).toBe(
+      "The 200 registered speakers can give the 300 conversations still to make.",
+    );
+    expect(capacityText({ ...open, registered: 1, more_speakers_needed: 1 })).toBe(
+      "1 more speaker is needed for the 300 conversations still to make (a conversation takes two speakers).",
+    );
+    expect(
+      capacityText({
+        ...open,
+        unique_pairs: true,
+        registered: 1,
+        conversations_to_make: 600,
+        more_speakers_needed: 35,
+      }),
+    ).toBe(
+      "35 more speakers are needed for the 600 conversations still to make (each pair of speakers only once).",
+    );
+    // Each pair only once can bind before the limit: 3 people make 3 pairs, not 4 conversations.
+    expect(
+      capacityText({
+        ...base,
+        unique_pairs: true,
+        registered: 3,
+        places_left: 9,
+        conversations_to_make: 4,
+        more_speakers_needed: 1,
+      }),
+    ).toBe(
+      "Even if every one of the 3 registered speakers records 3 conversations, 1 more speaker is needed for the 4 conversations still to make (each pair of speakers only once).",
+    );
+    expect(
+      capacityText({ ...base, registered: 0, places_left: 0, more_speakers_needed: 200 }),
+    ).toBe(
+      "200 more speakers are needed for the 300 conversations still to make (each at most 3 conversations).",
+    );
   });
 
   it("shows every share in one balance table, people without a detail as Not given", async () => {
@@ -443,31 +295,32 @@ describe("the Progress tab", () => {
     );
     const group = (name: string) => within(balance).getByRole("rowgroup", { name });
     // Group, count, actual percent, the bar (drawing only), target percent, variance.
-    expect(line(group("Gender"), "Male")).toEqual(["Male", "2", "40 %", "", "50 %", "−10 %"]);
-    expect(line(group("Gender"), "Not given")).toEqual(["Not given", "1", "20 %", "", "-", "-"]);
-    expect(line(group("Age bands"), "50-60")).toEqual(["50-60", "1", "20 %", "", "10 %", "+10 %"]);
-    expect(line(group("Age bands"), "20-30")).toEqual(["20-30", "2", "40 %", "", "40 %", "0 %"]);
+    // Percents written as everywhere else in the app: "40%", no space (POL-14).
+    expect(line(group("Gender"), "Male")).toEqual(["Male", "2", "40%", "", "50%", "−10%"]);
+    expect(line(group("Gender"), "Not given")).toEqual(["Not given", "1", "20%", "", "-", "-"]);
+    expect(line(group("Age bands"), "50-60")).toEqual(["50-60", "1", "20%", "", "10%", "+10%"]);
+    expect(line(group("Age bands"), "20-30")).toEqual(["20-30", "2", "40%", "", "40%", "0%"]);
     expect(line(group("Face-to-face and phone"), "Face-to-face")).toEqual([
       "Face-to-face",
       "2",
-      "66.7 %",
+      "66.7%",
       "",
-      "50 %",
-      "+16.7 %",
+      "50%",
+      "+16.7%",
     ]);
     expect(line(group("Districts"), "North Goa (Goa)")).toEqual([
       "North Goa (Goa)",
       "2",
-      "40 %",
+      "40%",
       "",
-      "12.5 %",
-      "+27.5 %",
+      "12.5%",
+      "+27.5%",
     ]);
     // Below the target red, above it green: the sign says the same.
-    for (const below of within(group("Gender")).getAllByText("−10 %")) {
+    for (const below of within(group("Gender")).getAllByText("−10%")) {
       expect(below).toHaveClass("variance--below");
     }
-    expect(within(group("Districts")).getByText("+27.5 %")).toHaveClass("variance--above");
+    expect(within(group("Districts")).getByText("+27.5%")).toHaveClass("variance--above");
     // What each section is of, and the definitions folded away under the table.
     expect(
       screen.getAllByText("Percent of the 5 speakers with an approved conversation."),
@@ -478,6 +331,7 @@ describe("the Progress tab", () => {
     expect(within(how).getByText("Effective speech")).toBeInTheDocument();
     expect(within(how).getByText("Still needed")).toBeInTheDocument();
     expect(how).toHaveTextContent("longer than 3 s");
+    expect(how).toHaveTextContent("+4% is above the target, −6% below.");
   });
 
   it("shows the first ten districts and the rest on request", async () => {
@@ -547,11 +401,131 @@ describe("the Progress tab", () => {
 
   it("writes a variance with its sign", () => {
     expect([variance(4), variance(-6), variance(0), variance(27.5)]).toEqual([
-      "+4 %",
-      "−6 %",
-      "0 %",
-      "+27.5 %",
+      "+4%",
+      "−6%",
+      "0%",
+      "+27.5%",
     ]);
+  });
+});
+
+describe("the Progress tab as a file (owner's request)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const EXPORT = "/api/v1/projects/p1/progress/export";
+
+  /** The tab, with the download answering `reply`; the names files are saved under. */
+  function open(reply: Handler = () => [200, "section,group\n"]) {
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, { createObjectURL: () => "blob:progress", revokeObjectURL: () => {} }),
+    );
+    const saved: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    const api = fakeApi(
+      signedInAs(MANAGER, {
+        "GET /api/v1/projects/p1": () => [200, PROJECT],
+        "GET /api/v1/projects/p1/progress": () => [200, PROGRESS],
+        [`GET ${EXPORT}`]: reply,
+      }),
+    );
+    renderAt("/projects/p1/progress");
+    return { ...api, saved };
+  }
+
+  it("offers Excel, CSV and print to the people who manage the project", async () => {
+    open();
+    const excel = await screen.findByRole("button", { name: "Download Excel" });
+    expect(screen.getByRole("button", { name: "Download CSV" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Print or save as PDF" })).toBeEnabled();
+    expect(excel).toBeEnabled();
+    // When the figures were read, on the page and on top of a printed one.
+    expect(screen.getByText(/^Figures as of \d{1,2} \w{3} \d{4}, /)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^HINDI · Hindi conversations · as of \d{1,2} \w{3} \d{4}, /),
+    ).toHaveClass("progress-print-head");
+  });
+
+  it("downloads the server's workbook and CSV under the names it gives", async () => {
+    const { calls, saved } = open(() => [
+      200,
+      "x",
+      { "content-disposition": 'attachment; filename="progress_summary_HINDI_20261122.xlsx"' },
+    ]);
+    await userEvent.click(await screen.findByRole("button", { name: "Download Excel" }));
+    await waitFor(() => expect(saved).toEqual(["progress_summary_HINDI_20261122.xlsx"]));
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    await waitFor(() => expect(saved).toHaveLength(2));
+    expect(calls.filter((c) => c.path.startsWith(EXPORT)).map((c) => c.path)).toEqual([
+      `${EXPORT}?format=xlsx`,
+      `${EXPORT}?format=csv`,
+    ]);
+  });
+
+  it("says why a download failed", async () => {
+    const { saved } = open(() => [
+      403,
+      {
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to do this",
+          request_id: "r9",
+        },
+      },
+    ]);
+    await userEvent.click(await screen.findByRole("button", { name: "Download CSV" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "You do not have permission to do this",
+    );
+    expect(saved).toEqual([]);
+  });
+
+  it("prints with the browser, every row shown and the definitions open", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      key: `D${i + 1}`,
+      label: `District ${i + 1}`,
+      count: 1,
+      percent: 8.3,
+      target_percent: null,
+      variance: null,
+    }));
+    fakeApi(
+      signedInAs(MANAGER, {
+        "GET /api/v1/projects/p1": () => [200, PROJECT],
+        "GET /api/v1/projects/p1/progress": () => [
+          200,
+          { ...PROGRESS, districts: { ...PROGRESS.districts, total: 12, rows } },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/progress");
+    await userEvent.click(await screen.findByRole("button", { name: "Print or save as PDF" }));
+    expect(print).toHaveBeenCalledTimes(1);
+
+    // The browser's own Print (Ctrl+P) too: the page as a report while it prints.
+    const balance = screen.getByRole("table", { name: "Balance against the targets" });
+    const districts = within(balance).getByRole("rowgroup", { name: "Districts" });
+    const how = screen.getByText("How these are counted").closest("details") as HTMLDetailsElement;
+    expect(within(districts).queryByText("District 12")).toBeNull();
+    act(() => {
+      window.dispatchEvent(new Event("beforeprint"));
+    });
+    expect(within(districts).getByText("District 12")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+    expect(how.open).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event("afterprint"));
+    });
+    expect(within(districts).queryByText("District 12")).toBeNull();
+    expect(how.open).toBe(false);
   });
 });
 

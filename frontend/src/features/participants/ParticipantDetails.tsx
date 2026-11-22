@@ -337,6 +337,7 @@ export function ParticipantDetails({
   participantId,
   consentMode,
   required = EVERY_DETAIL,
+  onChanged,
 }: {
   projectId: string;
   participantId: string;
@@ -344,12 +345,20 @@ export function ParticipantDetails({
   consentMode?: ConsentMode | undefined;
   /** The speaker details the project needs (D-145), for the words on what is missing. */
   required?: readonly string[];
+  /** After an upload here (for example to load the list or the task behind again). */
+  onChanged?: () => void;
 }) {
-  const { state, reload } = useResource(
+  const { state, reload, replace } = useResource(
     () => work.participantDetails(projectId, participantId),
     [projectId, participantId],
   );
   const { error, run } = useAction();
+  // After an upload the badges are read again without a loading screen: the window keeps its
+  // place and the upload's own message (FEW-13).
+  const uploaded = () => {
+    void work.participantDetails(projectId, participantId).then(replace, reload);
+    onChanged?.();
+  };
   if (state.status === "loading") return <LoadingState label="Loading the participant" />;
   if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
   const d = state.data;
@@ -387,7 +396,7 @@ export function ParticipantDetails({
             <DocumentsPanel
               projectId={projectId}
               participantId={participantId}
-              onChanged={reload}
+              onChanged={uploaded}
             />
           </Block>
         </div>

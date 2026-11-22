@@ -3,18 +3,18 @@
 GENERATED from docs/BUILD_STATUS.md by `python tools/requirements_checklist.py`;
 do not edit by hand. Change the requirement's row in BUILD_STATUS.md, then regenerate.
 
-333 requirements. Of the 290 that describe the product (not withdrawn, not a
-process rule), 193 are built with passing automated tests (69 of them also verified) - 67 %.
+333 requirements. Of the 289 that describe the product (not withdrawn, not a
+process rule), 192 are built with passing automated tests (69 of them also verified) - 66 %.
 
 | State | Count | Meaning |
 |---|---:|---|
 | Verified | 69 | built, automated tests pass and checked by hand or accepted at a gate |
-| Built | 124 | built and automated tests pass; not yet checked by hand |
+| Built | 123 | built and automated tests pass; not yet checked by hand |
 | Partly built / needs testing | 39 | some of it is built, or it needs a test that is not done yet |
 | Needs fixing | 0 | built but a test fails |
 | Not built | 11 | not started |
 | Blocked | 47 | waiting on a decision or account from the owner or client (see Note) |
-| Withdrawn | 20 | removed by an owner decision (see Note) |
+| Withdrawn | 21 | removed by an owner decision (see Note) |
 | Process rule | 23 | how the work is done (GEN, PROC), not a feature of the app |
 
 ## By module
@@ -32,7 +32,7 @@ process rule), 193 are built with passing automated tests (69 of them also verif
 | AUTH | 6 | 10 |  |  |  |  |  |  |
 | USER | 3 | 6 |  |  |  |  |  |  |
 | PROJ | 1 | 10 | 1 |  |  |  | 1 |  |
-| PART | 7 | 10 |  |  |  |  |  |  |
+| PART | 7 | 9 |  |  |  |  | 1 |  |
 | TASK | 8 | 4 |  |  |  |  |  |  |
 | STOR | 4 | 8 | 1 |  |  |  |  |  |
 | FTF | 13 |  | 2 |  |  |  |  |  |

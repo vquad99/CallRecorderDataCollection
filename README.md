@@ -33,7 +33,7 @@ docs/       requirements, architecture, decisions, test plan, evidence
 
 ## Prerequisites
 
-Python 3.12, [uv](https://docs.astral.sh/uv/) 0.13.1, Node.js 22, Docker with Compose v2, make.
+Python 3.12, [uv](https://docs.astral.sh/uv/) 0.13.9, Node.js 22, Docker with Compose v2, make.
 
 ## First-time setup
 

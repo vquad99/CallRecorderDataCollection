@@ -57,7 +57,7 @@ export function UserCreatePage() {
           type="submit"
           icon="send"
           busy={busy !== null}
-          disabled={!email || !name || roles.length === 0}
+          disabled={!email.trim() || !name.trim() || roles.length === 0}
         >
           Add and send invitation
         </Button>

@@ -36,7 +36,7 @@ from app.modules.participants.models import Participant
 from app.modules.projects.models import Project
 from app.modules.recordings import assets, media
 from app.modules.recordings.models import TELEPHONY_DELIVERY_KIND, AudioAsset, Recording
-from app.modules.tasks import service as tasks
+from app.modules.recordings.service import task_recorded
 from app.modules.tasks.models import Task
 from app.modules.telephony.models import Call
 from app.modules.telephony.service import candidate_from, mark_cancelled, mask, record_event
@@ -274,9 +274,9 @@ def _fetch_claimed(
         record_event(db, again, "FETCH_ERROR", detail)
         _fail_or_retry(db, again, datetime.now(UTC), "DOWNLOAD_FAILED", detail)
         return again
-    db.refresh(task)
-    if task.status == "IN_PROGRESS":
-        tasks.system_transition(db, task, "RECORDED", comment="Phone call recording ready")
+    # In progress: the task moves to Recorded. Put on hold while the file was coming down: it
+    # resumes at Recorded. A move refused meanwhile leaves the stored recording as it is.
+    task_recorded(db, task, "Phone call recording ready")
     if task.status == "RECORDED" and call.recording_id is not None:
         try:
             audio_qc.run_automatic(db, call.recording_id)

@@ -5,16 +5,21 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from fastapi.responses import Response
+from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.api.deps import AppSettings
+from app.core import csvio, xlsx
 from app.core.errors import forbidden
 from app.core.permissions import Perm
 from app.db.paging import Page, PageNumber, PageSize
 from app.modules.audio_qc import checklist
 from app.modules.auth.deps import CurrentPrincipal, DbSession, client_ip, require
+from app.modules.exports import service as exports
 from app.modules.participants.models import MAX_AGE, MIN_AGE
 from app.modules.projects import progress, service, targets
 from app.modules.projects.models import (
@@ -23,7 +28,6 @@ from app.modules.projects.models import (
     DEFAULT_SPEAKER_MIN_AGE,
     Project,
 )
-from app.modules.recordings.models import ASSET_KINDS
 
 # Every project route needs projects.view; finer checks and membership live in the service.
 router = APIRouter(
@@ -36,17 +40,28 @@ TwoPlaces = Annotated[Decimal, AfterValidator(lambda v: v.quantize(Decimal("0.01
 Status = Literal["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"]
 Mode = Literal["TELEPHONY", "FACE_TO_FACE"]
 ConsentMode = Literal["ONLINE", "UPLOAD"]
-AssetKind = Literal[
-    "PROVIDER_ORIGINAL_TRACK",
-    "PROVIDER_ORIGINAL_MIXED",
-    "TELEPHONY_FINAL_STEREO",
-    "CONSENT_RECORDING",
+# The kinds of file a retention rule can act on (PROJ-01): the originals and the delivery files,
+# the only kinds kept in storage as a recording's files. A rule saved before for another kind
+# still shows (the answer's field is plain text) but none can be saved.
+RetainedKind = Literal[
     "BROWSER_ORIGINAL",
     "FTF_DERIVED_PCM",
+    "PROVIDER_ORIGINAL_MIXED",
     "TELEPHONY_DERIVED_PCM",
-    "TRANSCRIPT_FILE",
-    "EXPORT_PACKAGE",
 ]
+
+
+def _one_line_name(value: str) -> str:
+    """A project's name on one line (PROJ-11): it heads emails (a line break in it stopped every
+    consent email), the consent form and the export's README. Spaces of any kind, line breaks
+    among them, become one space; nothing but spaces is no name."""
+    name = " ".join(value.split())
+    if not name:
+        raise ValueError("Give the project a name")
+    return name
+
+
+ProjectName = Annotated[str, Field(min_length=1, max_length=200), AfterValidator(_one_line_name)]
 
 
 class LanguageOut(BaseModel):
@@ -73,7 +88,16 @@ class AudioRuleIO(BaseModel):
 
 
 class RetentionIO(BaseModel):
-    asset_kind: AssetKind
+    """A retention rule as the project shows it."""
+
+    asset_kind: str
+    retain_days: int
+
+
+class RetentionIn(BaseModel):
+    """A retention rule as it is saved: a kind of file a rule can act on (PROJ-01)."""
+
+    asset_kind: RetainedKind
     retain_days: int = Field(ge=1, le=36500)
 
 
@@ -178,6 +202,9 @@ class ProjectDetail(ProjectSummary):
     audio_name_pattern: str
     status_reason: str | None
     status_changed_at: datetime | None
+    # When the project's own settings were last saved: sent back as `expected_updated_at` with a
+    # PATCH, it refuses a save over someone else's newer one (PROJ-03).
+    updated_at: datetime
     languages: list[LanguageOut]
     audio_rules: list[AudioRuleIO]
     retention_rules: list[RetentionIO]
@@ -221,6 +248,7 @@ def detail(p: Project) -> ProjectDetail:
         audio_name_pattern=p.audio_name_pattern,
         status_reason=p.status_reason,
         status_changed_at=p.status_changed_at,
+        updated_at=p.updated_at,
         languages=[
             LanguageOut(language_code=x.language_code, dialect=x.dialect) for x in p.languages
         ],
@@ -254,7 +282,7 @@ def list_projects(
 
 
 class ProjectBody(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: ProjectName
     description: str = Field(default="", max_length=5000)
     allows_telephony: bool
     allows_face_to_face: bool
@@ -296,9 +324,10 @@ class ProjectBody(BaseModel):
     )
     long_pauses_need_review: bool = False
     progress_counts: ProgressCounts = "EFFECTIVE"
-    # Targets (D-148), set on the Rules tab; null = no target. The shares left out: a new project
+    # Targets (D-148), set on the Rules tab; null = no target (an hours target of 0 is refused,
+    # PROJ-12, like a speakers or conversations target of 0). The shares left out: a new project
     # gets the first client's, and a change keeps the project's own.
-    target_hours: Decimal | None = Field(default=None, ge=0, le=1_000_000, decimal_places=2)
+    target_hours: Decimal | None = Field(default=None, gt=0, le=1_000_000, decimal_places=2)
     target_speakers: int | None = Field(
         default=targets.DEFAULT_TARGET_SPEAKERS, ge=1, le=10_000_000
     )
@@ -318,9 +347,12 @@ class ProjectBody(BaseModel):
     speaker_id_style: SpeakerIdStyle | None = None
     conversation_id_style: ConversationIdStyle | None = None
     audio_name_pattern: str | None = Field(default=None, max_length=200)
+    # The project's `updated_at` as the page loaded it (PROJ-03): a PATCH refuses to save over a
+    # newer save (409 PROJECT_CHANGED). Left out, nothing is compared. Not a setting.
+    expected_updated_at: AwareDatetime | None = None
 
     def to_input(self) -> service.ProjectInput:
-        values = self.model_dump()
+        values = self.model_dump(exclude={"expected_updated_at"})
         values["required_speaker_details"] = tuple(values["required_speaker_details"])
         for name in ("qc_checklist", "device_fields", "target_districts"):
             if values[name] is not None:
@@ -361,6 +393,45 @@ def project_progress(
     return progress.progress(db, principal, project_id)
 
 
+SummaryFormat = Literal["xlsx", "csv"]
+
+
+@router.get("/{project_id}/progress/export")
+def export_progress(
+    project_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: AppSettings,
+    table_format: Annotated[SummaryFormat, Query(alias="format")] = "xlsx",
+) -> Response:
+    """The Progress tab as a file (owner's request): an Excel workbook with a sheet per table
+    (`format=xlsx`, the default) or one long CSV table (`format=csv`). The tab's own numbers and
+    access: `projects.manage` (others 403, a project the caller cannot see 404). Audited as
+    `project.exported` with content `progress_summary`."""
+    answer = progress.progress(db, principal, project_id)
+    project = service.get_manageable(db, principal, project_id)  # already loaded: no query
+    now = datetime.now(ZoneInfo(settings.report_timezone))
+    tables = progress.summary_tables(answer, project, progress.stamp(now))
+    if table_format == "xlsx":
+        body: bytes | str = xlsx.write_workbook([(t.title, t.header, t.cells()) for t in tables])
+        media = xlsx.MEDIA_TYPE
+    else:
+        body = csvio.write_table(
+            progress.SUMMARY_COLUMNS, progress.summary_csv_rows(tables), bom=True
+        )
+        media = "text/csv; charset=utf-8"
+    exports.record(db, principal, project, "progress_summary", table_format, client_ip(request))
+    name = exports.file_name(
+        project, "progress_summary", table_format, tz_name=settings.report_timezone
+    )
+    return Response(
+        content=body,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @router.patch("/{project_id}", response_model=ProjectDetail)
 def update_project(
     project_id: uuid.UUID,
@@ -370,7 +441,14 @@ def update_project(
     db: DbSession,
 ) -> ProjectDetail:
     return detail(
-        service.update_project(db, principal, project_id, body.to_input(), client_ip(request))
+        service.update_project(
+            db,
+            principal,
+            project_id,
+            body.to_input(),
+            client_ip(request),
+            expected_updated_at=body.expected_updated_at,
+        )
     )
 
 
@@ -427,7 +505,7 @@ def set_audio_rules(
 
 
 class RetentionBody(BaseModel):
-    rules: list[RetentionIO] = Field(max_length=len(ASSET_KINDS))
+    rules: list[RetentionIn] = Field(max_length=len(get_args(RetainedKind)))
 
 
 @router.put("/{project_id}/retention", response_model=ProjectDetail)

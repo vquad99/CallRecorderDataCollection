@@ -80,6 +80,54 @@ function api(recordings: unknown[], extra: Record<string, Handler> = {}) {
   );
 }
 
+/** A file of a recording, as the server lists it. */
+function asset(id: string, kind: string, rate: number, depth: number, silence = 3.2) {
+  return {
+    id,
+    kind,
+    version: 1,
+    codec: "pcm",
+    sample_rate: rate,
+    bit_depth: depth,
+    channels: 1,
+    duration_ms: 7000,
+    size_bytes: 1,
+    sha256: "",
+    peak_dbfs: null,
+    rms_dbfs: null,
+    clip_pct: 0,
+    silence_pct: silence,
+  };
+}
+
+/** A recording prepared by the server: the original capture and the delivered recording. */
+function prepared(state: "READY" | "FAILED" = "READY", silence = 3.2) {
+  return {
+    id: "r1",
+    task_id: "t1",
+    state,
+    native_sample_rate: 16000,
+    channel_count: 1,
+    device_channel_count: 1,
+    channel_handling: "mono",
+    echo_cancellation: false,
+    noise_suppression: false,
+    auto_gain_control: false,
+    chunks_received: 2,
+    interrupted: false,
+    failure_reason: state === "FAILED" ? "RuntimeError" : null,
+    saved_seconds: 7,
+    current: true,
+    assets:
+      state === "READY"
+        ? [
+            asset("a1", "BROWSER_ORIGINAL", 16000, 32, silence),
+            asset("a2", "FTF_DERIVED_PCM", 16000, 16, silence),
+          ]
+        : [],
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal("AudioWorkletNode", function AudioWorkletNode() {});
 });
@@ -159,11 +207,13 @@ describe("RecorderPage", () => {
     const { calls } = api([open], {
       "POST /api/v1/recordings/r1/interrupted": () => [200, { ...open, state: "INTERRUPTED" }],
       "POST /api/v1/recordings/r1/complete": () => [200, { ...open, state: "UPLOADED" }],
+      "GET /api/v1/recordings/r1": () => [200, prepared()],
     });
     renderAt("/tasks/t1/record");
     expect(
       await screen.findByText(/0:15 of audio reached the server and is kept/),
     ).toBeInTheDocument();
+    await vi.waitFor(() => expect(document.title).toBe("Record T000009 · Conversation Collection"));
     await userEvent.click(screen.getByRole("button", { name: "Keep the saved 0:15" }));
     await vi.waitFor(() =>
       expect(calls.some((c) => c.path === "/api/v1/recordings/r1/complete")).toBe(true),
@@ -172,6 +222,28 @@ describe("RecorderPage", () => {
       ["/api/v1/recordings/r1/interrupted", { reason: "Page closed or reloaded during recording" }],
       ["/api/v1/recordings/r1/complete", { chunk_count: 3 }],
     ]);
+    // FEW-02: the kept audio is prepared and shown, with Send to QC; not a fresh start.
+    expect(await screen.findByRole("heading", { name: "Recording saved" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send to QC" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record again" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
+    expect(screen.queryByText("An earlier recording did not finish")).not.toBeInTheDocument();
+  });
+
+  it("keeps the way back and the title when the task cannot be loaded (POL-13)", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn() } });
+    api([], {
+      "GET /api/v1/tasks/t1": () => [
+        404,
+        { error: { code: "NOT_FOUND", message: "Task not found", request_id: "r" } },
+      ],
+    });
+    renderAt("/tasks/t1/record");
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Record task" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("href", "/tasks");
+    expect(screen.getByText("Task not found")).toBeInTheDocument();
   });
 
   it("does not let recording start until both participants have consent (D-119)", async () => {
@@ -221,8 +293,11 @@ function fakeAudio({ refuse = false, keptRate }: { refuse?: boolean; keptRate?: 
   }
   const track = {
     label: "Desk microphone",
-    onended: null,
-    stop: () => undefined,
+    onended: null as (() => void) | null,
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
     getSettings: () => ({
       channelCount: 1,
       echoCancellation: false,
@@ -245,8 +320,160 @@ function fakeAudio({ refuse = false, keptRate }: { refuse?: boolean; keptRate?: 
     act(() =>
       nodes[0]?.port.onmessage?.({ data: { samples: new Float32Array(160), channels: 1 } }),
     );
-  return { asked, speak };
+  return { asked, speak, track };
 }
+
+/** The microphone is allowed, audio arrives, and Start recording is pressed. */
+async function startRecording(audio: ReturnType<typeof fakeAudio>) {
+  renderAt("/tasks/t1/record");
+  await userEvent.click(await screen.findByRole("button", { name: "Allow microphone" }));
+  await audio.speak();
+  await userEvent.click(await screen.findByRole("button", { name: "Start recording" }));
+  expect(await screen.findByRole("button", { name: "Stop and save" })).toBeInTheDocument();
+}
+
+describe("no dead ends while recording (FEW-01, FEW-08)", () => {
+  const open = {
+    id: "r1",
+    task_id: "t1",
+    state: "INTERRUPTED",
+    chunks_received: 2,
+    saved_seconds: 10,
+    interrupted: true,
+    assets: [],
+  };
+
+  it("offers to keep or discard the saved audio when the microphone stops", async () => {
+    const audio = fakeAudio();
+    let listed: unknown[] = [];
+    const { calls } = api([], {
+      "GET /api/v1/tasks/t1/recordings": () => [200, listed],
+      "POST /api/v1/tasks/t1/recordings": () => [201, { id: "r1", state: "RECORDING" }],
+      "POST /api/v1/recordings/r1/interrupted": () => {
+        listed = [open];
+        return [200, open];
+      },
+    });
+    await startRecording(audio);
+    act(() => audio.track.onended?.());
+    const card = await screen.findByRole("alert", { name: "The recording stopped" });
+    expect(card).toHaveTextContent(
+      "The microphone stopped. 0:10 of audio reached the server and is kept. Nothing after that " +
+        "was recorded.",
+    );
+    expect(within(card).getByRole("button", { name: "Keep the saved 0:10" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Discard it" })).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/recordings/r1/interrupted")?.body).toEqual({
+      reason: "Microphone stopped",
+    });
+    expect(audio.track.stopped).toBe(true); // the microphone is let go
+    expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
+  });
+
+  it("offers the same when saving fails, instead of a fresh start the server refuses", async () => {
+    const audio = fakeAudio();
+    let listed: unknown[] = [];
+    api([], {
+      "GET /api/v1/tasks/t1/recordings": () => [200, listed],
+      "POST /api/v1/tasks/t1/recordings": () => [201, { id: "r1", state: "RECORDING" }],
+      "PUT /api/v1/recordings/r1/chunks/0": () => [200, { seq: 0, size_bytes: 640, sha256: "" }],
+      "POST /api/v1/recordings/r1/complete": () => {
+        listed = [{ ...open, state: "RECORDING", interrupted: false }];
+        return [
+          409,
+          {
+            error: {
+              code: "MISSING_CHUNKS",
+              message: "Some parts of the recording have not arrived yet",
+              request_id: "r",
+            },
+          },
+        ];
+      },
+    });
+    await startRecording(audio);
+    await audio.speak();
+    await userEvent.click(screen.getByRole("button", { name: "Stop and save" }));
+    const card = await screen.findByRole("alert", { name: "The recording stopped" });
+    expect(card).toHaveTextContent("The recording could not be saved. 0:10 of audio reached");
+    expect(within(card).getByRole("button", { name: "Keep the saved 0:10" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Some parts of the recording have not arrived yet"),
+    ).toBeInTheDocument();
+    expect(audio.track.stopped).toBe(true);
+    expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
+  });
+
+  it("sends Start recording once, and waits while it is on its way", async () => {
+    const audio = fakeAudio();
+    let answer: (reply: [number, unknown]) => void = () => undefined;
+    const { calls } = api([], {
+      "POST /api/v1/tasks/t1/recordings": () =>
+        new Promise<[number, unknown]>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    renderAt("/tasks/t1/record");
+    await userEvent.click(await screen.findByRole("button", { name: "Allow microphone" }));
+    await audio.speak();
+    const start = await screen.findByRole("button", { name: "Start recording" });
+    await userEvent.dblClick(start);
+    await vi.waitFor(() => expect(start).toBeDisabled());
+    expect(screen.getByRole("button", { name: /^Test/ })).toBeDisabled();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    answer([201, { id: "r1", state: "RECORDING" }]);
+    expect(await screen.findByRole("button", { name: "Stop and save" })).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
+  it("lets the moderator record again when the recording could not be prepared", async () => {
+    const audio = fakeAudio();
+    api([], {
+      "POST /api/v1/tasks/t1/recordings": () => [201, { id: "r1", state: "RECORDING" }],
+      "POST /api/v1/recordings/r1/complete": () => [200, { ...open, state: "UPLOADED" }],
+      "GET /api/v1/recordings/r1": () => [200, prepared("FAILED")],
+    });
+    await startRecording(audio);
+    await userEvent.click(screen.getByRole("button", { name: "Stop and save" }));
+    expect(await screen.findByRole("heading", { name: "Processing failed" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send to QC" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Record again" }));
+    expect(await screen.findByRole("button", { name: "Allow microphone" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Processing failed" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the silence of a saved recording (UXW-12)", () => {
+  it("warns at once when there is more silence than the project allows", async () => {
+    const { Result } = await import("./RecorderPage");
+    for (const [silence, warned] of [
+      [92.2, true],
+      [3.2, false],
+    ] as const) {
+      fakeApi(signedInAs(["tasks.view"]));
+      const router = createMemoryRouter([
+        { path: "/", element: <Result recording={prepared("READY", silence)} maxSilence={25} /> },
+      ]);
+      const { unmount } = render(
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>,
+      );
+      expect(await screen.findByText("Recorded at 16000 Hz.")).toBeInTheDocument();
+      const warning = screen.queryByText(/of this recording is silence/);
+      if (warned) {
+        expect(warning).toHaveTextContent(
+          "92.2% of this recording is silence; this project allows at most 25%. Listen to it, " +
+            "and record again while both speakers are here if it is not good.",
+        );
+        expect(warning).toHaveAttribute("role", "status");
+      } else {
+        expect(warning).toBeNull();
+      }
+      unmount();
+    }
+  });
+});
 
 describe("recording at the project's rate, never converted (owner 2026-11-17)", () => {
   it("opens the microphone at 16000 Hz and tells the server so", async () => {
