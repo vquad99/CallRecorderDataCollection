@@ -1,7 +1,8 @@
 // Everything about one participant in one project (D-104), opened by "View": profile, who added
 // them, the projects they are in, their personal link, the consent form as they answered it, their
 // uploaded documents (D-144), minutes, phone calls, and every session they were part of. Laid out
-// as key / value tables in two columns, the sessions as one table under them (D-152).
+// as key / value rows in two columns, the sessions as one table under them (D-152). Each part is a
+// sub-section of the window, with no frame of its own (D-158).
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -61,11 +62,14 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** A part of the window: its title under a line (D-158), then its rows. */
 function Block({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
     <section className="pd-section" aria-labelledby={id}>
-      <h3 id={id}>{title}</h3>
+      <h3 id={id} className="subhead">
+        {title}
+      </h3>
       {children}
     </section>
   );
@@ -121,8 +125,9 @@ function Profile({ d, required }: { d: work.ParticipantDetails; required: readon
           <span className="mono">{p.participant_code}</span>
         </Fact>
         <Fact label="Name">{p.display_label ?? "Hidden"}</Fact>
-        <Fact label="Phone">{p.phone ?? (p.has_phone ? "On file (hidden)" : "None")}</Fact>
-        <Fact label="Email">{p.email ?? (p.has_email ? "On file (hidden)" : "None")}</Fact>
+        {/* Nothing on file reads "-", as every empty value (D-158). */}
+        <Fact label="Phone">{p.phone ?? (p.has_phone ? "On file (hidden)" : "-")}</Fact>
+        <Fact label="Email">{p.email ?? (p.has_email ? "On file (hidden)" : "-")}</Fact>
         <Fact label="Language">{language(p)}</Fact>
         {/* Speaker details (D-143). */}
         <Fact label="Speaker details">
@@ -147,7 +152,7 @@ function Profile({ d, required }: { d: work.ParticipantDetails; required: readon
         <Fact label="Projects">
           {d.projects.length > 0 ? d.projects.map((x) => `${x.code} · ${x.name}`).join(", ") : "-"}
         </Fact>
-        <Fact label="Notes">{p.notes?.trim() ? p.notes : "None"}</Fact>
+        <Fact label="Notes">{p.notes?.trim() ? p.notes : "-"}</Fact>
         {d.removed ? (
           <>
             <Fact label="Removed on">{when(d.removed.at)}</Fact>
@@ -218,7 +223,8 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
         <p className="muted">This participant has not been part of a session yet.</p>
       ) : (
         <>
-          <DataTable label="Sessions of this participant">
+          {/* Edge to edge in the window, its first and last cells in line with the title. */}
+          <DataTable bleed label="Sessions of this participant">
             <thead>
               <tr>
                 <th scope="col">Task</th>
@@ -253,7 +259,7 @@ function Sessions({ d }: { d: work.ParticipantDetails }) {
                         <div className="muted">{when(s.recorded_at)}</div>
                       </>
                     ) : (
-                      <span className="muted">None</span>
+                      "-"
                     )}
                   </td>
                   <td>{s.mode === "TELEPHONY" ? s.phone_calls : "-"}</td>
@@ -364,7 +370,7 @@ export function ParticipantDetails({
   const d = state.data;
   const form = d.consent_form;
   return (
-    <div className="stack pd">
+    <div className="pd">
       <Head
         d={d}
         mode={consentMode}

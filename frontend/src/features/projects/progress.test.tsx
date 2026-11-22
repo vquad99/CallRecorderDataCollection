@@ -139,12 +139,25 @@ describe("the Progress tab", () => {
       name: "Speakers still needed by native district",
     });
     expect(line(districts, "North Goa (Goa)")).toEqual(["North Goa (Goa)", "63", "2", "1", "60"]);
-    expect(line(districts, "Other districts")).toEqual(["Other districts", "–", "1", "0", "–"]);
+    // No target: a plain dash (D-158).
+    expect(line(districts, "Other districts")).toEqual(["Other districts", "-", "1", "0", "-"]);
     expect(line(districts, "Total")).toEqual(["Total", "126", "4", "1", "122"]);
     // Conversations, by type too in a project that records both (made before D-153).
     const talks = within(needed).getByRole("table", { name: "Conversations still to make" });
     expect(line(talks, "All conversations")).toEqual(["All conversations", "600", "3", "2", "595"]);
     expect(line(talks, "Phone call")).toEqual(["Phone call", "300", "1", "1", "298"]);
+    // Three parts of one section, each titled under a line, their tables edge to edge (D-158).
+    expect(
+      within(needed)
+        .getAllByRole("heading", { level: 3 })
+        .map((h) => [h.textContent, h.className]),
+    ).toEqual([
+      ["Speakers by age band and gender", "subhead"],
+      ["Speakers by native district", "subhead"],
+      ["Conversations", "subhead"],
+    ]);
+    for (const table of [matrix, districts, talks])
+      expect(table.closest(".table-wrap")).toHaveClass("bleed");
   });
 
   it("leaves out the split by type in a project that records one (D-153)", async () => {
@@ -215,7 +228,7 @@ describe("the Progress tab", () => {
     const matrix = within(needed).getByRole("table", {
       name: "Speakers still needed by age band and gender",
     });
-    expect(needRow(matrix, "All ages")[2]).toBe("– | done 5 · registered 1");
+    expect(needRow(matrix, "All ages")[2]).toBe("- | done 5 · registered 1");
     expect(within(matrix).queryByRole("rowheader", { name: "Total" })).toBeNull();
     expect(needed).toHaveTextContent(
       "No districts listed: list them on the Rules tab (Targets) to see who is needed by district.",
@@ -348,7 +361,10 @@ describe("the Progress tab", () => {
     const balance = await screen.findByRole("table", { name: "Balance against the targets" });
     const districts = within(balance).getByRole("rowgroup", { name: "Districts" });
     expect(within(districts).queryByText("District 11")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Show all (12)" }));
+    const more = screen.getByRole("button", { name: "Show all (12)" });
+    // On the section's title bar, as on the dashboard (D-158).
+    expect(more.closest(".panel__head")).toHaveTextContent("Balance against the targets");
+    await userEvent.click(more);
     expect(within(districts).getByText("District 12")).toBeInTheDocument();
   });
 
@@ -446,8 +462,15 @@ describe("the Progress tab as a file (owner's request)", () => {
     expect(screen.getByRole("button", { name: "Download CSV" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Print or save as PDF" })).toBeEnabled();
     expect(excel).toBeEnabled();
-    // When the figures were read, on the page and on top of a printed one.
-    expect(screen.getByText(/^Figures as of \d{1,2} \w{3} \d{4}, /)).toBeInTheDocument();
+    // On the page's title row, as every page's own buttons (D-158), with when the figures were
+    // read under the title; a printed page says it on top.
+    const header = screen
+      .getByRole("heading", { level: 1, name: "Progress" })
+      .closest(".page-header");
+    expect(header).toContainElement(excel);
+    expect(screen.getByText(/^Figures as of \d{1,2} \w{3} \d{4}, /)).toHaveClass(
+      "page-header__lead",
+    );
     expect(
       screen.getByText(/^HINDI · Hindi conversations · as of \d{1,2} \w{3} \d{4}, /),
     ).toHaveClass("progress-print-head");

@@ -15,7 +15,8 @@ test("each role lands on its own dashboard view", async ({ browser }) => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Collection progress" }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Hours per day" })).toBeVisible();
+    // The chart counts in minutes when no day reaches an hour (D-158).
+    await expect(page.getByRole("heading", { name: /^(Hours|Minutes) per day$/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Needs attention" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Moderator output" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Tasks by status" })).toHaveCount(0);

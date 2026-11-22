@@ -480,7 +480,7 @@ as no effective speech and the page says how many.
 
 ### Settings, System status, Audit log
 
-- **Settings** (page title **Capacity targets**): **Staff accounts**, under **Account limit**
+- **Settings**: one section, **Capacity targets**, with **Save targets** on its title bar. **Staff accounts**, under **Account limit**
   (marked **Enforced**), refuses new or re-enabled accounts above the number. The figures under
   **Planning figures** are for reference only; nothing is limited by them. **Participants per
   conversation** is fixed at 2 and shown only. A value outside its bounds is refused on the page,
@@ -795,7 +795,7 @@ On a phone everything is in one column, your work first.
 
 ### Downloads
 
-On an approved task, in **Recordings**, click **Download with consent form**. You get three files:
+On an approved task, in **Recordings**, click the download icon in the recording's row (**Download with consent form**). You get three files:
 
 1. The audio file (16 kHz WAV, ready for delivery).
 2. The consent record (`consent_<task>_<recording>.html`): both participants' consent for this

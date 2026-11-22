@@ -1,10 +1,23 @@
 // The dashboards' shared figures and charts (D-151): tasks grouped by stage, a donut whose legend
-// is a table, a split bar with its counts as text, tables in sections, and the day chart's axis.
+// is a table, a split bar with its counts as text, tables in sections, and the day chart's axis;
+// and D-158's tables in sections: stage parts kept whole, numbers beside their bars, a dash for an
+// empty cell, a table that runs edge to edge.
 // Requirements: DASH-001
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { DayChart, Donut, Kpi, KpiStrip, MatrixTable, SplitBar } from "./Charts";
+import { DataTable } from "../DataTable";
+import {
+  CellBar,
+  DayChart,
+  Donut,
+  KeyTable,
+  Kpi,
+  KpiStrip,
+  MatrixTable,
+  ShareTable,
+  SplitBar,
+} from "./Charts";
 import { stageParts } from "./stages";
 
 describe("dashboard figures", () => {
@@ -158,5 +171,94 @@ describe("dashboard figures", () => {
     expect(
       within(figures).getByRole("progressbar", { name: "Today of the daily target" }),
     ).toHaveAttribute("aria-valuenow", "100");
+  });
+});
+
+describe("tables in sections (D-158)", () => {
+  it("keeps each part of a stage on one line, breaking only between parts", () => {
+    render(
+      <ShareTable
+        label="Tasks by status"
+        head="Stage"
+        countHead="Tasks"
+        emptyText="No tasks yet."
+        parts={stageParts({ AUDIO_QC: 48, ADMIN_REVIEW: 12 })}
+      />,
+    );
+    const stage = screen.getByRole("rowheader", { name: /Waiting for QC or approval/ });
+    expect(stage).toHaveTextContent("Waiting for QC or approvalAudio QC 48 · Admin review 12");
+    expect(Array.from(stage.querySelectorAll(".nowrap")).map((s) => s.textContent)).toEqual([
+      "Audio QC 48",
+      "Admin review 12",
+    ]);
+  });
+
+  it("writes a number after its bar, not over it", () => {
+    render(
+      <CellBar value={26} max={52}>
+        26 h
+      </CellBar>,
+    );
+    const n = screen.getByText("26 h");
+    expect(n).toHaveClass("cellbar__n");
+    const bar = n.previousElementSibling;
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    expect(bar?.firstElementChild).toHaveStyle({ width: "50%" });
+  });
+
+  it("shows a dash in a cell with nothing in it", () => {
+    render(
+      <>
+        <KeyTable
+          label="Phone calls"
+          rows={[
+            { label: "Placed", value: 3 },
+            { label: "Last call", value: null },
+          ]}
+        />
+        <MatrixTable<{ key: string; n: number | null }>
+          label="Reasons"
+          head="Reason"
+          columns={[{ key: "n", label: "Count", num: true, cell: (r) => r.n }]}
+          sections={[{ key: "a", title: "Cancelled", rows: [{ key: "No answer", n: null }] }]}
+          rowKey={(r) => r.key}
+          rowLabel={(r) => r.key}
+        />
+      </>,
+    );
+    expect(screen.getByRole("rowheader", { name: "Last call" }).closest("tr")).toHaveTextContent(
+      "Last call-",
+    );
+    expect(screen.getByRole("rowheader", { name: "Placed" }).closest("tr")).toHaveTextContent(
+      "Placed3",
+    );
+    expect(screen.getByRole("rowheader", { name: "No answer" }).closest("tr")).toHaveTextContent(
+      "No answer-",
+    );
+  });
+
+  it("lets a table inside a section run edge to edge when asked", () => {
+    const { rerender } = render(
+      <DataTable label="Device details">
+        <tbody>
+          <tr>
+            <td>Samsung</td>
+          </tr>
+        </tbody>
+      </DataTable>,
+    );
+    const wrap = () => screen.getByRole("table", { name: "Device details" }).parentElement;
+    expect(wrap()).toHaveClass("table-wrap");
+    expect(wrap()).not.toHaveClass("bleed");
+    rerender(
+      <DataTable label="Device details" bleed>
+        <tbody>
+          <tr>
+            <td>Samsung</td>
+          </tr>
+        </tbody>
+      </DataTable>,
+    );
+    expect(wrap()).toHaveClass("table-wrap", "bleed");
   });
 });

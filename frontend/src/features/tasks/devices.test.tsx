@@ -100,6 +100,9 @@ describe("device details on the task page (D-147)", () => {
     );
     const save = within(card).getByRole("button", { name: "Save device details" });
     expect(save).toBeDisabled(); // nothing changed yet
+    // D-158: the one Save sits on the section's title bar, above the matrix it saves.
+    const matrix = within(card).getByRole("table", { name: "Device details of both speakers" });
+    expect(save.compareDocumentPosition(matrix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await userEvent.type(box("A", "Device make"), "Samsung");
     await userEvent.type(box("A", "Device model"), "Galaxy A14");

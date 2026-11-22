@@ -1,11 +1,17 @@
+/* A project's pages. Loaded with the project's pages. */
+
+/* The title row (D-158): a page's own buttons on its right and a short line under the title; a
+   page without them leaves no gap. */
+.page-header > .actions:empty,
+.page-header__lead:empty {
+  display: none;
+}
+
 /* A project's Overview for members who do not manage it (Moderator, QC Executive, Client Viewer):
    the project in a few rows, label left and value right, a thin line between rows; on a phone the
-   label sits above its value. Loaded with the project's pages. */
+   label sits above its value. */
 .project-summary {
   max-width: 760px;
-}
-.project-summary h2 {
-  margin: 0 0 var(--space-3);
 }
 .project-summary__list {
   margin: 0;
@@ -45,11 +51,50 @@
   }
 }
 
-/* Retention: the heading, what the automatic deletion does, then the four kinds two by two (the
-   face-to-face pair, then the phone pair); one under the other on a phone. */
-.retention h2 {
-  margin: 0 0 var(--space-2);
+/* A short table's Actions column takes only the room its buttons need: they sit at the end of the
+   row under their heading, not in the middle of it (D-158). */
+.table th.actions-col {
+  width: 1%;
 }
+
+/* A box of text that grows with its words from its rows up (GrowBox: project details and Rules), so
+   it never scrolls on its own (D-157, D-158). The same words, unseen, in the same grid cell behind
+   the box set the cell's height; they take the box's padding, border and type so their lines
+   match. */
+.grow-box {
+  display: grid;
+}
+.grow-box > textarea.field__input,
+.grow-box::after {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.grow-box > textarea.field__input {
+  overflow: hidden;
+  resize: none;
+}
+.grow-box::after {
+  content: attr(data-value) " ";
+  visibility: hidden;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Team: the search for people to add, then who was found as a table edge to edge (D-158). A
+   person's email may break after its "@" (and their name between words), also on a phone, so the
+   table fits the screen with its Actions in view. */
+.team-search:not(:last-child) {
+  margin-bottom: var(--card-py);
+}
+.table td.team-person {
+  white-space: normal;
+}
+
+/* Retention: what the automatic deletion does, then the four kinds two by two (the face-to-face
+   pair, then the phone pair); one under the other on a phone. Its Save is on the title bar. */
 .retention__note {
   max-width: 760px;
   margin: 0 0 var(--space-4);

@@ -230,4 +230,86 @@ describe("dashboard filters", () => {
       expect(screen.queryByRole("region", { name })).toBeNull();
     }
   });
+
+  it("keeps the filters and the key figures apart, and pairs sections of like height (D-158)", async () => {
+    open();
+    renderAt("/dashboard");
+    const filters = await screen.findByRole("group", { name: "Filters" }, wait);
+    const figures = await screen.findByRole("group", { name: "Key figures" }, wait);
+    // Two sections of their own, the key figures right after the filters.
+    expect(filters).not.toContainElement(figures);
+    expect(figures).not.toContainElement(filters);
+    expect(filters.nextElementSibling).toBe(figures);
+    // One moderator: the tasks by status among the short tables, the moderators at the end.
+    const sections = () =>
+      Array.from(
+        screen.getByRole("region", { name: "Moderator output" }).parentElement?.children ?? [],
+      ).map((s) => s.querySelector("h2")?.textContent);
+    expect(sections()).toEqual([
+      "Hours per day",
+      "By recording type",
+      "Tasks by status",
+      "Needs attention",
+      "Audio QC",
+      "Phone calls",
+      "Moderator output",
+    ]);
+  });
+
+  it("puts the tasks by status beside a long list of moderators (D-158)", async () => {
+    const team = Array.from({ length: 12 }, (_, i) => ({
+      name: `Moderator ${i + 1}`,
+      recordings: 10,
+      recorded_hours: 2,
+    }));
+    open(() => ({ ...DASHBOARD, team }));
+    renderAt("/dashboard");
+    const output = await screen.findByRole("region", { name: "Moderator output" }, wait);
+    expect(
+      Array.from(output.parentElement?.children ?? []).map(
+        (s) => s.querySelector("h2")?.textContent,
+      ),
+    ).toEqual([
+      "Hours per day",
+      "By recording type",
+      "Needs attention",
+      "Audio QC",
+      "Phone calls",
+      "Tasks by status",
+      "Moderator output",
+    ]);
+    // The first ten, and the button for the rest on the section's title bar.
+    expect(within(output).queryByText("Moderator 11")).toBeNull();
+    const showAll = within(output).getByRole("button", { name: "Show all (12)" });
+    expect(
+      within(output).getByRole("heading", { name: "Moderator output" }).parentElement,
+    ).toContainElement(showAll);
+    await userEvent.click(showAll);
+    expect(within(output).getByText("Moderator 12")).toBeInTheDocument();
+  });
+
+  it("names the chart's unit as its axis does: minutes when no day reaches an hour (D-158)", async () => {
+    open(() => ({
+      ...DASHBOARD,
+      view: "worker",
+      target_hours_per_day: 0,
+      daily: DASHBOARD.daily.map((d) => ({ ...d, recorded_hours: 0.1, approved_hours: 0.05 })),
+      queues: null,
+      team: null,
+      calls: null,
+      options: { languages: ["hi"], dialects: [] },
+    }));
+    renderAt("/dashboard");
+    const chart = await screen.findByRole("figure", { name: "Minutes per day" }, wait);
+    expect(screen.queryByRole("heading", { name: "Hours per day" })).toBeNull();
+    // The busiest day is 6 minutes: an axis of plain minutes up to 10, no other unit on it.
+    const ticks = Array.from(chart.querySelectorAll("text")).map((t) => t.textContent);
+    expect(ticks).toEqual(expect.arrayContaining(["0", "5", "10"]));
+    expect(ticks.some((t) => /min|h$/.test(t ?? ""))).toBe(false);
+    // Without moderators, the tasks by status sit beside audio QC.
+    const grid = screen.getByRole("region", { name: "Audio QC" }).parentElement;
+    expect(Array.from(grid?.children ?? []).map((s) => s.querySelector("h2")?.textContent)).toEqual(
+      ["Minutes per day", "By recording type", "Tasks by status", "Audio QC"],
+    );
+  });
 });

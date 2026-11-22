@@ -9,7 +9,8 @@
  * D-156 (after D-154's plain pages): a page is its title row, one filter row, then sections. Each
  * section is a white panel with a thin frame on the light grey page, its title on a bar of its
  * own, then a table, a chart or fields; a table runs edge to edge inside it. Never a panel inside
- * a panel, and no tile per number.
+ * a panel, and no tile per number. D-158: the filter row and the key figures are framed sections
+ * of their own; a table inside a section or a window never has a frame of its own.
  */
 
 /* ---------- Tokens ---------- */
@@ -31,6 +32,10 @@
   /* A section's inner space: top and bottom, left and right (smaller on a phone). */
   --card-py: 16px;
   --card-px: 16px;
+  /* Every title bar is one height, its controls compact (D-158); on a phone they are tap-sized. */
+  --bar-ctl: 32px;
+  --bar-py: 6px;
+  --bar-h: calc(var(--bar-ctl) + 2 * var(--bar-py) + 1px);
 
   --font-sans: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -825,6 +830,8 @@ h1 > .tile {
   .topbar__menu {
     display: inline-flex;
     flex: none;
+    width: 40px;
+    height: 40px;
   }
   .topbar__account {
     padding: 2px;
@@ -838,7 +845,8 @@ h1 > .tile {
   /* A phone's top bar: the product as its mark, the account as its initials, Sign out as its
      icon, the phone line as its dot and state (D-141); the full words stay for screen readers. */
   .topbar__signout {
-    padding: 0 9px;
+    height: 40px;
+    padding: 0 11px;
   }
   .topbar__brand .brand__name,
   .topbar__who,
@@ -882,12 +890,21 @@ h1 > .tile {
   .section-nav {
     padding: 0;
   }
+  /* The row fades out at both edges (D-158): a pill cut by the screen's edge shows the row goes
+     on; at either end the first or last pill is whole. */
   .section-nav__list {
     display: flex;
     gap: 6px;
     overflow-x: auto;
     padding: 4px var(--gutter) 10px;
     scrollbar-width: none;
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 var(--gutter),
+      #000 calc(100% - var(--gutter)),
+      transparent
+    );
   }
   .section-nav__list > li,
   .section-nav__sub,
@@ -897,8 +914,9 @@ h1 > .tile {
   .section-nav__link,
   .section-nav__sublink {
     flex: none;
+    min-height: 40px;
     margin: 0;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border: 1px solid var(--panel-border);
     border-radius: 999px;
     background: var(--surface);
@@ -907,8 +925,11 @@ h1 > .tile {
   .section-nav__link .icon {
     display: none;
   }
+  /* The Rules' own pages: quieter pills, no line round them (D-158). */
   .section-nav__sublink {
-    border-style: dashed;
+    border-color: transparent;
+    background: rgb(255 255 255 / 0.55);
+    color: var(--panel-muted);
   }
   .section-nav__link[aria-current="page"],
   .section-nav__sublink[aria-current="page"] {
@@ -1235,55 +1256,71 @@ h1 > .tile {
   margin: 0;
   color: var(--muted);
 }
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px;
-}
-.toolbar .field {
-  min-width: 190px;
-  margin-bottom: 0;
-}
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
+/* A page's own buttons on a phone (D-158): rows of even buttons across the width, not a ragged
+   stack. Beside the page's title they do it by themselves; elsewhere add .page-actions. */
+@media (max-width: 640px) {
+  .page-header > .actions,
+  .page-actions {
+    flex: 1 1 100%;
+  }
+  :is(.page-header > .actions, .page-actions) > * {
+    flex: 1 1 0;
+  }
+}
 /* A section (D-156): a white panel with a thin frame on the grey page, its title on a bar of its
    own, then its table, chart or fields. Never a panel inside a panel: a section inside a section
-   is plain. */
-.card {
+   is plain. A page's filter bar (.filters) and its key figures (.figs) are framed the same way,
+   each on its own (D-158); inside a section or a window a filter row is plain. */
+.card,
+.panel,
+.filters,
+.figs {
   min-width: 0;
-  padding: var(--card-py) var(--card-px);
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: 0 1px 2px rgb(16 24 40 / 0.05);
 }
-.card .card {
+.card {
+  padding: var(--card-py) var(--card-px);
+}
+.card .card,
+:is(.card, .panel, .dialog) :is(.filters, .figs) {
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-.card > h2:first-child,
-.card > h3:first-child,
+/* The title bar (D-158): a section's first child (an h2 or h3, or a head holding the title and
+   its buttons or filter), a fieldset section's legend, a dashboard's .panel__head or chart
+   caption. One height everywhere: what sits on it is compact (32 px; 40 px on a phone). */
 .card
-  > :is(
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child {
-  margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
-  padding: 12px var(--card-px);
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+fieldset.card > legend,
+.panel__head,
+.panel > .chart:first-child > .chart__head {
+  display: flex;
+  align-items: center;
+  min-height: var(--bar-h);
+  padding: var(--bar-py) var(--card-px);
   border-bottom: 1px solid var(--border);
   border-radius: 8px 8px 0 0;
   background: #fafbfd;
+}
+.card
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child {
+  margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
+}
+.card > :is(h2, h3):first-child {
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 .card > h2,
 .card > h3 {
@@ -1291,110 +1328,142 @@ h1 > .tile {
   font-size: 0.9375rem;
   font-weight: 600;
 }
-/* A title with buttons beside it on the bar: the title the same size as any other. */
-.card
-  > :is(
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child
+/* On the bar the title is the same size as any other, a filter's label sits beside its box, and
+   buttons, boxes and players are compact. */
+:is(
+    .card > :is(.card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+    .panel__head,
+    .panel > .chart:first-child > .chart__head
+  )
   :is(h2, h3) {
   margin: 0;
+  padding-block: 6px;
   font-size: 0.9375rem;
   font-weight: 600;
 }
-/* A filter on the bar: its label beside it and a compact box, so the bar stays one line. */
-.card
-  > :is(
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child
+:is(
+    .card > :is(.card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+    .panel__head,
+    .panel > .chart:first-child > .chart__head
+  )
   .field {
   flex-direction: row;
   align-items: center;
   gap: 8px;
   margin: 0;
 }
-.card
-  > :is(
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child
-  .field__input {
+:is(
+    .card > :is(.card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+    .panel__head,
+    .panel > .chart:first-child > .chart__head
+  )
+  :is(.button, .field__input) {
   width: auto;
-  min-height: 30px;
+  min-height: var(--bar-ctl);
   padding-top: 4px;
   padding-bottom: 4px;
 }
+:is(
+    .card > :is(.card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+    .panel__head,
+    .panel > .chart:first-child > .chart__head
+  )
+  .button {
+  padding-inline: 12px;
+  font-size: 0.8125rem;
+}
+:is(
+    .card > :is(.card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child,
+    .panel__head,
+    .panel > .chart:first-child > .chart__head
+  )
+  audio {
+  height: var(--bar-ctl);
+}
 /* In a section whose parts are spaced by a gap, the gap is part of the space under the bar. */
 .card.stack
-  > :is(
-    h2,
-    h3,
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child {
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child {
   margin-bottom: calc(var(--card-py) - var(--space-4));
 }
 .card.stack--tight
-  > :is(
-    h2,
-    h3,
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child {
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child {
   margin-bottom: calc(var(--card-py) - var(--space-2));
 }
 /* A table right under the title bar starts at the bar's line. */
 .card
-  > :is(
-    h2,
-    h3,
-    .card__head,
-    .rules-card__head,
-    .side-card__head,
-    .calls-list__head,
-    .pick__head
-  ):first-child
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child
   + .table-wrap {
   margin-top: calc(-1 * var(--card-py));
   border-top: 0;
 }
-/* A table directly in a section runs edge to edge under the title bar. */
-.card > .table-wrap {
-  margin-inline: calc(-1 * var(--card-px));
-  border-width: 1px 0;
+/* A table inside a section or a window has no frame of its own, only a line above and below it
+   (D-158): never a box inside a box, also side by side. Directly in a section, or in a block
+   marked .bleed (a wrapper as wide as the section, or <DataTable bleed>), it runs edge to edge
+   and its first and last cells line up with the section's title. */
+:is(.card, .panel, .dialog) :is(.table-wrap, .bleed) {
+  border-inline-width: 0;
   border-radius: 0;
+}
+:is(.card, .panel) > .table-wrap,
+:is(.card, .panel, .dialog) .bleed {
+  --x0: var(--card-px);
+  margin-inline: calc(-1 * var(--card-px));
 }
 .card > .table-wrap:last-child {
   margin-bottom: calc(-1 * var(--card-py));
   border-bottom: 0;
   border-radius: 0 0 8px 8px;
 }
-.card > .table-wrap .table :is(th, td):first-child {
+/* Its first and last cells sit at the section's inner line, as do a list's table's directly on
+   the page (in line with the filter bar above it). */
+:is(:is(.card, .panel) > .table-wrap, .bleed, .table-wrap:not(:is(.card, .panel, .dialog) *))
+  .table
+  tr
+  > :is(th, td):first-child {
   padding-left: var(--card-px);
 }
-.card > .table-wrap .table :is(th, td):last-child {
+:is(:is(.card, .panel) > .table-wrap, .bleed, .table-wrap:not(:is(.card, .panel, .dialog) *))
+  .table
+  tr
+  > :is(th, td):last-child {
   padding-right: var(--card-px);
+}
+/* A part of a section (D-158): its heading under a line that runs edge to edge, with room for a
+   button on its right. Use it directly in a section, or in a block as wide as the section. */
+:is(.card, .panel, .dialog) .subhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: var(--card-py) calc(-1 * var(--card-px)) var(--space-2);
+  padding: var(--space-3) var(--card-px) 0;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.subhead > :is(h2, h3, h4) {
+  margin: 0;
+  font: inherit;
+}
+:is(.stack, .panel) > .subhead {
+  margin-block: 0;
+}
+.card
+  > :is(h2, h3, .card__head, .rules-card__head, .side-card__head, .calls-list__head):first-child
+  + .subhead,
+.panel__head + .subhead {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 @media (max-width: 640px) {
   :root {
     --card-py: 12px;
     --card-px: 12px;
+    --bar-ctl: 40px;
+    --bar-py: 4px;
   }
 }
 /* Two short sections side by side on a wide screen, under one line. */
@@ -1411,25 +1480,18 @@ h1 > .tile {
 .state {
   padding: var(--space-3) 0;
 }
-.with-icon {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 fieldset.card {
   min-width: 0;
   margin: 0;
 }
-/* A group of fields as a section: its legend is the section's heading, above the line's text, not
-   in it (floated out of the border). */
+/* A group of fields as a section: its legend is the section's title bar, above the line's text,
+   not in it (floated out of the border). */
 fieldset.card > legend {
   float: left;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   width: calc(100% + 2 * var(--card-px));
   margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
-  padding: 12px var(--card-px);
-  border-bottom: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  background: #fafbfd;
   font-size: 0.9375rem;
   font-weight: 600;
 }
@@ -1479,14 +1541,23 @@ fieldset.card > legend + * {
   min-width: 200px;
   margin-bottom: 0;
 }
+/* Pages of a list (D-158), one standard: under the table and outside its frame, on the right,
+   12 px below it (also in a column of parts spaced by a gap). */
 .pagination {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px 12px;
+  margin-top: var(--space-3);
   color: var(--muted);
   font-size: 0.8125rem;
+}
+.stack > .pagination {
+  margin-top: calc(var(--space-3) - var(--space-4));
+}
+.stack--tight > .pagination {
+  margin-top: calc(var(--space-3) - var(--space-2));
 }
 
 /* ---------- Buttons ---------- */
@@ -1668,6 +1739,10 @@ fieldset:disabled label {
   gap: 9px;
   min-height: 30px;
 }
+/* A tick box keeps its size beside a label of two lines (D-158). */
+.checkbox > input {
+  flex: none;
+}
 input[type="checkbox"],
 input[type="radio"] {
   width: 16px;
@@ -1675,12 +1750,16 @@ input[type="radio"] {
   margin: 0;
   accent-color: var(--primary);
 }
-/* A page's filters (D-154): one plain row of compact fields under the title, no box. */
+/* A page's filters (D-154, D-158): one row of compact fields in a white bar framed like a section,
+   under the page's title and before its key figures and sections; inside a section or a window a
+   plain row. On a phone the fields fill an even grid of two columns, and a last one alone spans
+   both. */
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px 12px;
+  padding: 10px var(--card-px) 12px;
 }
 .filters .field {
   flex: 1 1 170px;
@@ -1696,10 +1775,37 @@ input[type="radio"] {
   padding-top: 5px;
   padding-bottom: 5px;
 }
+/* A choice is as wide as the option chosen and at least 170 px, so a project's long name is never
+   cut (D-158); a browser that cannot size it so makes it as wide as its longest option. */
+.filters > .field:has(> select) {
+  flex: 0 1 auto;
+  min-width: 170px;
+  max-width: 100%;
+}
+.filters > .field > select {
+  field-sizing: content;
+}
 /* The button that takes the filters off sits on the line of the fields (D-108). */
 .filters > .button {
   min-height: 34px;
   margin: 0;
+}
+@media (max-width: 640px) {
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .filters > .field,
+  .filters > .field:has(> select) {
+    min-width: 0;
+    max-width: none;
+  }
+  .filters > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .filters :is(.field__input, .button) {
+    min-height: 40px;
+  }
 }
 /* Forms on a wide screen (D-141): a field keeps a readable width instead of running across the
    page, and figures and dates are short. Filter bars and windows keep their own layout. */
@@ -1903,10 +2009,26 @@ fieldset.field legend {
 .icon-button + .icon-button {
   margin-left: 2px;
 }
-/* Narrow screens: a table scrolls sideways rather than wrapping words in its cells. */
+/* Narrow screens: a table scrolls sideways rather than wrapping words in its cells. On a phone
+   every button, box, tick or choice and row action is at least 40 px tall to tap (D-158). */
 @media (max-width: 640px) {
   .table td {
     white-space: nowrap;
+  }
+  .button,
+  .field__input,
+  .checkbox,
+  .view-as__stop,
+  .idle-warning .button,
+  .table td.actions .button {
+    min-height: 40px;
+  }
+  .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+  .dialog__close {
+    padding: 11px;
   }
 }
 
@@ -1943,6 +2065,7 @@ a.code:hover {
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 500;
+  line-height: 1.5;
   letter-spacing: 0.03em;
   text-decoration: none;
   text-transform: uppercase;
@@ -2139,11 +2262,13 @@ button.tabs__link {
 .dialog__close:hover {
   background: var(--surface-hover);
 }
+/* A window's inner space is a section's (D-158): a .bleed table in it runs to its edges. */
 .dialog__body {
+  --card-px: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 20px 20px;
+  padding: 16px var(--card-px) 20px;
 }
 form.dialog__body > h2 {
   margin-bottom: 4px;
@@ -2392,13 +2517,6 @@ form.dialog__body > h2 {
 .list li:last-child {
   padding-bottom: 0;
   border-bottom: 0;
-}
-.list--rows li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
 }
 
 /* ---------- Printed, or saved as PDF (UXA-02) ----------

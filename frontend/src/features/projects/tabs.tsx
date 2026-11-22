@@ -1,14 +1,16 @@
 // Project detail tabs. Forms appear only for roles that may change the project; the server
 // enforces the same rules (PROJ-002..011, USER-003). An archived project is read only: its
-// settings, audio rules, languages and retention wait until it is reopened (PROJ-010).
-import { useState, type ReactNode } from "react";
+// settings, audio rules, languages and retention wait until it is reopened (PROJ-010). Each list
+// is a titled section, a settings form has its Save on its section's title bar, and a row is
+// removed with the bin (D-158).
+import { Fragment, useId, useState, type ReactNode } from "react";
 
 import { ROLE_LABELS } from "../../api/admin";
 import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import type { IconName } from "../../components/Icon";
@@ -25,6 +27,33 @@ import "./overview.css";
 
 /** Said on a page an archived project keeps read only, to someone who could change it otherwise. */
 const ARCHIVED_NOTE = "Read only. Reopen the project to change it.";
+/** A person's roles in words: "Moderator, QC Executive"; "-" for none (D-158). */
+const rolesOf = (roles: readonly string[]) =>
+  roles.map((r) => ROLE_LABELS[r] ?? r).join(", ") || "-";
+
+/** A person's name with their email under it, which may break after its "@" only: on a phone the
+ * table then fits, its Actions in view (D-158). */
+function Person({ name, email }: { name: string; email: string | null | undefined }) {
+  const at = email ? email.indexOf("@") + 1 : 0;
+  return (
+    <>
+      {name}
+      {email ? (
+        <div className="muted">
+          {at > 0 ? (
+            <>
+              {email.slice(0, at)}
+              <wbr />
+              {email.slice(at)}
+            </>
+          ) : (
+            email
+          )}
+        </div>
+      ) : null}
+    </>
+  );
+}
 const accepts = (p: api.Project) =>
   p.accepts_new_work
     ? "This project accepts new work."
@@ -76,7 +105,8 @@ function ProjectStatus() {
       {project.status_reason ? (
         <p className="muted">Reason given last: {project.status_reason}</p>
       ) : null}
-      <div className="actions">
+      {/* Even rows of buttons on a phone, not a ragged stack (D-158). */}
+      <div className="actions page-actions">
         {api.NEXT_STATUSES[project.status].map((to) => (
           <Button
             key={to}
@@ -102,7 +132,8 @@ function dailyTarget(p: api.Project): string {
   ] as const;
   const set = days.filter(([, allowed, hours]) => allowed && Number(hours) > 0);
   if (set.length === 0) return "No daily target";
-  const text = (hours: string) => `${Number(hours).toLocaleString("en-IN")} h a day`;
+  // International grouping (1,000), as on Settings (D-158).
+  const text = (hours: string) => `${Number(hours).toLocaleString("en-US")} h a day`;
   return set.length === 1 && set[0]
     ? text(set[0][2])
     : set.map(([mode, , hours]) => `${MODE_LABELS[mode]}: ${text(hours)}`).join(", ");
@@ -165,6 +196,13 @@ export function OverviewTab() {
         disabled={project.status === "ARCHIVED"}
         readOnlyNote={ARCHIVED_NOTE}
         guardUnsaved
+        saveOnBar
+        notices={
+          <>
+            <ErrorNotice error={error} />
+            <SuccessNotice message={message} />
+          </>
+        }
         onSubmit={(fields) =>
           void run(async () => {
             // Only the settings are this page's: the rules go back as they are now, including
@@ -175,8 +213,6 @@ export function OverviewTab() {
           })
         }
       />
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
     </div>
   );
 }
@@ -206,49 +242,60 @@ export function TeamTab() {
 
   return (
     <div className="stack">
-      {members.state.status === "loading" ? <LoadingState /> : null}
-      {members.state.status === "failed" ? (
-        <ErrorState error={members.state.error} onRetry={members.reload} />
-      ) : null}
-      {members.state.status === "loaded" && members.state.data.length === 0 ? (
-        <EmptyState title="No members yet" />
-      ) : null}
-      {members.state.status === "loaded" && members.state.data.length > 0 ? (
-        <DataTable>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Roles</th>
-              {canEdit ? <th scope="col">Action</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {members.state.data.map((m) => (
-              <tr key={m.user_id}>
-                <td>
-                  {m.display_name} {m.email ? <span className="muted">{m.email}</span> : null}
-                </td>
-                <td>{m.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+      {/* D-158: the members are a titled section, as "Add people" under it is. */}
+      <section className="card" aria-labelledby="members-title">
+        <h2 id="members-title">Members</h2>
+        {members.state.status === "loading" ? <LoadingState /> : null}
+        {members.state.status === "failed" ? (
+          <ErrorState error={members.state.error} onRetry={members.reload} />
+        ) : null}
+        {members.state.status === "loaded" && members.state.data.length === 0 ? (
+          <EmptyState title="No members yet" />
+        ) : null}
+        {members.state.status === "loaded" && members.state.data.length > 0 ? (
+          <DataTable label="Members">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Roles</th>
                 {canEdit ? (
-                  <td className="actions">
-                    <Button
-                      variant="secondary"
-                      icon="userMinus"
-                      disabled={busy !== null}
-                      onClick={() => remove(m)}
-                    >
-                      Remove
-                    </Button>
-                  </td>
+                  <th scope="col" className="actions-col">
+                    Actions
+                  </th>
                 ) : null}
               </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      ) : null}
+            </thead>
+            <tbody>
+              {members.state.data.map((m) => (
+                <tr key={m.user_id}>
+                  <td className="team-person">
+                    <Person name={m.display_name} email={m.email} />
+                  </td>
+                  <td>{rolesOf(m.roles)}</td>
+                  {canEdit ? (
+                    <td className="actions">
+                      {/* One way to remove, as in every list (D-158): the bin, its words on
+                          hover and for screen readers. */}
+                      <IconButton
+                        icon="trash"
+                        label={`Remove ${m.display_name}`}
+                        disabled={busy !== null}
+                        onClick={() => remove(m)}
+                      />
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        ) : null}
+      </section>
       {canEdit ? (
         <form
           className="card"
+          aria-labelledby="add-people-title"
           onSubmit={(e) => {
             e.preventDefault();
             void run(
@@ -257,58 +304,76 @@ export function TeamTab() {
             );
           }}
         >
-          <h2>Add people</h2>
-          {can("users.manage") ? (
-            <TextField
-              label="Find by name or email"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          ) : (
-            <TextField
-              label="Email address"
-              hint="Type the person's full email address."
-              type="email"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          )}
-          <Button type="submit" variant="secondary" icon="search" busy={busy === "search"}>
-            Search
-          </Button>
+          <h2 id="add-people-title">Add people</h2>
+          <div className="team-search">
+            {can("users.manage") ? (
+              <TextField
+                label="Find by name or email"
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            ) : (
+              <TextField
+                label="Email address"
+                hint="Type the person's full email address."
+                type="email"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            )}
+            <Button type="submit" variant="secondary" icon="search" busy={busy === "search"}>
+              Search
+            </Button>
+          </div>
           {candidates?.length === 0 ? (
-            <p>No matching active users who are not already members.</p>
+            <p className="muted">No matching active users who are not already members.</p>
           ) : null}
+          {/* Who was found: a table like the members above it, edge to edge (D-158). */}
           {candidates && candidates.length > 0 ? (
-            <ul className="list">
-              {candidates.map((c) => (
-                <li key={c.user_id}>
-                  {c.display_name} ({c.email}) -{" "}
-                  {c.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}{" "}
-                  <Button
-                    icon="userPlus"
-                    busy={busy === `add-${c.user_id}`}
-                    disabled={busy !== null}
-                    onClick={() =>
-                      void run(async () => {
-                        await api.addMember(project.id, c.user_id);
-                        setCandidates(candidates.filter((x) => x.user_id !== c.user_id));
-                        members.reload();
-                        return `${c.email} added.`;
-                      }, `add-${c.user_id}`)
-                    }
-                  >
-                    Add
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <DataTable label="People found">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Roles</th>
+                  <th scope="col" className="actions-col">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map((c) => (
+                  <tr key={c.user_id}>
+                    <td className="team-person">
+                      <Person name={c.display_name} email={c.email} />
+                    </td>
+                    <td>{rolesOf(c.roles)}</td>
+                    <td className="actions">
+                      <Button
+                        variant="secondary"
+                        icon="userPlus"
+                        aria-label={`Add ${c.display_name}`}
+                        busy={busy === `add-${c.user_id}`}
+                        disabled={busy !== null}
+                        onClick={() =>
+                          void run(async () => {
+                            await api.addMember(project.id, c.user_id);
+                            setCandidates(candidates.filter((x) => x.user_id !== c.user_id));
+                            members.reload();
+                            return `${c.email} added.`;
+                          }, `add-${c.user_id}`)
+                        }
+                      >
+                        Add
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
           ) : null}
         </form>
       ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
       {confirm.dialog}
     </div>
   );
@@ -326,11 +391,21 @@ export function AudioRulesTab() {
   );
   const update = (i: number, patch: Partial<api.AudioRule>) =>
     setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const id = useId();
+  // One section with its Save on the title bar (D-158): titled with the project's recording type,
+  // or, for a project made before D-153 with both, one part per type under one Save.
+  const several = rules.length > 1;
+  const title = several
+    ? "Face-to-face and phone call"
+    : rules[0]
+      ? labelFor(MODE_LABELS, rules[0].mode)
+      : "Audio rules";
 
   return (
     <>
       <form
-        className="stack"
+        className="card"
+        aria-labelledby={`${id}-title`}
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
@@ -341,88 +416,101 @@ export function AudioRulesTab() {
           });
         }}
       >
+        <div className="card__head">
+          <h2 id={`${id}-title`}>{title}</h2>
+          {canEdit ? (
+            <Button type="submit" icon="check" busy={busy !== null}>
+              Save audio rules
+            </Button>
+          ) : null}
+        </div>
         {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
-        {rules.map((r, i) => (
-          <fieldset key={r.mode} className="card" disabled={!canEdit}>
-            <legend>{labelFor(MODE_LABELS, r.mode)}</legend>
-            <div className="form-grid">
-              <TextField
-                label="Sample rate (Hz)"
-                type="number"
-                value={String(r.sample_rate)}
-                onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
-              />
-              <Select
-                label="Bit depth"
-                value={String(r.bit_depth)}
-                onChange={(e) =>
-                  update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
-                }
-                options={[
-                  { value: "16", label: "16-bit" },
-                  { value: "24", label: "24-bit" },
-                  { value: "32", label: "32-bit" },
-                ]}
-              />
-              <Select
-                label="Channels"
-                value={String(r.channels)}
-                onChange={(e) =>
-                  update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
-                }
-                options={[
-                  { value: "1", label: "Mono (1)" },
-                  { value: "2", label: "Stereo (2)" },
-                ]}
-              />
-              <TextField
-                label="Maximum silence (%)"
-                type="number"
-                min={0}
-                max={100}
-                value={r.max_silence_pct}
-                onChange={(e) => update(i, { max_silence_pct: e.target.value })}
-              />
-              <TextField
-                label="Maximum clipping (%)"
-                hint="Leave empty for no limit."
-                type="number"
-                min={0}
-                max={100}
-                value={r.max_clipping_pct ?? ""}
-                onChange={(e) =>
-                  update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
-                }
-              />
-              <TextField
-                label="Minimum duration (seconds)"
-                type="number"
-                min={0}
-                value={String(r.min_duration_seconds)}
-                onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
-              />
-              <TextField
-                label="Maximum duration (seconds)"
-                hint="Leave empty for no limit."
-                type="number"
-                min={1}
-                value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
-                onChange={(e) =>
-                  update(i, {
-                    max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-          </fieldset>
-        ))}
-        {canEdit ? (
-          <Button type="submit" busy={busy !== null}>
-            Save audio rules
-          </Button>
-        ) : null}
         <ErrorNotice error={error} />
         <SuccessNotice message={message} />
+        {rules.map((r, i) => (
+          <Fragment key={r.mode}>
+            {several ? (
+              <h3 id={`${id}-${r.mode}`} className="subhead">
+                {labelFor(MODE_LABELS, r.mode)}
+              </h3>
+            ) : null}
+            <fieldset
+              className="plain-fieldset"
+              aria-labelledby={several ? `${id}-${r.mode}` : `${id}-title`}
+              disabled={!canEdit}
+            >
+              <div className="form-grid">
+                <TextField
+                  label="Sample rate (Hz)"
+                  type="number"
+                  value={String(r.sample_rate)}
+                  onChange={(e) => update(i, { sample_rate: Number(e.target.value) })}
+                />
+                <Select
+                  label="Bit depth"
+                  value={String(r.bit_depth)}
+                  onChange={(e) =>
+                    update(i, { bit_depth: Number(e.target.value) as api.AudioRule["bit_depth"] })
+                  }
+                  options={[
+                    { value: "16", label: "16-bit" },
+                    { value: "24", label: "24-bit" },
+                    { value: "32", label: "32-bit" },
+                  ]}
+                />
+                <Select
+                  label="Channels"
+                  value={String(r.channels)}
+                  onChange={(e) =>
+                    update(i, { channels: Number(e.target.value) as api.AudioRule["channels"] })
+                  }
+                  options={[
+                    { value: "1", label: "Mono (1)" },
+                    { value: "2", label: "Stereo (2)" },
+                  ]}
+                />
+                <TextField
+                  label="Maximum silence (%)"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={r.max_silence_pct}
+                  onChange={(e) => update(i, { max_silence_pct: e.target.value })}
+                />
+                <TextField
+                  label="Maximum clipping (%)"
+                  hint="Leave empty for no limit."
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={r.max_clipping_pct ?? ""}
+                  onChange={(e) =>
+                    update(i, { max_clipping_pct: e.target.value === "" ? null : e.target.value })
+                  }
+                />
+                <TextField
+                  label="Minimum duration (seconds)"
+                  type="number"
+                  min={0}
+                  value={String(r.min_duration_seconds)}
+                  onChange={(e) => update(i, { min_duration_seconds: Number(e.target.value) })}
+                />
+                <TextField
+                  label="Maximum duration (seconds)"
+                  hint="Leave empty for no limit."
+                  type="number"
+                  min={1}
+                  value={r.max_duration_seconds === null ? "" : String(r.max_duration_seconds)}
+                  onChange={(e) =>
+                    update(i, {
+                      max_duration_seconds: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+            </fieldset>
+          </Fragment>
+        ))}
       </form>
       {leaveGuard}
     </>
@@ -471,43 +559,48 @@ export function LanguagesTab() {
   return (
     <div className="stack">
       {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
-      {project.languages.length === 0 ? (
-        <EmptyState title="No languages yet" />
-      ) : (
-        <DataTable label="Languages">
-          <thead>
-            <tr>
-              <th scope="col">Language</th>
-              <th scope="col">Dialect</th>
-              {canEdit ? (
-                <th scope="col">
-                  <span className="sr-only">Action</span>
-                </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {project.languages.map((l) => (
-              <tr key={`${l.language_code}/${l.dialect}`}>
-                <td>{languageLabel(l.language_code)}</td>
-                <td>{l.dialect || <span className="muted">-</span>}</td>
+      <ErrorNotice error={error} />
+      <SuccessNotice message={message} />
+      {/* D-158: the languages are a titled section, as "Add a language" under it is. */}
+      <section className="card" aria-labelledby="languages-title">
+        <h2 id="languages-title">Project languages</h2>
+        {project.languages.length === 0 ? (
+          <EmptyState title="No languages yet" />
+        ) : (
+          <DataTable label="Languages">
+            <thead>
+              <tr>
+                <th scope="col">Language</th>
+                <th scope="col">Dialect</th>
                 {canEdit ? (
-                  <td className="actions">
-                    <Button
-                      variant="secondary"
-                      icon="trash"
-                      disabled={busy !== null}
-                      onClick={() => remove(l)}
-                    >
-                      Remove
-                    </Button>
-                  </td>
+                  <th scope="col" className="actions-col">
+                    Actions
+                  </th>
                 ) : null}
               </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      )}
+            </thead>
+            <tbody>
+              {project.languages.map((l) => (
+                <tr key={`${l.language_code}/${l.dialect}`}>
+                  <td>{languageLabel(l.language_code)}</td>
+                  <td>{l.dialect || <span className="muted">-</span>}</td>
+                  {canEdit ? (
+                    <td className="actions">
+                      {/* One way to remove, as in every list (D-158). */}
+                      <IconButton
+                        icon="trash"
+                        label={`Remove ${name(l)}`}
+                        disabled={busy !== null}
+                        onClick={() => remove(l)}
+                      />
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </section>
       {canEdit ? (
         <form
           className="card"
@@ -571,8 +664,6 @@ export function LanguagesTab() {
           </Button>
         </form>
       ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
       {confirm.dialog}
     </div>
   );
@@ -640,13 +731,23 @@ export function RetentionTab() {
           });
         }}
       >
-        <h2 id="retention-title">Days to keep each kind of file</h2>
+        {/* The Save on the section's title bar, as on the Rules pages (D-158). */}
+        <div className="card__head">
+          <h2 id="retention-title">Days to keep each kind of file</h2>
+          {canEdit ? (
+            <Button type="submit" icon="check" busy={busy !== null} disabled={wrong}>
+              Save retention
+            </Button>
+          ) : null}
+        </div>
         <p className="field__hint retention__note">
           An automatic job deletes a file permanently once it is older than the days set for its
           kind, counted from when it was stored. Only the files of closed tasks (approved, rejected
           or cancelled) are deleted. Leave a box empty to keep that kind of file.
         </p>
         {canManage && !canEdit ? <p className="notice notice--info">{ARCHIVED_NOTE}</p> : null}
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
         <fieldset disabled={!canEdit} className="plain-fieldset">
           <div className="form-grid">
             {api.ASSET_KINDS.map((kind) => {
@@ -666,14 +767,7 @@ export function RetentionTab() {
               );
             })}
           </div>
-          {canEdit ? (
-            <Button type="submit" busy={busy !== null} disabled={wrong}>
-              Save retention
-            </Button>
-          ) : null}
         </fieldset>
-        <ErrorNotice error={error} />
-        <SuccessNotice message={message} />
       </form>
       {leaveGuard}
     </>

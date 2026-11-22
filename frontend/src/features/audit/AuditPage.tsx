@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { listAudit } from "../../api/work";
 import { DataTable } from "../../components/DataTable";
+import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Pagination } from "../../components/Pagination";
@@ -131,8 +132,11 @@ export function AuditPage() {
   );
   return (
     <section aria-labelledby="audit-title" className="stack">
-      <h1 id="audit-title">Audit log</h1>
-      <div className="filters">
+      <div className="page-header">
+        <h1 id="audit-title">Audit log</h1>
+      </div>
+      {/* The filters, a section of their own (D-158). */}
+      <div className="filters" role="group" aria-label="Filters">
         <Select
           label="Area"
           value={area}
@@ -167,6 +171,20 @@ export function AuditPage() {
             setPage(1);
           }}
         />
+        {area || entityType || action ? (
+          <Button
+            variant="secondary"
+            icon="filterX"
+            onClick={() => {
+              setArea("");
+              setEntityType("");
+              setAction("");
+              setPage(1);
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       {state.status === "loading" ? <LoadingState label="Loading audit log" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}

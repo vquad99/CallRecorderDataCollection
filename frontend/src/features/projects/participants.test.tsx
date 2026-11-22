@@ -135,6 +135,37 @@ describe("participants tab", () => {
     expect(row).toHaveTextContent("2.5");
   });
 
+  it("has its buttons on the title row and the search in a filter bar, as the Participants page (D-158)", async () => {
+    fakeApi(
+      signedInAs([...MANAGERS, "participants.export"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          { items: [asha], total: 1, page: 1, page_size: 25 },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    const add = await screen.findByRole("button", { name: "Add participant" });
+    const header = screen
+      .getByRole("heading", { level: 1, name: "Participants" })
+      .closest(".page-header") as HTMLElement;
+    // On the right of the title, the main one last.
+    expect(header).toContainElement(add);
+    expect(
+      within(header)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Add existing participant", "Export contacts", "Add participant"]);
+    const filters = screen.getByRole("group", { name: "Filters" });
+    expect(within(filters).queryByRole("button", { name: "Clear filters" })).toBeNull();
+    const search = within(filters).getByRole("searchbox", { name: "Search by code or name" });
+    await userEvent.type(search, "Asha");
+    await userEvent.click(within(filters).getByRole("button", { name: "Clear filters" }));
+    expect(search).toHaveValue("");
+    expect(within(filters).queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
   it("adds a participant and deletes one with a reason", async () => {
     const { calls } = fakeApi(
       signedInAs(["projects.view", "projects.manage", "participants.view", "participants.manage"], {

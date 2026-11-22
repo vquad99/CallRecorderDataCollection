@@ -1,7 +1,8 @@
 // Participants of a project (PART-*). Names and phone numbers appear only for roles allowed to see
 // them; the server decides what each role receives. Adding, editing, the consent history and the
 // details open in the same windows as on the Participants page. The "Still needed" line is read
-// again after each add, edit or delete (FEA-09).
+// again after each add, edit or delete (FEA-09). As on the Participants page (D-158): the page's
+// buttons on its title row, the search in a filter bar of its own, then the table.
 import { useState } from "react";
 
 import { apiDownload } from "../../api/client";
@@ -23,10 +24,12 @@ import { DetailsMissing } from "../participants/ParticipantDetails";
 import { addedText, useParticipantWindows } from "../participants/ParticipantEditor";
 import "../participants/participants.css";
 import { languageLabel } from "./choices";
-import { useProject } from "./ProjectDetailPage";
+import { PageActions, useProject } from "./ProjectDetailPage";
 import { StillNeededLine } from "./StillNeededLine";
 
-/** People who already exist in another of the caller's projects, added here as they are (D-090). */
+/** People who already exist in another of the caller's projects, added here as they are (D-090).
+ * A section like any other (D-158): the count and "Add selected" on its title bar, then the search
+ * and the people found as a table, edge to edge. */
 function AddExisting({
   projectId,
   refresh,
@@ -52,21 +55,34 @@ function AddExisting({
   const flip = (code: string) =>
     setTicked(chosen.includes(code) ? chosen.filter((x) => x !== code) : [...chosen, code]);
   return (
-    <section className="card pick" aria-labelledby="add-existing-title">
-      <div className="pick__head">
-        <div>
-          <h2 id="add-existing-title">Add an existing participant</h2>
-          <p className="muted">
-            People from your other projects who are not in this one yet. They keep their code,
-            details and consent history.
-          </p>
+    <section className="card" aria-labelledby="add-existing-title">
+      <div className="card__head">
+        <h2 id="add-existing-title">Add an existing participant</h2>
+        <div className="actions">
+          {found.state.status === "loaded" ? (
+            <span className="pick__count">
+              {people.length === 1 ? "1 person" : `${people.length} people`}
+            </span>
+          ) : null}
+          {people.length > 0 ? (
+            <Button
+              icon="plus"
+              busy={busy}
+              disabled={chosen.length === 0}
+              onClick={() => {
+                onAdd(chosen);
+                setTicked([]);
+              }}
+            >
+              Add selected ({chosen.length})
+            </Button>
+          ) : null}
         </div>
-        {found.state.status === "loaded" ? (
-          <span className="pick__count">
-            {people.length === 1 ? "1 person" : `${people.length} people`}
-          </span>
-        ) : null}
       </div>
+      <p className="muted">
+        People from your other projects who are not in this one yet. They keep their code, details
+        and consent history.
+      </p>
       <TextField
         label="Search your other projects"
         type="search"
@@ -79,68 +95,68 @@ function AddExisting({
         <ErrorState error={found.state.error} onRetry={found.reload} />
       ) : null}
       {found.state.status === "loaded" && people.length === 0 ? (
-        <p className="pick__empty">
+        <p className="muted">
           {search ? `No one matches "${search}".` : "No one to add: everyone is already here."}
         </p>
       ) : null}
       {people.length > 0 ? (
-        <div className="actions">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={chosen.length === shown.length}
-              onChange={(e) => setTicked(e.target.checked ? shown : [])}
-            />
-            <span>Select all shown ({shown.length})</span>
-          </label>
-          <Button
-            icon="plus"
-            busy={busy}
-            disabled={chosen.length === 0}
-            onClick={() => {
-              onAdd(chosen);
-              setTicked([]);
-            }}
-          >
-            Add selected ({chosen.length})
-          </Button>
-        </div>
-      ) : null}
-      {people.length > 0 ? (
-        <ul className="pick__list">
-          {people.map((c) => (
-            <li key={c.id} className="pick__row">
-              <input
-                type="checkbox"
-                aria-label={`Select ${c.participant_code}`}
-                checked={chosen.includes(c.participant_code)}
-                onChange={() => flip(c.participant_code)}
-              />
-              <span className="pick__code">{c.participant_code}</span>
-              <span className="pick__name">{c.display_label ?? "Name hidden"}</span>
-              <span className="pick__meta">
-                {languageLabel(c.language_code)}
-                {c.dialect ? ` · ${c.dialect}` : ""}
-              </span>
-              <Button
-                variant="secondary"
-                icon="plus"
-                busy={busy}
-                aria-label={`Add ${c.participant_code}`}
-                onClick={() => onAdd([c.participant_code])}
-              >
-                Add
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <DataTable label="People to add">
+          <thead>
+            <tr>
+              <th scope="col">
+                <input
+                  type="checkbox"
+                  aria-label={`Select all shown (${shown.length})`}
+                  checked={chosen.length === shown.length}
+                  onChange={(e) => setTicked(e.target.checked ? shown : [])}
+                />
+              </th>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">Language</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((c) => (
+              <tr key={c.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${c.participant_code}`}
+                    checked={chosen.includes(c.participant_code)}
+                    onChange={() => flip(c.participant_code)}
+                  />
+                </td>
+                <td>{c.participant_code}</td>
+                <td>{c.display_label ?? <span className="muted">Name hidden</span>}</td>
+                <td>
+                  {languageLabel(c.language_code)}
+                  {c.dialect ? ` · ${c.dialect}` : ""}
+                </td>
+                <td className="actions">
+                  <Button
+                    variant="secondary"
+                    icon="plus"
+                    busy={busy}
+                    aria-label={`Add ${c.participant_code}`}
+                    onClick={() => onAdd([c.participant_code])}
+                  >
+                    Add
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
       ) : null}
     </section>
   );
 }
 
+/** Minutes for people, "-" when the server sent none, grouped as on Settings (D-158). */
 const minutesText = (value: number | undefined) =>
-  value === undefined ? "–" : value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  value === undefined ? "-" : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 export function ParticipantsTab() {
   const { project } = useProject();
@@ -196,14 +212,8 @@ export function ParticipantsTab() {
 
   return (
     <div className="stack">
-      {/* D-153: who the recruiters still need to find, from the targets. */}
-      <StillNeededLine projectId={project.id} version={refresh} />
-      <div className="actions">
-        {canManage ? (
-          <Button icon="userPlus" onClick={() => windows.open({ kind: "add" })}>
-            Add participant
-          </Button>
-        ) : null}
+      {/* On the title row, on the right, the main one last (D-158). */}
+      <PageActions>
         {canManage ? (
           <Button
             variant="secondary"
@@ -231,7 +241,14 @@ export function ParticipantsTab() {
             Export contacts
           </Button>
         ) : null}
-      </div>
+        {canManage ? (
+          <Button icon="userPlus" onClick={() => windows.open({ kind: "add" })}>
+            Add participant
+          </Button>
+        ) : null}
+      </PageActions>
+      {/* D-153: who the recruiters still need to find, from the targets. */}
+      <StillNeededLine projectId={project.id} version={refresh} />
       {addingExisting ? (
         <AddExisting
           projectId={project.id}
@@ -262,15 +279,30 @@ export function ParticipantsTab() {
       ) : null}
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
-      <TextField
-        label="Search by code or name"
-        type="search"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-      />
+      {/* The search in a framed bar of its own, as every page's filters (D-158). */}
+      <div className="filters" role="group" aria-label="Filters">
+        <TextField
+          label="Search by code or name"
+          type="search"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+        {search ? (
+          <Button
+            variant="secondary"
+            icon="filterX"
+            onClick={() => {
+              setSearch("");
+              setPage(1);
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
+      </div>
       {list.state.status === "loading" ? <LoadingState label="Loading participants" /> : null}
       {list.state.status === "failed" ? (
         <ErrorState error={list.state.error} onRetry={list.reload} />

@@ -2,7 +2,8 @@
 // delivery rate (normally 16000 Hz, owner 2026-11-17: the file is kept as recorded, never
 // converted), uploads 5-second chunks as it goes, and never claims to keep recording after the tab
 // is closed or the device sleeps. The project's reminders show before recording; after it, the
-// speakers' device details are filled beside Send to QC (D-147).
+// speakers' device details are filled beside Send to QC (D-147). D-158: two sections with title
+// bars, the reminders and the recorder (its steps with the microphone and the live recording).
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
@@ -700,26 +701,7 @@ export function RecorderPage() {
 
   return (
     <Frame back={`/tasks/${t.id}`} backLabel="Back to the task" title={title}>
-      <div className="card">
-        <Stepper
-          steps={STEPS}
-          current={step}
-          label={`Recording step: ${STEPS[Math.min(step, STEPS.length - 1)]}`}
-        />
-      </div>
-      {!supported() ? (
-        <ErrorState
-          title="This browser cannot record here"
-          message="Use a current version of Chrome or Edge on a computer."
-        />
-      ) : null}
-      {rateRefused ? (
-        <ErrorState
-          title={`This browser cannot record at ${rate} Hz`}
-          message="Use the latest Chrome or Edge."
-        />
-      ) : null}
-      {/* The project's reminders for face-to-face (D-147), with its silence limit. */}
+      {/* The project's reminders for face-to-face (D-147), with its silence limit: read first. */}
       <Reminders task={t} extra={`At most ${maxSilence}% of the recording may be silence.`} />
       {/* Whatever stopped it (this page or an earlier one), an unfinished recording is kept or
           discarded here (FEW-01); once kept it is prepared and shown below (FEW-02). */}
@@ -733,127 +715,149 @@ export function RecorderPage() {
             existing.reload();
           }}
         />
-      ) : stopped && phase === "idle" ? (
-        <p className="notice notice--error" role="alert">
-          {stopped} The audio saved so far is kept.
-        </p>
       ) : null}
-      {t.status !== "IN_PROGRESS" && phase !== "processing" && phase !== "done" ? (
-        <p className="notice">
-          The task must be in progress to record. Now it is:{" "}
-          {labelFor(TASK_STATUS_LABELS, t.status)}.
-        </p>
-      ) : null}
-      {t.status === "IN_PROGRESS" && waitingConsent.length > 0 ? (
-        <p className="notice notice--error" role="alert">
-          Participant {waitingConsent.join(" and ")} has not agreed on the consent form yet.
-          Recording starts once both have agreed (see the{" "}
-          <Link to={`/tasks/${t.id}`}>task page</Link>).
-        </p>
-      ) : null}
-      {canRecord &&
-      (phase === "idle" || phase === "opening" || phase === "ready" || phase === "testing") ? (
-        <div className="card stack">
-          {phase === "idle" ? (
-            <span>
-              <Button icon="mic" onClick={() => void openMicrophone(deviceId)}>
-                Allow microphone
-              </Button>
-            </span>
-          ) : null}
-          {devices.length > 0 ? (
-            <Select
-              label="Microphone"
-              value={deviceId}
-              onChange={(e) => {
-                setDeviceId(e.target.value);
-                void openMicrophone(e.target.value);
-              }}
-              options={[
-                { value: "", label: "Default microphone" },
-                ...devices.map((d, i) => ({
-                  value: d.deviceId,
-                  label: d.label || `Microphone ${i + 1}`,
-                })),
-              ]}
-            />
-          ) : null}
-          {phase === "opening" ? <p role="status">Opening the microphone…</p> : null}
-          {phase !== "idle" ? (
+      {/* D-158: one section with its title bar: the steps, then what the step needs (the
+          microphone, the live recording, why it cannot start), never a panel of one button. */}
+      <section className="card stack recorder" aria-labelledby="recorder-title">
+        <h2 id="recorder-title">Recorder</h2>
+        <Stepper
+          steps={STEPS}
+          current={step}
+          label={`Recording step: ${STEPS[Math.min(step, STEPS.length - 1)]}`}
+        />
+        {!supported() ? (
+          <ErrorState
+            title="This browser cannot record here"
+            message="Use a current version of Chrome or Edge on a computer."
+          />
+        ) : null}
+        {rateRefused ? (
+          <ErrorState
+            title={`This browser cannot record at ${rate} Hz`}
+            message="Use the latest Chrome or Edge."
+          />
+        ) : null}
+        {!open && stopped && phase === "idle" ? (
+          <p className="notice notice--error" role="alert">
+            {stopped} The audio saved so far is kept.
+          </p>
+        ) : null}
+        {t.status !== "IN_PROGRESS" && phase !== "processing" && phase !== "done" ? (
+          <p className="notice">
+            The task must be in progress to record. Now it is:{" "}
+            {labelFor(TASK_STATUS_LABELS, t.status)}.
+          </p>
+        ) : null}
+        {t.status === "IN_PROGRESS" && waitingConsent.length > 0 ? (
+          <p className="notice notice--error" role="alert">
+            Participant {waitingConsent.join(" and ")} has not agreed on the consent form yet.
+            Recording starts once both have agreed (see the{" "}
+            <Link to={`/tasks/${t.id}`}>task page</Link>).
+          </p>
+        ) : null}
+        {canRecord && phase === "idle" ? (
+          <div className="actions page-actions">
+            <Button icon="mic" onClick={() => void openMicrophone(deviceId)}>
+              Allow microphone
+            </Button>
+          </div>
+        ) : null}
+        {canRecord && (phase === "opening" || phase === "ready" || phase === "testing") ? (
+          <>
+            {devices.length > 0 ? (
+              <Select
+                label="Microphone"
+                value={deviceId}
+                onChange={(e) => {
+                  setDeviceId(e.target.value);
+                  void openMicrophone(e.target.value);
+                }}
+                options={[
+                  { value: "", label: "Default microphone" },
+                  ...devices.map((d, i) => ({
+                    value: d.deviceId,
+                    label: d.label || `Microphone ${i + 1}`,
+                  })),
+                ]}
+              />
+            ) : null}
+            {phase === "opening" ? <p role="status">Opening the microphone…</p> : null}
             <div className="field">
               <label htmlFor="level" className="field__label">
                 Input level
               </label>
               <meter id="level" min={0} max={1} low={0.2} high={0.9} optimum={0.6} value={level} />
             </div>
-          ) : null}
-          {phase === "ready" ? (
-            <div className="actions">
-              <Button
-                variant="secondary"
-                icon="waveform"
-                disabled={busy !== null}
-                onClick={() => void runTest()}
-              >
-                Test ({TEST_SECONDS} s, then play back)
-              </Button>
-              <Button icon="record" busy={busy !== null} onClick={() => void start()}>
-                Start recording
-              </Button>
-            </div>
-          ) : null}
-          {phase === "testing" ? <p role="status">Test recording… speak now.</p> : null}
-        </div>
-      ) : null}
-      {phase === "recording" || phase === "finishing" ? (
-        <div className="card stack recorder-live">
-          <p className="status" role="status" aria-live="off">
-            <span className="rec-dot" aria-hidden="true" />
-            {phase === "recording" ? "Recording" : "Finishing upload"} {clock(elapsed)}
+            {phase === "ready" ? (
+              <div className="actions page-actions">
+                <Button
+                  variant="secondary"
+                  icon="waveform"
+                  disabled={busy !== null}
+                  onClick={() => void runTest()}
+                >
+                  Test ({TEST_SECONDS} s, then play back)
+                </Button>
+                <Button icon="record" busy={busy !== null} onClick={() => void start()}>
+                  Start recording
+                </Button>
+              </div>
+            ) : null}
+            {phase === "testing" ? <p role="status">Test recording… speak now.</p> : null}
+          </>
+        ) : null}
+        {phase === "recording" || phase === "finishing" ? (
+          <div className="stack recorder-live">
+            <p className="status" role="status" aria-live="off">
+              <span className="rec-dot" aria-hidden="true" />
+              {phase === "recording" ? "Recording" : "Finishing upload"} {clock(elapsed)}
+            </p>
+            <meter aria-label="Input level" min={0} max={1} value={level} />
+            <p>
+              Saved parts: {progress.sent}; waiting to upload: {progress.waiting}. Keep this tab
+              open and the computer awake.
+            </p>
+            {phase === "recording" ? (
+              <div className="actions page-actions">
+                <Button icon="stop" onClick={() => void stop()}>
+                  Stop and save
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {phase === "processing" ? <LoadingState label="Preparing the recording" /> : null}
+        {problem ? (
+          <p className="notice notice--error" role="alert">
+            {problem}
           </p>
-          <meter aria-label="Input level" min={0} max={1} value={level} />
-          <p>
-            Saved parts: {progress.sent}; waiting to upload: {progress.waiting}. Keep this tab open
-            and the computer awake.
+        ) : null}
+        {error ? (
+          <p className="notice notice--error" role="alert">
+            {error}
           </p>
-          {phase === "recording" ? (
-            <span>
-              <Button icon="stop" onClick={() => void stop()}>
-                Stop and save
-              </Button>
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {phase === "processing" ? <LoadingState label="Preparing the recording" /> : null}
+        ) : null}
+        <ErrorNotice error={apiError} />
+        {phase === "done" && result?.state === "READY" ? (
+          <SuccessNotice message="The task is now marked as recorded." />
+        ) : null}
+        {phase === "done" && result?.state === "FAILED" ? (
+          // Not a dead end: the task is still in progress, so the conversation can be recorded
+          // again while both speakers are here; the failed one stays on file for the admin.
+          <div className="actions page-actions">
+            <Button variant="secondary" icon="record" onClick={startOver}>
+              Record again
+            </Button>
+          </div>
+        ) : null}
+      </section>
       {result ? <Result recording={result} maxSilence={maxSilence} /> : null}
-      {problem ? (
-        <p className="notice notice--error" role="alert">
-          {problem}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="notice notice--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <ErrorNotice error={apiError} />
       {phase === "done" && result?.state === "READY" ? (
         <>
-          <SuccessNotice message="The task is now marked as recorded." />
           {/* D-147: filled here, near Send to QC; the task is loaded again quietly once saved. */}
           <DeviceDetailsCard task={t} onSaved={() => void getTask(taskId).then(task.replace)} />
           <AfterRecording taskId={t.id} waits={devicesWait(t)} onAgain={startOver} />
         </>
-      ) : null}
-      {phase === "done" && result?.state === "FAILED" ? (
-        // Not a dead end: the task is still in progress, so the conversation can be recorded
-        // again while both speakers are here; the failed one stays on file for the admin.
-        <div className="actions">
-          <Button variant="secondary" icon="record" onClick={startOver}>
-            Record again
-          </Button>
-        </div>
       ) : null}
     </Frame>
   );

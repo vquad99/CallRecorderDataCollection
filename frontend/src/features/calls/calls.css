@@ -1,33 +1,32 @@
 /* Phone calls page (D-102; plain tables in D-154, framed sections in D-156) and the call card on
-   a task page (D-103). The sections, key figures, day chart and tables are in components/charts. */
-.calls-page .panel > p {
-  margin: 0;
+   a task page (D-103). The sections, key figures, day chart and tables are in components/charts;
+   the filter bar, the title bars and the edge-to-edge tables in global.css (D-158). */
+/* The filters, the tabs and the figures under the title: 12 px apart, as on the dashboard
+   (D-158). */
+.calls-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .funnel tbody th {
   white-space: nowrap;
 }
-/* The counted reasons: two tables side by side, one under the other in a narrow section. */
-.reasons {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 12px 16px;
-}
-@container (max-width: 560px) {
-  .reasons {
-    grid-template-columns: minmax(0, 1fr);
+/* Two sections to a row on a middle-sized screen (charts.css): one that has no partner of its
+   height there takes the whole width instead of leaving half a row empty (D-158). */
+@container (max-width: 760px) {
+  .calls-page .dash-grid > .mid-whole {
+    grid-column: span 12;
   }
 }
 
 /* Calls by hour of the day: one matrix, an hour per column, each count shaded by its share of
-   the row's busiest hour (D-154). */
+   the row's busiest hour (D-154). Its first and last cells keep the section's edge (D-158). */
 .panel .table.hours-matrix th,
 .panel .table.hours-matrix td {
   padding-right: 4px;
   padding-left: 4px;
 }
 .panel .table.hours-matrix th:first-child {
-  padding-left: 10px;
   white-space: nowrap;
 }
 .table.hours-matrix tbody td {
@@ -42,20 +41,28 @@
   text-align: left;
 }
 
-.calls-list__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  margin-bottom: 8px;
+/* The list's "Show" filter on its title bar (D-158): as wide as the chosen choice, so the bar
+   stays one compact line; on a narrow screen the box gives way instead of wrapping the bar. */
+.calls-list > .card__head {
+  flex-wrap: nowrap;
 }
-.calls-list__head h2 {
-  margin: 0;
+.calls-list > .card__head h2 {
+  white-space: nowrap;
 }
+.calls-list > .card__head .field {
+  min-width: 0;
+}
+.calls-list > .card__head .field__label {
+  white-space: nowrap;
+}
+.calls-list > .card__head .field__input {
+  min-width: 0;
+  field-sizing: content;
+}
+/* What TxContact answered, for the Super Admin: as long as it is, wide lines scroll sideways
+   (one scroll bar per page, D-157). */
 .calls-raw {
-  overflow: auto;
-  max-height: 240px;
+  overflow-x: auto;
   font-size: 0.75rem;
 }
 
@@ -81,17 +88,25 @@
   align-items: center;
   gap: 6px 10px;
 }
+/* Fixing or cancelling a call: plain, inside the call card's section (D-158: no framed box
+   inside a section). */
 .call__manage {
   margin: 10px 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
 }
-/* A provider's file name is one long word: it wraps instead of pushing the page wide. */
+/* A provider's file name is one long word: it never pushes the page wide. Held in a span that
+   carries the full name as its title, it stays on one line cut with "…" (D-158); bare, it wraps.
+   (A table cell ignores max-width, so the span holds the width.) */
 .call-file {
   max-width: 220px;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+.call-file > span {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .call-candidates caption {
   padding: 6px 0;

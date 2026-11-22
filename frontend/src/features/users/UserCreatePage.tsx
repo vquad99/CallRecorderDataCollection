@@ -42,7 +42,9 @@ export function UserCreatePage() {
     <section aria-labelledby="new-user-title" className="stack">
       <BackLink to="/admin/users">All users</BackLink>
       <h1 id="new-user-title">Add user</h1>
+      {/* A section with its title on a bar, its main button at the foot (D-158). */}
       <form onSubmit={submit} noValidate className="card">
+        <h2>Details</h2>
         <TextField
           label="Email"
           type="email"

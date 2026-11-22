@@ -369,13 +369,8 @@ export function ParticipantForm({
         </fieldset>
       ) : null}
       <ErrorNotice error={error} />
-      <div className="dialog__actions">
-        {/* Not a live region: the Edit form's "Missing:" notice is the form's status. */}
-        {waits ? (
-          <p id={waitsId} className="form-waits">
-            {waits}
-          </p>
-        ) : null}
+      {/* The main button at the form's foot, on the left (D-158), what it waits for beside it. */}
+      <div className="form-foot">
         <Button
           type="submit"
           busy={busy}
@@ -384,6 +379,12 @@ export function ParticipantForm({
         >
           {submitLabel}
         </Button>
+        {/* Not a live region: the Edit form's "Missing:" notice is the form's status. */}
+        {waits ? (
+          <p id={waitsId} className="form-waits">
+            {waits}
+          </p>
+        ) : null}
       </div>
     </form>
   );

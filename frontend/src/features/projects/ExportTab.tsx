@@ -2,7 +2,7 @@
 // bundle that is prepared in the background, listed here with its state, and downloaded through a
 // link that works for a few minutes. A bundle is laid out as the project's Rules tab says (D-149):
 // the speaker-pair delivery format, with what is not on file counted, or the platform's own layout.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "react-router";
 
 import { apiDownload } from "../../api/client";
@@ -10,7 +10,7 @@ import * as api from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon, type IconName } from "../../components/Icon";
@@ -94,10 +94,11 @@ const megabytes = (n: number) =>
       ? `about ${Math.ceil(n / 1e6)} MB`
       : "less than 1 MB";
 
-/** What was chosen for an export, in words: "Audio + metadata · every finished recording · ..." */
-function chosen(job: api.ExportJob): string {
+/** What was chosen for an export, in words: "Audio + metadata · every finished recording · ...",
+ * on lines that break between its pieces, never inside one (D-158). */
+function Chosen({ job }: { job: api.ExportJob }) {
   const f = job.filters;
-  return [
+  const pieces = [
     f.layout === "CLIENT" ? "Speaker-pair format" : null,
     CONTENT_WORDS[job.content] ?? job.content,
     job.scope === "approved" ? "approved tasks" : "every finished recording",
@@ -109,9 +110,25 @@ function chosen(job: api.ExportJob): string {
     f.originals ? "with originals" : null,
     f.contact ? "with names and contact details" : null,
     job.table_format.toUpperCase(),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter((p): p is string => Boolean(p));
+  return pieces.map((piece, i) => (
+    <Fragment key={piece}>
+      {i > 0 ? " · " : null}
+      <span className="nowrap">{piece}</span>
+    </Fragment>
+  ));
+}
+
+/** A date over its time, "22 Nov 2026" then "3:30 pm IST": two whole lines in a narrow column
+ * rather than a word on each (D-158); "-" without one. */
+function Stamp({ iso }: { iso: string | null }) {
+  const [date, time] = when(iso).split(", ");
+  return (
+    <>
+      <div className="nowrap">{date}</div>
+      {time ? <div className="nowrap">{time}</div> : null}
+    </>
+  );
 }
 
 /** The reports, each saved as one table. Fetched like any request, so a refusal (or a session
@@ -124,6 +141,7 @@ function Reports({ projectId }: { projectId: string }) {
       <ErrorNotice error={error} />
       {/* What a report holds is written under its name, so its downloads stay in view on a
           phone too. */}
+      {/* The Download heading starts where its first link's icon does (D-158). */}
       <DataTable label="Reports" className="export__reports">
         <thead>
           <tr>
@@ -393,6 +411,8 @@ function BundleForm({ onAsked }: { onAsked: (job: api.ExportJob) => void }) {
         </div>
       ) : null}
       <ErrorNotice error={error} />
+      {/* What the choice holds, then its button under it on the left, as on every form that
+          makes something (D-158). */}
       <div className="export__go">
         <div>
           {counting ? <LoadingState label="Counting the recordings" /> : null}
@@ -492,59 +512,61 @@ function ExportList({
               return (
                 <tr key={job.id}>
                   <td>
-                    {when(job.created_at)}
+                    <Stamp iso={job.created_at} />
                     <div className="muted">{job.requested_by ?? "-"}</div>
                   </td>
-                  <td>
-                    <span className="export__file">
+                  <td className="export__what">
+                    {/* One line, cut short with the whole name on hover (D-158). */}
+                    <span className="export__file" title={job.file_name}>
                       <Icon name="fileZip" size={18} />
                       <span className="mono">{job.file_name}</span>
                     </span>
-                    <div className="muted">{chosen(job)}</div>
+                    <div className="muted">
+                      <Chosen job={job} />
+                    </div>
                     {job.state === "FAILED" && job.error ? (
                       <div className="export__error">{job.error}</div>
                     ) : null}
                   </td>
-                  <td>
+                  <td className="nowrap">
                     <StatusBadge status={tone} label={label} />
                   </td>
-                  <td>
+                  <td className="nowrap">
                     {job.recordings}
                     {job.missing > 0 ? (
                       <div className="export__missing">{missingWords(job.missing)}</div>
                     ) : null}
                   </td>
-                  <td>{job.state === "READY" ? megabytes(job.size_bytes) : "-"}</td>
+                  <td className="nowrap">
+                    {job.state === "READY" ? megabytes(job.size_bytes) : "-"}
+                  </td>
                   <td>
-                    {job.state === "READY" ? when(job.expires_at) : "-"}
+                    {job.state === "READY" ? <Stamp iso={job.expires_at} /> : "-"}
                     {job.downloads > 0 ? (
                       <div className="muted">Downloaded {plural(job.downloads, "time")}</div>
                     ) : null}
                   </td>
                   <td className="actions">
+                    {/* A row's actions as icons, their words on hover and for screen readers
+                        (D-141), so the table fits its section (D-158); the bin removes, as in
+                        every list. */}
                     {job.state === "READY" ? (
-                      <Button
-                        variant="secondary"
+                      <IconButton
                         icon="download"
+                        label={`Download ${job.file_name}`}
                         busy={busy === job.id}
                         disabled={busy !== null}
                         onClick={() => download(job)}
-                        aria-label={`Download ${job.file_name}`}
-                      >
-                        Download
-                      </Button>
+                      />
                     ) : null}
                     {job.state === "READY" || job.state === "QUEUED" ? (
-                      <Button
-                        variant="secondary"
+                      <IconButton
                         icon="trash"
+                        label={`Remove ${job.file_name}`}
                         busy={busy === job.id}
                         disabled={busy !== null}
                         onClick={() => remove(job)}
-                        aria-label={`Remove ${job.file_name}`}
-                      >
-                        Remove
-                      </Button>
+                      />
                     ) : null}
                   </td>
                 </tr>

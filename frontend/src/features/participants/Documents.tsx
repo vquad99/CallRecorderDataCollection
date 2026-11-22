@@ -176,24 +176,27 @@ export function DocumentBadges({
   );
 }
 
-/** A file as a table cell: its name, and under it when, by whom and how big; an earlier version
- * also when it was replaced. One column, so the row's icons stay in view on a phone. */
-function FileCell({ doc }: { doc: work.ParticipantDocument }) {
+/** A file under its kind's name: its name on one line (cut short, the whole name on hover), and
+ * under it when, by whom and how big; an earlier version also when it was replaced (D-158). */
+function FileLines({ doc }: { doc: work.ParticipantDocument }) {
   return (
-    <td className="docs__file">
-      <div className="docs__name">{doc.file_name}</div>
+    <>
+      <div className="docs__name" title={doc.file_name}>
+        {doc.file_name}
+      </div>
       <div className="docs__when">{uploadedText(doc)}</div>
       {doc.replaced_at ? (
         <div className="docs__when">
           Replaced {when(doc.replaced_at)} by {doc.replaced_by ?? "someone"}
         </div>
       ) : null}
-    </td>
+    </>
   );
 }
 
-/** One kind of document as a table row (D-152): its name and state, the file with when and by
- * whom it was uploaded, and View and Upload or Replace as icons. */
+/** One kind of document as a table row (D-152): its name and state, the file under them with when
+ * and by whom it was uploaded, and View and Upload or Replace as icons. Two columns (D-158), so
+ * the file has room on a phone too and no name breaks a word to a line. */
 function Slot({
   kind,
   doc,
@@ -218,20 +221,22 @@ function Slot({
   return (
     <tr>
       <th scope="row">
-        <span className="docs__kind">
-          <Icon name="fileText" size={16} />
-          {words}
-        </span>
-        {doc ? (
-          <StatusBadge tone="success" label="Uploaded" />
-        ) : missing ? (
-          <StatusBadge
-            tone={kind === "CONSENT_FORM" ? "warning" : "neutral"}
-            label={kind === "CONSENT_FORM" ? "Consent form missing" : "Address proof missing"}
-          />
-        ) : null}
+        <div className="docs__kind">
+          <span className="docs__words">
+            <Icon name="fileText" size={16} />
+            {words}
+          </span>
+          {doc ? (
+            <StatusBadge tone="success" label="Uploaded" />
+          ) : missing ? (
+            <StatusBadge
+              tone={kind === "CONSENT_FORM" ? "warning" : "neutral"}
+              label={kind === "CONSENT_FORM" ? "Consent form missing" : "Address proof missing"}
+            />
+          ) : null}
+        </div>
+        {doc ? <FileLines doc={doc} /> : <div className="docs__note">{note}</div>}
       </th>
-      {doc ? <FileCell doc={doc} /> : <td className="docs__note muted">{note}</td>}
       <td className="docs__actions">
         {doc ? (
           <IconButton
@@ -300,11 +305,11 @@ export function DocumentsPanel({
       ) : null}
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
-      <DataTable className="docs-table" label="Documents">
+      {/* No frame of its own in a window: it runs to the window's edges (D-158). */}
+      <DataTable bleed className="docs-table" label="Documents">
         <thead>
           <tr>
             <th scope="col">Document</th>
-            <th scope="col">File</th>
             <th scope="col">
               <span className="sr-only">Actions</span>
             </th>
@@ -345,12 +350,11 @@ export function DocumentsPanel({
       </p>
       {d.earlier.length > 0 ? (
         <section aria-label="Earlier versions" className="docs__earlier">
-          <h4>Earlier versions</h4>
-          <DataTable className="docs-table" label="Earlier versions">
+          <h4 className="subhead">Earlier versions</h4>
+          <DataTable bleed className="docs-table docs-table--earlier" label="Earlier versions">
             <thead>
               <tr>
                 <th scope="col">Document</th>
-                <th scope="col">File</th>
                 <th scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -358,9 +362,13 @@ export function DocumentsPanel({
             </thead>
             <tbody>
               {d.earlier.map((e) => (
-                <tr key={e.id} className="row--replaced">
-                  <th scope="row">{DOCUMENT_WORDS[e.kind]}</th>
-                  <FileCell doc={e} />
+                <tr key={e.id}>
+                  <th scope="row">
+                    <div className="docs__kind">
+                      <span className="docs__words">{DOCUMENT_WORDS[e.kind]}</span>
+                    </div>
+                    <FileLines doc={e} />
+                  </th>
                   <td className="docs__actions">
                     <IconButton
                       icon="eye"

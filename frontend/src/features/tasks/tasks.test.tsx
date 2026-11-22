@@ -881,6 +881,32 @@ describe("task page in plain words (UI review 2026-11-17)", () => {
       ),
     ).toBe(true);
   });
+
+  it("takes every filter off with Clear filters, in the page's filter bar (D-158)", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["tasks.view", "tasks.assign"], {
+        "GET /api/v1/projects": () => [
+          200,
+          { items: [{ id: "p1", code: "VOICE" }], total: 1, page: 1, page_size: 100 },
+        ],
+        "GET /api/v1/tasks": () => [200, { items: [task], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/tasks?status=AUDIO_QC&project=p1&mode=TELEPHONY&page=2");
+    await screen.findByText("T000001");
+    const filters = screen.getByRole("group", { name: "Filters" });
+    await userEvent.click(within(filters).getByRole("button", { name: "Clear filters" }));
+    expect(within(filters).getByLabelText("Status")).toHaveValue("");
+    expect(within(filters).getByLabelText("Project")).toHaveValue("");
+    expect(within(filters).getByLabelText("Recording type")).toHaveValue("");
+    // Nothing left to clear: the button goes; the list is asked again from page 1, unfiltered.
+    expect(within(filters).queryByRole("button", { name: "Clear filters" })).toBeNull();
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.startsWith("/api/v1/tasks?")).at(-1)?.path).not.toMatch(
+        /status=|project_id=|mode=|page=2/,
+      ),
+    );
+  });
 });
 
 describe("one task on one screen (D-152)", () => {

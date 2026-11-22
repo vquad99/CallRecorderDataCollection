@@ -1,0 +1,12 @@
+/* Users pages (D-158). A user's page: a section's result under its title bar, and no extra room
+   under its last field. */
+.user-card > .notice {
+  margin-bottom: var(--space-3);
+}
+.user-card > :last-child {
+  margin-bottom: 0;
+}
+/* Import users: the Import button under the rows' table. */
+.import-rows__go {
+  margin-top: var(--space-3);
+}

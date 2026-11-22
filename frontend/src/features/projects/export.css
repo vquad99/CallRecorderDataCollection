@@ -11,10 +11,12 @@
 .export__choices legend {
   margin-bottom: 8px;
 }
-/* Three plain choices side by side: a round box, the name, what it holds under it. */
+/* Three plain choices side by side: a round box, the name, what it holds under it. Their lines
+   start at the top (D-158): a choice with a shorter note is not spread over the row's height. */
 .export__choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
   align-items: start;
   gap: 2px 10px;
   cursor: pointer;
@@ -36,13 +38,21 @@
 /* CSV or TSV needs little room: the filters fit one line on a laptop. */
 .export .filters .field:has(> select[name="table_format"]) {
   flex: 0 1 120px;
+  min-width: auto;
 }
+/* On a phone each choice has a line of its own, so "Approved tasks only" is not cut; the two days
+   share one (D-158). */
+@media (max-width: 640px) {
+  .export .filters > .field:has(> select) {
+    grid-column: 1 / -1;
+  }
+}
+/* What the choice holds, then Prepare export under it on the left (D-158). */
 .export__go {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 24px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
 .export__summary {
   display: flex;
@@ -52,7 +62,7 @@
   margin: 0;
 }
 /* A report's name with what it holds under it; its two downloads stay on one line beside it, in
-   view on a phone too. */
+   view on a phone too, the first link's icon under the column's heading (D-158). */
 .table .export__detail {
   display: block;
   max-width: 72ch;
@@ -63,6 +73,30 @@
 }
 .export__reports td.actions {
   width: 1%;
+}
+.export__reports td.actions > .button:first-child {
+  margin-left: -8px;
+}
+/* A prepared export: its file's name on one line as wide as the column, cut short with the whole
+   name on hover (it does not widen the column); what was chosen under it takes more lines, also
+   on a phone, breaking between its pieces only (D-158). */
+.table .export__file {
+  display: flex;
+  width: 0;
+  min-width: 100%;
+}
+.export__file > .icon {
+  flex: none;
+}
+.export__file > .mono {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table td.export__what > .muted {
+  min-width: 180px;
+  white-space: normal;
 }
 .export__error {
   margin-top: 4px;

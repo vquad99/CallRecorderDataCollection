@@ -1,20 +1,23 @@
 /* Dashboard page styles, loaded with the page (not part of the first screen). The sections, key
-   figures, chart and tables are in components/charts (D-151, D-154). */
+   figures, chart and tables are in components/charts (D-151, D-154); the filter bar and the key
+   figures are framed sections of their own (global.css, charts.css, D-158). */
 
-/* The filters: one row of compact fields under the title (D-154). */
-.filters.dash-filters {
-  gap: 8px 10px;
-}
+/* Up to eight filters on one row on a laptop screen (D-154), 1280 px wide too (D-158): each starts
+   as wide as its chosen option (the shared bar, global.css) and the row's room left over is shared
+   out, so no choice is cut; when they do not fit, the last ones go to a second row, none wider
+   than the bar's usual 280 px. */
 .filters.dash-filters .field {
-  flex: 1 1 105px;
-  max-width: 220px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 280px;
 }
-/* The project's name is the longest choice, then the period's. */
-.filters.dash-filters .field:first-child {
-  flex-basis: 170px;
-}
-.filters.dash-filters .field:nth-child(2) {
-  flex-basis: 135px;
+
+/* Two sections to a row on a middle-sized screen (charts.css): one that has no partner of its
+   height there takes the whole width instead of leaving half a row empty (D-158). */
+@container (max-width: 760px) {
+  .dash-page .dash-grid > .mid-whole {
+    grid-column: span 12;
+  }
 }
 
 /* Face-to-face beside phone: the total column a shade darker. */

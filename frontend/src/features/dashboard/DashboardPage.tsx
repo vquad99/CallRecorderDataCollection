@@ -2,6 +2,8 @@
 // progress only; moderators and QC see their own work; managers also see what needs attention.
 // Laid out plainly (D-154, after D-151): the title, one row of filters, the key figures as one
 // line, then a heading over each table, and one chart where the trend is the point (hours per day).
+// D-158: the filters and the key figures are white sections of their own, 12 px apart, and the
+// sections that share a row are about the same height.
 import { Link } from "react-router";
 import { useState } from "react";
 
@@ -15,6 +17,7 @@ import {
   MatrixTable,
   Panel,
   ShareTable,
+  type DonutPart,
 } from "../../components/charts/Charts";
 import { stageParts } from "../../components/charts/stages";
 import { DataTable } from "../../components/DataTable";
@@ -186,12 +189,28 @@ function AudioQc({ qc }: { qc: NonNullable<Dashboard["qc"]> }) {
   );
 }
 
-/** What each moderator recorded: the first rows, and the rest on request. */
+/** The tasks by stage, each status named under its stage. */
+function Status({ parts, className }: { parts: DonutPart[]; className: string }) {
+  return (
+    <Panel className={className} title="Tasks by status">
+      <ShareTable
+        label="Tasks by status"
+        head="Stage"
+        countHead="Tasks"
+        parts={parts}
+        emptyText="No tasks yet."
+      />
+    </Panel>
+  );
+}
+
+/** What each moderator recorded: the first rows, and the rest on request (the button on the
+ * section's title bar, D-158). */
 function Team({ team, className }: { team: NonNullable<Dashboard["team"]>; className: string }) {
   const { shown, more } = useFirstRows(team);
   const most = Math.max(0, ...team.map((t) => t.recorded_hours));
   return (
-    <Panel className={className} title="Moderator output">
+    <Panel className={className} title="Moderator output" action={more}>
       {team.length === 0 ? (
         <p className="muted">No finished recordings yet.</p>
       ) : (
@@ -222,11 +241,11 @@ function Team({ team, className }: { team: NonNullable<Dashboard["team"]>; class
           </tbody>
         </DataTable>
       )}
-      {more}
     </Panel>
   );
 }
 
+/** The key figures, the sections and the notes under them (the page puts them under its filters). */
 function Body({ data }: { data: Dashboard }) {
   const daily = data.target_hours_per_day;
   const statuses = data.view === "client" ? [] : stageParts(data.tasks_by_status ?? {});
@@ -234,18 +253,38 @@ function Body({ data }: { data: Dashboard }) {
     data.calls !== null &&
     (data.calls.placed > 0 ||
       data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0));
-  // The second row holds what this view has: tasks by status, what needs attention, audio QC.
-  const second = [data.view !== "client", data.queues !== null, data.qc !== null].filter(
-    Boolean,
-  ).length;
-  const spans = second === 3 ? ["g-4", "g-4", "g-4"] : second === 2 ? ["g-6", "g-6"] : ["g-6"];
-  const [statusSpan, attentionSpan, qcSpan] = [
-    data.view !== "client" ? spans.shift() : "",
-    data.queues ? spans.shift() : "",
-    data.qc ? spans.shift() : "",
-  ];
+  // D-158: when no day and no daily target reach an hour, the chart counts minutes, so its title
+  // and its axis name the same unit.
+  const busiest = Math.max(
+    daily,
+    ...data.daily.map((d) => Math.max(d.recorded_hours, d.approved_hours)),
+  );
+  const perHour = busiest > 0 && busiest < 1 ? 60 : 1;
+  // D-158: sections of about the same height share a row, so none is stretched far past its
+  // table. The short ones (what needs attention, audio QC, phone calls) side by side; the tasks
+  // by status beside a long list of moderators (eight or more), else among the short ones, and a
+  // short list of moderators across the whole width at the end. Two to a row on a middle-sized
+  // screen: one left without a partner takes the whole width there ("mid-whole", dashboard.css).
+  const hasStatus = data.view !== "client";
+  const longTeam = (data.team?.length ?? 0) >= 8;
+  const besideTeam = hasStatus && longTeam;
+  const short = [
+    hasStatus && !besideTeam ? "status" : null,
+    data.queues ? "attention" : null,
+    data.qc ? "qc" : null,
+    data.calls && showCalls ? "calls" : null,
+  ].filter((key) => key !== null);
+  const span = (key: string) => {
+    if (key === "status" && besideTeam) return "g-4 mid-whole";
+    // Taller than two other short ones: the tasks by status then take a row of their own.
+    if (key === "status" && short.length === 3) return "";
+    if (short.length === 3 && !short.includes("status")) {
+      return key === short[2] ? "g-4 mid-whole" : "g-4";
+    }
+    return short.length === 1 ? "" : "g-6";
+  };
   return (
-    <div className="dash">
+    <>
       <FigureLine label="Key figures">
         <Figure
           label="Recorded"
@@ -294,17 +333,22 @@ function Body({ data }: { data: Dashboard }) {
       <div className="dash-grid">
         <div className="panel g-7">
           <DayChart
-            title="Hours per day"
+            title={perHour === 60 ? "Minutes per day" : "Hours per day"}
             height={180}
             days={data.daily}
-            target={daily}
+            target={daily * perHour}
+            wholeNumbers={perHour === 60}
             emptyText="No finished recordings in this period yet."
             series={[
-              { label: "Approved", className: "series--approved", value: (d) => d.approved_hours },
+              {
+                label: "Approved",
+                className: "series--approved",
+                value: (d) => d.approved_hours * perHour,
+              },
               {
                 label: "Recorded, not yet approved",
                 className: "series--waiting",
-                value: (d) => Math.max(0, d.recorded_hours - d.approved_hours),
+                value: (d) => Math.max(0, d.recorded_hours - d.approved_hours) * perHour,
               },
             ]}
             columns={[
@@ -317,31 +361,19 @@ function Body({ data }: { data: Dashboard }) {
           <ByMode data={data} />
         </Panel>
 
-        {data.view !== "client" ? (
-          <Panel className={statusSpan} title="Tasks by status">
-            <ShareTable
-              label="Tasks by status"
-              head="Stage"
-              countHead="Tasks"
-              parts={statuses}
-              emptyText="No tasks yet."
-            />
-          </Panel>
-        ) : null}
+        {short.includes("status") ? <Status parts={statuses} className={span("status")} /> : null}
         {data.queues ? (
-          <Panel className={attentionSpan} title="Needs attention">
+          <Panel className={span("attention")} title="Needs attention">
             <Attention queues={data.queues} projectId={data.project_id} />
           </Panel>
         ) : null}
         {data.qc ? (
-          <Panel className={qcSpan} title="Audio QC">
+          <Panel className={span("qc")} title="Audio QC">
             <AudioQc qc={data.qc} />
           </Panel>
         ) : null}
-
-        {data.team ? <Team team={data.team} className="g-8" /> : null}
         {data.calls && showCalls ? (
-          <Panel className="g-4" title="Phone calls">
+          <Panel className={span("calls")} title="Phone calls">
             <KeyTable
               label="Phone calls"
               rows={[
@@ -357,6 +389,9 @@ function Body({ data }: { data: Dashboard }) {
             </p>
           </Panel>
         ) : null}
+
+        {besideTeam ? <Status parts={statuses} className={span("status")} /> : null}
+        {data.team ? <Team team={data.team} className={besideTeam ? "g-8" : ""} /> : null}
       </div>
       <p className="muted dash-foot">
         Effective speech is the time someone speaks (silences left out). Completed counts each
@@ -371,7 +406,7 @@ function Body({ data }: { data: Dashboard }) {
           : `${data.timezone.replace("_", " ")} time`}
         .
       </p>
-    </div>
+    </>
   );
 }
 
@@ -424,139 +459,142 @@ export function DashboardPage() {
   const narrowed = Object.values(filters).some(Boolean) || custom;
   const set = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
   return (
-    <section aria-labelledby="dash-title" className="stack stack--tight dash-page">
+    <section aria-labelledby="dash-title" className="stack dash-page">
       <div className="page-header">
         <div className="page-header__text">
           <h1 id="dash-title">{HEADINGS[view].title}</h1>
           <p className="page-header__lead">{HEADINGS[view].lead}</p>
         </div>
       </div>
-      {/* One row of filters (D-154): the project and the period first. */}
-      <div className="filters dash-filters" role="group" aria-label="Filters">
-        <Select
-          label="Project"
-          value={projectId}
-          onChange={(e) => {
-            setProjectId(e.target.value);
-            // Another project has other people and languages.
-            set({ language: "", dialect: "", district: "", staffId: "" });
-          }}
-          options={[
-            { value: "", label: "All my projects" },
-            ...projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
-          ]}
-        />
-        <Select
-          label="Period"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          options={[
-            { value: "7", label: "Last 7 days" },
-            { value: "30", label: "Last 30 days" },
-            { value: "90", label: "Last 90 days" },
-            { value: "custom", label: "Choose dates (from – to)" },
-          ]}
-        />
-        {custom ? (
-          <>
-            <TextField
-              label="From"
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-            <TextField
-              label="To"
-              type="date"
-              value={to}
-              {...(backwards ? { error: "Must not be before the first day" } : {})}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </>
-        ) : null}
-        <Select
-          label="Recording type"
-          value={filters.mode}
-          onChange={(e) => set({ mode: e.target.value })}
-          options={[
-            { value: "", label: "All" },
-            ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
-          ]}
-        />
-        <Select
-          label="Language"
-          value={filters.language}
-          onChange={(e) => set({ language: e.target.value })}
-          options={[
-            { value: "", label: "All" },
-            ...(options.languages ?? []).map((code) => ({
-              value: code,
-              label: languageLabel(code),
-            })),
-          ]}
-        />
-        {(options.dialects ?? []).length > 0 ? (
+      {/* D-158: the filters, the key figures and the sections, each a white section, 12 px apart. */}
+      <div className="dash">
+        {/* One row of filters (D-154): the project and the period first. */}
+        <div className="filters dash-filters" role="group" aria-label="Filters">
           <Select
-            label="Dialect"
-            value={filters.dialect}
-            onChange={(e) => set({ dialect: e.target.value })}
-            options={[
-              { value: "", label: "All" },
-              ...(options.dialects ?? []).map((d) => ({ value: d, label: d })),
-            ]}
-          />
-        ) : null}
-        {(options.districts ?? []).length > 0 ? (
-          <Select
-            label="District"
-            value={filters.district}
-            onChange={(e) => set({ district: e.target.value })}
-            options={[
-              { value: "", label: "All" },
-              ...(options.districts ?? []).map((d) => ({ value: d, label: d })),
-            ]}
-          />
-        ) : null}
-        {view !== "client" ? (
-          <Select
-            label="Task status"
-            value={filters.status}
-            onChange={(e) => set({ status: e.target.value })}
-            options={[
-              { value: "", label: "All" },
-              ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label })),
-            ]}
-          />
-        ) : null}
-        {options.staff ? (
-          <Select
-            label="Staff"
-            value={filters.staffId}
-            onChange={(e) => set({ staffId: e.target.value })}
-            options={[
-              { value: "", label: "Everyone" },
-              ...options.staff.map((s) => ({ value: s.id, label: s.name })),
-            ]}
-          />
-        ) : null}
-        {narrowed ? (
-          <Button
-            variant="secondary"
-            icon="filterX"
-            onClick={() => {
-              setFilters(NO_FILTERS);
-              setPeriod("30");
-              setFrom("");
-              setTo("");
+            label="Project"
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              // Another project has other people and languages.
+              set({ language: "", dialect: "", district: "", staffId: "" });
             }}
-          >
-            Clear filters
-          </Button>
-        ) : null}
+            options={[
+              { value: "", label: "All my projects" },
+              ...projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
+            ]}
+          />
+          <Select
+            label="Period"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            options={[
+              { value: "7", label: "Last 7 days" },
+              { value: "30", label: "Last 30 days" },
+              { value: "90", label: "Last 90 days" },
+              { value: "custom", label: "Choose dates (from – to)" },
+            ]}
+          />
+          {custom ? (
+            <>
+              <TextField
+                label="From"
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+              <TextField
+                label="To"
+                type="date"
+                value={to}
+                {...(backwards ? { error: "Must not be before the first day" } : {})}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </>
+          ) : null}
+          <Select
+            label="Recording type"
+            value={filters.mode}
+            onChange={(e) => set({ mode: e.target.value })}
+            options={[
+              { value: "", label: "All" },
+              ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+          <Select
+            label="Language"
+            value={filters.language}
+            onChange={(e) => set({ language: e.target.value })}
+            options={[
+              { value: "", label: "All" },
+              ...(options.languages ?? []).map((code) => ({
+                value: code,
+                label: languageLabel(code),
+              })),
+            ]}
+          />
+          {(options.dialects ?? []).length > 0 ? (
+            <Select
+              label="Dialect"
+              value={filters.dialect}
+              onChange={(e) => set({ dialect: e.target.value })}
+              options={[
+                { value: "", label: "All" },
+                ...(options.dialects ?? []).map((d) => ({ value: d, label: d })),
+              ]}
+            />
+          ) : null}
+          {(options.districts ?? []).length > 0 ? (
+            <Select
+              label="District"
+              value={filters.district}
+              onChange={(e) => set({ district: e.target.value })}
+              options={[
+                { value: "", label: "All" },
+                ...(options.districts ?? []).map((d) => ({ value: d, label: d })),
+              ]}
+            />
+          ) : null}
+          {view !== "client" ? (
+            <Select
+              label="Task status"
+              value={filters.status}
+              onChange={(e) => set({ status: e.target.value })}
+              options={[
+                { value: "", label: "All" },
+                ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+              ]}
+            />
+          ) : null}
+          {options.staff ? (
+            <Select
+              label="Staff"
+              value={filters.staffId}
+              onChange={(e) => set({ staffId: e.target.value })}
+              options={[
+                { value: "", label: "Everyone" },
+                ...options.staff.map((s) => ({ value: s.id, label: s.name })),
+              ]}
+            />
+          ) : null}
+          {narrowed ? (
+            <Button
+              variant="secondary"
+              icon="filterX"
+              onClick={() => {
+                setFilters(NO_FILTERS);
+                setPeriod("30");
+                setFrom("");
+                setTo("");
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+        {state.status === "loading" ? <LoadingState label="Loading dashboard" /> : null}
+        {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+        {data && state.status !== "failed" && !backwards ? <Body data={data} /> : null}
       </div>
-      {state.status === "loading" ? <LoadingState label="Loading dashboard" /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {data && state.status !== "failed" && !backwards ? <Body data={data} /> : null}
     </section>
   );
 }

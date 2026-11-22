@@ -107,10 +107,11 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.goto(`${projectUrl}/team`);
     await admin.getByLabel("Find by name or email").fill(moderatorEmail);
     await admin.getByRole("button", { name: "Search" }).click();
+    // The people found are a table now, one row each (D-158).
     await admin
-      .getByRole("listitem")
+      .getByRole("row")
       .filter({ hasText: moderatorEmail })
-      .getByRole("button", { name: "Add" })
+      .getByRole("button", { name: /^Add/ })
       .click();
     await expect(admin.getByText(`${moderatorEmail} added.`)).toBeVisible();
     await admin

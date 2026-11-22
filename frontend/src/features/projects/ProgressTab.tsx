@@ -3,10 +3,11 @@
 // needed" near the top for the people who recruit (speakers by age band and gender, by district,
 // the conversations still to make, and whether the registered people can give them); the shares
 // in one balance table; the conversations by status and the completed minutes as two small
-// tables; the definitions folded away. Above them, the tab as a file (owner's request): Excel with
-// a sheet per table, one long CSV table, or the browser's print (Save as PDF) as a clean report:
-// the menus left out, every row shown, the definitions open. For the people who manage the
-// project, like the other tabs (D-104). Loaded with the tab, not with the first screen.
+// tables; the definitions folded away. On the title row, the tab as a file (owner's request; D-158
+// puts the buttons there as on every page, and when the figures were read under the title): Excel
+// with a sheet per table, one long CSV table, or the browser's print (Save as PDF) as a clean
+// report: the menus left out, every row shown, the definitions open. For the people who manage
+// the project, like the other tabs (D-104). Loaded with the tab, not with the first screen.
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 
@@ -41,7 +42,7 @@ import { useAction } from "../../hooks/useAction";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
-import { useProject } from "./ProjectDetailPage";
+import { PageActions, PageLead, useProject } from "./ProjectDetailPage";
 import "./progress.css";
 
 /** A length for people: "6 h 12 min", "45 min", "30 s". */
@@ -75,9 +76,9 @@ const FIRST_DISTRICTS = 10;
 
 // ---------------------------------------------------------------------- still needed (D-153)
 
-/** A still-needed number: bold, green when nothing more is needed, "–" without a target. */
+/** A still-needed number: bold, green when nothing more is needed, "-" without a target (D-158). */
 function Still({ n }: { n: number | null }) {
-  if (n === null) return <span className="need need--none">–</span>;
+  if (n === null) return <span className="need need--none">-</span>;
   return <span className={n === 0 ? "need need--met" : "need"}>{n}</span>;
 }
 
@@ -128,7 +129,7 @@ function SpeakersMatrix({ speakers }: { speakers: StillNeeded["speakers"] }) {
     </tr>
   );
   return (
-    <DataTable label="Speakers still needed by age band and gender" className="needs">
+    <DataTable label="Speakers still needed by age band and gender" className="needs" bleed>
       <thead>
         <tr>
           <th scope="col">{speakers.by_age ? "Age band" : "Ages"}</th>
@@ -158,7 +159,7 @@ function DistrictsTable({ districts }: { districts: StillNeeded["districts"] }) 
     );
   const cells = (d: StillNeeded["districts"]["rows"][number]) => (
     <>
-      <td className="num">{d.target ?? "–"}</td>
+      <td className="num">{d.target ?? "-"}</td>
       <td className="num">{d.done}</td>
       <td className="num">{d.registered}</td>
       <td className="num">
@@ -167,7 +168,7 @@ function DistrictsTable({ districts }: { districts: StillNeeded["districts"] }) 
     </>
   );
   return (
-    <DataTable label="Speakers still needed by native district">
+    <DataTable label="Speakers still needed by native district" bleed>
       <thead>
         <tr>
           <th scope="col">Native district</th>
@@ -207,7 +208,7 @@ function DistrictsTable({ districts }: { districts: StillNeeded["districts"] }) 
 
 function ConversationsTable({ rows }: { rows: ConversationNeed[] }) {
   return (
-    <DataTable label="Conversations still to make">
+    <DataTable label="Conversations still to make" bleed>
       <thead>
         <tr>
           <th scope="col">Conversations</th>
@@ -229,7 +230,7 @@ function ConversationsTable({ rows }: { rows: ConversationNeed[] }) {
         {rows.map((c) => (
           <tr key={c.key}>
             <th scope="row">{c.label}</th>
-            <td className="num">{c.target ?? "–"}</td>
+            <td className="num">{c.target ?? "-"}</td>
             <td className="num">{c.approved}</td>
             <td className="num">{c.in_pipeline}</td>
             <td className="num">
@@ -286,8 +287,9 @@ function StillNeededPanel({ needed }: { needed: StillNeeded }) {
         )}
         {capacity ? ` ${capacity}` : ""}
       </p>
-      <section className="needs-part" aria-labelledby={`${id}-ages`}>
-        <h3 id={`${id}-ages`} className="needs-title">
+      {/* Three parts, each under a line edge to edge, its table edge to edge too (D-158). */}
+      <section className="needs-part stack stack--tight" aria-labelledby={`${id}-ages`}>
+        <h3 id={`${id}-ages`} className="subhead">
           Speakers by age band and gender
         </h3>
         {needed.speakers.target === null ? (
@@ -296,14 +298,14 @@ function StillNeededPanel({ needed }: { needed: StillNeeded }) {
         <MatrixKey byGender={needed.speakers.by_gender} />
         <SpeakersMatrix speakers={needed.speakers} />
       </section>
-      <section className="needs-part" aria-labelledby={`${id}-districts`}>
-        <h3 id={`${id}-districts`} className="needs-title">
+      <section className="needs-part stack stack--tight" aria-labelledby={`${id}-districts`}>
+        <h3 id={`${id}-districts`} className="subhead">
           Speakers by native district
         </h3>
         <DistrictsTable districts={needed.districts} />
       </section>
-      <section className="needs-part" aria-labelledby={`${id}-talks`}>
-        <h3 id={`${id}-talks`} className="needs-title">
+      <section className="needs-part stack stack--tight" aria-labelledby={`${id}-talks`}>
+        <h3 id={`${id}-talks`} className="subhead">
           Conversations
         </h3>
         <ConversationsTable rows={needed.conversations} />
@@ -322,12 +324,9 @@ interface Group {
 }
 
 /** Every share in one table: a section per group, the actual count and percent against the
- * target percent, the variance, and a bar with a tick at the target. Printed, every district. */
-function BalanceMatrix({ data, printing }: { data: ProjectProgress; printing: boolean }) {
-  const districts = useFirstRows(
-    data.districts.rows,
-    printing ? data.districts.rows.length : FIRST_DISTRICTS,
-  );
+ * target percent, the variance, and a bar with a tick at the target. `districts` are the
+ * districts shown: the first ones, or all of them on request and when printed. */
+function BalanceMatrix({ data, districts }: { data: ProjectProgress; districts: ShareRow[] }) {
   const groups: Group[] = [
     {
       key: "age",
@@ -350,7 +349,7 @@ function BalanceMatrix({ data, printing }: { data: ProjectProgress; printing: bo
     {
       key: "districts",
       title: "Districts",
-      share: { ...data.districts, rows: districts.shown },
+      share: { ...data.districts, rows: districts },
       noTarget: "No districts listed: the speakers' own native districts.",
     },
   ];
@@ -371,62 +370,59 @@ function BalanceMatrix({ data, printing }: { data: ProjectProgress; printing: bo
     rows: g.share.total === 0 ? [] : g.share.rows.map((r) => ({ ...r, group: g.key })),
   }));
   return (
-    <>
-      <MatrixTable
-        label="Balance against the targets"
-        head="Group"
-        groups={[
-          { label: "Actual", span: 3, tone: "blue" },
-          { label: "Target", span: 2, tone: "teal" },
-        ]}
-        columns={[
-          { key: "count", label: "Count", num: true, cell: (r) => r.count },
-          { key: "percent", label: "Share", num: true, cell: (r) => pct(r.percent) },
-          {
-            key: "bar",
-            label: <span className="sr-only">Share against the target</span>,
-            cell: (r) => (
-              <TargetBar
-                value={r.percent}
-                target={r.target_percent}
-                max={scale.get(r.group) ?? 100}
-              />
+    <MatrixTable
+      label="Balance against the targets"
+      head="Group"
+      groups={[
+        { label: "Actual", span: 3, tone: "blue" },
+        { label: "Target", span: 2, tone: "teal" },
+      ]}
+      columns={[
+        { key: "count", label: "Count", num: true, cell: (r) => r.count },
+        { key: "percent", label: "Share", num: true, cell: (r) => pct(r.percent) },
+        {
+          key: "bar",
+          label: <span className="sr-only">Share against the target</span>,
+          cell: (r) => (
+            <TargetBar
+              value={r.percent}
+              target={r.target_percent}
+              max={scale.get(r.group) ?? 100}
+            />
+          ),
+        },
+        {
+          key: "target",
+          label: "Share",
+          num: true,
+          cell: (r) => (r.target_percent === null ? "-" : pct(r.target_percent)),
+        },
+        {
+          key: "variance",
+          label: "Variance",
+          num: true,
+          cell: (r) =>
+            r.variance === null ? (
+              "-"
+            ) : (
+              <span
+                className={
+                  r.variance < 0
+                    ? "variance variance--below"
+                    : r.variance > 0
+                      ? "variance variance--above"
+                      : "variance"
+                }
+              >
+                {variance(r.variance)}
+              </span>
             ),
-          },
-          {
-            key: "target",
-            label: "Share",
-            num: true,
-            cell: (r) => (r.target_percent === null ? "-" : pct(r.target_percent)),
-          },
-          {
-            key: "variance",
-            label: "Variance",
-            num: true,
-            cell: (r) =>
-              r.variance === null ? (
-                "-"
-              ) : (
-                <span
-                  className={
-                    r.variance < 0
-                      ? "variance variance--below"
-                      : r.variance > 0
-                        ? "variance variance--above"
-                        : "variance"
-                  }
-                >
-                  {variance(r.variance)}
-                </span>
-              ),
-          },
-        ]}
-        sections={sections}
-        rowKey={(r) => r.key}
-        rowLabel={(r) => r.label}
-      />
-      {districts.more}
-    </>
+        },
+      ]}
+      sections={sections}
+      rowKey={(r) => r.key}
+      rowLabel={(r) => r.label}
+    />
   );
 }
 
@@ -511,7 +507,8 @@ function usePrintView(notes: RefObject<HTMLDetailsElement | null>): boolean {
 
 /** The tab as a file (owner's request): an Excel workbook with a sheet per table, one long CSV
  * table (both made by the server from the same answer, audited), or the browser's print, which
- * also saves a PDF. A printed page starts with the project and the time of its figures. */
+ * also saves a PDF. On the page's title row (D-158): when the figures were read under the title,
+ * the buttons on the right. A printed page starts with the project and the time of its figures. */
 function ReportActions({ asOf }: { asOf: string }) {
   const { project } = useProject();
   const { busy, error, run } = useAction();
@@ -519,30 +516,28 @@ function ReportActions({ asOf }: { asOf: string }) {
     void run(() => apiDownload(progressExportPath(project.id, format)), format);
   return (
     <>
-      <div className="progress-actions">
-        <p className="progress-actions__asof">Figures as of {when(asOf)}</p>
-        <div className="progress-actions__buttons">
-          <Button
-            variant="secondary"
-            icon="table"
-            busy={busy === "xlsx"}
-            onClick={() => download("xlsx")}
-          >
-            Download Excel
-          </Button>
-          <Button
-            variant="secondary"
-            icon="fileCsv"
-            busy={busy === "csv"}
-            onClick={() => download("csv")}
-          >
-            Download CSV
-          </Button>
-          <Button variant="secondary" icon="fileText" onClick={() => window.print()}>
-            Print or save as PDF
-          </Button>
-        </div>
-      </div>
+      <PageLead>Figures as of {when(asOf)}</PageLead>
+      <PageActions>
+        <Button
+          variant="secondary"
+          icon="table"
+          busy={busy === "xlsx"}
+          onClick={() => download("xlsx")}
+        >
+          Download Excel
+        </Button>
+        <Button
+          variant="secondary"
+          icon="fileCsv"
+          busy={busy === "csv"}
+          onClick={() => download("csv")}
+        >
+          Download CSV
+        </Button>
+        <Button variant="secondary" icon="fileText" onClick={() => window.print()}>
+          Print or save as PDF
+        </Button>
+      </PageActions>
       <ErrorNotice error={error} />
       <p className="progress-print-head">
         {project.code} · {project.name} · as of {when(asOf)}
@@ -562,6 +557,12 @@ function Body({ data, asOf }: { data: ProjectProgress; asOf: string }) {
     percent === null ? "No target set." : `${pct(percent)} of the target`;
   const notes = useRef<HTMLDetailsElement>(null);
   const printing = usePrintView(notes);
+  // The first districts, the rest on request: the button on the section's title bar, as on the
+  // dashboard (D-158). Printed, every district.
+  const districts = useFirstRows(
+    data.districts.rows,
+    printing ? data.districts.rows.length : FIRST_DISTRICTS,
+  );
   return (
     <div className="dash progress">
       <ReportActions asOf={asOf} />
@@ -615,8 +616,16 @@ function Body({ data, asOf }: { data: ProjectProgress; asOf: string }) {
 
       <StillNeededPanel needed={data.still_needed} />
 
-      <Panel title="Balance against the targets" action="Variance: actual minus target">
-        <BalanceMatrix data={data} printing={printing} />
+      <Panel
+        title="Balance against the targets"
+        action={
+          <span className="actions">
+            Variance: actual minus target
+            {districts.more}
+          </span>
+        }
+      >
+        <BalanceMatrix data={data} districts={districts.shown} />
       </Panel>
 
       <div className="dash-grid">

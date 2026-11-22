@@ -101,11 +101,8 @@
 .task-work:empty {
   display: none;
 }
-/* The records under the work: the same thin line as between the work's own sections. */
-.task-work:not(:empty) ~ .task-rest > :first-child {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-}
+/* D-158: no line on the grey page between the work and the records (or the side column on a
+   phone): every section is framed now. */
 /* The side column moves with the page (D-157): one scroll bar, no box that scrolls on its own. */
 .task-side {
   display: flex;
@@ -128,20 +125,10 @@
     grid-template-rows: auto;
     grid-template-columns: minmax(0, 1fr);
   }
-  /* One column: the side's first section gets the line between sections too. */
-  .task-work:not(:empty) ~ .task-side {
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
-  }
 }
 
-/* The person's next step: a plain section like the others; its button is the page's main one. */
-.task-page .card > :is(h2, h3):not(:first-child) {
-  margin-bottom: 10px;
-}
-.task-page .card .card__head:not(:first-child) {
-  margin-bottom: 4px;
-}
+/* The person's next step: a section like the others, its title on the title bar (D-158); its
+   button is the page's main one. */
 .assign-card .field {
   max-width: 420px;
 }
@@ -235,7 +222,9 @@ a.fact-code:hover {
   box-shadow: var(--focus-ring);
   outline: none;
 }
-/* The participants matrix in the narrow column. */
+/* The participants matrix in the narrow column. Its first and last cells line up with the
+   section's title (the shared table rule, D-158); the labels' column fits "Speaker details" on one
+   line, and the headings "Participant A" stay on one line. */
 .table-wrap .table.people-matrix th,
 .table-wrap .table.people-matrix td {
   padding: 6px 8px;
@@ -245,7 +234,7 @@ a.fact-code:hover {
 }
 .table.people-matrix thead th:first-child,
 .table.people-matrix tbody th {
-  width: 112px;
+  width: 124px;
 }
 .table.people-matrix .badge {
   padding: 2px 7px;
@@ -264,19 +253,24 @@ a.fact-code:hover {
 .mx-name {
   font-weight: 500;
 }
+/* A signed form's file name (D-158): one line, cut with an ellipsis; the full name is the
+   button's title. Upload or Replace goes under it, so the narrow column shows more of the name. */
 .mx-file {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 2px;
   min-width: 0;
 }
 .mx-file__open {
   display: inline-flex;
+  flex: 1 1 100%;
   align-items: center;
   gap: 4px;
   min-width: 0;
   max-width: 100%;
   padding: 2px 4px;
+  overflow: hidden;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -292,8 +286,11 @@ a.fact-code:hover {
   flex: none;
 }
 .mx-file__name {
-  overflow-wrap: break-word;
+  min-width: 0;
+  overflow: hidden;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* A form QC sent back (D-146, UXW-03): marked until a new one is uploaded. */
 .mx-file.is-fault .mx-file__open {
@@ -303,6 +300,17 @@ a.fact-code:hover {
   flex: none;
   width: 28px;
   height: 28px;
+}
+/* On a phone the small buttons are tap-sized (D-158). */
+@media (max-width: 640px) {
+  .mx-file .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+  .mx-file__open,
+  .linkish {
+    min-height: 40px;
+  }
 }
 
 /* History: the newest first, a dot per entry on a thin line. */
@@ -381,21 +389,20 @@ a.fact-code:hover {
   margin-bottom: 10px;
 }
 
-/* ---------- The next step, in one card with one main button ---------- */
-.record-card {
+/* ---------- The next step, in one section with one main button ---------- */
+/* D-158: the title on the section's title bar (WorkCard); under it the steps or words on the left
+   and the buttons on the right; parts as wide as the section after them. */
+.record-card__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px 24px;
-}
-.record-card .notice {
-  grid-column: 1 / -1;
+  align-items: start;
+  gap: 12px 24px;
 }
 .record-card__steps {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0;
   color: var(--muted);
   font-size: 0.8125rem;
@@ -461,32 +468,25 @@ a.fact-code:hover {
 .record-card__go p {
   margin: 0;
 }
-/* Two choices side by side (Approve, Reject). */
-.record-card__go--row {
-  flex-direction: row;
-  flex-wrap: wrap;
-  max-width: none;
-}
 
-/* Waiting for consent: one row per person who has not agreed yet. */
-.consent {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.consent > h2 {
-  margin: 0;
-}
+/* Waiting for consent, and a consent form to fix: one row per person. D-158: rows across the
+   section (.bleed), a line above and below, never a box inside it; the text in line with the
+   section's title. */
 .consent > p {
   margin: 0;
 }
 .consent__rows {
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-block: 1px solid var(--border);
   background: var(--surface);
   list-style: none;
+}
+/* The section's last part runs down to its frame. */
+.card > .consent__rows:last-child {
+  margin-bottom: calc(-1 * var(--card-py));
+  border-bottom: 0;
+  border-radius: 0 0 8px 8px;
 }
 /* One wrapping row (UXW-01): who, the chip at the right, the action on the next line when the
    row is too narrow; nothing ever paints over the code or the name. */
@@ -495,7 +495,7 @@ a.fact-code:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 8px 12px;
+  padding: 8px var(--card-px);
   border-bottom: 1px solid var(--border);
 }
 .consent__row:last-child {
@@ -516,7 +516,7 @@ a.fact-code:hover {
   white-space: nowrap;
 }
 @media (max-width: 640px) {
-  .record-card {
+  .record-card__body {
     grid-template-columns: minmax(0, 1fr);
   }
   .record-card__steps {
@@ -580,19 +580,10 @@ a.fact-code:hover {
 .qc-assign .notice {
   flex-basis: 100%;
 }
-.qc-checklist__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-.qc-checklist__head h3 {
-  margin: 0;
-}
-.qc-checklist__head p {
-  margin: 0;
+/* The QC checklist, a section of its own (D-158): the decision under its title bar, the words,
+   the count, then its parts, each under a heading with a line across the section. */
+.qc-checklist__note {
+  margin-top: var(--space-3);
 }
 /* "Answered 31 / 43 · 2 failing" and its bar: one plain line. */
 .qc-progress {
@@ -641,66 +632,62 @@ a.fact-code:hover {
     grid-row: 2;
   }
 }
-/* The checklist's tables: side by side when the panel is wide enough. */
+/* The checklist's tables, each across the section under its heading (D-158); the conversation's
+   and the speakers' side by side when the section is wide enough, split by a line. */
 .qc-matrix {
-  display: grid;
-  gap: 12px;
   container-type: inline-size;
 }
-.qc-matrix__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 12px 16px;
-}
-@container (min-width: 1000px) {
-  .qc-matrix__grid {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
-  }
-}
 .qc-block {
-  display: grid;
-  gap: 6px;
   min-width: 0;
 }
-.qc-block > h4 {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
 .qc-block__note {
-  margin: 0;
+  margin: 0 0 var(--space-2);
 }
-.qc-recorded__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+/* The answers of a decision, read only: two tables, a gap between them. */
+.qc-matrix--answers {
+  margin-top: var(--space-3);
 }
-.qc-recorded__head h3 {
-  margin: 0;
+.qc-matrix--answers .qc-block + .qc-block {
+  margin-top: var(--space-4);
+}
+@container (min-width: 1000px) {
+  .qc-matrix .qc-matrix__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+    align-items: start;
+    margin-inline: calc(-1 * var(--card-px));
+  }
+  .qc-matrix .qc-matrix__grid > .qc-block > .subhead,
+  .qc-matrix .qc-matrix__grid .bleed {
+    margin-inline: 0;
+  }
+  .qc-matrix--answers .qc-matrix__grid > .qc-block + .qc-block {
+    margin-top: 0;
+  }
+  .qc-matrix .qc-matrix__grid > .qc-block + .qc-block {
+    border-left: 1px solid var(--border);
+  }
 }
 .stack--tight > p {
   margin: 0;
 }
 
-/* The decision: stays at the bottom of the screen while the questions scroll (D-152). */
+/* The decision (D-152, D-158): right under the checklist's title bar and across the section, it
+   stays in view under the top bar while the questions scroll, as the Rules pages' Save does. */
 .qc-decide {
   position: sticky;
-  bottom: 0;
+  top: var(--topbar-h);
   z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  margin: 4px 0 0;
-  padding: 10px 0;
-  border-top: 1px solid var(--border-strong);
+  margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py);
+  padding: var(--space-3) var(--card-px);
+  border-bottom: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 -6px 16px rgb(30 33 42 / 0.08);
+  box-shadow: 0 6px 10px -8px rgb(30 33 42 / 0.22);
 }
 .qc-decide__text {
   flex: 1 1 260px;
@@ -708,6 +695,10 @@ a.fact-code:hover {
 }
 .qc-decide__buttons {
   flex: none;
+}
+/* The decisions made so far, under the checklist. */
+.qc-decisions.timeline {
+  margin-bottom: 0;
 }
 .qc-decide__text h3 {
   margin: 0;
@@ -788,13 +779,11 @@ a.fact-code:hover {
   white-space: nowrap;
 }
 
-/* Who acts next, for someone with nothing to do on the task now: one line. */
-.next-step {
+/* Who acts next, for someone with nothing to do on the task now: one line under the title bar. */
+.next-step > p {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.next-step p {
   margin: 0;
   color: var(--text);
   font-weight: 500;
@@ -813,10 +802,9 @@ a.fact-code:hover {
 }
 
 /* ---------- Phones: one column, tighter matrices ---------- */
+/* The decision on a phone (D-158): 12 px inside, each button's words on one line; with three
+   buttons Pass takes the first row and the other two share the next. */
 @media (max-width: 640px) {
-  .qc-decide {
-    padding: 8px 0;
-  }
   .qc-decide__text h3 {
     position: absolute;
     width: 1px;
@@ -830,29 +818,30 @@ a.fact-code:hover {
     font-size: 0.8125rem;
   }
   .qc-decide__buttons {
-    display: grid;
     flex: 1 1 100%;
-    grid-auto-columns: minmax(0, 1fr);
-    grid-auto-flow: column;
     min-width: 0;
   }
-  .qc-decide__buttons .button {
-    justify-content: center;
-    min-height: 36px;
-    padding: 4px 8px;
-    font-size: 0.8125rem;
-    line-height: 1.2;
-    white-space: normal;
+  .qc-decide__buttons > .button {
+    flex: 1 1 auto;
   }
-  .qc-decide__buttons .notice {
-    grid-column: 1 / -1;
+  .qc-decide__buttons > .button:first-child:nth-last-child(3) {
+    flex-basis: 100%;
   }
 }
 
-/* A call's steps (D-152): a compact table under its line in Phone calls. */
-.call > .table-wrap {
-  margin: 6px 0 10px;
+/* A call's steps (D-152): a compact table across the section under its line in Phone calls
+   (D-158: no box inside it). */
+.call > summary {
+  margin-bottom: 6px;
+}
+.call + .call {
+  margin-top: var(--space-3);
 }
 .table.call-events td {
   vertical-align: top;
+}
+/* A time and a name stay on one line, also on a phone (D-158); the table scrolls sideways if it
+   must. */
+.table.matrix.call-events td.nowrap {
+  white-space: nowrap;
 }

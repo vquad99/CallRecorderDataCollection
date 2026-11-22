@@ -101,7 +101,7 @@ const HEADING: Record<string, string> = {
   Tasks: "Tasks",
   "Phone calls": "Phone calls|My phone calls",
   Users: "Users",
-  Settings: "Capacity targets",
+  Settings: "Settings",
   "Audit log": "Audit log",
   "System status": "System status",
 };

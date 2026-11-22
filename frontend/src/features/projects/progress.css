@@ -1,46 +1,29 @@
 /* A project's Progress tab (D-148, D-151, D-153). Loaded with the tab, not with the first screen.
-   The sections, key figures and tables are in components/charts. */
+   The sections, key figures and tables are in components/charts; the Excel, CSV and Print buttons
+   and when the figures were read are on the page's title row (D-158). */
 
-/* ---------- The tab as a file: when the figures were read, then Excel, CSV and Print ---------- */
-.progress-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-}
-.progress-actions__asof {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-.progress-actions__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 /* The printed page's first line (the project and the time of its figures); not on screen. */
 .progress-print-head {
   display: none;
 }
 
-/* ---------- Still needed (D-153) ---------- */
+/* ---------- Still needed (D-153) ----------
+   Its three parts are sub-sections (D-158): a line edge to edge above each title, their tables
+   edge to edge; the last table closes the section as a table directly in it does. */
 .needs-lead {
   max-width: 900px;
   margin: 0;
   color: var(--text);
 }
-.progress h3.needs-title {
-  margin: 8px 0 2px;
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 600;
-}
 .needs-part {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   min-width: 0;
+}
+.progress .panel > .needs-part:last-child:has(> .table-wrap:last-child) {
+  margin-bottom: calc(-1 * var(--card-py));
+}
+.progress .panel > .needs-part:last-child > .table-wrap:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 8px 8px;
 }
 .needs-key {
   max-width: 900px;
@@ -88,6 +71,8 @@ td:not(.need-cell) > .need {
 .progress .table.needs tfoot th[scope="row"] {
   vertical-align: top;
 }
+/* Narrow: the parts one under the other and tighter cells. A heading stays on one line (D-158):
+   a table too wide for its section scrolls sideways instead. */
 @container (max-width: 560px) {
   .need__part {
     display: block;
@@ -102,10 +87,6 @@ td:not(.need-cell) > .need {
   }
   .progress .table.needs td.need-cell {
     min-width: 0;
-  }
-  /* Short tables: their headings may take two lines rather than scroll. */
-  .progress .panel .table thead th {
-    white-space: normal;
   }
 }
 
@@ -130,7 +111,8 @@ td:not(.need-cell) > .need {
   background: var(--tint-green);
   color: var(--text-green);
 }
-/* The balance table: tight columns so a district's name stays on one line. */
+/* The balance table: tight columns so a district's name stays on one line. A group's rows keep
+   the indent every sectioned table has (D-158, charts.css). */
 .progress .panel .table.matrix th,
 .progress .panel .table.matrix td {
   padding-right: 6px;
@@ -138,7 +120,6 @@ td:not(.need-cell) > .need {
 }
 .progress .panel .table.matrix tbody th[scope="row"] {
   min-width: 150px;
-  padding-left: 14px;
 }
 .progress .table.matrix td:has(> .tbar) {
   width: 24%;
@@ -182,6 +163,7 @@ td:not(.need-cell) > .need {
   body:has(.dash.progress) {
     background: #fff;
   }
+  /* The title row's buttons and its "Figures as of" line too: the printed head says it. */
   body:has(.dash.progress)
     :is(
       .topbar,
@@ -191,7 +173,8 @@ td:not(.need-cell) > .need {
       .view-as,
       .idle-warning,
       .pwa-update,
-      .progress-actions,
+      .page-header > .actions,
+      .page-header__lead,
       button
     ) {
     display: none !important;

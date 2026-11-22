@@ -75,15 +75,21 @@ const shown = (value: string | boolean | null) =>
 const partyOf = (task: work.TaskDetail, side: Side) =>
   side === "A" ? task.participant_a : task.participant_b;
 
-/** A speaker's column heading: "Participant A", their code and, for people who may see it, name. */
+/** A speaker's column heading: "Participant A", their code and, for people who may see it, name,
+ * each on a line of its own (D-158: a name is never split across lines). */
 function Who({ task, side }: { task: work.TaskDetail; side: Side }) {
   const p = partyOf(task, side);
   return (
     <span className="mx-who">
-      <span>Participant {side}</span>{" "}
+      <span className="mx-who__side">Participant {side}</span>{" "}
       <span className="mx-who__meta">
         <span className="code-tag">{p.participant_code}</span>
-        {p.display_label ? ` ${p.display_label}` : null}
+        {p.display_label ? (
+          <>
+            {" "}
+            <span className="mx-who__name">{p.display_label}</span>
+          </>
+        ) : null}
       </span>
     </span>
   );
@@ -91,34 +97,29 @@ function Who({ task, side }: { task: work.TaskDetail; side: Side }) {
 
 const toAnswer = (v: boolean | null) => (v === true ? "yes" : v === false ? "no" : null);
 
+const startOf = (details: devices.DeviceDetails) =>
+  Object.fromEntries(details.participants.map((p) => [p.side, valuesOf(p.details)])) as Record<
+    Side,
+    Values
+  >;
+
+/** The boxes and switches of both speakers; the section's title bar holds its Save (D-158). */
 function DeviceForm({
   task,
   details,
-  busy,
-  onSave,
+  values,
+  onChange,
 }: {
   task: work.TaskDetail;
   details: devices.DeviceDetails;
-  busy: boolean;
-  onSave: (entries: (Values & { side: Side })[]) => void;
+  values: Record<Side, Values>;
+  onChange: (side: Side, patch: Partial<Values>) => void;
 }) {
-  const start = Object.fromEntries(
-    details.participants.map((p) => [p.side, valuesOf(p.details)]),
-  ) as Record<Side, Values>;
-  const [values, setValues] = useState(start);
-  const set = (side: Side, patch: Partial<Values>) =>
-    setValues({ ...values, [side]: { ...values[side], ...patch } });
+  const set = onChange;
   const asked = DEVICE_FIELDS.filter((f) => details.fields.includes(f.key));
-  const changed = JSON.stringify(values) !== JSON.stringify(start);
   const people = details.participants;
   return (
-    <form
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(people.map((p) => ({ side: p.side, ...values[p.side] })));
-      }}
-    >
+    <>
       <p className="field__hint devices__hint">
         Call type: {details.call_type}. Fill these for both speakers before you send the recording
         to QC.
@@ -197,12 +198,7 @@ function DeviceForm({
           </tr>
         </tfoot>
       </DataTable>
-      <div className="actions devices__save">
-        <Button type="submit" icon="check" busy={busy} disabled={!changed}>
-          Save device details
-        </Button>
-      </div>
-    </form>
+    </>
   );
 }
 
@@ -267,38 +263,57 @@ function DeviceCard({
   const titleId = useId();
   const { state, reload, replace } = resource;
   const { busy, error, message, run } = useAction();
-  const save = (entries: (Values & { side: Side })[]) =>
-    void run(async () => {
-      replace(await devices.saveDeviceDetails(task.id, entries));
-      onSaved?.();
-      return "Device details saved.";
-    });
+  const details = state.status === "loaded" ? state.data : null;
+  const editable = Boolean(details?.editable);
+  // What is typed, until the server sends the details again: saved values come back from it (a
+  // new filled_at), and the boxes start again from them.
+  const stamp = details ? details.participants.map((p) => p.filled_at ?? "").join("|") : "";
+  const [draft, setDraft] = useState<{ stamp: string; values: Record<Side, Values> } | null>(null);
+  const start = details ? startOf(details) : null;
+  const values = draft && draft.stamp === stamp ? draft.values : start;
+  const changed = JSON.stringify(values) !== JSON.stringify(start);
+  const set = (side: Side, patch: Partial<Values>) => {
+    if (values) setDraft({ stamp, values: { ...values, [side]: { ...values[side], ...patch } } });
+  };
   // A cancelled task: the card only when someone filled the details before it ended (FEW-10).
-  const filled =
-    state.status === "loaded" && Boolean(state.data?.participants.some((p) => p.filled_at));
+  const filled = Boolean(details?.participants.some((p) => p.filled_at));
   if (task.status === "CANCELLED" && state.status !== "failed" && !filled) return null;
+  // D-158: one Save, on the section's title bar, the form round the whole section (as the
+  // project's Rules); the matrix runs edge to edge under the bar.
   return (
-    <section className="card devices-card" aria-labelledby={titleId}>
-      <h2 id={titleId}>Device details</h2>
-      {state.status === "loading" ? <LoadingState /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" && state.data ? (
-        state.data.editable ? (
-          <DeviceForm
-            // Saved values come back from the server: the form starts again from them.
-            key={state.data.participants.map((p) => p.filled_at ?? "").join("|")}
-            task={task}
-            details={state.data}
-            busy={busy !== null}
-            onSave={save}
-          />
-        ) : (
-          <DeviceFacts task={task} details={state.data} />
-        )
-      ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </section>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!details || !values || !editable) return;
+        const entries = details.participants.map((p) => ({ side: p.side, ...values[p.side] }));
+        void run(async () => {
+          replace(await devices.saveDeviceDetails(task.id, entries));
+          onSaved?.();
+          return "Device details saved.";
+        });
+      }}
+    >
+      <section className="card devices-card" aria-labelledby={titleId}>
+        <div className="card__head">
+          <h2 id={titleId}>Device details</h2>
+          {editable ? (
+            <Button type="submit" icon="check" busy={busy !== null} disabled={!changed}>
+              Save device details
+            </Button>
+          ) : null}
+        </div>
+        {state.status === "loading" ? <LoadingState /> : null}
+        {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
+        {details && values && editable ? (
+          <DeviceForm task={task} details={details} values={values} onChange={set} />
+        ) : details ? (
+          <DeviceFacts task={task} details={details} />
+        ) : null}
+      </section>
+    </form>
   );
 }
 

@@ -42,7 +42,7 @@ One person can test every role: sign out (top right) and sign in as the next rol
 | 13 | QC Executive | **Tasks** → open the task. Read the check results. Click **Listen**. | The recording plays. |
 | 14 | QC Executive | **Your decision → Pass: send to the admin for final approval → Save decision**. | Status **Admin review**. |
 | 15 | Project Admin | Open the task. In **Final approval**, click **Listen**, then **Approve**. | Status **Approved**. |
-| 16 | Project Admin | **Recordings → Download with consent form**. | Three files download: the audio (.wav), the consent record (.html) and the details file (.json). |
+| 16 | Project Admin | **Recordings →** the download icon in the row (**Download with consent form**). | Three files download: the audio (.wav), the consent record (.html) and the details file (.json). |
 | 17 | Client Viewer | Open the **Dashboard**. | **Collection progress** shows the recorded and approved time. |
 
 ## Extra checks

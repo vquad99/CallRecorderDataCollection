@@ -1,0 +1,10 @@
+/* Settings (D-158): the capacity targets as one section, its two parts under it. A message after
+   Save sits under the title bar; the first part has no line of its own right under the bar. */
+.capacity > .notice {
+  margin-bottom: var(--space-3);
+}
+.capacity > .plain-fieldset:first-of-type > .subhead:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}

@@ -122,16 +122,22 @@ export function useDraftSaver(taskId: string) {
   return { state, error, save };
 }
 
-/** A speaker's column heading: "Participant A", with their code and name under it. */
+/** A speaker's column heading: "Participant A", with their code and name under it, each on a line
+ * of its own (D-158: a name is never split across lines). */
 function SideHead({ task, side }: { task: work.TaskDetail; side: qc.Side }) {
   const p = partyOf(task, side);
   return (
     <th scope="col" className={`mx-${side.toLowerCase()} mx-col`}>
       <span className="mx-who">
-        <span>Participant {side}</span>{" "}
+        <span className="mx-who__side">Participant {side}</span>{" "}
         <span className="mx-who__meta">
           <span className="code-tag">{p.participant_code}</span>
-          {p.display_label ? ` ${p.display_label}` : null}
+          {p.display_label ? (
+            <>
+              {" "}
+              <span className="mx-who__name">{p.display_label}</span>
+            </>
+          ) : null}
         </span>
       </span>
     </th>
@@ -179,7 +185,8 @@ function AnswerCell({
   );
 }
 
-/** A block of the checklist with its small heading. */
+/** A part of the checklist (D-158): its heading under a line across the section, its table
+ * running edge to edge under it (no box inside the section). */
 function Block({
   title,
   note,
@@ -192,7 +199,9 @@ function Block({
   const id = useId();
   return (
     <section className="qc-block" aria-labelledby={id}>
-      <h4 id={id}>{title}</h4>
+      <h3 id={id} className="subhead">
+        {title}
+      </h3>
       {note ? <p className="muted qc-block__note">{note}</p> : null}
       {children}
     </section>
@@ -219,7 +228,7 @@ function ConsentCheck({
         title="Consent"
         note="This project takes consent online: the platform recorded each person's answer, so there is nothing to check here."
       >
-        <DataTable className="matrix qc-table" label="Consent of each speaker">
+        <DataTable bleed className="matrix qc-table" label="Consent of each speaker">
           <thead>
             <tr>
               <th scope="col" className="mx-n">
@@ -256,7 +265,7 @@ function ConsentCheck({
       title="Signed consent forms"
       note={<>Open each person&apos;s form and check it: {view.consent_question}.</>}
     >
-      <DataTable className="matrix qc-table" label="Signed consent form of each speaker">
+      <DataTable bleed className="matrix qc-table" label="Signed consent form of each speaker">
         <thead>
           <tr>
             <th scope="col" className="mx-n">
@@ -337,7 +346,7 @@ export function ChecklistForm({
       <div className="qc-matrix__grid">
         {conversation.length > 0 ? (
           <Block title="The conversation">
-            <DataTable className="matrix qc-table" label="Questions about the conversation">
+            <DataTable bleed className="matrix qc-table" label="Questions about the conversation">
               <thead>
                 <tr>
                   <th scope="col" className="mx-n">
@@ -372,7 +381,7 @@ export function ChecklistForm({
         ) : null}
         {speaker.length > 0 ? (
           <Block title="Each speaker">
-            <DataTable className="matrix qc-table" label="Questions about each speaker">
+            <DataTable bleed className="matrix qc-table" label="Questions about each speaker">
               <thead>
                 <tr>
                   <th scope="col" className="mx-n">
@@ -490,10 +499,38 @@ function Said({
   );
 }
 
+/** The QC checklist's section (D-158): its own title bar, apart from the audio check. */
+export function ChecklistSection({
+  head,
+  children,
+}: {
+  /** What sits on the right of the title bar. */
+  head?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="card qc-checklist" aria-labelledby="qc-checklist-title">
+      <div className="card__head">
+        <h2 id="qc-checklist-title">QC checklist</h2>
+        {head}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Every answer of a decision on request: the button on the checklist's title bar (D-158). */
+export function ShowAnswers({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <Button variant="secondary" icon="tasks" aria-expanded={open} onClick={onToggle}>
+      {open ? "Hide the answers" : "Show every answer"}
+    </Button>
+  );
+}
+
 /** A decision's answers, read only, with the questions as they read then, who and when: the same
- * matrices with a tick or a cross in each cell. */
-export function RecordedChecklist({ latest }: { latest: qc.RecordedAnswers }) {
-  const [open, setOpen] = useState(false);
+ * matrices with a tick or a cross in each cell, shown when `open`. */
+export function RecordedChecklist({ latest, open }: { latest: qc.RecordedAnswers; open: boolean }) {
   const fails = new Set(latest.failing.map((f) => `${f.side ?? ""}:${f.key}`));
   const conversation = latest.items.filter((i) => i.scope === "conversation");
   const speaker = latest.items.filter((i) => i.scope === "speaker");
@@ -503,18 +540,7 @@ export function RecordedChecklist({ latest }: { latest: qc.RecordedAnswers }) {
     latest.participants.reduce((n, p) => n + Object.keys(p.answers).length, 0);
   const total = conversation.length + speaker.length * latest.participants.length;
   return (
-    <section className="stack stack--tight" aria-labelledby="qc-answers-title">
-      <div className="qc-recorded__head">
-        <h3 id="qc-answers-title">QC checklist</h3>
-        <Button
-          variant="secondary"
-          icon="tasks"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? "Hide the answers" : "Show every answer"}
-        </Button>
-      </div>
+    <>
       <p className="muted">
         {labelFor(qc.OUTCOME_LABELS, latest.outcome)} · answered by {latest.reviewer_name ?? "QC"} ·{" "}
         {when(latest.decided_at)} · {answered} / {total} answered
@@ -527,102 +553,111 @@ export function RecordedChecklist({ latest }: { latest: qc.RecordedAnswers }) {
         </p>
       ) : null}
       {open ? (
-        <div className="qc-matrix">
+        // D-158: each table runs edge to edge in the section, never a box inside it.
+        <div className="qc-matrix qc-matrix--answers">
           <div className="qc-matrix__grid">
             {conversation.length > 0 ? (
-              <DataTable className="matrix qc-table" label="Answers about the conversation">
-                <thead>
-                  <tr>
-                    <th scope="col" className="mx-n">
-                      <span className="sr-only">Number</span>
-                    </th>
-                    <th scope="col">The conversation</th>
-                    <th scope="col" className="mx-col">
-                      Answer
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {conversation.map((item, i) => {
-                    const failing = fails.has(`:${item.key}`);
-                    return (
-                      <tr key={item.key}>
-                        <td className="mx-n">{i + 1}</td>
-                        <th scope="row">{item.question}</th>
-                        <td className={`mx-cell${failing ? " is-fail" : ""}`}>
-                          <Said
-                            answer={latest.conversation[item.key]}
-                            fails={failing}
-                            observation={item.fails_on === null}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </DataTable>
-            ) : null}
-            {a && b ? (
-              <DataTable className="matrix qc-table" label="Answers about each speaker">
-                <thead>
-                  <tr>
-                    <th scope="col" className="mx-n">
-                      <span className="sr-only">Number</span>
-                    </th>
-                    <th scope="col">Each speaker</th>
-                    {[a, b].map((p) => (
-                      <th key={p.side} scope="col" className={`mx-${p.side.toLowerCase()} mx-col`}>
-                        <span className="mx-who">
-                          <span>Participant {p.side}</span>{" "}
-                          <span className="mx-who__meta">
-                            <span className="code-tag">{p.participant_code}</span>
-                          </span>
-                        </span>
+              <div className="qc-block">
+                <DataTable bleed className="matrix qc-table" label="Answers about the conversation">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="mx-n">
+                        <span className="sr-only">Number</span>
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {speaker.map((item, i) => (
-                    <tr key={item.key}>
-                      <td className="mx-n">{i + 1}</td>
-                      <th scope="row">{item.question}</th>
-                      {[a, b].map((p) => {
-                        const failing = fails.has(`${p.side}:${item.key}`);
-                        return (
-                          <td key={p.side} className={`mx-cell${failing ? " is-fail" : ""}`}>
+                      <th scope="col">The conversation</th>
+                      <th scope="col" className="mx-col">
+                        Answer
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conversation.map((item, i) => {
+                      const failing = fails.has(`:${item.key}`);
+                      return (
+                        <tr key={item.key}>
+                          <td className="mx-n">{i + 1}</td>
+                          <th scope="row">{item.question}</th>
+                          <td className={`mx-cell${failing ? " is-fail" : ""}`}>
                             <Said
-                              answer={p.answers[item.key]}
+                              answer={latest.conversation[item.key]}
                               fails={failing}
                               observation={item.fails_on === null}
                             />
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                  {latest.consent_check ? (
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </DataTable>
+              </div>
+            ) : null}
+            {a && b ? (
+              <div className="qc-block">
+                <DataTable bleed className="matrix qc-table" label="Answers about each speaker">
+                  <thead>
                     <tr>
-                      <td className="mx-n" />
-                      <th scope="row">
-                        Consent form checked: signed, the right person, this project
+                      <th scope="col" className="mx-n">
+                        <span className="sr-only">Number</span>
                       </th>
+                      <th scope="col">Each speaker</th>
                       {[a, b].map((p) => (
-                        <td
+                        <th
                           key={p.side}
-                          className={`mx-cell${p.consent === "no" ? " is-fail" : ""}`}
+                          scope="col"
+                          className={`mx-${p.side.toLowerCase()} mx-col`}
                         >
-                          <Said answer={p.consent} fails={p.consent === "no"} />
-                        </td>
+                          <span className="mx-who">
+                            <span className="mx-who__side">Participant {p.side}</span>{" "}
+                            <span className="mx-who__meta">
+                              <span className="code-tag">{p.participant_code}</span>
+                            </span>
+                          </span>
+                        </th>
                       ))}
                     </tr>
-                  ) : null}
-                </tbody>
-              </DataTable>
+                  </thead>
+                  <tbody>
+                    {speaker.map((item, i) => (
+                      <tr key={item.key}>
+                        <td className="mx-n">{i + 1}</td>
+                        <th scope="row">{item.question}</th>
+                        {[a, b].map((p) => {
+                          const failing = fails.has(`${p.side}:${item.key}`);
+                          return (
+                            <td key={p.side} className={`mx-cell${failing ? " is-fail" : ""}`}>
+                              <Said
+                                answer={p.answers[item.key]}
+                                fails={failing}
+                                observation={item.fails_on === null}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    {latest.consent_check ? (
+                      <tr>
+                        <td className="mx-n" />
+                        <th scope="row">
+                          Consent form checked: signed, the right person, this project
+                        </th>
+                        {[a, b].map((p) => (
+                          <td
+                            key={p.side}
+                            className={`mx-cell${p.consent === "no" ? " is-fail" : ""}`}
+                          >
+                            <Said answer={p.consent} fails={p.consent === "no"} />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </DataTable>
+              </div>
             ) : null}
           </div>
         </div>
       ) : null}
-    </section>
+    </>
   );
 }

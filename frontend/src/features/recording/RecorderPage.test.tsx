@@ -176,6 +176,14 @@ describe("RecorderPage", () => {
       note.compareDocumentPosition(screen.getByRole("button", { name: "Allow microphone" })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    // D-158: two sections with titles: the reminders, then the recorder with its steps and the
+    // microphone (no section holding one button alone).
+    expect(within(note).getByRole("heading", { name: "Reminders" })).toBeInTheDocument();
+    const recorder = screen.getByRole("region", { name: "Recorder" });
+    expect(
+      within(recorder).getByRole("img", { name: "Recording step: Microphone" }),
+    ).toBeInTheDocument();
+    expect(within(recorder).getByRole("button", { name: "Allow microphone" })).toBeInTheDocument();
   });
 
   it("leaves out the speaker-ID line when the project does not ask it (D-147)", async () => {

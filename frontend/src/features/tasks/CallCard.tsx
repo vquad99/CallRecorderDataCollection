@@ -30,6 +30,7 @@ import { devicesWait } from "./DeviceDetails";
 import { ListenLatest } from "./Listen";
 import { Reminders } from "./Reminders";
 import type { OnTaskChange } from "./TaskDetailPage";
+import { WorkCard } from "./WorkCard";
 
 const REFRESH_MS = 5000;
 
@@ -156,7 +157,10 @@ function CallFixer({ call, onChange }: { call: tel.Call; onChange: () => void })
                 <td>
                   {c.from_hint || "?"} / {c.to_hint || "?"}
                 </td>
-                <td className="call-file">{c.file}</td>
+                {/* D-158: one line, cut with "…"; the full name on hover. */}
+                <td className="call-file">
+                  <span title={c.file}>{c.file}</span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -354,6 +358,8 @@ function CallCard({
   let body: ReactNode = (
     <p>Start the session, then call participant A from here. Their phone will ring.</p>
   );
+  // The project's reminders: a part across the card, under its words and buttons (D-158).
+  let reminders: ReactNode = null;
   let go: ReactNode = (
     <Button
       icon="play"
@@ -440,9 +446,9 @@ function CallCard({
               The last call could not be placed. {problem(latest)}
             </p>
           ) : null}
-          <Reminders task={task} inline />
         </>
       );
+      reminders = <Reminders task={task} inline />;
       go = (
         <Button
           icon="phone"
@@ -455,12 +461,8 @@ function CallCard({
       );
     } else if (latest.state === "DIALLING") {
       title = "On the call";
-      body = (
-        <>
-          <CallSteps call={latest} onChange={calls.refresh} />
-          <Reminders task={task} inline />
-        </>
-      );
+      body = <CallSteps call={latest} onChange={calls.refresh} />;
+      reminders = <Reminders task={task} inline />;
       go = cancel(latest);
     } else if (latest.state === "WAITING_FOR_RECORDING") {
       title = "Fetching the recording";
@@ -479,14 +481,19 @@ function CallCard({
   }
 
   return (
-    <section className="card record-card work-card" aria-labelledby="call-card-title">
-      <div className="record-card__text">
-        <h2 id="call-card-title">{title}</h2>
-        {body}
-      </div>
-      {go ? <div className="record-card__go">{go}</div> : null}
-      <ErrorNotice error={error} />
-    </section>
+    <WorkCard
+      id="call-card-title"
+      title={title}
+      go={go}
+      after={
+        <>
+          {reminders}
+          <ErrorNotice error={error} />
+        </>
+      }
+    >
+      {body}
+    </WorkCard>
   );
 }
 
@@ -525,8 +532,10 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
                   <CancelButton call={c} onChange={refresh} />
                 </div>
               ) : null}
-              {/* D-152: the call's steps as a compact table, one line each. */}
+              {/* D-152: the call's steps as a compact table, one line each; D-158: across the
+                  section, no box inside it. */}
               <DataTable
+                bleed
                 className="matrix call-events"
                 label={`Steps of call ${state.data.length - i}`}
               >

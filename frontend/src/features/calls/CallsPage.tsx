@@ -2,7 +2,9 @@
 // plus TxContact's own count of calls per hour; and, on its own tab, every call with a link to its
 // task. Moderators see a plain list of their own calls (D-104). The figures are laid out plainly
 // (D-154): the key figures as one line, one chart (calls per day), and a heading over each table;
-// the calls per hour as one matrix (our count and TxContact's, hour by hour).
+// the calls per hour as one matrix (our count and TxContact's, hour by hour). D-158: the filters
+// and the key figures are white sections of their own, and the sections sharing a row are about
+// the same height.
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -83,7 +85,8 @@ function HourCells({ hours, shown }: { hours: number[]; shown: number[] }) {
                 : undefined
             }
           >
-            {n > 0 ? n : <span className="muted">·</span>}
+            {/* An hour with no call shows "-", as every empty cell does (D-158). */}
+            {n > 0 ? n : <span className="muted">-</span>}
           </td>
         ))}
     </>
@@ -92,7 +95,15 @@ function HourCells({ hours, shown }: { hours: number[]; shown: number[] }) {
 
 /** Calls started in each hour of the day as one matrix (D-154): our own count, and TxContact's
  * own count beside it (or why it is missing). */
-function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
+function CallsByHour({
+  ours,
+  days,
+  className,
+}: {
+  ours: number[];
+  days: number;
+  className: string;
+}) {
   const superAdmin = Boolean(useAuth().user?.roles.includes("SUPER_ADMIN"));
   const provider = useProviderHours(days);
   const busiest = ours.indexOf(Math.max(...ours));
@@ -110,9 +121,10 @@ function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
         ) : theirs.status === "failed" ? (
           <>
             {theirs.error.message}{" "}
-            <button type="button" className="linkish" onClick={provider.reload}>
+            {/* A plain button (D-158): tap-sized on a phone, styled on this page too. */}
+            <Button variant="secondary" onClick={provider.reload}>
               Try again
-            </button>
+            </Button>
           </>
         ) : !theirs.data.available ? (
           `Not available: ${theirs.data.message}.`
@@ -122,7 +134,7 @@ function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
       </td>
     );
   return (
-    <Panel title="Calls by hour of the day">
+    <Panel className={className} title="Calls by hour of the day">
       <DataTable label="Calls by hour of the day" className="hours-matrix">
         <thead>
           <tr>
@@ -162,82 +174,61 @@ function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
   );
 }
 
-/** The counted lists as two tables side by side: a section per kind, a row per reason with its
- * count and a light bar for its share of the section's largest. */
-function Reasons({ data }: { data: tel.CallAnalytics }) {
-  type Row = { key: string; label: string; n: number; max: number };
-  const section = (
-    key: string,
-    title: string,
-    counts: Record<string, number>,
-    labels: Record<string, string>,
-    empty: string,
-  ): MatrixSection<Row> => {
-    const entries = Object.entries(counts);
-    const max = Math.max(0, ...entries.map(([, n]) => n));
-    return {
-      key,
-      title,
-      empty,
-      rows: entries.map(([k, n]) => ({ key: k, label: labelFor(labels, k), n, max })),
-    };
+type ReasonRow = { key: string; label: string; n: number; max: number };
+
+/** One kind of counted list: a row per reason with its count and a bar for its share of the
+ * kind's largest. */
+function reasonSection(
+  key: string,
+  title: string,
+  counts: Record<string, number>,
+  labels: Record<string, string>,
+  empty: string,
+): MatrixSection<ReasonRow> {
+  const entries = Object.entries(counts);
+  const max = Math.max(0, ...entries.map(([, n]) => n));
+  return {
+    key,
+    title,
+    empty,
+    rows: entries.map(([k, n]) => ({ key: k, label: labelFor(labels, k), n, max })),
   };
-  const table = (label: string, sections: MatrixSection<Row>[]) => (
-    <MatrixTable<Row>
-      label={label}
-      head="Reason"
-      columns={[
-        {
-          key: "n",
-          label: "Count",
-          num: true,
-          cell: (r) => (
-            <CellBar value={r.n} max={r.max}>
-              {r.n}
-            </CellBar>
-          ),
-        },
-      ]}
-      sections={sections}
-      rowKey={(r) => r.key}
-      rowLabel={(r) => r.label}
-    />
-  );
+}
+
+/** Counted lists as a section of their own, one table edge to edge under its title (D-158: no
+ * table framed inside a section, and two sections of their own instead of two tables of unlike
+ * length side by side). */
+function Reasons({
+  title,
+  sections,
+  className,
+}: {
+  title: string;
+  sections: MatrixSection<ReasonRow>[];
+  className: string;
+}) {
   return (
-    <div className="reasons">
-      {table("Checks and QC decisions", [
-        section(
-          "checks",
-          "Automatic audio check of call recordings",
-          data.automatic_checks,
-          tel.AUTOMATIC_CHECK_LABELS,
-          "No call recording checked in this period.",
-        ),
-        section(
-          "qc",
-          "QC decisions on call recordings",
-          data.qc_decisions,
-          tel.QC_DECISION_LABELS,
-          "No QC decision in this period.",
-        ),
-      ])}
-      {table("Cancelled calls and recording problems", [
-        section(
-          "cancelled",
-          "Why calls were cancelled",
-          data.cancel_reasons,
-          tel.CANCEL_REASONS,
-          "None in this period.",
-        ),
-        section(
-          "problems",
-          "Problems getting the recording",
-          data.problems,
-          tel.FAILURE_LABELS,
-          "None in this period.",
-        ),
-      ])}
-    </div>
+    <Panel className={className} title={title}>
+      <MatrixTable<ReasonRow>
+        label={title}
+        head="Reason"
+        columns={[
+          {
+            key: "n",
+            label: "Count",
+            num: true,
+            cell: (r) => (
+              <CellBar value={r.n} max={r.max}>
+                {r.n}
+              </CellBar>
+            ),
+          },
+        ]}
+        sections={sections}
+        rowKey={(r) => r.key}
+        rowLabel={(r) => r.label}
+      />
+    </Panel>
   );
 }
 
@@ -276,7 +267,7 @@ function Funnel({ funnel, className }: { funnel: tel.CallFunnel; className: stri
                 </CellBar>
               </td>
               <td className="num">
-                {funnel.dialled > 0 ? `${pct(funnel[f.key], funnel.dialled)}%` : ""}
+                {funnel.dialled > 0 ? `${pct(funnel[f.key], funnel.dialled)}%` : "-"}
               </td>
             </tr>
           ))}
@@ -299,33 +290,34 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
       }),
     [projectId, state, page],
   );
+  const loaded = list.state.status === "loaded" ? list.state.data : null;
+  // D-158: the list is a section (its title bar with the compact "Show" filter, the table edge to
+  // edge under it) and its pages sit under the section's frame, as on every other list.
   return (
-    <section className="card" aria-labelledby="all-calls">
-      <div className="calls-list__head">
-        <h2 id="all-calls">{title}</h2>
-        <Select
-          label="Show"
-          value={state}
-          onChange={(e) => {
-            setState(e.target.value);
-            setPage(1);
-          }}
-          options={[
-            { value: "", label: "Every call" },
-            { value: "NEEDS_PERSON", label: "Needs a person" },
-            ...Object.entries(tel.CALL_STATE_LABELS).map(([value, label]) => ({ value, label })),
-          ]}
-        />
-      </div>
-      {list.state.status === "loading" ? <LoadingState /> : null}
-      {list.state.status === "failed" ? (
-        <ErrorState error={list.state.error} onRetry={list.reload} />
-      ) : null}
-      {list.state.status === "loaded" && list.state.data.items.length === 0 ? (
-        <p className="muted">No calls.</p>
-      ) : null}
-      {list.state.status === "loaded" && list.state.data.items.length > 0 ? (
-        <>
+    <>
+      <section className="card calls-list" aria-labelledby="all-calls">
+        <div className="card__head">
+          <h2 id="all-calls">{title}</h2>
+          <Select
+            label="Show"
+            value={state}
+            onChange={(e) => {
+              setState(e.target.value);
+              setPage(1);
+            }}
+            options={[
+              { value: "", label: "Every call" },
+              { value: "NEEDS_PERSON", label: "Needs a person" },
+              ...Object.entries(tel.CALL_STATE_LABELS).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+        </div>
+        {list.state.status === "loading" ? <LoadingState /> : null}
+        {list.state.status === "failed" ? (
+          <ErrorState error={list.state.error} onRetry={list.reload} />
+        ) : null}
+        {loaded && loaded.items.length === 0 ? <p className="muted">No calls.</p> : null}
+        {loaded && loaded.items.length > 0 ? (
           <DataTable>
             <thead>
               <tr>
@@ -339,7 +331,7 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
               </tr>
             </thead>
             <tbody>
-              {list.state.data.items.map((c) => (
+              {loaded.items.map((c) => (
                 <tr key={c.id}>
                   <td>{when(c.dialled_at)}</td>
                   <td>
@@ -363,83 +355,85 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
                       ? tel.CANCEL_REASONS[c.cancel_reason]
                       : c.failure_code && c.state !== "RECORDED"
                         ? labelFor(tel.FAILURE_LABELS, c.failure_code)
-                        : ""}
+                        : "-"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </DataTable>
-          <Pagination
-            page={list.state.data.page}
-            pageSize={list.state.data.page_size}
-            total={list.state.data.total}
-            onPage={setPage}
-          />
-        </>
+        ) : null}
+      </section>
+      {loaded && loaded.items.length > 0 ? (
+        <Pagination
+          page={loaded.page}
+          pageSize={loaded.page_size}
+          total={loaded.total}
+          onPage={setPage}
+        />
       ) : null}
-    </section>
+    </>
   );
 }
 
+/** The calls of each moderator: the first rows, and the rest on request (the button on the
+ * section's title bar, D-158). */
 function ByModerator({ rows, className }: { rows: tel.ModeratorCalls[]; className: string }) {
   const { shown, more } = useFirstRows(rows);
   const most = Math.max(0, ...rows.map((m) => m.calls));
   return (
-    <Panel className={className} title="By moderator">
+    <Panel className={className} title="By moderator" action={more}>
       {rows.length === 0 ? (
         <p className="muted">No calls in this period yet.</p>
       ) : (
-        <>
-          <DataTable label="By moderator" className="names">
-            <thead>
-              <tr>
-                <th scope="col">Moderator</th>
-                <th scope="col" className="num">
-                  Calls
-                </th>
-                <th scope="col" className="num">
-                  Recorded
-                </th>
-                <th scope="col" className="num">
-                  Failed or cancelled
-                </th>
-                <th scope="col" className="num">
-                  Recorded audio
-                </th>
-                <th scope="col" className="num">
-                  Average call
-                </th>
+        <DataTable label="By moderator" className="names">
+          <thead>
+            <tr>
+              <th scope="col">Moderator</th>
+              <th scope="col" className="num">
+                Calls
+              </th>
+              <th scope="col" className="num">
+                Recorded
+              </th>
+              <th scope="col" className="num">
+                Failed or cancelled
+              </th>
+              <th scope="col" className="num">
+                Recorded audio
+              </th>
+              <th scope="col" className="num">
+                Average call
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((m) => (
+              <tr key={m.moderator_id}>
+                <th scope="row">{m.name}</th>
+                <td className="num">
+                  <CellBar value={m.calls} max={most}>
+                    {m.calls}
+                  </CellBar>
+                </td>
+                <td className="num">{m.recorded}</td>
+                <td className="num">{m.failed}</td>
+                <td className="num">{minutes(m.recorded_minutes)}</td>
+                <td className="num">{minutes(m.avg_call_minutes)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {shown.map((m) => (
-                <tr key={m.moderator_id}>
-                  <th scope="row">{m.name}</th>
-                  <td className="num">
-                    <CellBar value={m.calls} max={most}>
-                      {m.calls}
-                    </CellBar>
-                  </td>
-                  <td className="num">{m.recorded}</td>
-                  <td className="num">{m.failed}</td>
-                  <td className="num">{minutes(m.recorded_minutes)}</td>
-                  <td className="num">{minutes(m.avg_call_minutes)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
-          {more}
-        </>
+            ))}
+          </tbody>
+        </DataTable>
       )}
     </Panel>
   );
 }
 
+/** The calls of each project, the rest on request as above. */
 function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: string }) {
   const { shown, more } = useFirstRows(rows);
   const most = Math.max(0, ...rows.map((p) => p.calls));
   return (
-    <Panel className={className} title="By project">
+    <Panel className={className} title="By project" action={more}>
       <DataTable label="By project" className="names">
         <thead>
           <tr>
@@ -477,7 +471,6 @@ function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: s
           ))}
         </tbody>
       </DataTable>
-      {more}
     </Panel>
   );
 }
@@ -571,9 +564,33 @@ function Figures({
             ]}
           />
         </div>
-        <Funnel className="g-4" funnel={data.funnel} />
+        {/* D-158: sections of about the same height share a row: the moderators beside the
+            longer list of reasons, the phone tasks beside the checks and QC decisions. Two to a
+            row on a middle-sized screen, where one without a partner takes the whole width
+            ("mid-whole", calls.css). */}
+        <Funnel className="g-4 mid-whole" funnel={data.funnel} />
         <ByModerator className="g-8" rows={data.by_moderator} />
-        <Panel className="g-4" title="Phone tasks by status">
+        <Reasons
+          className="g-4 mid-whole"
+          title="Cancelled calls and recording problems"
+          sections={[
+            reasonSection(
+              "cancelled",
+              "Why calls were cancelled",
+              data.cancel_reasons,
+              tel.CANCEL_REASONS,
+              "None in this period.",
+            ),
+            reasonSection(
+              "problems",
+              "Problems getting the recording",
+              data.problems,
+              tel.FAILURE_LABELS,
+              "None in this period.",
+            ),
+          ]}
+        />
+        <Panel className="g-6" title="Phone tasks by status">
           <ShareTable
             label="Phone tasks by status"
             head="Stage"
@@ -582,12 +599,27 @@ function Figures({
             emptyText="No phone tasks yet."
           />
         </Panel>
-        <Panel title="Checks, decisions and reasons">
-          <Reasons data={data} />
-        </Panel>
-        <div>
-          <CallsByHour ours={data.by_hour} days={days} />
-        </div>
+        <Reasons
+          className="g-6"
+          title="Checks and QC decisions"
+          sections={[
+            reasonSection(
+              "checks",
+              "Automatic audio check of call recordings",
+              data.automatic_checks,
+              tel.AUTOMATIC_CHECK_LABELS,
+              "No call recording checked in this period.",
+            ),
+            reasonSection(
+              "qc",
+              "QC decisions on call recordings",
+              data.qc_decisions,
+              tel.QC_DECISION_LABELS,
+              "No QC decision in this period.",
+            ),
+          ]}
+        />
+        <CallsByHour className="" ours={data.by_hour} days={days} />
         {byProject ? <ByProject className="" rows={data.by_project} /> : null}
       </div>
     </div>
@@ -614,31 +646,25 @@ function ProjectSelect({ value, onChange }: { value: string; onChange: (id: stri
   );
 }
 
-/** The title row (with its actions on the right) and the one row of filters under it (D-154). */
-function Header({
-  title,
-  lead,
-  actions,
-  children,
-}: {
-  title: string;
-  lead: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
+/** The title row, with its actions on the right. */
+function Header({ title, lead, actions }: { title: string; lead: string; actions?: ReactNode }) {
   return (
-    <>
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="calls-title">{title}</h1>
-          <p className="page-header__lead">{lead}</p>
-        </div>
-        {actions ? <div className="actions">{actions}</div> : null}
+    <div className="page-header">
+      <div className="page-header__text">
+        <h1 id="calls-title">{title}</h1>
+        <p className="page-header__lead">{lead}</p>
       </div>
-      <div className="filters" role="group" aria-label="Filters">
-        {children}
-      </div>
-    </>
+      {actions ? <div className="actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+/** The one row of filters under the title (D-154), a white bar of its own (D-158). */
+function Filters({ children }: { children: ReactNode }) {
+  return (
+    <div className="filters" role="group" aria-label="Filters">
+      {children}
+    </div>
   );
 }
 
@@ -651,9 +677,10 @@ function MyCalls() {
       <Header
         title="My phone calls"
         lead="The calls you made, newest first. Open a task to continue with its call."
-      >
+      />
+      <Filters>
         <ProjectSelect value={projectId} onChange={setProjectId} />
-      </Header>
+      </Filters>
       <CallList key={projectId} projectId={projectId} title="My calls" />
     </section>
   );
@@ -683,7 +710,7 @@ function CallFigures() {
     [projectId, days, view],
   );
   return (
-    <section aria-labelledby="calls-title" className="stack stack--tight calls-page">
+    <section aria-labelledby="calls-title" className="stack calls-page">
       <Header
         title="Phone calls"
         lead="Calls made through TxContact: how many and how they ended. Times are in India time (IST), here and in the CSV."
@@ -701,49 +728,62 @@ function CallFigures() {
             Download calls (CSV)
           </Button>
         }
-      >
-        <ProjectSelect value={projectId} onChange={setProjectId} />
-        <Select
-          label="Period"
-          value={String(days)}
-          onChange={(e) => setDays(Number(e.target.value))}
-          options={[
-            { value: "7", label: "Last 7 days" },
-            { value: "30", label: "Last 30 days" },
-            { value: "90", label: "Last 90 days" },
-          ]}
-        />
-      </Header>
-      <ErrorNotice error={download.error} />
-      <div className="tabs" role="tablist" aria-label="Phone call views">
-        {VIEWS.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            role="tab"
-            id={`calls-tab-${v.id}`}
-            aria-selected={view === v.id}
-            aria-controls="calls-panel"
-            className={view === v.id ? "tabs__link active" : "tabs__link"}
-            onClick={() => setParams(v.id === "calls" ? { view: "calls" } : {}, { replace: true })}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-      <div id="calls-panel" role="tabpanel" aria-labelledby={`calls-tab-${view}`} className="stack">
-        {view === "calls" ? (
-          // A new list for each project: it starts again at its first page.
-          <CallList key={projectId} projectId={projectId} title="All calls" />
-        ) : (
-          <>
-            {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}
-            {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-            {state.status === "loaded" && state.data ? (
-              <Figures data={state.data} allProjects={projectId === ""} days={days} />
-            ) : null}
-          </>
-        )}
+      />
+      {/* D-158: the filters, the tabs and the figures 12 px apart, as on the dashboard. */}
+      <div className="calls-body">
+        <Filters>
+          <ProjectSelect value={projectId} onChange={setProjectId} />
+          <Select
+            label="Period"
+            value={String(days)}
+            onChange={(e) => setDays(Number(e.target.value))}
+            options={[
+              { value: "7", label: "Last 7 days" },
+              { value: "30", label: "Last 30 days" },
+              { value: "90", label: "Last 90 days" },
+            ]}
+          />
+        </Filters>
+        <ErrorNotice error={download.error} />
+        <div className="tabs" role="tablist" aria-label="Phone call views">
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="tab"
+              id={`calls-tab-${v.id}`}
+              aria-selected={view === v.id}
+              aria-controls="calls-panel"
+              className={view === v.id ? "tabs__link active" : "tabs__link"}
+              onClick={() =>
+                setParams(v.id === "calls" ? { view: "calls" } : {}, { replace: true })
+              }
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        <div
+          id="calls-panel"
+          role="tabpanel"
+          aria-labelledby={`calls-tab-${view}`}
+          className="stack"
+        >
+          {view === "calls" ? (
+            // A new list for each project: it starts again at its first page.
+            <CallList key={projectId} projectId={projectId} title="All calls" />
+          ) : (
+            <>
+              {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}
+              {state.status === "failed" ? (
+                <ErrorState error={state.error} onRetry={reload} />
+              ) : null}
+              {state.status === "loaded" && state.data ? (
+                <Figures data={state.data} allProjects={projectId === ""} days={days} />
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

@@ -3,8 +3,10 @@
 // phone, a row of chips at the top. The Rules page's sections are its sub-items, each opened on its
 // own. Only people who manage projects (Super Admin, Project Admin) have the other pages, the Rules
 // (D-145) and the Progress page (D-148) among them (D-104): everyone else has the overview, no
-// menu, and another page's address answers "No access".
-import { useEffect, useRef } from "react";
+// menu, and another page's address answers "No access". A page puts its own buttons on the title
+// row, on the right as on every list page, and a short line under its title (D-158).
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useMatch, useOutletContext, useParams } from "react-router";
 
 import { getProject, type Project } from "../../api/projects";
@@ -16,14 +18,31 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useResource } from "../../hooks/useResource";
 import { StatusBadge } from "../../components/StatusBadge";
 import { labelFor, PROJECT_STATUS_LABELS } from "../../lib/labels";
+import "./overview.css";
 
 export interface ProjectContext {
   project: Project;
   replace: (project: Project) => void;
+  /** The title row's places for a page's buttons and its line under the title (D-158); not
+   * there until the row is on the screen, nor on the overview of someone with no menu. */
+  header?: { actions: HTMLElement | null; lead: HTMLElement | null };
 }
 
 export function useProject(): ProjectContext {
   return useOutletContext<ProjectContext>();
+}
+
+/** A page's own buttons, on the title row on the right as on every list page (D-158). Drawn from
+ * inside the page, so they keep its state; nothing outside a project's page. */
+export function PageActions({ children }: { children: ReactNode }) {
+  const slot = useOutletContext<ProjectContext | undefined>()?.header?.actions;
+  return slot ? createPortal(children, slot) : null;
+}
+
+/** A short line under the page's title, such as when its figures were read (D-158). */
+export function PageLead({ children }: { children: ReactNode }) {
+  const slot = useOutletContext<ProjectContext | undefined>()?.header?.lead;
+  return slot ? createPortal(children, slot) : null;
 }
 
 /** The Rules page's sections, in order (D-145..D-149), each opened at rules/<key> (D-150). */
@@ -126,6 +145,9 @@ export function ProjectDetailPage() {
   const onOverview = useMatch({ path: "/projects/:projectId", end: true }) !== null;
   const page = useMatch("/projects/:projectId/:page/*")?.params.page ?? "";
   const section = useMatch("/projects/:projectId/rules/:section")?.params.section;
+  // The title row's places for a page's buttons and its line under the title (D-158).
+  const [actions, setActions] = useState<HTMLElement | null>(null);
+  const [lead, setLead] = useState<HTMLElement | null>(null);
   const { state, reload, replace } = useResource(() => getProject(projectId), [projectId]);
   const loaded = state.status === "loaded" ? state.data : null;
   // The browser tab: the project on its overview; elsewhere the page (with the Rules section)
@@ -162,7 +184,7 @@ export function ProjectDetailPage() {
   );
   const content =
     onOverview || can("projects.manage") ? (
-      <Outlet context={{ project, replace } satisfies ProjectContext} />
+      <Outlet context={{ project, replace, header: { actions, lead } } satisfies ProjectContext} />
     ) : (
       <EmptyState
         title="No access"
@@ -193,7 +215,11 @@ export function ProjectDetailPage() {
       <ProjectMenu project={project} pages={pages} />
       <section aria-labelledby="project-title" className="section-layout__main stack">
         <div className="page-header">
-          <h1 id="project-title">{title}</h1>
+          <div className="page-header__text">
+            <h1 id="project-title">{title}</h1>
+            <p ref={setLead} className="page-header__lead" />
+          </div>
+          <div ref={setActions} className="actions" />
         </div>
         {content}
       </section>

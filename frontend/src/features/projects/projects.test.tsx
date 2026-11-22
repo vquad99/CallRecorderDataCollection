@@ -661,12 +661,19 @@ describe("project detail", () => {
       }),
     );
     renderAt("/projects/p1/team");
-    expect(await screen.findByText("No members yet")).toBeInTheDocument();
+    // Each list is a titled section (D-158).
+    const members = await screen.findByRole("region", { name: "Members" });
+    expect(await within(members).findByText("No members yet")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Audio rules" }));
     expect(await screen.findByRole("group", { name: "Phone call" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Languages" }));
     expect(await screen.findByRole("row", { name: /Hindi \(hi\) Awadhi/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    const languages = screen.getByRole("region", { name: "Project languages" });
+    // Removed with the bin like every row, under "Actions" (D-158).
+    expect(within(languages).getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
+    expect(
+      within(languages).getByRole("button", { name: "Remove Hindi (hi), Awadhi" }),
+    ).toHaveClass("icon-button");
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
     // Each box shows a faded example under it, tied to the box for screen readers (D-086).
@@ -756,7 +763,10 @@ describe("project detail", () => {
       }),
     );
     renderAt("/projects/p1/team");
-    await userEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    // The members in a titled section, removed with the bin under "Actions" (D-158).
+    const members = await screen.findByRole("table", { name: "Members" });
+    expect(within(members).getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
+    await userEvent.click(within(members).getByRole("button", { name: "Remove Mona Moderator" }));
     const dialog = screen.getByRole("dialog", { name: "Remove Mona Moderator from HINDI?" });
     expect(dialog).toHaveTextContent(/must have those tasks reassigned first/);
     await userEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
@@ -852,6 +862,12 @@ describe("project detail", () => {
       "href",
       "/tasks/new?project=p1",
     );
+    // Both on the project's title row (D-158): the count under the title, New task on the right.
+    const titleRow = screen
+      .getByRole("heading", { level: 1, name: "Tasks" })
+      .closest(".page-header") as HTMLElement;
+    expect(within(titleRow).getByText("1 task in this project")).toBeInTheDocument();
+    expect(within(titleRow).getByRole("link", { name: "New task" })).toBeInTheDocument();
   });
 });
 
@@ -1115,6 +1131,47 @@ describe("changes not saved yet (FEA-04)", () => {
   });
 });
 
+describe("one look on every page (D-158)", () => {
+  /** The title bar a button sits on, as its text. */
+  const barOf = (button: HTMLElement) => button.closest(".card__head")?.textContent;
+
+  it("has each settings form's Save on its section's title bar", async () => {
+    fakeApi(signedInAs(MANAGER, { "GET /api/v1/projects/p1": () => [200, project] }));
+    renderAt("/projects/p1");
+    expect(barOf(await screen.findByRole("button", { name: "Save project" }))).toBe(
+      "Project detailsSave project",
+    );
+    await userEvent.click(within(sections()).getByRole("link", { name: "Audio rules" }));
+    // A project of one recording type: the section is titled with it.
+    expect(barOf(await screen.findByRole("button", { name: "Save audio rules" }))).toBe(
+      "Phone callSave audio rules",
+    );
+    await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
+    expect(barOf(await screen.findByRole("button", { name: "Save retention" }))).toBe(
+      "Days to keep each kind of fileSave retention",
+    );
+  });
+
+  it("gives a project made with both recording types one Save for both", async () => {
+    const both = {
+      ...project,
+      allows_face_to_face: true,
+      audio_rules: [{ ...project.audio_rules[0], mode: "FACE_TO_FACE" }, ...project.audio_rules],
+    };
+    fakeApi(signedInAs(MANAGER, { "GET /api/v1/projects/p1": () => [200, both] }));
+    renderAt("/projects/p1/audio");
+    const save = await screen.findByRole("button", { name: "Save audio rules" });
+    expect(barOf(save)).toBe("Face-to-face and phone callSave audio rules");
+    expect(screen.getAllByRole("button", { name: "Save audio rules" })).toHaveLength(1);
+    // Each type a part of the section, its boxes named by it.
+    for (const type of ["Face-to-face", "Phone call"])
+      expect(
+        within(screen.getByRole("group", { name: type })).getByLabelText("Sample rate (Hz)"),
+      ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Phone call" })).toHaveClass("subhead");
+  });
+});
+
 describe("an archived project (PROJ-05)", () => {
   it("keeps its settings, audio rules, languages and retention read only until it is reopened", async () => {
     const { calls } = fakeApi(
@@ -1138,7 +1195,8 @@ describe("an archived project (PROJ-05)", () => {
     await userEvent.click(within(sections()).getByRole("link", { name: "Languages" }));
     expect(await screen.findByRole("row", { name: /Hindi \(hi\) Awadhi/ })).toBeInTheDocument();
     expect(screen.getByText(note)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove/ })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Actions" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add language" })).toBeNull();
 
     await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
@@ -1372,10 +1430,14 @@ describe("the project list", () => {
     expect(await screen.findByRole("heading", { name: "No projects match" })).toBeVisible();
     expect(screen.getByText("Try another search or status.")).toBeInTheDocument();
     expect(screen.queryByText(/not a member/)).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    // Clear filters is the filter bar's last part, as on every list (D-158).
+    const filters = screen.getByRole("group", { name: "Filters" });
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(1);
+    await userEvent.click(within(filters).getByRole("button", { name: "Clear filters" }));
     expect(await screen.findByRole("link", { name: "PRJ0001" })).toBeInTheDocument();
     expect(router.state.location.search).toBe("");
     expect(screen.getByLabelText("Status")).toHaveValue("");
+    expect(within(filters).queryByRole("button", { name: "Clear filters" })).toBeNull();
   });
 
   it("titles the page without an icon tile and lists plain codes (UXA-14)", async () => {

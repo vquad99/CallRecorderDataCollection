@@ -33,27 +33,13 @@
 .portal__hero p {
   margin: 0;
 }
-.portal__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-}
-/* The four figures: a small white panel each, side by side (D-156). */
-.portal__stats p {
-  margin: 0;
-}
 /* The note under the participant's details, apart from the last of them. */
 .portal__main .checks + p {
   margin-top: var(--space-3);
 }
-.portal__num {
-  font-size: 1.5rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
+/* The consent form's text: a light page, no frame inside the section (D-158). */
 .consent-text {
   padding: 14px 16px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   line-height: 1.6;

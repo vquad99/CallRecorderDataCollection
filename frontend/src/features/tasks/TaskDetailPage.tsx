@@ -13,7 +13,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { BackLink } from "../../components/BackLink";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -31,6 +31,7 @@ import { PhoneCalls } from "./CallCard";
 import { DeviceDetailsCard, devicesWait, useDeviceDetails } from "./DeviceDetails";
 import { ListenLatest, Player } from "./Listen";
 import { Assignment, ParticipantsMatrix, TaskSummary, Timeline, useSignedForms } from "./TaskSide";
+import { WorkCard } from "./WorkCard";
 import "./tasks.css";
 
 const FLOW: readonly work.TaskStatus[] = [
@@ -162,26 +163,12 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
   // The step in progress (1-based); while recording it is consent first, then the recorder.
   const step = review ? 4 : recording ? (waiting ? 2 : 3) : 1;
   return (
-    <section className="card record-card work-card" aria-labelledby="record-card-title">
-      <div className="record-card__text">
-        <h2 id="record-card-title">
-          {review ? "Check your recording" : recording ? "Ready to record" : "Start the session"}
-        </h2>
-        <ol className="record-card__steps">
-          {RECORD_STEPS.map((text, i) => (
-            <li key={text} className={i + 1 < step ? "is-done" : i + 1 === step ? "is-now" : ""}>
-              {text}
-            </li>
-          ))}
-        </ol>
-        {review ? (
-          <div className="record-card__listen">
-            <ListenLatest taskId={task.id} />
-          </div>
-        ) : null}
-      </div>
-      <div className="record-card__go">
-        {review ? (
+    <WorkCard
+      id="record-card-title"
+      title={review ? "Check your recording" : recording ? "Ready to record" : "Start the session"}
+      after={<ErrorNotice error={error} />}
+      go={
+        review ? (
           <>
             <Button
               icon="send"
@@ -236,10 +223,22 @@ function RecordCard({ task, onChange }: { task: work.TaskDetail; onChange: OnTas
           >
             Start session
           </Button>
-        )}
-      </div>
-      <ErrorNotice error={error} />
-    </section>
+        )
+      }
+    >
+      <ol className="record-card__steps">
+        {RECORD_STEPS.map((text, i) => (
+          <li key={text} className={i + 1 < step ? "is-done" : i + 1 === step ? "is-now" : ""}>
+            {text}
+          </li>
+        ))}
+      </ol>
+      {review ? (
+        <div className="record-card__listen">
+          <ListenLatest taskId={task.id} />
+        </div>
+      ) : null}
+    </WorkCard>
   );
 }
 
@@ -262,37 +261,44 @@ function AdminReviewCard({ task, onChange }: { task: work.TaskDetail; onChange: 
         ),
     });
   return (
-    <section className="card record-card work-card" aria-labelledby="admin-review-title">
-      <div className="record-card__text">
-        <h2 id="admin-review-title">Final approval</h2>
-        <p className="muted">QC passed this recording. Listen, then approve or reject it.</p>
-        <div className="record-card__listen">
-          <ListenLatest taskId={task.id} />
-        </div>
-      </div>
-      <div className="record-card__go record-card__go--row">
-        <Button
-          icon="verified"
-          busy={busy === "APPROVED"}
-          disabled={busy !== null}
-          onClick={() =>
-            void run(async () => {
-              const t = await work.transitionTask(task.id, "APPROVED", "", "");
-              onChange(t, "Recording approved.");
-            }, "APPROVED")
-          }
-        >
-          Approve
-        </Button>
-        {task.allowed_transitions.includes("REJECTED") ? (
-          <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
-            Reject
+    <WorkCard
+      id="admin-review-title"
+      title="Final approval"
+      after={
+        <>
+          <ErrorNotice error={error} />
+          {confirm.dialog}
+        </>
+      }
+      go={
+        // Two choices side by side (D-092), sharing the row on a phone.
+        <div className="actions page-actions">
+          <Button
+            icon="verified"
+            busy={busy === "APPROVED"}
+            disabled={busy !== null}
+            onClick={() =>
+              void run(async () => {
+                const t = await work.transitionTask(task.id, "APPROVED", "", "");
+                onChange(t, "Recording approved.");
+              }, "APPROVED")
+            }
+          >
+            Approve
           </Button>
-        ) : null}
+          {task.allowed_transitions.includes("REJECTED") ? (
+            <Button variant="danger" icon="failed" disabled={busy !== null} onClick={reject}>
+              Reject
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
+      <p className="muted">QC passed this recording. Listen, then approve or reject it.</p>
+      <div className="record-card__listen">
+        <ListenLatest taskId={task.id} />
       </div>
-      <ErrorNotice error={error} />
-      {confirm.dialog}
-    </section>
+    </WorkCard>
   );
 }
 
@@ -309,92 +315,99 @@ function ConsentFixCard({ task, onChange }: { task: work.TaskDetail; onChange: O
   // counts there: each person agrees on their personal page, and nobody uploads anything.
   const online = fix.by_upload === false;
   return (
-    <section className="card record-card work-card" aria-labelledby="consent-fix-title">
-      <div className="record-card__text">
-        <h2 id="consent-fix-title">Consent form to fix</h2>
-        {online ? (
-          <p>
-            QC found the recording fine but a problem with the signed consent form of {codes}. This
-            project now takes consent online, so a signed form no longer counts: once{" "}
-            {fix.participants.length > 1 ? "they have" : "the person has"} agreed on their personal
-            page, send the same recording back to QC. Nothing is recorded again.
-          </p>
-        ) : (
-          <p>
-            QC found the recording fine but a problem with the signed consent form of {codes}.
-            Upload a new scan, then send the same recording back to QC. Nothing is recorded again.
-          </p>
-        )}
-        <p className="notice notice--warning">
-          <strong>What QC found:</strong> {fix.comment}
-          <span className="muted">
-            {" "}
-            · {fix.by ?? "QC"}, {when(fix.at)}
-          </span>
+    <WorkCard
+      id="consent-fix-title"
+      title="Consent form to fix"
+      go={
+        fix.can_send_back ? (
+          <>
+            <Button
+              icon="send"
+              busy={busy === "send"}
+              disabled={busy !== null || !fix.forms_replaced}
+              aria-describedby={fix.forms_replaced ? undefined : "consent-fix-waits"}
+              onClick={() =>
+                void run(async () => {
+                  onChange(
+                    await work.sendBackToQc(task.id),
+                    "Sent back to QC with the same recording.",
+                  );
+                }, "send")
+              }
+            >
+              Send back to QC
+            </Button>
+            {fix.forms_replaced ? null : (
+              <p id="consent-fix-waits" className="muted">
+                {online ? "They agree on their personal page first." : "Upload the new form first."}
+              </p>
+            )}
+          </>
+        ) : null
+      }
+      after={
+        <>
+          {/* D-158: whose form to replace, as rows across the section (no box inside it). */}
+          <ul className="consent__rows bleed">
+            {fix.participants.map((p) => {
+              const who = party(p.side);
+              return (
+                <li key={p.side} className="consent__row">
+                  <span className="consent__who">
+                    <span className="consent__side">Participant {p.side}</span>
+                    <PartyName party={who} />
+                  </span>
+                  {p.replaced ? (
+                    <StatusBadge
+                      tone="success"
+                      label={online ? "Agreed online" : "New form uploaded"}
+                    />
+                  ) : (
+                    <StatusBadge
+                      tone="warning"
+                      label={online ? "Not agreed yet" : "New form needed"}
+                    />
+                  )}
+                  {online ? null : who.can_upload_consent_form ? (
+                    <UploadButton
+                      label={`Upload a new consent form of ${p.participant_code}`}
+                      busy={busy === `upload-${who.id}`}
+                      disabled={busy !== null}
+                      onFile={upload(who)}
+                    />
+                  ) : (
+                    <span className="muted">Ask the moderator or your admin to upload it.</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <ErrorNotice error={error} />
+          <SuccessNotice message={message} />
+        </>
+      }
+    >
+      {online ? (
+        <p>
+          QC found the recording fine but a problem with the signed consent form of {codes}. This
+          project now takes consent online, so a signed form no longer counts: once{" "}
+          {fix.participants.length > 1 ? "they have" : "the person has"} agreed on their personal
+          page, send the same recording back to QC. Nothing is recorded again.
         </p>
-        <ul className="consent__rows">
-          {fix.participants.map((p) => {
-            const who = party(p.side);
-            return (
-              <li key={p.side} className="consent__row">
-                <span className="consent__who">
-                  <span className="consent__side">Participant {p.side}</span>
-                  <PartyName party={who} />
-                </span>
-                {p.replaced ? (
-                  <StatusBadge
-                    tone="success"
-                    label={online ? "Agreed online" : "New form uploaded"}
-                  />
-                ) : (
-                  <StatusBadge
-                    tone="warning"
-                    label={online ? "Not agreed yet" : "New form needed"}
-                  />
-                )}
-                {online ? null : who.can_upload_consent_form ? (
-                  <UploadButton
-                    label={`Upload a new consent form of ${p.participant_code}`}
-                    busy={busy === `upload-${who.id}`}
-                    disabled={busy !== null}
-                    onFile={upload(who)}
-                  />
-                ) : (
-                  <span className="muted">Ask the moderator or your admin to upload it.</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      {fix.can_send_back ? (
-        <div className="record-card__go">
-          <Button
-            icon="send"
-            busy={busy === "send"}
-            disabled={busy !== null || !fix.forms_replaced}
-            aria-describedby={fix.forms_replaced ? undefined : "consent-fix-waits"}
-            onClick={() =>
-              void run(async () => {
-                onChange(
-                  await work.sendBackToQc(task.id),
-                  "Sent back to QC with the same recording.",
-                );
-              }, "send")
-            }
-          >
-            Send back to QC
-          </Button>
-          {fix.forms_replaced ? null : (
-            <p id="consent-fix-waits" className="muted">
-              {online ? "They agree on their personal page first." : "Upload the new form first."}
-            </p>
-          )}
-        </div>
-      ) : null}
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-    </section>
+      ) : (
+        <p>
+          QC found the recording fine but a problem with the signed consent form of {codes}. Upload
+          a new scan, then send the same recording back to QC. Nothing is recorded again.
+        </p>
+      )}
+      <p className="notice notice--warning">
+        <strong>What QC found:</strong> {fix.comment}
+        <span className="muted">
+          {" "}
+          · {fix.by ?? "QC"}, {when(fix.at)}
+        </span>
+      </p>
+    </WorkCard>
   );
 }
 
@@ -411,14 +424,15 @@ function ConsentStatus({ task, onChange }: { task: work.TaskDetail; onChange: On
   const send = (p: work.Party) => void run(() => work.emailConsentForm(task.project_id, p), p.id);
   const parties = [task.participant_a, task.participant_b];
   return (
-    <section className="card consent work-card" aria-labelledby="consent-title">
+    <section className="card stack consent work-card" aria-labelledby="consent-title">
       <h2 id="consent-title">Waiting for consent</h2>
       <p className="muted">
         {uploads
           ? "Consent is each person's signed consent form, uploaded by staff (or their online agreement). Calling and recording start only when both have one."
           : "Consent is taken from each person's consent form. Calling and recording start only when both have agreed."}
       </p>
-      <ul className="consent__rows">
+      {/* D-158: one row per person across the section, no box inside it. */}
+      <ul className="consent__rows bleed">
         {parties.map((p, i) =>
           p.may_record ? null : (
             <li key={p.id} className="consent__row">
@@ -565,11 +579,13 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                     ) : null}
                   </td>
                   <td>{file ? <Player assetId={file.id} /> : "-"}</td>
+                  {/* D-158: a row's action as its icon (D-141), its words on hover, so the
+                      length and its speech line keep their room. */}
                   {can("recordings.download") ? (
                     <td>
-                      <Button
-                        variant="secondary"
+                      <IconButton
                         icon="fileAudio"
+                        label="Download with consent form"
                         busy={busy === r.id}
                         disabled={busy !== null}
                         onClick={() =>
@@ -578,9 +594,7 @@ function Recordings({ task }: { task: work.TaskDetail }) {
                             return "Recording, consent record and details downloaded.";
                           }, r.id)
                         }
-                      >
-                        Download with consent form
-                      </Button>
+                      />
                     </td>
                   ) : null}
                 </tr>
@@ -635,12 +649,16 @@ function nextStep(task: work.TaskDetail, qcName: string | null | undefined): str
   }
 }
 
+/** D-158: a section like the others, its title on the title bar. */
 function NextStep({ text }: { text: string }) {
   if (!text) return null;
   return (
-    <section className="card next-step" aria-label="Next step">
-      <Icon name="info" size={18} />
-      <p>{text}</p>
+    <section className="card next-step" aria-labelledby="next-step-title">
+      <h2 id="next-step-title">Next step</h2>
+      <p>
+        <Icon name="info" size={18} />
+        {text}
+      </p>
     </section>
   );
 }

@@ -6,6 +6,7 @@ export function DataTable({
   label,
   caption,
   className,
+  bleed = false,
   children,
 }: {
   /** The table's name for screen readers when no caption is shown. */
@@ -13,10 +14,14 @@ export function DataTable({
   /** A visible caption above the rows. */
   caption?: ReactNode;
   className?: string;
+  /** Inside a section but not its direct child: run edge to edge as a direct child does, its
+   * first and last cells in line with the section's title (D-158). Its parent must be as wide as
+   * the section's inside. */
+  bleed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="table-wrap">
+    <div className={bleed ? "table-wrap bleed" : "table-wrap"}>
       <table className={className ? `table ${className}` : "table"} aria-label={label}>
         {caption ? <caption className="muted">{caption}</caption> : null}
         {children}

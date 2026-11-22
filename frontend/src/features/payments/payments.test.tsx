@@ -149,6 +149,28 @@ describe("payments page", () => {
     expect(codes()[0]).toBe("P000001");
   });
 
+  it("shows the first ten projects' rates, the rest from the section's title bar", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...RATES,
+      project_id: `p${i + 1}`,
+      project_code: `PRJ${String(i + 1).padStart(2, "0")}`,
+    }));
+    open({ "GET /api/v1/payments/rates": () => [200, many] });
+    renderAt("/payments");
+    const rates = await screen.findByRole(
+      "table",
+      { name: "Rates per project" },
+      { timeout: 5000 },
+    );
+    expect(within(rates).getByText("PRJ10")).toBeInTheDocument();
+    expect(within(rates).queryByText("PRJ11")).toBeNull();
+    const more = screen.getByRole("button", { name: "Show all (12)" });
+    // On the section's title bar, as on the dashboard (D-158).
+    expect(more.closest(".card__head")).toHaveTextContent("Rates");
+    await userEvent.click(more);
+    expect(within(rates).getByText("PRJ12")).toBeInTheDocument();
+  });
+
   it("changes a project's rates and loads the amounts again", async () => {
     const { calls } = open();
     renderAt("/payments");

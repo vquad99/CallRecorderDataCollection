@@ -2,15 +2,21 @@
 // pairing, consent, approval) are on its Rules tab (D-145); a new project starts with the defaults.
 // A project records one type, face-to-face or phone calls (D-153): two choices, one daily target.
 // On the Overview, edits not saved yet ask before the page is left (FEA-04); the new-project page
-// does not ask, as it leaves by itself once the project is made.
-import { useId, useState, type FormEvent } from "react";
+// does not ask, as it leaves by itself once the project is made. The fields are a section titled
+// "Project details": on the Overview its Save is on the title bar, as on the Rules pages; a new
+// project's Create button stays under the fields (D-158).
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 
 import { sameValue, type ProjectSettings } from "../../api/projects";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { UnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
+// The description and the consent form's text grow with their words, from their rows up, so they
+// never scroll on their own (D-157, D-158).
+import { GrowBox } from "./GrowBox";
 import { onlyMode, type RecordingMode } from "./recordingType";
+import "./overview.css";
 
 /** Filled in on every new project; the admin edits it to fit the project (D-083). */
 export const SAMPLE_CONSENT_TEXT = `Consent to be recorded
@@ -68,6 +74,8 @@ export function ProjectForm({
   disabled = false,
   readOnlyNote = "Read only. Only a project administrator can change these settings.",
   guardUnsaved = false,
+  saveOnBar = false,
+  notices,
   onSubmit,
 }: {
   initial: ProjectSettings;
@@ -78,6 +86,10 @@ export function ProjectForm({
   readOnlyNote?: string;
   /** Ask before the page is left with edits not saved yet. */
   guardUnsaved?: boolean;
+  /** Settings that are saved: the button on the section's title bar (D-158). */
+  saveOnBar?: boolean;
+  /** What a save said, under the title bar where the Save button is. */
+  notices?: ReactNode;
   onSubmit: (fields: ProjectSettings) => void;
 }) {
   const [f, setF] = useState<ProjectSettings>(initial);
@@ -85,6 +97,7 @@ export function ProjectForm({
   const [mode, setMode] = useState<RecordingMode | null>(() => onlyMode(initial));
   const [missing, setMissing] = useState(false);
   const both = initial.allows_telephony && initial.allows_face_to_face;
+  const titleId = useId();
   const typeHint = useId();
   const typeError = useId();
   const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) =>
@@ -107,9 +120,18 @@ export function ProjectForm({
     });
   }
 
+  const save = (
+    <Button type="submit" {...(saveOnBar ? { icon: "check" as const } : {})} busy={busy}>
+      {submitLabel}
+    </Button>
+  );
   return (
-    <form onSubmit={submit} noValidate className="card">
-      {guardUnsaved ? <UnsavedChangesGuard dirty={dirty && !busy} /> : null}
+    <form onSubmit={submit} noValidate className="card" aria-labelledby={titleId}>
+      <div className="card__head">
+        <h2 id={titleId}>Project details</h2>
+        {saveOnBar && !disabled ? save : null}
+      </div>
+      {notices}
       {disabled ? <p className="notice notice--info readonly-note">{readOnlyNote}</p> : null}
       <fieldset disabled={disabled} className="plain-fieldset">
         <TextField
@@ -122,9 +144,8 @@ export function ProjectForm({
           <label htmlFor="project-description" className="field__label">
             Description
           </label>
-          <textarea
+          <GrowBox
             id="project-description"
-            className="field__input"
             rows={3}
             value={f.description}
             onChange={(e) => set("description", e.target.value)}
@@ -204,9 +225,8 @@ export function ProjectForm({
             Participants read and answer this on their personal page. Change the version above when
             you change the text.
           </p>
-          <textarea
+          <GrowBox
             id="consent-text"
-            className="field__input"
             rows={8}
             maxLength={20000}
             aria-describedby="consent-text-hint"
@@ -214,12 +234,10 @@ export function ProjectForm({
             onChange={(e) => set("consent_text", e.target.value)}
           />
         </div>
-        {disabled ? null : (
-          <Button type="submit" busy={busy}>
-            {submitLabel}
-          </Button>
-        )}
+        {disabled || saveOnBar ? null : save}
       </fieldset>
+      {/* Last, so the title bar stays the section's first part (D-158). */}
+      {guardUnsaved ? <UnsavedChangesGuard dirty={dirty && !busy} /> : null}
     </form>
   );
 }

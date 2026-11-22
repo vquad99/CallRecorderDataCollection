@@ -2,20 +2,10 @@
    task page; the matrices' pieces (Yes / No switches, ticks and crosses). Loaded with those
    pages, not with the first screen. */
 
-/* A note with its icon at the left (the recorder's reminders; D-141 callout style). */
-.callout {
-  display: flex;
-  gap: 10px;
+/* The moderator's reminders (D-147). D-158: a section with its title on the title bar (the
+   recorder), or a part of the call card under a line across it; never a box inside a section. */
+.reminders {
   color: var(--text-2);
-}
-.callout .icon {
-  flex: none;
-  margin-top: 1px;
-}
-.reminders__title {
-  margin: 0 0 4px;
-  color: var(--text);
-  font-weight: 600;
 }
 .reminders ul {
   margin: 0;
@@ -24,14 +14,6 @@
 .reminders li + li,
 .reminders li ul {
   margin-top: 3px;
-}
-/* Inside the call card: a quiet box under the card's words. */
-.record-card .reminders {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
 }
 
 /* ---------- Matrices (D-152): rows of questions or details, a column per speaker ---------- */
@@ -62,6 +44,11 @@
   background: var(--tint-violet);
   color: var(--text);
 }
+/* Both speakers' names start on the same line, also when one has "Same as last time" under it. */
+.table-wrap .table.matrix thead th:is(.mx-a, .mx-b),
+.card .table-wrap .table.matrix thead th:is(.mx-a, .mx-b) {
+  vertical-align: top;
+}
 .table.matrix tbody th {
   color: var(--text);
   font-weight: 400;
@@ -91,13 +78,27 @@
 .mx-col {
   width: 1%;
 }
+/* A speaker's column heading (D-158): "Participant A" on one line, then the code, then the name,
+   each on a line of its own; a name never splits across lines. */
 .mx-who {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.mx-who__side,
+.mx-who__name {
   white-space: nowrap;
 }
+.mx-who__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .mx-who__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   color: var(--text-2);
   font-weight: 400;
 }
@@ -129,7 +130,8 @@
   font-size: 0.75rem;
 }
 
-/* Yes / No: two radio buttons drawn as one switch; the chosen one filled, a failing one rose. */
+/* Yes / No: two radio buttons drawn as one switch; the chosen one filled, a failing one rose.
+   D-158: 36 px tall to click (40 px on a phone), each half wide enough to hit. */
 .yn {
   display: inline-flex;
   flex: none;
@@ -143,8 +145,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  padding: 3px 10px;
+  min-width: 46px;
+  min-height: 34px;
+  padding: 0 12px;
   color: var(--text-2);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -206,9 +209,10 @@
   color: var(--icon-rose);
 }
 
-/* Device details (D-147) as a matrix: a row per detail, a column per speaker. */
+/* Device details (D-147) as a matrix: a row per detail, a column per speaker. D-158: the matrix
+   runs edge to edge under the section's title bar, its Save on the bar, editable or not. */
 .devices__hint {
-  margin: -4px 0 10px;
+  margin: 0 0 var(--space-3);
 }
 .table.devices-matrix tbody th {
   width: 190px;
@@ -218,7 +222,7 @@
 }
 .mx-input.field__input {
   width: 100%;
-  min-height: 32px;
+  min-height: 36px;
   padding: 4px 8px;
   font-size: 0.8125rem;
 }
@@ -232,9 +236,6 @@
 .table.devices-matrix tfoot td {
   font-size: 0.8125rem;
   white-space: normal;
-}
-.devices__save {
-  margin-top: 10px;
 }
 .table.matrix tfoot th,
 .table.matrix tfoot td {
@@ -254,20 +255,35 @@
   .table.matrix th.mx-n {
     display: none;
   }
-  .mx-who {
-    white-space: normal;
+  /* Without the number, the question is the first column: in line with the section's title. */
+  .card .bleed .table.matrix tr > .mx-n + :is(th, td) {
+    padding-left: var(--card-px);
   }
+  /* Tap-sized on a phone (D-158): the switches, boxes and small buttons in the matrices. */
   .yn__opt {
-    min-width: 32px;
-    padding: 3px 7px;
+    min-width: 42px;
+    min-height: 38px;
+    padding: 0 8px;
+  }
+  .mx-input.field__input,
+  .mx-view.button {
+    min-height: 40px;
+  }
+  /* "Same as last time (T000007)" may take two lines in a narrow column, never one word each. */
+  .mx-last.button {
+    min-height: 40px;
+    line-height: 1.25;
+    text-align: left;
+    white-space: normal;
   }
   .table.devices-matrix {
     table-layout: fixed;
   }
+  /* The labels' column fits "Bluetooth earphones used" on two lines at most. */
   .table.devices-matrix tbody th,
   .table.devices-matrix thead th:first-child,
   .table.devices-matrix tfoot th {
-    width: 31%;
+    width: 36%;
   }
   .table.devices-matrix td {
     min-width: 0;

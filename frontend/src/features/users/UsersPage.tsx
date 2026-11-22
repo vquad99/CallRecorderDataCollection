@@ -91,7 +91,8 @@ export function UsersPage() {
         </div>
       </div>
       <ErrorNotice error={error} />
-      <div className="filters">
+      {/* The filters, a section of their own (D-158). */}
+      <div className="filters" role="group" aria-label="Filters">
         <TextField
           label="Search"
           type="search"
@@ -117,6 +118,18 @@ export function UsersPage() {
             { value: "DISABLED", label: "Disabled" },
           ]}
         />
+        {typed || role || status ? (
+          <Button
+            variant="secondary"
+            icon="filterX"
+            onClick={() => {
+              setTyped("");
+              setFilter({ search: "", role: "", status: "" });
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       {state.status === "loading" ? <LoadingState label="Loading users" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}

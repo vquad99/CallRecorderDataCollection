@@ -102,32 +102,21 @@
   }
 }
 
-/* A section (D-156): a white panel with a thin frame on the grey page, its title on a bar of its
-   own over its table or chart. Its content answers to the section's own width. */
+/* A section (D-156): a white panel with a thin frame on the grey page (the frame and the title
+   bar are the sections' own, in global.css), its title on a bar over its table or chart. Its
+   content answers to the section's own width. */
 .panel {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-width: 0;
   padding: 0 var(--card-px) var(--card-py);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgb(16 24 40 / 0.05);
 }
 .panel__head {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
-  min-height: 22px;
   margin: 0 calc(-1 * var(--card-px));
-  padding: 11px var(--card-px);
-  border-bottom: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  background: #fafbfd;
 }
 .panel__head h2,
 .panel .chart__head h2 {
@@ -275,16 +264,11 @@
 }
 
 /* ---------- Tables in sections: compact rows, the grey heading row kept ---------- */
-/* A section's table is short: it shows whole in its own thin frame. */
+/* A section's table is short: it shows whole. Directly in a section it runs edge to edge under
+   the title bar (global.css: no frame of its own, its first and last cells at the title's line). */
 .panel .table-wrap {
   flex: none;
   max-height: none;
-}
-/* A table directly in a section runs edge to edge under the title bar. */
-.panel > .table-wrap {
-  margin-inline: calc(-1 * var(--card-px));
-  border-width: 1px 0;
-  border-radius: 0;
 }
 .panel > .table-wrap:last-child {
   margin-bottom: calc(-1 * var(--card-py));
@@ -294,12 +278,6 @@
 .panel > .panel__head + .table-wrap {
   margin-top: -10px;
   border-top: 0;
-}
-.panel > .table-wrap .table :is(th, td):first-child {
-  padding-left: var(--card-px);
-}
-.panel > .table-wrap .table :is(th, td):last-child {
-  padding-right: var(--card-px);
 }
 .panel .table th,
 .panel .table td {
@@ -328,14 +306,28 @@
 .panel .table tbody tr:last-child td {
   border-bottom: 0;
 }
-/* A number with a light bar behind it (its share of the column's largest). */
+/* A number with a bar beside it, as long as its share of the column's largest (D-158): the bar
+   on the left, the number after it, never written over it. */
 .cellbar {
-  display: block;
-  min-width: 64px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--tint-blue) var(--w), transparent var(--w));
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-variant-numeric: tabular-nums;
+}
+.cellbar__bar {
+  flex: 1 1 auto;
+  min-width: 56px;
+}
+.cellbar__bar > span {
+  display: block;
+  height: 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--icon-blue) 55%, #fff);
+}
+.cellbar__n {
+  flex: none;
+  min-width: 2.4em;
+  text-align: right;
 }
 /* The actual share as a bar with a tick where the target is (a bullet bar). */
 .tbar {
@@ -421,8 +413,11 @@
   font-size: 0.8125rem;
   font-weight: 400;
 }
-.panel .table.matrix tbody th[scope="row"] {
-  padding-left: 18px;
+/* A part's rows one step in from its title, the same in every section (D-158): from the frame's
+   inner line when the table runs edge to edge (--x0, global.css), else from the cell's own. */
+.table.matrix tbody > .matrix__section ~ tr > th[scope="row"],
+.table.matrix tbody > tr.matrix__empty > td[colspan] {
+  padding-left: calc(var(--x0, 10px) + 12px);
 }
 /* Sectioned tables are the long ones: rows a little tighter. */
 .panel .table.matrix tbody th,
@@ -436,7 +431,6 @@
   padding-left: 6px;
 }
 .matrix__empty td {
-  padding-left: 18px;
   color: var(--muted);
 }
 
@@ -558,14 +552,30 @@
   margin: 0;
 }
 /* A chart that opens its section (Hours per day, Calls per day): its caption is the section's
-   title bar, as every other section's title (D-157). */
+   title bar (D-157), drawn as every other one (global.css). */
 .panel > .chart:first-child > .chart__head {
-  min-height: 22px;
   margin: 0 calc(-1 * var(--card-px)) 10px;
-  padding: 11px var(--card-px);
-  border-bottom: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  background: #fafbfd;
+}
+/* In a narrow section (a phone) the legend would wrap inside the bar and make it taller than every
+   other one: there the bar holds only the title, and the legend sits under it (D-158). */
+@container (max-width: 560px) {
+  .panel > .chart:first-child > figcaption.chart__head {
+    display: block;
+    min-height: 0;
+    padding: 0;
+    border-bottom: 0;
+    background: none;
+  }
+  .panel > .chart:first-child > .chart__head > h2:first-child {
+    min-height: var(--bar-h);
+    padding: var(--bar-py) var(--card-px);
+    border-bottom: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    background: #fafbfd;
+  }
+  .panel > .chart:first-child > .chart__head > .legend {
+    padding: 10px var(--card-px) 0;
+  }
 }
 .chart__head {
   display: flex;
@@ -677,6 +687,15 @@
   font-weight: 500;
   cursor: pointer;
 }
+/* Tap-sized on a phone (D-158), as the notes' summary below; still a list item, so its triangle
+   stays. */
+@media (max-width: 640px) {
+  .chart__table summary,
+  .dash-notes > summary {
+    min-height: 40px;
+    padding-block: 10px;
+  }
+}
 .chart__table .table-wrap {
   margin-top: 8px;
 }
@@ -699,27 +718,31 @@
   margin: 0 0 6px;
 }
 
-/* ---------- Key figures as one line (D-154): a label over each value, thin lines between ---------- */
+/* ---------- Key figures (D-154, D-158): a framed section of their own, thin lines between ----------
+   The frame is the sections' (global.css). Each figure's label, value and note share a row with
+   the other figures' (subgrid), so the values stay on one line when a label takes two; the lines
+   between figures are cut off at the frame. One row on a wide screen, two columns on a phone. */
 .figs {
   container-type: inline-size;
+  overflow: hidden;
 }
 .figline {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, var(--n, 4)), minmax(0, 1fr));
   margin: 0;
-  padding: 2px 0 10px;
-  border-bottom: 1px solid var(--border);
 }
 .figline__item {
-  flex: 1 1 0;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
   min-width: 0;
-  padding: 0 14px;
-  border-left: 1px solid var(--border);
-}
-.figline__item:first-child {
-  padding-left: 0;
-  border-left: 0;
+  padding: 10px var(--card-px) 12px;
+  box-shadow:
+    -1px 0 0 var(--border),
+    0 -1px 0 var(--border);
 }
 .figline dt {
+  align-self: end;
   color: var(--text-2);
   font-size: 0.8125rem;
   line-height: 1.3;
@@ -745,19 +768,40 @@
   font-size: 0.8125rem;
   line-height: 1.35;
 }
-/* Narrower: two or three to a row, a thin line above each. */
-@container (max-width: 780px) {
-  .figline {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    column-gap: 16px;
-    padding: 0;
+/* A figure needs about 130 px: when they do not all fit on one line, even rows of three or four
+   (a line between the rows too), and two to a row on a phone. */
+@container (max-width: 1040px) {
+  .figline:has(> :nth-child(8):last-child) {
+    --cols: 4;
   }
-  .figline__item,
-  .figline__item:first-child {
-    padding: 6px 0 8px;
-    border-top: 1px solid var(--border);
-    border-left: 0;
+}
+@container (max-width: 910px) {
+  .figline:has(> :nth-child(7):last-child) {
+    --cols: 4;
+  }
+}
+@container (max-width: 780px) {
+  .figline:has(> :nth-child(6):last-child) {
+    --cols: 3;
+  }
+}
+@container (max-width: 650px) {
+  .figline:has(> :nth-child(5):last-child) {
+    --cols: 3;
+  }
+}
+/* Two to a row on a phone: as specific as the rules above and after them, so it wins over them
+   (D-158); a single figure keeps its row, and a last one alone takes the whole row, as in the
+   filter bar. */
+@container (max-width: 480px) {
+  .figs .figline:has(> :nth-child(2)) {
+    --cols: 2;
+  }
+  .figs .figline > .figline__item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .figline__value {
+    font-size: 1.125rem;
   }
 }
 
@@ -768,9 +812,10 @@
   justify-content: flex-end;
   gap: 8px;
 }
+/* A short bar (D-158), so the stage's name keeps the room. */
 .sharebar__track {
   display: block;
-  width: 72px;
+  width: 44px;
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -786,9 +831,11 @@
   min-width: 3.2em;
   text-align: right;
 }
+/* What a stage is made of: "Audio QC 48 · Admin review 12", each part on one line (D-158). */
 .share-table__detail {
   display: block;
   color: var(--muted);
+  font-size: 0.75rem;
   font-weight: 400;
 }
 

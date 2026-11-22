@@ -79,7 +79,8 @@ export function ProjectsPage() {
         ) : null}
       </div>
       <SuccessNotice message={created} />
-      <div className="filters">
+      {/* The filters in a framed bar of their own, Clear filters last, as on every list (D-158). */}
+      <div className="filters" role="group" aria-label="Filters">
         <TextField
           label="Search"
           type="search"
@@ -95,20 +96,17 @@ export function ProjectsPage() {
             ...Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => ({ value, label })),
           ]}
         />
+        {filtered || typed !== "" ? (
+          <Button variant="secondary" icon="filterX" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       {state.status === "loading" ? <LoadingState label="Loading projects" /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.items.length === 0 ? (
         filtered ? (
-          <EmptyState
-            title="No projects match"
-            message="Try another search or status."
-            action={
-              <Button variant="secondary" icon="close" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            }
-          />
+          <EmptyState title="No projects match" message="Try another search or status." />
         ) : can("projects.create") ? (
           <EmptyState
             title="No projects yet"
@@ -148,7 +146,7 @@ export function ProjectsPage() {
                       p.allows_face_to_face ? MODE_LABELS.FACE_TO_FACE : "",
                     ]
                       .filter(Boolean)
-                      .join(", ")}
+                      .join(", ") || "-"}
                   </td>
                 </tr>
               ))}

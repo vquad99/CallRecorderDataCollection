@@ -54,10 +54,13 @@ export function StatusPage() {
     <section aria-labelledby="status-title" className="stack">
       <div className="page-header">
         <h1 id="status-title">System status</h1>
+        {/* The page's button, as on every page: its own row on a phone (D-158). */}
         {state.kind === "loaded" ? (
-          <Button variant="secondary" icon="refresh" onClick={retry}>
-            Check again
-          </Button>
+          <div className="actions">
+            <Button variant="secondary" icon="refresh" onClick={retry}>
+              Check again
+            </Button>
+          </div>
         ) : null}
       </div>
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}

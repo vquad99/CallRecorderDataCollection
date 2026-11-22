@@ -9,14 +9,18 @@ import { TwoStepEnrol } from "../../auth/TwoStepEnrol";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
+import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
+import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { when } from "../../lib/format";
 import { describeUserAgent } from "../../lib/userAgent";
 import { InstallCard } from "../../pwa/InstallCard";
+import "./account.css";
 
 function ChangePassword() {
   const [current, setCurrent] = useState("");
@@ -64,12 +68,25 @@ function ChangePassword() {
   );
 }
 
+/** The account's sessions: this device first, then the others, newest first. A long list shows
+ * its first rows, the rest on request (the button on the section's title bar, as on the
+ * dashboard, D-158). */
 function Sessions() {
   const { state, reload } = useResource(authApi.listSessions, []);
   const { busy, error, run } = useAction(reload);
+  const sessions =
+    state.status === "loaded"
+      ? [...state.data].sort((a, b) => Number(b.current) - Number(a.current))
+      : [];
+  const { shown, more } = useFirstRows(sessions);
   return (
-    <section className="card" aria-labelledby="sessions-title">
-      <h2 id="sessions-title">Signed-in devices</h2>
+    <section className="card account-sessions" aria-labelledby="sessions-title">
+      <div className="card__head">
+        <h2 id="sessions-title">Signed-in devices</h2>
+        {more}
+      </div>
+      {/* Under the title, in sight however long the list. */}
+      <ErrorNotice error={error} />
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" ? (
@@ -77,21 +94,29 @@ function Sessions() {
           <thead>
             <tr>
               <th scope="col">Device</th>
-              <th scope="col">Last active</th>
+              <th scope="col" className="account-sessions__wide">
+                Last active
+              </th>
               <th scope="col">Action</th>
             </tr>
           </thead>
           <tbody>
-            {state.data.map((s) => (
+            {shown.map((s) => (
               <tr key={s.id}>
                 <td>
                   {describeUserAgent(s.user_agent)}
                   {s.ip ? <span className="muted"> · {s.ip}</span> : null}
+                  {/* On a phone the time goes under the device, so Sign out stays in view. */}
+                  <div className="muted account-sessions__narrow">{when(s.last_seen_at)}</div>
                 </td>
-                <td>{when(s.last_seen_at)}</td>
+                <td className="account-sessions__wide">{when(s.last_seen_at)}</td>
                 <td className="actions">
                   {s.current ? (
-                    <span className="muted">This device</span>
+                    // Drawn like the Sign out buttons under it, so both line up (D-158).
+                    <span className="session-here">
+                      <Icon name="ok" size={16} />
+                      This device
+                    </span>
                   ) : (
                     <Button
                       variant="secondary"
@@ -109,7 +134,6 @@ function Sessions() {
           </tbody>
         </DataTable>
       ) : null}
-      <ErrorNotice error={error} />
     </section>
   );
 }
@@ -122,8 +146,11 @@ function TwoStep() {
   const enabled = user?.mfa_enabled ?? false;
   return (
     <section className="card" aria-labelledby="mfa-title">
-      <h2 id="mfa-title">Two-step sign-in</h2>
-      <p>Status: {enabled ? "On" : "Off"}</p>
+      {/* Its state on the title bar, as the Server's on System status (D-158). */}
+      <div className="card__head">
+        <h2 id="mfa-title">Two-step sign-in</h2>
+        <StatusBadge tone={enabled ? "success" : "neutral"} label={enabled ? "On" : "Off"} />
+      </div>
       {!enabled ? <TwoStepEnrol onDone={refresh} /> : null}
       {enabled ? (
         <form
@@ -189,18 +216,23 @@ export function AccountPage() {
   const { user } = useAuth();
   return (
     <section aria-labelledby="account-title" className="stack">
-      <h1 id="account-title">My account</h1>
-      <p>
-        {user?.display_name} ({user?.email})
-      </p>
+      <div className="page-header">
+        <div className="page-header__text">
+          <h1 id="account-title">My account</h1>
+          <p className="page-header__lead">
+            {user?.display_name} ({user?.email})
+          </p>
+        </div>
+      </div>
       {user?.telephony_agent_id ? (
         <PhoneSeat
           seat={user.telephony_agent_id}
           hasPassword={user.telephony_has_password ?? false}
         />
       ) : null}
-      {/* Two short forms side by side on a wide screen (D-154). */}
-      <div className="section-pair">
+      {/* Two short forms side by side on a wide screen (D-154), as tall as each other with their
+          buttons on one line (D-158). */}
+      <div className="section-pair account-pair">
         <ChangePassword />
         <TwoStep />
       </div>

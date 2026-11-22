@@ -2,13 +2,15 @@
 // rate per approved minute, with the rates themselves. For the Super Admin and Project Admins.
 // One row per person and project (each project has its own rates); the days are approval days in
 // India time. A project with no rate yet shows its minutes and "No rate set". A long list is shown
-// a page at a time; its totals and the CSV always cover every row.
-import { useState, type ReactNode } from "react";
+// a page at a time; its totals and the CSV always cover every row. D-158: one filter bar for the
+// page (the project, the days and the search), the tab's table in a section of its own with the
+// CSV download on its title bar, and the rates' first rows with the rest on request.
+import { useId, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
 import * as pay from "../../api/payments";
 import { DataTable } from "../../components/DataTable";
-import { Button } from "../../components/form/Button";
+import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Modal } from "../../components/Modal";
@@ -17,8 +19,10 @@ import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
+import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { rupees, typedDay, when } from "../../lib/format";
+import "./payments.css";
 
 const VIEWS: { id: pay.Payee; label: string }[] = [
   { id: "moderators", label: "Moderators" },
@@ -141,24 +145,25 @@ function ParticipantTable({ rows, totals }: Shown<pay.ParticipantPay>) {
   );
 }
 
-/** One tab: a search, the CSV download, and the table `show` draws for one page of what `load`
- * gives, with the totals of every row. */
+/** One tab (D-158): a section titled `title` with the CSV download on its title bar and the table
+ * `show` draws for one page of what `load` gives, with the totals of every row; the pages under
+ * the section. */
 function Earnings<Row>({
   who,
+  title,
   filters,
   load,
   show,
 }: {
   who: pay.Payee;
+  title: string;
   filters: pay.PayFilters;
   load: (filters: pay.PayFilters) => Promise<pay.Payments<Row>>;
   show: (shown: Shown<Row>) => ReactNode;
 }) {
-  const [search, setSearch] = useState("");
-  const query = useDebounced(search.trim());
-  const asked = { ...filters, search: query || undefined };
-  const key = JSON.stringify(asked);
-  const { state, reload } = useResource(() => load(asked), [key]);
+  const titleId = useId();
+  const key = JSON.stringify(filters);
+  const { state, reload } = useResource(() => load(filters), [key]);
   // Another choice or search starts again at its first page.
   const [paging, setPaging] = useState({ key, page: 1 });
   const download = useAction();
@@ -166,47 +171,47 @@ function Earnings<Row>({
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const page = Math.min(paging.key === key ? paging.page : 1, pages);
   return (
-    <div className="stack stack--tight">
-      <div className="filters" role="group" aria-label="Search and download">
-        <TextField
-          label={who === "moderators" ? "Search by name" : "Search by code or name"}
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <Button
-          variant="secondary"
-          icon="fileCsv"
-          busy={download.busy !== null}
-          onClick={() => void download.run(() => pay.downloadPay(who, asked))}
-        >
-          Download CSV
-        </Button>
-      </div>
-      <ErrorNotice error={download.error} />
-      {state.status === "loading" ? <LoadingState label="Loading payments" /> : null}
-      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
-      {state.status === "loaded" ? (
-        rows.length ? (
-          <>
-            {show({
+    <>
+      <section className="card pay-section" aria-labelledby={titleId}>
+        <div className="card__head">
+          <h2 id={titleId}>{title}</h2>
+          <Button
+            variant="secondary"
+            icon="fileCsv"
+            busy={download.busy !== null}
+            onClick={() => void download.run(() => pay.downloadPay(who, filters))}
+          >
+            Download CSV
+          </Button>
+        </div>
+        <p className="muted">
+          Only approved tasks count, by the day they were approved (India time). A moderator is paid
+          on the full length of the tasks they recorded; each participant on their half of every
+          session.
+        </p>
+        <ErrorNotice error={download.error} />
+        {state.status === "loading" ? <LoadingState label="Loading payments" /> : null}
+        {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+        {state.status === "loaded" ? (
+          rows.length ? (
+            show({
               rows: rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
               totals: state.data.totals,
-            })}
-            {pages > 1 ? (
-              <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={rows.length}
-                onPage={(p) => setPaging({ key, page: p })}
-              />
-            ) : null}
-          </>
-        ) : (
-          <p className="muted">No approved work in this choice.</p>
-        )
+            })
+          ) : (
+            <p className="muted">No approved work in this choice.</p>
+          )
+        ) : null}
+      </section>
+      {pages > 1 ? (
+        <Pagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={rows.length}
+          onPage={(p) => setPaging({ key, page: p })}
+        />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -280,56 +285,66 @@ function Rates({
 }) {
   const [editing, setEditing] = useState<pay.ProjectRates | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // A long list of projects shows its first rows, the rest on request (the button on the
+  // section's title bar, as on the dashboard, D-158).
+  const { shown, more } = useFirstRows(projects);
   return (
-    <section className="card stack stack--tight" aria-labelledby="rates-title">
-      <h2 id="rates-title">Rates</h2>
-      <p className="muted">
-        Each project pays a fixed amount per approved minute. Every change is kept in the audit log.
-        A new rate also applies to work approved before.
-      </p>
-      <SuccessNotice message={message} />
-      {projects.length === 0 ? (
-        <p className="muted">You have no projects.</p>
-      ) : (
-        <DataTable label="Rates per project">
-          <thead>
-            <tr>
-              <th scope="col">Project</th>
-              <th scope="col">Moderators</th>
-              <th scope="col">Participants</th>
-              <th scope="col">Last changed</th>
-              <th scope="col">
-                <span className="sr-only">Change</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.project_id}>
-                <td>
-                  {p.project_code} <span className="muted">{p.project_name}</span>
-                </td>
-                <td>{rate(p.moderator_rate)}</td>
-                <td>{rate(p.participant_rate)}</td>
-                <td>{p.updated_at ? `${when(p.updated_at)} · ${p.updated_by ?? "-"}` : "-"}</td>
-                <td className="actions">
-                  <Button
-                    variant="secondary"
-                    icon="pencil"
-                    aria-label={`Change rates of ${p.project_code}`}
-                    onClick={() => {
-                      setMessage(null);
-                      setEditing(p);
-                    }}
-                  >
-                    Change
-                  </Button>
-                </td>
+    <>
+      <section className="card pay-section" aria-labelledby="rates-title">
+        <div className="card__head">
+          <h2 id="rates-title">Rates</h2>
+          {more}
+        </div>
+        <p className="muted">
+          Each project pays a fixed amount per approved minute. Every change is kept in the audit
+          log. A new rate also applies to work approved before.
+        </p>
+        <SuccessNotice message={message} />
+        {projects.length === 0 ? (
+          <p className="muted">You have no projects.</p>
+        ) : (
+          <DataTable label="Rates per project" className="rates-table">
+            <thead>
+              <tr>
+                <th scope="col">Project</th>
+                <th scope="col">Moderators</th>
+                <th scope="col">Participants</th>
+                <th scope="col" className="rates-table__extra">
+                  Last changed
+                </th>
+                <th scope="col">
+                  <span className="sr-only">Change</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      )}
+            </thead>
+            <tbody>
+              {shown.map((p) => (
+                <tr key={p.project_id}>
+                  <td>
+                    {p.project_code}{" "}
+                    <span className="muted rates-table__extra">{p.project_name}</span>
+                  </td>
+                  <td>{rate(p.moderator_rate)}</td>
+                  <td>{rate(p.participant_rate)}</td>
+                  <td className="rates-table__extra">
+                    {p.updated_at ? `${when(p.updated_at)} · ${p.updated_by ?? "-"}` : "-"}
+                  </td>
+                  <td className="actions">
+                    <IconButton
+                      icon="pencil"
+                      label={`Change rates of ${p.project_code}`}
+                      onClick={() => {
+                        setMessage(null);
+                        setEditing(p);
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </section>
       {editing ? (
         <RatesForm
           rates={editing}
@@ -341,7 +356,7 @@ function Rates({
           }}
         />
       ) : null}
-    </section>
+    </>
   );
 }
 
@@ -352,6 +367,11 @@ export function PaymentsPage() {
   const [projectId, setProjectId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // The search is the tab's: another tab starts without one.
+  const [search, setSearch] = useState("");
+  // Asked once typing pauses; an emptied box at once.
+  const settled = useDebounced(search.trim());
+  const query = search.trim() ? settled : "";
   // Amounts change with the rates: the tab is loaded again after a rate is saved.
   const [version, setVersion] = useState(0);
   // The days as asked: a year still being typed (0002, 0020, 0202) is no day yet.
@@ -363,7 +383,9 @@ export function PaymentsPage() {
     project_id: projectId || undefined,
     date_from: fromDay || undefined,
     date_to: toDay || undefined,
+    search: query || undefined,
   };
+  const narrowed = Boolean(projectId || from || to || search);
   return (
     <section aria-labelledby="payments-title" className="stack">
       <div className="page-header">
@@ -375,7 +397,8 @@ export function PaymentsPage() {
           </p>
         </div>
       </div>
-      <div className="filters" role="group" aria-label="Project and approval days">
+      {/* One filter bar for the page, a section of its own (D-158). */}
+      <div className="filters payments-filters" role="group" aria-label="Filters">
         <Select
           label="Project"
           value={projectId}
@@ -401,12 +424,27 @@ export function PaymentsPage() {
           {...(backwards ? { error: "Must not be before the first day" } : {})}
           onChange={(e) => setTo(e.target.value)}
         />
+        <TextField
+          label={view === "moderators" ? "Search by name" : "Search by code or name"}
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {narrowed ? (
+          <Button
+            variant="secondary"
+            icon="filterX"
+            onClick={() => {
+              setProjectId("");
+              setFrom("");
+              setTo("");
+              setSearch("");
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
-      <p className="muted">
-        Only approved tasks count, by the day they were approved (India time). A moderator is paid
-        on the full length of the tasks they recorded; each participant on their half of every
-        session.
-      </p>
       <div className="tabs" role="tablist" aria-label="Who is paid">
         {VIEWS.map((v) => (
           <button
@@ -417,9 +455,10 @@ export function PaymentsPage() {
             aria-selected={view === v.id}
             aria-controls="payments-panel"
             className={view === v.id ? "tabs__link active" : "tabs__link"}
-            onClick={() =>
-              setParams(v.id === "participants" ? { view: "participants" } : {}, { replace: true })
-            }
+            onClick={() => {
+              if (v.id !== view) setSearch("");
+              setParams(v.id === "participants" ? { view: "participants" } : {}, { replace: true });
+            }}
           >
             {v.label}
           </button>
@@ -435,6 +474,7 @@ export function PaymentsPage() {
           <Earnings
             key={`moderators-${version}`}
             who="moderators"
+            title="Moderator payments"
             filters={filters}
             load={pay.moderatorPay}
             show={(shown) => <ModeratorTable {...shown} />}
@@ -443,6 +483,7 @@ export function PaymentsPage() {
           <Earnings
             key={`participants-${version}`}
             who="participants"
+            title="Participant payments"
             filters={filters}
             load={pay.participantPay}
             show={(shown) => <ParticipantTable {...shown} />}

@@ -206,11 +206,16 @@ describe("the Export tab", () => {
     expect(await within(list).findByText("Ready", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(list).toHaveTextContent("about 240 MB");
 
+    // The file's whole name on hover, as its line may be cut short (D-158).
+    expect(within(list).getByTitle(JOB.file_name)).toHaveTextContent(JOB.file_name);
     await userEvent.click(within(list).getByRole("button", { name: `Download ${JOB.file_name}` }));
     expect(
       await screen.findByText(`Downloading ${JOB.file_name}. The link works for 5 minutes.`),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: `Remove ${JOB.file_name}` }));
+    // Removed with the bin, as a row everywhere (D-158).
+    const remove = screen.getByRole("button", { name: `Remove ${JOB.file_name}` });
+    expect(remove).toHaveClass("icon-button");
+    await userEvent.click(remove);
     await userEvent.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove" }),
     );

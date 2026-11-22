@@ -60,9 +60,10 @@ describe("SettingsPage", () => {
     ]);
     const limit = screen.getByRole("group", { name: /Account limit/ });
     expect(within(limit).getByText(/Enforced/)).toBeInTheDocument();
+    // Figures grouped in thousands, as international readers write them (D-158).
     expect(
       within(limit).getByText(
-        "New or re-enabled accounts above this number are refused. Allowed: 1 to 1,00,000.",
+        "New or re-enabled accounts above this number are refused. Allowed: 1 to 100,000.",
       ),
     ).toBeInTheDocument();
     const planning = screen.getByRole("group", { name: "Planning figures" });
@@ -71,7 +72,7 @@ describe("SettingsPage", () => {
         "For reference only; nothing in the platform is limited by these.",
       ),
     ).toBeInTheDocument();
-    expect(within(planning).getByText("Allowed: 1 to 10,00,000.")).toBeInTheDocument();
+    expect(within(planning).getByText("Allowed: 1 to 1,000,000.")).toBeInTheDocument();
     // One possible value: shown, never a box to type in.
     expect(screen.queryByLabelText(/Participants per conversation/)).not.toBeInTheDocument();
     expect(within(planning).getByText(/Participants per conversation: 2/)).toBeInTheDocument();
@@ -89,7 +90,7 @@ describe("SettingsPage", () => {
     if (typed) await userEvent.type(staff, typed);
     await userEvent.click(screen.getByRole("button", { name: "Save targets" }));
     expect(
-      await screen.findByText("Staff accounts: enter a whole number from 1 to 1,00,000."),
+      await screen.findByText("Staff accounts: enter a whole number from 1 to 100,000."),
     ).toBeInTheDocument();
     expect(calls.some((c) => c.method === "PATCH")).toBe(false);
     expect(screen.queryByText(/capacity\./)).not.toBeInTheDocument();

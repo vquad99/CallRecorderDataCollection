@@ -5,7 +5,7 @@
 // project that takes signed forms nothing is emailed: staff upload the scan (D-144). A selection
 // belongs to the list it was made in: another project, search or page starts with none ticked, so
 // an action never reaches people who are not shown (FEW-05).
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { getProject, listAllProjects } from "../../api/projects";
 import * as work from "../../api/work";
@@ -40,6 +40,15 @@ const SAMPLE =
   `${COLUMNS}\n` +
   "Asha Naik,+919876543210,asha@example.org,kok,,Salcete,34,female,Goa,North Goa,403001,Goa," +
   "403601,Konkani,bachelors,english,Goa,North Goa,403001\n";
+/** The columns as shown: the line may break after any comma, so it never runs past its section
+ * (D-158). */
+const COLUMNS_SHOWN = COLUMNS.split(",").map((column, i) => (
+  <Fragment key={column}>
+    {i > 0 ? "," : null}
+    {i > 0 ? <wbr /> : null}
+    {column}
+  </Fragment>
+));
 
 type BulkAction = "assign" | "remove" | "send_consent";
 
@@ -61,8 +70,8 @@ function BulkAdd({ projectId, onDone }: { projectId: string; onDone: () => void 
     <section className="card stack stack--tight" aria-labelledby="bulk-add-title">
       <h2 id="bulk-add-title">Add many participants</h2>
       <p className="muted">
-        Paste rows or choose a CSV file. First line: <code>{COLUMNS}</code>. Every row needs an
-        email; phone and dialect may be empty. The speaker details (<code>district</code> is the
+        Paste rows or choose a CSV file. First line: <code>{COLUMNS_SHOWN}</code>. Every row needs
+        an email; phone and dialect may be empty. The speaker details (<code>district</code> is the
         native district; <code>gender</code> male or female; <code>education</code> primary,
         secondary, higher_secondary, diploma, bachelors, masters, phd or other;{" "}
         <code>education_medium</code> english or non_english; states written in full; PIN codes of 6
@@ -272,7 +281,8 @@ export function ParticipantsPage() {
       {all.length === 0 ? (
         <EmptyState title="No projects" message="You are not a member of any project yet." />
       ) : (
-        <div className="filters">
+        // The filters, a section of their own; the project's box as wide as its names (D-158).
+        <div className="filters participants-filters" role="group" aria-label="Filters">
           <Select
             label="Project"
             value={projectId}
@@ -455,6 +465,8 @@ export function ParticipantsPage() {
                       {p.has_email ? (
                         <div className="muted">{p.email ?? "Email on file"}</div>
                       ) : null}
+                      {/* Nothing to reach them by: a dash, as for any empty value (D-158). */}
+                      {!p.phone && !p.has_phone && !p.has_email ? "-" : null}
                     </td>
                     <td>
                       {languageLabel(p.language_code)}

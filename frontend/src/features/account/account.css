@@ -1,0 +1,58 @@
+/* My account (D-158). */
+
+/* Change password and Two-step sign-in side by side: as tall as each other, each one's button at
+   its foot, so the two buttons are on one line. */
+.account-pair {
+  align-items: stretch;
+}
+.account-pair > .card {
+  display: flex;
+  flex-direction: column;
+}
+.account-pair > .card > form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.account-pair > .card > form > .button {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Signed-in devices: a failure under the title ("Show all" is on the title bar). */
+.account-sessions > .notice {
+  margin-bottom: var(--space-3);
+}
+/* On a phone the time a device was last active goes under its name, so the row's Sign out stays
+   on the screen; on a wider screen it has its own column. */
+.account-sessions__narrow {
+  display: none;
+}
+@media (max-width: 640px) {
+  .account-sessions__wide {
+    display: none;
+  }
+  .account-sessions__narrow {
+    display: block;
+  }
+}
+/* "This device", drawn like the Sign out buttons in the rows under it (padding, icon, size), so
+   the two line up. */
+.session-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .session-here {
+    min-height: 40px;
+  }
+}

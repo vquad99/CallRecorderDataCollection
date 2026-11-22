@@ -1,0 +1,25 @@
+/* Payments (D-137, D-158). */
+
+/* The project's box fits the chosen project's name (the shared filter bar, global.css); the days
+   need less room, so the bar keeps to one line on a laptop. */
+.payments-filters > .field:has(> input[type="date"]) {
+  flex: 0 1 160px;
+}
+
+/* A message in a section sits under its note, apart from the table under it. */
+.pay-section > .notice {
+  margin-bottom: var(--space-3);
+}
+
+/* The pencil at the row's end, in line with the title bar's right edge. */
+.rates-table td.actions {
+  width: 1%;
+}
+
+/* The rates on a phone: each project's code, its two rates and the pencil fit the screen; its name
+   and the last change are left to a wider screen. */
+@media (max-width: 640px) {
+  .rates-table .rates-table__extra {
+    display: none;
+  }
+}

@@ -15,3 +15,9 @@
 .audit-change__lines li + li {
   margin-top: 2px;
 }
+/* Tap-sized on a phone (D-158). */
+@media (max-width: 640px) {
+  .audit-change summary {
+    padding-block: 10px;
+  }
+}

@@ -3,7 +3,7 @@
 // and, for a project that records one type, to that type (D-153). The filters live in the address
 // (?status=AUDIO_QC&project=...), so a link from the dashboard opens the list already filtered and
 // the browser's Back button keeps them. People who assign tasks also see who holds each task and
-// its two people (UXW-05).
+// its two people (UXW-05). D-158: the filters are a framed bar of their own with Clear filters.
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 
@@ -24,6 +24,7 @@ import { useDebounced } from "../../hooks/useDebounced";
 import { toApiError, useResource } from "../../hooks/useResource";
 import { day } from "../../lib/format";
 import { labelFor, MODE_LABELS, PRIORITY_LABELS, TASK_STATUS_LABELS } from "../../lib/labels";
+import { PageActions, PageLead } from "../projects/ProjectDetailPage";
 import type { RecordingMode } from "../projects/recordingType";
 import "./tasks.css";
 
@@ -73,6 +74,13 @@ export function TasksPage({
     if (settled !== search) setFilter({ search: settled });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settled]);
+  // Any filter chosen (not the project a project's own Tasks tab is fixed to): Clear filters
+  // takes them all off and starts again at page 1 (D-158, as on the other pages).
+  const narrowed = Boolean(typed.trim() || search || status || mode || (!inProject && projectId));
+  const clearFilters = () => {
+    setTyped("");
+    setFilter({ search: "", status: "", mode: "", ...(inProject ? {} : { project: "" }) });
+  };
   // Every project the person can see, past the first 100 too (PERF-09): the filter and the
   // project codes of the rows.
   const projects = useResource(
@@ -153,23 +161,26 @@ export function TasksPage({
   return (
     <section aria-labelledby={inProject ? undefined : "tasks-title"} className="stack">
       {inProject ? (
-        <div className="actions">
-          {newTask}
+        // D-158: on the project's title row, as on the Tasks page: the count under the title, New
+        // task on the right.
+        <>
           {tasks.state.status === "loaded" ? (
-            <span className="muted">
+            <PageLead>
               {tasks.state.data.total === 1
                 ? "1 task in this project"
                 : `${tasks.state.data.total} tasks in this project`}
-            </span>
+            </PageLead>
           ) : null}
-        </div>
+          {newTask ? <PageActions>{newTask}</PageActions> : null}
+        </>
       ) : (
         <div className="page-header">
           <h1 id="tasks-title">Tasks</h1>
           {newTask}
         </div>
       )}
-      <div className="filters">
+      {/* D-158: the page's filters, a framed bar of their own, as on every other page. */}
+      <div className="filters" role="group" aria-label="Filters">
         <TextField
           label="Task or participant code"
           type="search"
@@ -209,6 +220,11 @@ export function TasksPage({
             ]}
           />
         )}
+        {narrowed ? (
+          <Button variant="secondary" icon="filterX" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       {canSelect && selected.length > 0 ? (
         <div className="card bulkbar" role="group" aria-label="Actions for selected tasks">

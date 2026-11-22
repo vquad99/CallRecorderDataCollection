@@ -9,6 +9,7 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import { DataTable } from "../../components/DataTable";
 import { plural } from "../../lib/format";
+import "./users.css";
 
 const SAMPLE =
   "email,display_name,roles\n" +
@@ -40,55 +41,62 @@ export function UserImportPage() {
   }
 
   const valid = rows?.filter((r) => r.errors.length === 0).length ?? 0;
+  // D-158: the file and the rows are sections of their own, each titled on a bar.
   return (
     <section aria-labelledby="import-title" className="stack">
       <BackLink to="/admin/users">All users</BackLink>
       <h1 id="import-title">Import users</h1>
-      <p>
-        A CSV file with the header <code>email,display_name,roles</code> and one person per row.
-        Separate several roles with a semicolon. Each new account is sent an invitation to set its
-        password. Nothing is written until you check the rows and import them.
-      </p>
-      <p>
-        Role codes:
-        {ROLE_CODES.map((code) => (
-          <span key={code}>
-            {" "}
-            <code>{code}</code>
+      <section className="card" aria-labelledby="import-file-title">
+        <h2 id="import-file-title">CSV file</h2>
+        <p>
+          A CSV file with the header <code>email,display_name,roles</code> and one person per row.
+          Separate several roles with a semicolon. Each new account is sent an invitation to set its
+          password. Nothing is written until you check the rows and import them.
+        </p>
+        <p>
+          Role codes:
+          {ROLE_CODES.map((code) => (
+            <span key={code}>
+              {" "}
+              <code>{code}</code>
+            </span>
+          ))}
+        </p>
+        <div className="actions">
+          <Button variant="secondary" icon="fileCsv" onClick={downloadSample}>
+            Download sample CSV
+          </Button>
+          <label className="button button--secondary">
+            <Icon name="fileUp" size={16} />
+            Choose a CSV file
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="sr-only"
+              onChange={(e) => void loadFile(e.target.files?.[0])}
+            />
+          </label>
+          {/* Outside the label, so the file box keeps one name for screen readers. */}
+          <span className="muted" aria-live="polite">
+            {fileName ?? "No file chosen"}
           </span>
-        ))}
-      </p>
-      <div className="actions">
-        <Button variant="secondary" icon="fileCsv" onClick={downloadSample}>
-          Download sample CSV
-        </Button>
-        <label className="button button--secondary">
-          <Icon name="fileUp" size={16} />
-          Choose a CSV file
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            onChange={(e) => void loadFile(e.target.files?.[0])}
-          />
-        </label>
-        {/* Outside the label, so the file box keeps one name for screen readers. */}
-        <span className="muted" aria-live="polite">
-          {fileName ?? "No file chosen"}
-        </span>
-        <Button
-          icon="eye"
-          disabled={!csv}
-          busy={busy === "preview"}
-          onClick={() => void run(async () => setRows((await previewImport(csv)).rows), "preview")}
-        >
-          Preview
-        </Button>
-      </div>
+          <Button
+            icon="eye"
+            disabled={!csv}
+            busy={busy === "preview"}
+            onClick={() =>
+              void run(async () => setRows((await previewImport(csv)).rows), "preview")
+            }
+          >
+            Preview
+          </Button>
+        </div>
+      </section>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       {rows ? (
-        <>
+        <section className="card" aria-labelledby="import-rows-title">
+          <h2 id="import-rows-title">Rows</h2>
           <p>
             {valid} valid, {rows.length - valid} with problems. Only valid rows are imported.
           </p>
@@ -114,7 +122,7 @@ export function UserImportPage() {
               ))}
             </tbody>
           </DataTable>
-          <span>
+          <div className="actions import-rows__go">
             <Button
               icon="fileUp"
               disabled={valid === 0}
@@ -135,8 +143,8 @@ export function UserImportPage() {
             >
               Import {plural(valid, "valid row")}
             </Button>
-          </span>
-        </>
+          </div>
+        </section>
       ) : null}
     </section>
   );

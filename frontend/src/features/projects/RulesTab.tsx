@@ -9,7 +9,9 @@
 // kept; when this section itself was changed meanwhile, nothing is saved and the page says so.
 // Leaving a section with changes not saved yet asks first. A later kind of rule is one more
 // section with its fields in the draft. Everyone who sees the project may read them; project
-// admins change them.
+// admins change them. D-158: a section's parts (the age bands, the districts, a new question)
+// are sub-sections under a divider; its lists run edge to edge like a table, with their column
+// titles once; boxes of text grow with their words; help sits under its box.
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
 
@@ -30,6 +32,7 @@ import {
 } from "../../lib/speakers";
 import { DEVICE_FIELDS } from "../tasks/deviceFields";
 import { audioNameProblem, CLIENT_AUDIO_NAME, exampleAudioName, MAX_AUDIO_NAME } from "./delivery";
+import { GrowBox } from "./GrowBox";
 import { RULE_SECTIONS, useProject } from "./ProjectDetailPage";
 import {
   CLIENT_QC_CHECKLIST,
@@ -283,6 +286,52 @@ function Tick({
   );
 }
 
+/** A part of a section (D-158): its title under a divider that runs edge to edge, its hint, its
+ * fields, what is wrong with them and its buttons. Screen readers get it as a group named by its
+ * title and described by its hint and its error. */
+function Part({
+  title,
+  hint,
+  error,
+  actions,
+  children,
+}: {
+  title: string;
+  hint?: ReactNode;
+  error?: string | undefined;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  const id = useId();
+  const describedBy = [hint ? `${id}-hint` : "", error ? `${id}-error` : ""]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div
+      role="group"
+      className="rules-part"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={describedBy || undefined}
+    >
+      <h3 id={`${id}-title`} className="subhead">
+        {title}
+      </h3>
+      {hint ? (
+        <p id={`${id}-hint`} className="field__hint rules__note">
+          {hint}
+        </p>
+      ) : null}
+      {children}
+      {error ? (
+        <p id={`${id}-error`} className="field__error">
+          {error}
+        </p>
+      ) : null}
+      {actions ? <div className="actions page-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
 /** Who may speak (D-145) and who may be paired (D-143). */
 function SpeakerRules({ draft, change }: SectionProps) {
   const errors = ageErrors(draft);
@@ -315,33 +364,34 @@ function SpeakerRules({ draft, change }: SectionProps) {
         Checked when someone is added to the project, when their age is changed here and when a task
         is made. Ages saved before stay as they are.
       </p>
-      <TextField
-        label="Conversations per speaker (at most)"
-        type="number"
-        min={1}
-        step={1}
-        hint="Cancelled and rejected tasks do not count. Leave empty for no limit."
-        value={draft.max_conversations_per_speaker ?? ""}
-        onChange={(e) =>
-          change({
-            max_conversations_per_speaker: e.target.value
-              ? Math.max(1, Math.trunc(Number(e.target.value)))
-              : null,
-          })
-        }
-      />
+      {/* In a row of fields of its own (D-158): as wide as the ages above it, its help under it. */}
+      <div className="form-grid">
+        <TextField
+          label="Conversations per speaker (at most)"
+          type="number"
+          min={1}
+          step={1}
+          hint="Cancelled and rejected tasks do not count. Leave empty for no limit."
+          value={draft.max_conversations_per_speaker ?? ""}
+          onChange={(e) =>
+            change({
+              max_conversations_per_speaker: e.target.value
+                ? Math.max(1, Math.trunc(Number(e.target.value)))
+                : null,
+            })
+          }
+        />
+      </div>
       <Tick
         label="Each pair of speakers only once"
         hint="When ticked, two people who already share a task (not cancelled or rejected) cannot be put on another one together. Tasks made before stay as they are."
         checked={draft.unique_pairs}
         onChange={(on) => change({ unique_pairs: on })}
       />
-      <fieldset className="field">
-        <legend className="field__label">Speaker details needed before a task</legend>
-        <p className="field__hint">
-          A task is made only for people who have every ticked detail; Add participant asks for
-          them. The others may be left empty.
-        </p>
+      <Part
+        title="Speaker details needed before a task"
+        hint="A task is made only for people who have every ticked detail; Add participant asks for them. The others may be left empty."
+      >
         <div className="rules-details">
           {SPEAKER_GROUPS.map((group) => (
             <fieldset key={group.title} className="rules-details__group">
@@ -359,7 +409,7 @@ function SpeakerRules({ draft, change }: SectionProps) {
             </fieldset>
           ))}
         </div>
-      </fieldset>
+      </Part>
     </>
   );
 }
@@ -446,9 +496,56 @@ const FAILS: readonly { value: string; label: string }[] = [
   { value: "", label: "Never" },
 ];
 
-/** One question of the checklist as one row of the matrix (D-150): its key and words, what it
- * applies to, when it fails, required, and moving or removing it. Each box keeps its own label
- * for screen readers; the column titles above say the same on screen. */
+/** A question's words in a box that grows to show them all (D-158). A question is one line of
+ * text: Enter adds no line break (in the new question it adds the question) and pasted lines are
+ * joined. */
+function QuestionBox({
+  label,
+  value,
+  error,
+  className,
+  onChange,
+  onEnter,
+}: {
+  label: string;
+  value: string;
+  error: string | undefined;
+  className?: string;
+  onChange: (value: string) => void;
+  onEnter?: () => void;
+}) {
+  const id = useId();
+  return (
+    <div className={["field", className, error ? "field--invalid" : ""].filter(Boolean).join(" ")}>
+      <label htmlFor={id} className="field__label">
+        {label}
+      </label>
+      <GrowBox
+        id={id}
+        rows={1}
+        value={value}
+        maxLength={MAX_QUESTION}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={(e) => onChange(e.target.value.replace(/\s*[\r\n]+\s*/g, " "))}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          onEnter?.();
+        }}
+      />
+      {error ? (
+        <p id={`${id}-error`} className="field__error">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** One question of the checklist as one row of the matrix (D-150): its number and key, its words,
+ * what it applies to, when it fails, required, and moving or removing it. Each box keeps its own
+ * label for screen readers; the column titles above say the same on screen. */
 function ChecklistRow({
   item,
   index,
@@ -472,41 +569,42 @@ function ChecklistRow({
         <legend className="sr-only">
           {index + 1}. {item.key}
         </legend>
-        <span className="qc-rule__number" aria-hidden="true">
-          {index + 1}
-        </span>
-        <div className="qc-rule__question">
-          <span className="qc-rule__key" aria-hidden="true">
+        <span className="qc-rule__id" aria-hidden="true">
+          <span className="qc-rule__number">{index + 1}</span>
+          <span className="qc-rule__key" title={item.key}>
             {item.key}
           </span>
-          <TextField
-            label="Question"
-            value={item.question}
-            title={item.question}
-            maxLength={MAX_QUESTION}
-            {...(error ? { error } : {})}
-            onChange={(e) => onChange({ ...item, question: e.target.value })}
+        </span>
+        <QuestionBox
+          label="Question"
+          className="qc-rule__question"
+          value={item.question}
+          error={error}
+          onChange={(question) => onChange({ ...item, question })}
+        />
+        <div className="qc-rule__scope">
+          <Select
+            label="Applies to"
+            value={item.scope}
+            options={SCOPES}
+            onChange={(e) =>
+              onChange({ ...item, scope: e.target.value as api.ChecklistItem["scope"] })
+            }
           />
         </div>
-        <Select
-          label="Applies to"
-          value={item.scope}
-          options={SCOPES}
-          onChange={(e) =>
-            onChange({ ...item, scope: e.target.value as api.ChecklistItem["scope"] })
-          }
-        />
-        <Select
-          label="Fails when the answer is"
-          value={item.fails_on ?? ""}
-          options={FAILS}
-          onChange={(e) =>
-            onChange({
-              ...item,
-              fails_on: (e.target.value || null) as api.ChecklistItem["fails_on"],
-            })
-          }
-        />
+        <div className="qc-rule__fails">
+          <Select
+            label="Fails when the answer is"
+            value={item.fails_on ?? ""}
+            options={FAILS}
+            onChange={(e) =>
+              onChange({
+                ...item,
+                fails_on: (e.target.value || null) as api.ChecklistItem["fails_on"],
+              })
+            }
+          />
+        </div>
         <label className="checkbox qc-rule__required">
           <input
             type="checkbox"
@@ -565,7 +663,7 @@ function QcChecklistRules({ draft, change }: SectionProps) {
     if (item) next.splice(i + by, 0, item);
     set(next);
   };
-  // Enter in the new question's boxes adds it, instead of saving the rules.
+  // Enter in the new question's key adds it, instead of saving the rules.
   const onEnter = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -584,9 +682,10 @@ function QcChecklistRules({ draft, change }: SectionProps) {
       <p className="muted">
         {items.length === 1 ? "1 question" : `${items.length} questions`} (at most {MAX_ITEMS}).
       </p>
+      {/* Edge to edge like a table in a section (D-158), never a box of its own. */}
       {items.length > 0 ? (
-        <div className="qc-matrix">
-          <div className="qc-matrix__head" aria-hidden="true">
+        <div className="qc-edit bleed">
+          <div className="qc-edit__head" aria-hidden="true">
             <span>#</span>
             <span>Key and question</span>
             <span>Applies to</span>
@@ -612,9 +711,8 @@ function QcChecklistRules({ draft, change }: SectionProps) {
       ) : (
         <p className="muted">No questions: QC checks only the consent forms.</p>
       )}
-      <fieldset className="qc-rule qc-rule--new">
-        <legend className="qc-rule__head">Add a question</legend>
-        <div className="form-grid">
+      <Part title="Add a question">
+        <div className="qc-add">
           <TextField
             label="Key"
             hint="Lowercase letters, digits and _, like speech_intelligible. It names the answer in the delivery."
@@ -624,16 +722,15 @@ function QcChecklistRules({ draft, change }: SectionProps) {
             onChange={(e) => setKey(e.target.value.trim())}
             onKeyDown={onEnter}
           />
-          <TextField
+          <QuestionBox
             label="New question"
             value={question}
-            maxLength={MAX_QUESTION}
-            {...(tried && newError ? { error: newError } : {})}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={onEnter}
+            error={tried && newError ? newError : undefined}
+            onChange={setQuestion}
+            onEnter={add}
           />
         </div>
-        <div className="actions">
+        <div className="actions page-actions">
           <Button variant="secondary" icon="plus" disabled={full} onClick={add}>
             Add question
           </Button>
@@ -646,7 +743,7 @@ function QcChecklistRules({ draft, change }: SectionProps) {
           </Button>
         </div>
         {full ? <p className="muted">The list is full ({MAX_ITEMS} questions).</p> : null}
-      </fieldset>
+      </Part>
     </>
   );
 }
@@ -696,7 +793,8 @@ function reminderErrors(draft: RulesDraft): Partial<Record<ReminderList, string>
   return errors;
 }
 
-/** One box of lines, one entry per line. */
+/** One box of lines, one entry per line: at least three lines tall, and taller with every line it
+ * holds, so none is cut (D-158). */
 function LinesBox({
   label,
   hint,
@@ -719,10 +817,9 @@ function LinesBox({
       <p id={`${id}-hint`} className="field__hint">
         {hint}
       </p>
-      <textarea
+      <GrowBox
         id={id}
-        className="field__input"
-        rows={Math.min(8, Math.max(3, value.split("\n").length))}
+        rows={3}
         value={value}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
@@ -768,7 +865,7 @@ function ReminderRules({ draft, change }: SectionProps) {
           />
         ))}
       </div>
-      <div className="actions">
+      <div className="actions page-actions">
         <Button
           variant="secondary"
           icon="history"
@@ -799,17 +896,20 @@ function AudioProgressRules({ draft, change }: SectionProps) {
         0.3 s between words count as speech). A long pause is a silence inside the conversation
         longer than the limit; silence before the first word and after the last is not a pause.
       </p>
-      <TextField
-        label="Long pause (seconds)"
-        type="number"
-        min={PAUSE_LIMITS.min}
-        max={PAUSE_LIMITS.max}
-        step={1}
-        hint="The automatic check counts the pauses longer than this and shows the longest."
-        value={draft.pause_limit_seconds}
-        {...(errors.pause ? { error: errors.pause } : {})}
-        onChange={(e) => change({ pause_limit_seconds: e.target.value })}
-      />
+      {/* In a row of fields (D-158): as wide as the short boxes on the other Rules pages. */}
+      <div className="form-grid">
+        <TextField
+          label="Long pause (seconds)"
+          type="number"
+          min={PAUSE_LIMITS.min}
+          max={PAUSE_LIMITS.max}
+          step={1}
+          hint="The automatic check counts the pauses longer than this and shows the longest."
+          value={draft.pause_limit_seconds}
+          {...(errors.pause ? { error: errors.pause } : {})}
+          onChange={(e) => change({ pause_limit_seconds: e.target.value })}
+        />
+      </div>
       <Tick
         label="Long pauses need a listen"
         hint="When ticked, a recording with a long pause is marked “Listen and decide” by the automatic check. Otherwise the pauses are only shown."
@@ -839,7 +939,8 @@ function AudioProgressRules({ draft, change }: SectionProps) {
   );
 }
 
-/** Two percents that add up to 100, or both empty for no target. */
+/** Two percents that add up to 100, or both empty for no target: a part of the Targets, its two
+ * boxes in the first two columns of the targets' grid (D-158). */
 function PercentPair({
   legend,
   hint,
@@ -855,8 +956,6 @@ function PercentPair({
   error: string | undefined;
   onChange: (values: [string, string]) => void;
 }) {
-  const hintId = useId();
-  const errorId = useId();
   const box = (i: 0 | 1) => (
     <TextField
       label={labels[i]}
@@ -872,21 +971,12 @@ function PercentPair({
     />
   );
   return (
-    <fieldset className="field" aria-describedby={error ? `${hintId} ${errorId}` : hintId}>
-      <legend className="field__label">{legend}</legend>
-      <p id={hintId} className="field__hint">
-        {hint}
-      </p>
-      <div className="form-grid">
+    <Part title={legend} hint={hint} error={error}>
+      <div className="target-grid target-grid--pair">
         {box(0)}
         {box(1)}
       </div>
-      {error ? (
-        <p id={errorId} className="field__error">
-          {error}
-        </p>
-      ) : null}
-    </fieldset>
+    </Part>
   );
 }
 
@@ -917,15 +1007,29 @@ function TargetRules({ draft, change }: SectionProps) {
       onChange={(e) => set({ [key]: e.target.value })}
     />
   );
+  // A box of a band: its name is its column's title, written once above the rows (D-158).
+  const bandBox = (i: number, part: keyof BandTexts, label: string, value: string) => (
+    <input
+      className="field__input"
+      type="number"
+      aria-label={label}
+      min={part === "percent" ? 0 : AGE_LIMITS.min}
+      max={part === "percent" ? 100 : AGE_LIMITS.max}
+      value={value}
+      onChange={(e) => setBand(i, { [part]: e.target.value })}
+    />
+  );
+  // One grid for the whole section (D-158): the boxes of the targets, the bands and the districts
+  // share its columns, so each lines up with the ones above and below it.
   return (
-    <>
+    <div className="targets">
       <p className="field__hint rules__note">
         The Progress page shows what was collected against these, and what is still needed. Age,
         gender and districts are shares of the speakers with an approved conversation
         {bothTypes ? "; face-to-face and phone are shares of the approved conversations" : ""}. A
         new project starts with the default targets.
       </p>
-      <div className="form-grid">
+      <div className="target-grid target-grid--fields">
         <TextField
           label="Hours completed"
           type="number"
@@ -939,71 +1043,56 @@ function TargetRules({ draft, change }: SectionProps) {
         {whole("Speakers", "speakers")}
         {whole("Conversations", "conversations")}
       </div>
-      <fieldset className="field">
-        <legend className="field__label">Age bands (percent of speakers)</legend>
-        <p className="field__hint">
-          A band takes the ages from its first age up to, but not including, its last; the band that
-          ends highest also takes its last age. The percents add up to 100; no bands is no age
-          target.
-        </p>
+      <Part
+        title="Age bands (percent of speakers)"
+        hint="A band takes the ages from its first age up to, but not including, its last; the band that ends highest also takes its last age. The percents add up to 100; no bands is no age target."
+        error={errors.bands}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon="plus"
+              disabled={t.bands.length >= MAX_BANDS}
+              onClick={() => set({ bands: [...t.bands, { from: "", to: "", percent: "" }] })}
+            >
+              Add age band
+            </Button>
+            <Button
+              variant="secondary"
+              icon="history"
+              onClick={() => set({ bands: bandTexts(CLIENT_AGE_BANDS) })}
+            >
+              Reset to the default age bands
+            </Button>
+          </>
+        }
+      >
         {t.bands.length > 0 ? (
-          <ol className="target-rows">
-            {t.bands.map((b, i) => (
-              <li key={i} className="target-row">
-                <TextField
-                  label="From age"
-                  type="number"
-                  min={AGE_LIMITS.min}
-                  max={AGE_LIMITS.max}
-                  value={b.from}
-                  onChange={(e) => setBand(i, { from: e.target.value })}
-                />
-                <TextField
-                  label="To age"
-                  type="number"
-                  min={AGE_LIMITS.min}
-                  max={AGE_LIMITS.max}
-                  value={b.to}
-                  onChange={(e) => setBand(i, { to: e.target.value })}
-                />
-                <TextField
-                  label="Percent"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={b.percent}
-                  onChange={(e) => setBand(i, { percent: e.target.value })}
-                />
-                <IconButton
-                  icon="trash"
-                  label={`Remove age band ${b.from}-${b.to}`}
-                  onClick={() => set({ bands: t.bands.filter((_, j) => j !== i) })}
-                />
-              </li>
-            ))}
-          </ol>
+          <div className="target-table bleed">
+            <div className="target-grid target-table__head" aria-hidden="true">
+              <span>From age</span>
+              <span>To age</span>
+              <span>Percent</span>
+            </div>
+            <ol className="target-table__rows">
+              {t.bands.map((b, i) => (
+                <li key={i} className="target-grid">
+                  {bandBox(i, "from", "From age", b.from)}
+                  {bandBox(i, "to", "To age", b.to)}
+                  {bandBox(i, "percent", "Percent", b.percent)}
+                  <IconButton
+                    icon="trash"
+                    label={`Remove age band ${b.from}-${b.to}`}
+                    onClick={() => set({ bands: t.bands.filter((_, j) => j !== i) })}
+                  />
+                </li>
+              ))}
+            </ol>
+          </div>
         ) : (
           <p className="muted">No age bands: no age target.</p>
         )}
-        {errors.bands ? <p className="field__error">{errors.bands}</p> : null}
-        <div className="actions">
-          <Button
-            variant="secondary"
-            icon="plus"
-            disabled={t.bands.length >= MAX_BANDS}
-            onClick={() => set({ bands: [...t.bands, { from: "", to: "", percent: "" }] })}
-          >
-            Add age band
-          </Button>
-          <Button
-            variant="secondary"
-            icon="history"
-            onClick={() => set({ bands: bandTexts(CLIENT_AGE_BANDS) })}
-          >
-            Reset to the default age bands
-          </Button>
-        </div>
-      </fieldset>
+      </Part>
       <PercentPair
         legend="Gender (percent of speakers)"
         hint="Both empty: no gender target."
@@ -1022,62 +1111,81 @@ function TargetRules({ draft, change }: SectionProps) {
           onChange={([face_to_face, telephony]) => set({ face_to_face, telephony })}
         />
       ) : null}
-      <fieldset className="field">
-        <legend className="field__label">Districts (by native district)</legend>
-        <p className="field__hint">
-          Each listed district is expected to give an equal share of the speakers
-          {t.districts.length > 0
-            ? `: ${share}% each for ${t.districts.length}.`
-            : ". None listed: the Progress page shows the speakers' own districts."}
-        </p>
+      <Part
+        title="Districts (by native district)"
+        hint={
+          <>
+            Each listed district is expected to give an equal share of the speakers
+            {t.districts.length > 0
+              ? `: ${share}% each for ${t.districts.length}.`
+              : ". None listed: the Progress page shows the speakers' own districts."}
+          </>
+        }
+        error={errors.districts}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon="plus"
+              disabled={t.districts.length >= MAX_DISTRICTS}
+              onClick={() => set({ districts: [...t.districts, { state: "", district: "" }] })}
+            >
+              Add district
+            </Button>
+            <Button
+              variant="secondary"
+              icon="history"
+              onClick={() => set({ districts: CLIENT_DISTRICTS.map((d) => ({ ...d })) })}
+            >
+              Use the Konkani-region districts
+            </Button>
+          </>
+        }
+      >
         {t.districts.length > 0 ? (
-          <ol className="target-rows">
-            {t.districts.map((d, i) => (
-              <li key={i} className="target-row target-row--district">
-                <Select
-                  label="State"
-                  value={d.state}
-                  options={[
-                    { value: "", label: "Choose a state" },
-                    ...INDIAN_STATES.map((s) => ({ value: s, label: s })),
-                  ]}
-                  onChange={(e) => setDistrict(i, { state: e.target.value })}
-                />
-                <TextField
-                  label="District"
-                  value={d.district}
-                  maxLength={100}
-                  onChange={(e) => setDistrict(i, { district: e.target.value })}
-                />
-                <IconButton
-                  icon="trash"
-                  label={`Remove ${d.district || `district ${i + 1}`}`}
-                  onClick={() => set({ districts: t.districts.filter((_, j) => j !== i) })}
-                />
-              </li>
-            ))}
-          </ol>
+          <div className="target-table bleed">
+            <div
+              className="target-grid target-grid--district target-table__head"
+              aria-hidden="true"
+            >
+              <span>State</span>
+              <span>District</span>
+            </div>
+            <ol className="target-table__rows">
+              {t.districts.map((d, i) => (
+                <li key={i} className="target-grid target-grid--district">
+                  <select
+                    className="field__input"
+                    aria-label="State"
+                    value={d.state}
+                    onChange={(e) => setDistrict(i, { state: e.target.value })}
+                  >
+                    <option value="">Choose a state</option>
+                    {INDIAN_STATES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="field__input"
+                    aria-label="District"
+                    value={d.district}
+                    maxLength={100}
+                    onChange={(e) => setDistrict(i, { district: e.target.value })}
+                  />
+                  <IconButton
+                    icon="trash"
+                    label={`Remove ${d.district || `district ${i + 1}`}`}
+                    onClick={() => set({ districts: t.districts.filter((_, j) => j !== i) })}
+                  />
+                </li>
+              ))}
+            </ol>
+          </div>
         ) : null}
-        {errors.districts ? <p className="field__error">{errors.districts}</p> : null}
-        <div className="actions">
-          <Button
-            variant="secondary"
-            icon="plus"
-            disabled={t.districts.length >= MAX_DISTRICTS}
-            onClick={() => set({ districts: [...t.districts, { state: "", district: "" }] })}
-          >
-            Add district
-          </Button>
-          <Button
-            variant="secondary"
-            icon="history"
-            onClick={() => set({ districts: CLIENT_DISTRICTS.map((d) => ({ ...d })) })}
-          >
-            Use the Konkani-region districts
-          </Button>
-        </div>
-      </fieldset>
-    </>
+      </Part>
+    </div>
   );
 }
 
@@ -1136,25 +1244,24 @@ function ExportRules({ draft, change }: SectionProps) {
           }
         />
       </div>
+      {/* The example right after the help under the box (D-158), or what is wrong instead. */}
       <TextField
         label="Audio file name"
         value={draft.audio_name_pattern}
         maxLength={MAX_AUDIO_NAME}
         hint="{a} and {b}: the two speakers' IDs; {a_pin} and {b_pin}: their native PIN codes (000000 when not given); {conversation}: the conversation ID. Letters, digits, _ and - between them."
-        {...(problem ? { error: problem } : {})}
+        {...(problem
+          ? { error: problem }
+          : {
+              example: `e.g. ${exampleAudioName(
+                draft.audio_name_pattern,
+                draft.speaker_id_style,
+                draft.conversation_id_style,
+              )}`,
+            })}
         onChange={(e) => change({ audio_name_pattern: e.target.value })}
       />
-      {problem ? null : (
-        <p className="field__hint rules__note">
-          e.g.{" "}
-          {exampleAudioName(
-            draft.audio_name_pattern,
-            draft.speaker_id_style,
-            draft.conversation_id_style,
-          )}
-        </p>
-      )}
-      <div className="actions">
+      <div className="actions page-actions">
         <Button
           variant="secondary"
           icon="history"

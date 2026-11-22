@@ -8,6 +8,7 @@ import { useLocation } from "react-router";
 
 import { ApiError } from "../../api/client";
 import { answerConsent, getPortal, type PortalView } from "../../api/portal";
+import { Figure, FigureLine } from "../../components/charts/Charts";
 import { Button } from "../../components/form/Button";
 import { BrandMark, Icon } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
@@ -65,7 +66,8 @@ function Consent({
 
   return (
     <section className="card stack" aria-labelledby="consent-title">
-      <div className="page-header">
+      {/* Its title and the answer on the section's title bar (D-158). */}
+      <div className="card__head">
         <h2 id="consent-title">Consent form</h2>
         {answer ? (
           <StatusBadge tone={answer.tone} label={answer.label} />
@@ -174,25 +176,17 @@ export function ParticipantView({
         </dl>
         <p className="muted">To correct your details, contact the project team.</p>
       </section>
-      <div className="portal__stats">
-        <div className="card">
-          <p className="muted">Sessions</p>
-          <p className="portal__num">{view.sessions.length}</p>
-        </div>
-        <div className="card">
-          <p className="muted">Recorded time</p>
-          <p className="portal__num">{minutes(view.recorded_minutes)}</p>
-        </div>
-        <div className="card">
-          <p className="muted">Accepted recording time</p>
-          <p className="portal__num">{minutes(view.accepted_minutes)}</p>
-        </div>
-        <div className="card">
-          <p className="muted">Your share for payment</p>
-          <p className="portal__num">{minutes(view.payable_minutes)}</p>
-          <p className="muted">Half of each accepted conversation</p>
-        </div>
-      </div>
+      {/* The key figures in one framed section, thin lines between them (D-158). */}
+      <FigureLine label="Your figures">
+        <Figure label="Sessions" value={String(view.sessions.length)} />
+        <Figure label="Recorded time" value={minutes(view.recorded_minutes)} />
+        <Figure label="Accepted recording time" value={minutes(view.accepted_minutes)} />
+        <Figure
+          label="Your share for payment"
+          value={minutes(view.payable_minutes)}
+          note="Half of each accepted conversation"
+        />
+      </FigureLine>
       {consentFirst ? null : consentForm}
       <section className="card stack stack--tight" aria-labelledby="sessions-title">
         <h2 id="sessions-title">Your sessions</h2>

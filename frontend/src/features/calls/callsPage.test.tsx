@@ -104,7 +104,12 @@ describe("phone calls page", () => {
     renderAt("/calls");
     const card = await screen.findByRole("region", { name: "By moderator" }, { timeout: 5000 });
     expect(within(card).queryByText("Moderator 11")).not.toBeInTheDocument();
-    await userEvent.click(within(card).getByRole("button", { name: "Show all (12)" }));
+    // The button sits on the section's title bar, beside its title (D-158).
+    const showAll = within(card).getByRole("button", { name: "Show all (12)" });
+    expect(
+      within(card).getByRole("heading", { name: "By moderator" }).parentElement,
+    ).toContainElement(showAll);
+    await userEvent.click(showAll);
     expect(within(card).getByText("Moderator 12")).toBeInTheDocument();
   });
 
@@ -224,6 +229,67 @@ describe("phone calls page", () => {
     expect(
       api.calls.some((c) => c.path.includes("project_id=p1") && c.path.includes("page=2")),
     ).toBe(false);
+  });
+
+  it("gives each kind of reason a section of its own and writes '-' for an hour with no call (D-158)", async () => {
+    fakeApi(signedInAs(ALL_PERMISSIONS, worldHandlers()));
+    renderAt("/calls");
+    const cancelled = await screen.findByRole(
+      "region",
+      { name: "Cancelled calls and recording problems" },
+      { timeout: 5000 },
+    );
+    for (const name of ["Why calls were cancelled", "Problems getting the recording"]) {
+      expect(within(cancelled).getByRole("rowgroup", { name })).toBeInTheDocument();
+    }
+    const checks = screen.getByRole("region", { name: "Checks and QC decisions" });
+    for (const name of [
+      "Automatic audio check of call recordings",
+      "QC decisions on call recordings",
+    ]) {
+      expect(within(checks).getByRole("rowgroup", { name })).toBeInTheDocument();
+    }
+    // The hours from the first call to the last: one without a call shows "-", never a dot.
+    const made = within(screen.getByRole("table", { name: "Calls by hour of the day" }))
+      .getByRole("rowheader", { name: "Calls made" })
+      .closest("tr") as HTMLTableRowElement;
+    expect(Array.from(made.cells).map((c) => c.textContent)).toEqual([
+      "Calls made",
+      "3",
+      "-",
+      "-",
+      "-",
+      "1",
+    ]);
+  });
+
+  it("lists the calls in a section with its filter on the title bar, and the pages under it (D-158)", async () => {
+    fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/calls": (_, url) => [
+          200,
+          {
+            items: [CALL_ROW],
+            total: 60,
+            page: Number(url.searchParams.get("page") ?? 1),
+            page_size: 25,
+          },
+        ],
+      }),
+    );
+    renderAt("/calls?view=calls");
+    const list = await screen.findByRole("region", { name: "All calls" }, { timeout: 5000 });
+    // The "Show" filter sits on the section's title bar, beside its title.
+    const bar = within(list).getByRole("heading", { name: "All calls" }).parentElement;
+    expect(bar).toContainElement(within(list).getByLabelText("Show"));
+    // A stored recording has no reason: the column shows "-".
+    const call = (await within(list).findByRole("link", { name: "T000001" })).closest("tr");
+    expect(call?.lastElementChild).toHaveTextContent(/^-$/);
+    // The pages are under the section, outside its frame.
+    const pages = screen.getByRole("navigation", { name: "Pages" });
+    expect(list).not.toContainElement(pages);
+    expect(list.nextElementSibling).toBe(pages);
   });
 
   it("gives a moderator a plain list of their own calls, and no figures (D-104)", async () => {

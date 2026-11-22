@@ -2,8 +2,9 @@
 // recording, a player, the QC checklist (D-146) and the QC Executive's decision: Pass, Reject
 // (D-118) or, where the project takes signed forms, Send back for consent. The server decides who
 // may do what; this only shows the controls it allows. D-152: the checklist is a matrix with a
-// count of what is answered and failing, and the decision bar stays at the bottom of the screen
-// while the QC Executive works down the questions, saying why Pass waits.
+// count of what is answered and failing, and the decision bar stays in view while the QC
+// Executive works down the questions, saying why Pass waits. D-158: the checklist, its decision
+// and the decisions made are a section of their own after the audio check.
 import { useState } from "react";
 
 import * as qc from "../../api/audioQc";
@@ -25,10 +26,12 @@ import { Player } from "./Listen";
 import {
   ChecklistForm,
   ChecklistProgress,
+  ChecklistSection,
   type Judgement,
   judge,
   noAnswers,
   RecordedChecklist,
+  ShowAnswers,
   useDraftSaver,
 } from "./QcChecklist";
 
@@ -69,13 +72,14 @@ function Outcome({ outcome }: { outcome: qc.QcOutcome }) {
   );
 }
 
-/** The automatic checks: those that need attention, and every check on request. */
+/** The automatic checks: those that need attention, and every check on request. D-158: the table
+ * is a part of the section itself, so it runs edge to edge in it (no box inside it). */
 function Checks({ result }: { result: qc.QcResult }) {
   const [all, setAll] = useState(false);
   const attention = result.checks.filter((c) => ATTENTION.includes(c.state));
   const shown = all ? result.checks : attention;
   return (
-    <div className="stack stack--tight">
+    <>
       <div className="qc__summary">
         <p>
           {attention.length === 0
@@ -120,7 +124,7 @@ function Checks({ result }: { result: qc.QcResult }) {
           </tbody>
         </DataTable>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -214,7 +218,8 @@ function hint(j: Judgement, consentCheck: boolean): string {
 /** Pass sends the recording to the project admin, or approves the task where QC pass is the
  * final approval (D-138); Reject asks why and ends the task; Send back for consent (projects that
  * take signed forms) returns it to the moderator for a new form (D-146). The checklist's answers
- * go with each; Pass and Send back wait until they allow it. */
+ * go with each; Pass and Send back wait until they allow it. D-158: the parts of the checklist's
+ * section, the decision first, right under its title bar. */
 function Decision({
   task,
   view,
@@ -276,41 +281,9 @@ function Decision({
   const tone = j.failing.length > 0 ? "is-fail" : canPass ? "is-ok" : "";
   return (
     <>
-      <section className="stack stack--tight" aria-labelledby="qc-checklist-title">
-        <div className="qc-checklist__head">
-          <h3 id="qc-checklist-title">QC checklist</h3>
-          <p className="muted">
-            Listen, then tick Yes or No for every question; your answers are kept as you go.{" "}
-            {view.pass_approves
-              ? "Pass approves the task: this project has no admin review."
-              : "Pass sends it to the project admin for final approval."}{" "}
-            Reject ends the task.
-            {consentCheck
-              ? " Send back for consent returns it to the moderator for a new signed form; the recording stays."
-              : ""}
-          </p>
-        </div>
-        <ChecklistProgress
-          j={j}
-          saving={
-            <p className="muted qc-progress__saved" role="status">
-              {draft.state === "saving"
-                ? "Saving your answers…"
-                : draft.state === "saved"
-                  ? "Answers saved."
-                  : ""}
-            </p>
-          }
-        />
-        <ChecklistForm task={task} view={checklist} answers={answers} onChange={change} />
-        {draft.state === "failed" ? (
-          <p className="notice notice--warning">
-            Your answers could not be saved just now ({draft.error?.message}). They still go with
-            your decision.
-          </p>
-        ) : null}
-      </section>
-      {/* The decision stays in view at the bottom of the screen while the questions scroll. */}
+      {/* D-158: the decision sits under the title bar, across the section, and stays in view under
+          the top bar while the questions scroll (as the Rules pages' Save does). Kept at the
+          bottom (D-152) it left an empty slot in the section whenever the window held it. */}
       <section className="qc-decide" aria-labelledby="qc-decision-title">
         <div className="qc-decide__text">
           <h3 id="qc-decision-title">Your decision</h3>
@@ -346,41 +319,108 @@ function Decision({
         <ErrorNotice error={error} />
         {confirm.dialog}
       </section>
+      <p className="muted">
+        Listen, then tick Yes or No for every question; your answers are kept as you go.{" "}
+        {view.pass_approves
+          ? "Pass approves the task: this project has no admin review."
+          : "Pass sends it to the project admin for final approval."}{" "}
+        Reject ends the task.
+        {consentCheck
+          ? " Send back for consent returns it to the moderator for a new signed form; the recording stays."
+          : ""}
+      </p>
+      <ChecklistProgress
+        j={j}
+        saving={
+          <p className="muted qc-progress__saved" role="status">
+            {draft.state === "saving"
+              ? "Saving your answers…"
+              : draft.state === "saved"
+                ? "Answers saved."
+                : ""}
+          </p>
+        }
+      />
+      <ChecklistForm task={task} view={checklist} answers={answers} onChange={change} />
+      {draft.state === "failed" ? (
+        <p className="notice notice--warning qc-checklist__note">
+          Your answers could not be saved just now ({draft.error?.message}). They still go with your
+          decision.
+        </p>
+      ) : null}
     </>
   );
 }
 
-/** The QC checklist's part of the card: the answers to tick for the person who decides, or the
- * newest decision's answers for everyone else (D-146). */
+/** The decisions made so far, newest first: a part of the checklist's section (D-158). */
+function Decisions({ decisions }: { decisions: qc.QcResult[] }) {
+  if (decisions.length === 0) return null;
+  return (
+    <>
+      <h3 className="subhead">Decisions</h3>
+      <ol className="list timeline qc-decisions">
+        {decisions.map((d) => (
+          <li key={d.id}>
+            <span className="muted">
+              {when(d.created_at)} · {d.reviewer_name ?? "Platform"}
+            </span>
+            <div>
+              <Outcome outcome={d.outcome} />
+              {d.reason_code ? ` ${labelFor(REASON_LABELS, d.reason_code)}` : ""}
+              {d.comment ? ` · ${d.comment}` : ""}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+/** The QC checklist as a section of its own (D-158), after the audio check: the answers to tick
+ * for the person who decides, or the newest decision's answers for everyone else (D-146); the
+ * decisions made so far under them. */
 function Checklist({
   task,
   view,
   automatic,
+  decisions,
   onDecided,
 }: {
   task: work.TaskDetail;
   view: qc.AudioQcView;
   automatic: qc.QcResult | undefined;
+  decisions: qc.QcResult[];
   onDecided: () => void;
 }) {
   const { state, reload } = useResource(
     () => qc.getChecklist(task.id),
     [task.id, task.status, view.can_decide],
   );
-  if (state.status === "loading") return <LoadingState label="Loading the QC checklist" />;
-  if (state.status === "failed") return <ErrorState error={state.error} onRetry={reload} />;
-  const checklist = state.data;
-  if (view.can_decide && checklist.can_answer)
-    return (
-      <Decision
-        task={task}
-        view={view}
-        checklist={checklist}
-        automatic={automatic}
-        onDecided={onDecided}
-      />
-    );
-  return checklist.latest ? <RecordedChecklist latest={checklist.latest} /> : null;
+  const [open, setOpen] = useState(false);
+  const checklist = state.status === "loaded" ? state.data : null;
+  const deciding = view.can_decide && Boolean(checklist?.can_answer);
+  const latest = deciding ? null : (checklist?.latest ?? null);
+  if (checklist && !deciding && !latest && decisions.length === 0) return null;
+  // One section whatever it holds, so it stays in place while the checklist loads.
+  return (
+    <ChecklistSection
+      head={latest ? <ShowAnswers open={open} onToggle={() => setOpen(!open)} /> : null}
+    >
+      {state.status === "loading" ? <LoadingState label="Loading the QC checklist" /> : null}
+      {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
+      {deciding && checklist ? (
+        <Decision
+          task={task}
+          view={view}
+          checklist={checklist}
+          automatic={automatic}
+          onDecided={onDecided}
+        />
+      ) : null}
+      {latest ? <RecordedChecklist latest={latest} open={open} /> : null}
+      <Decisions decisions={decisions} />
+    </ChecklistSection>
+  );
 }
 
 export function AudioQcPanel({
@@ -405,65 +445,56 @@ export function AudioQcPanel({
   const automatic = view.results.find((r) => r.automated);
   const listen = automatic?.asset_id && (view.can_decide || view.can_recheck) ? automatic : null;
   const decisions = view.results.filter((r) => !r.automated);
+  // D-158: two sections, each with its own title bar: the audio check (what the machine found,
+  // listening, who checks it), then the QC Executive's checklist and the decisions.
   return (
-    <section className="card stack stack--tight qc-panel" aria-labelledby="qc-title">
-      {/* The title, the automatic check's result, and listening beside them. */}
-      <div className="card__head qc-head">
-        <span className="qc-head__title">
-          <h2 id="qc-title">Audio quality</h2>
-          {automatic ? <Outcome outcome={automatic.outcome} /> : null}
-        </span>
-        {listen?.asset_id || view.can_recheck ? (
-          <div className="actions">
-            {listen?.asset_id ? <Player assetId={listen.asset_id} /> : null}
-            {view.can_recheck ? (
-              <Button
-                variant="secondary"
-                icon="refresh"
-                busy={busy !== null}
-                onClick={() =>
-                  void run(async () => {
-                    const v = await qc.recheckQc(task.id);
-                    replace(v);
-                    if (v.task_status !== task.status) onDecided();
-                  })
-                }
-              >
-                Check the stored file again
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <p className="qc-auto__line">
-        <span className="qc-auto__label">Automatic check</span>
-        {automatic ? `${automatic.comment} · ${when(automatic.created_at)}` : "Not run yet"}
-      </p>
-      {automatic ? <Checks result={automatic} /> : null}
-      <ErrorNotice error={error} />
-      {view.can_assign ? <AssignQc task={task} view={view} onChange={replace} /> : null}
-      {decisions.length > 0 || view.can_decide ? (
-        <Checklist task={task} view={view} automatic={automatic} onDecided={onDecided} />
-      ) : null}
-      {decisions.length > 0 ? (
-        <div>
-          <h3>Decisions</h3>
-          <ol className="list timeline">
-            {decisions.map((d) => (
-              <li key={d.id}>
-                <span className="muted">
-                  {when(d.created_at)} · {d.reviewer_name ?? "Platform"}
-                </span>
-                <div>
-                  <Outcome outcome={d.outcome} />
-                  {d.reason_code ? ` ${labelFor(REASON_LABELS, d.reason_code)}` : ""}
-                  {d.comment ? ` · ${d.comment}` : ""}
-                </div>
-              </li>
-            ))}
-          </ol>
+    <>
+      <section className="card stack stack--tight qc-panel" aria-labelledby="qc-title">
+        {/* The title, the automatic check's result, and listening beside them. */}
+        <div className="card__head qc-head">
+          <span className="qc-head__title">
+            <h2 id="qc-title">Audio quality</h2>
+            {automatic ? <Outcome outcome={automatic.outcome} /> : null}
+          </span>
+          {listen?.asset_id || view.can_recheck ? (
+            <div className="actions">
+              {listen?.asset_id ? <Player assetId={listen.asset_id} /> : null}
+              {view.can_recheck ? (
+                <Button
+                  variant="secondary"
+                  icon="refresh"
+                  busy={busy !== null}
+                  onClick={() =>
+                    void run(async () => {
+                      const v = await qc.recheckQc(task.id);
+                      replace(v);
+                      if (v.task_status !== task.status) onDecided();
+                    })
+                  }
+                >
+                  Check the stored file again
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
+        <p className="qc-auto__line">
+          <span className="qc-auto__label">Automatic check</span>
+          {automatic ? `${automatic.comment} · ${when(automatic.created_at)}` : "Not run yet"}
+        </p>
+        {automatic ? <Checks result={automatic} /> : null}
+        <ErrorNotice error={error} />
+        {view.can_assign ? <AssignQc task={task} view={view} onChange={replace} /> : null}
+      </section>
+      {decisions.length > 0 || view.can_decide ? (
+        <Checklist
+          task={task}
+          view={view}
+          automatic={automatic}
+          decisions={decisions}
+          onDecided={onDecided}
+        />
       ) : null}
-    </section>
+    </>
   );
 }

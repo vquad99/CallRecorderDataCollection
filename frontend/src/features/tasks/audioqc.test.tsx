@@ -389,6 +389,25 @@ describe("the QC checklist (D-146)", () => {
     expect(screen.getByText("Answered 1 / 3")).toBeInTheDocument();
   });
 
+  it("gives the checklist and the decision a section of their own, the decision first (D-158)", async () => {
+    open(view({ can_decide: true }));
+    renderAt("/tasks/t1");
+    const card = await screen.findByRole("region", { name: "QC checklist" }, { timeout: 5000 });
+    const decision = await within(card).findByRole("region", { name: "Your decision" });
+    expect(within(decision).getByRole("button", { name: "Pass" })).toBeDisabled();
+    // Under the title bar, before the questions: it stays in view while they scroll.
+    const speakers = within(card).getByRole("table", { name: "Questions about each speaker" });
+    expect(
+      decision.compareDocumentPosition(speakers) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Each part under its own heading; the audio check holds no question and no decision.
+    for (const name of ["The conversation", "Each speaker", "Consent"])
+      expect(within(card).getByRole("heading", { name })).toBeInTheDocument();
+    const audio = screen.getByRole("region", { name: "Audio quality" });
+    expect(within(audio).queryByRole("radio")).toBeNull();
+    expect(within(audio).queryByRole("button", { name: "Pass" })).toBeNull();
+  });
+
   it("checks both signed forms where the project takes them, and sends a wrong one back", async () => {
     const uploads = {
       ...TASK,
@@ -507,11 +526,15 @@ describe("the QC checklist (D-146)", () => {
       ],
     });
     renderAt("/tasks/t1");
-    const card = await screen.findByRole("region", { name: "Audio quality" }, { timeout: 5000 });
-    expect(await within(card).findByRole("heading", { name: "QC checklist" })).toBeInTheDocument();
+    // D-158: the checklist is a section of its own after the audio check, the decisions in it.
+    const card = await screen.findByRole("region", { name: "QC checklist" }, { timeout: 5000 });
     expect(
-      within(card).getByText(/Failed · answered by Quinn QC · 20 Nov 2026/),
+      await within(card).findByText(/Failed · answered by Quinn QC · 20 Nov 2026/),
     ).toBeInTheDocument();
+    const audio = screen.getByRole("region", { name: "Audio quality" });
+    expect(within(audio).queryByRole("heading", { name: "QC checklist" })).toBeNull();
+    expect(within(audio).queryByRole("heading", { name: "Decisions" })).toBeNull();
+    expect(within(card).getByRole("heading", { name: "Decisions" })).toBeInTheDocument();
     expect(within(card).getByText("1 answer fails the recording.")).toBeInTheDocument();
     expect(within(card).queryByRole("radio")).toBeNull();
     await userEvent.click(within(card).getByRole("button", { name: "Show every answer" }));

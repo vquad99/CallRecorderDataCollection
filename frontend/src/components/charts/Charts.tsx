@@ -1,11 +1,12 @@
 // Figures and charts shared by the dashboard, the Phone calls page and a project's Progress tab
 // (D-151, D-154): a plain section with its heading, the key figures as one line, bars per day, a
-// whole in parts as a table with a bar in each row, a bar to a target for table cells, a light bar
-// behind a number, and tables with row sections. SVG and CSS only. Every chart has its numbers as
+// whole in parts as a table with a bar in each row, a bar to a target for table cells, a bar
+// beside a number, and tables with row sections. SVG and CSS only. Every chart has its numbers as
 // text too: the day chart has "Show as a table", and the bars in table cells repeat a number in
 // the same row.
 import {
   Children,
+  Fragment,
   useId,
   useLayoutEffect,
   useRef,
@@ -19,8 +20,9 @@ import { DataTable } from "../DataTable";
 import { IconTile, type IconName, type Tone } from "../Icon";
 import "./charts.css";
 
-/** A section of a dashboard (D-154): its heading, an optional link or note on its right, and its
- * table or chart under it; no box. `icon` is accepted from older callers and not drawn. */
+/** A section of a dashboard (D-156): a framed panel, its title on a bar with an optional link or
+ * note on its right, and its table or chart under it. `icon` is accepted from older callers and
+ * not drawn. */
 export function Panel({
   title,
   action,
@@ -45,12 +47,21 @@ export function Panel({
   );
 }
 
-/** The key figures as one line (D-154): each a label over its value, with an optional "of" and a
- * short note under it, thin lines between them; two columns on a phone. */
+/** Shown for a cell with nothing in it (D-158): a dash, never a blank or a dot. */
+const orDash = (v: ReactNode): ReactNode =>
+  v === null || v === undefined || v === false || v === "" ? "-" : v;
+
+/** The key figures as one line in a framed section of their own (D-154, D-158): each a label over
+ * its value, with an optional "of" and a short note under it, thin lines between them, the values
+ * on one line; two columns on a phone. */
 export function FigureLine({ label, children }: { label: string; children: ReactNode }) {
+  // How many there are, so a narrower screen gets even rows (charts.css).
+  const n = Children.toArray(children).length;
   return (
     <div className="figs" role="group" aria-label={label}>
-      <dl className="figline">{children}</dl>
+      <dl className="figline" style={{ "--n": n } as CSSProperties}>
+        {children}
+      </dl>
     </div>
   );
 }
@@ -92,6 +103,18 @@ export function ShareBar({ percent }: { percent: number }) {
   );
 }
 
+/** What a part is made of, "Audio QC 48 · Admin review 12", with a line break only between its
+ * pieces, never inside one (D-158). */
+function Pieces({ detail }: { detail: ReactNode }) {
+  if (typeof detail !== "string") return detail;
+  return detail.split(" · ").map((piece, i) => (
+    <Fragment key={piece}>
+      {i > 0 ? " · " : null}
+      <span className="nowrap">{piece}</span>
+    </Fragment>
+  ));
+}
+
 /** A whole in parts as a plain table (D-154): a row per part with its count and its share as a
  * bar, a second line under a part's name for what it is made of, and the total at the foot. */
 export function ShareTable({
@@ -129,7 +152,11 @@ export function ShareTable({
           <tr key={p.key}>
             <th scope="row">
               {p.label}
-              {p.detail ? <span className="share-table__detail">{p.detail}</span> : null}
+              {p.detail ? (
+                <span className="share-table__detail">
+                  <Pieces detail={p.detail} />
+                </span>
+              ) : null}
             </th>
             <td className="num">{p.n}</td>
             <td className="num">
@@ -485,7 +512,7 @@ export function DayChart<T extends { day: string }>({
               <tr key={d.day}>
                 <td>{dayLabel(d.day, long)}</td>
                 {columns.map((c) => (
-                  <td key={c.label}>{c.value(d)}</td>
+                  <td key={c.label}>{orDash(c.value(d))}</td>
                 ))}
               </tr>
             ))}
@@ -638,7 +665,8 @@ export function TargetBar({
   );
 }
 
-/** A number with a light bar behind it, as long as its share of the column's largest. */
+/** A number with a bar beside it (D-158), as long as its share of the column's largest; the
+ * number is written after the bar, never over it. */
 export function CellBar({
   value,
   max,
@@ -650,8 +678,11 @@ export function CellBar({
 }) {
   const width = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <span className="cellbar" style={{ "--w": `${width}%` } as CSSProperties}>
-      {children}
+    <span className="cellbar">
+      <span className="cellbar__bar" aria-hidden="true">
+        <span style={{ width: `${width}%` }} />
+      </span>
+      <span className="cellbar__n">{children}</span>
     </span>
   );
 }
@@ -670,7 +701,7 @@ export function KeyTable({
         {rows.map((r, i) => (
           <tr key={r.key ?? (typeof r.label === "string" ? r.label : i)}>
             <th scope="row">{r.label}</th>
-            <td className="num">{r.value}</td>
+            <td className="num">{orDash(r.value)}</td>
           </tr>
         ))}
       </tbody>
@@ -769,7 +800,7 @@ export function MatrixTable<R>({
                   <th scope="row">{rowLabel(r)}</th>
                   {columns.map((c) => (
                     <td key={c.key} className={c.num ? "num" : undefined}>
-                      {c.cell(r)}
+                      {orDash(c.cell(r))}
                     </td>
                   ))}
                 </tr>

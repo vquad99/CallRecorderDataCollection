@@ -1,6 +1,8 @@
 // Capacity settings, editable without a deployment (CAP-002). Only the number of staff accounts is
 // a limit the platform keeps (D-059); the other figures are for planning and limit nothing.
-import { useState, type FormEvent } from "react";
+// D-158: the page is "Settings"; the capacity targets are one section with its Save on the title
+// bar, the account limit and the planning figures its two parts (they are saved together).
+import { useId, useState, type FormEvent } from "react";
 
 import { getSettings, updateSettings, type Setting } from "../../api/admin";
 import { ApiError } from "../../api/client";
@@ -8,8 +10,10 @@ import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
+import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
+import "./settings.css";
 
 const LIMIT = "capacity.staff_accounts";
 /** Names in the order the page shows them. */
@@ -24,13 +28,16 @@ const LABELS: Record<string, string> = {
 const ORDER = Object.keys(LABELS);
 const label = (s: Setting) => LABELS[s.key] ?? s.key;
 const place = (s: Setting) => (ORDER.includes(s.key) ? ORDER.indexOf(s.key) : ORDER.length);
-/** Figures as the rest of the app writes them: "1,00,000". */
-const count = (n: number) => n.toLocaleString("en-IN");
+/** Figures grouped in thousands, as international readers write them: "1,000,000" (D-158). */
+const count = (n: number) => n.toLocaleString("en-US");
 const allowed = (s: Setting) => `Allowed: ${count(s.min_value)} to ${count(s.max_value)}.`;
 /** A setting with one possible value is shown, never edited or sent. */
 const fixed = (s: Setting) => s.min_value === s.max_value;
 
 function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting[]) => void }) {
+  const titleId = useId();
+  const limitId = useId();
+  const planningId = useId();
   const sorted = [...settings].sort((a, b) => place(a) - place(b));
   const editable = sorted.filter((s) => !fixed(s));
   const limit = editable.filter((s) => s.key === LIMIT);
@@ -79,35 +86,44 @@ function Form({ settings, onSaved }: { settings: Setting[]; onSaved: (s: Setting
   );
 
   return (
-    <form onSubmit={submit} noValidate className="stack">
-      {limit.length > 0 ? (
-        <fieldset className="card">
-          <legend>
-            Account limit <span className="badge badge--warning">Enforced</span>
-          </legend>
-          <div className="form-grid">
-            {limit.map((s) =>
-              field(s, `New or re-enabled accounts above this number are refused. ${allowed(s)}`),
-            )}
-          </div>
+    <form onSubmit={submit} noValidate>
+      <section className="card capacity" aria-labelledby={titleId}>
+        <div className="card__head">
+          <h2 id={titleId}>Capacity targets</h2>
+          <Button type="submit" icon="check" busy={busy !== null}>
+            Save targets
+          </Button>
+        </div>
+        <ErrorNotice error={error} />
+        <SuccessNotice message={message} />
+        {limit.length > 0 ? (
+          <fieldset className="plain-fieldset" aria-labelledby={limitId}>
+            <div className="subhead">
+              <h3 id={limitId}>
+                Account limit <StatusBadge tone="warning" label="Enforced" />
+              </h3>
+            </div>
+            <div className="form-grid">
+              {limit.map((s) =>
+                field(s, `New or re-enabled accounts above this number are refused. ${allowed(s)}`),
+              )}
+            </div>
+          </fieldset>
+        ) : null}
+        <fieldset className="plain-fieldset" aria-labelledby={planningId}>
+          <h3 className="subhead" id={planningId}>
+            Planning figures
+          </h3>
+          <p className="muted">For reference only; nothing in the platform is limited by these.</p>
+          <div className="form-grid">{planning.map((s) => field(s, allowed(s)))}</div>
+          {sorted.filter(fixed).map((s) => (
+            <p key={s.key}>
+              {label(s)}: {s.value === null ? "-" : count(s.value)}{" "}
+              <span className="muted">(fixed)</span>
+            </p>
+          ))}
         </fieldset>
-      ) : null}
-      <fieldset className="card">
-        <legend>Planning figures</legend>
-        <p className="muted">For reference only; nothing in the platform is limited by these.</p>
-        <div className="form-grid">{planning.map((s) => field(s, allowed(s)))}</div>
-        {sorted.filter(fixed).map((s) => (
-          <p key={s.key}>
-            {label(s)}: {s.value === null ? "-" : count(s.value)}{" "}
-            <span className="muted">(fixed)</span>
-          </p>
-        ))}
-      </fieldset>
-      <ErrorNotice error={error} />
-      <SuccessNotice message={message} />
-      <Button type="submit" busy={busy !== null}>
-        Save targets
-      </Button>
+      </section>
     </form>
   );
 }
@@ -116,12 +132,14 @@ export function SettingsPage() {
   const { state, reload, replace } = useResource(getSettings, []);
   return (
     <section aria-labelledby="settings-title" className="stack">
-      <div className="page-header__text">
-        <h1 id="settings-title">Capacity targets</h1>
-        <p className="page-header__lead">
-          The account limit and the daily figures the platform is planned for. Changes apply at
-          once.
-        </p>
+      <div className="page-header">
+        <div className="page-header__text">
+          <h1 id="settings-title">Settings</h1>
+          <p className="page-header__lead">
+            The account limit and the daily figures the platform is planned for. Changes apply at
+            once.
+          </p>
+        </div>
       </div>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
