@@ -703,7 +703,7 @@ describe("project detail", () => {
       }),
     );
     renderAt("/projects/p1/retention");
-    const form = await screen.findByRole("form", { name: "Days to keep each kind of file" });
+    const form = await screen.findByRole("form", { name: "Days to keep files" });
     expect(within(form).getAllByRole("spinbutton")).toHaveLength(4);
     for (const kind of [
       "Browser original captures",
@@ -1147,8 +1147,9 @@ describe("one look on every page (D-158)", () => {
       "Phone callSave audio rules",
     );
     await userEvent.click(within(sections()).getByRole("link", { name: "Retention" }));
+    // A short title, so the bar stays one row on a phone (D-159).
     expect(barOf(await screen.findByRole("button", { name: "Save retention" }))).toBe(
-      "Days to keep each kind of fileSave retention",
+      "Days to keep filesSave retention",
     );
   });
 
@@ -1448,5 +1449,13 @@ describe("the project list", () => {
       screen.getByRole("heading", { level: 1, name: "Projects" }).querySelector(".tile"),
     ).toBeNull();
     expect(code.closest("td")).toHaveTextContent(/^PRJ0001$/);
+  });
+
+  it("has New project in the title row's actions, a full row on a phone as on every page (D-159)", async () => {
+    fakeApi(signedInAs(["projects.view", "projects.create"], { "GET /api/v1/projects": pages }));
+    renderAt("/projects");
+    const add = await screen.findByRole("link", { name: "New project" });
+    expect(add.parentElement).toHaveClass("actions");
+    expect(add.parentElement?.parentElement).toHaveClass("page-header");
   });
 });

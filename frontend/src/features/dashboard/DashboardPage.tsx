@@ -13,7 +13,6 @@ import {
   DayChart,
   Figure,
   FigureLine,
-  KeyTable,
   MatrixTable,
   Panel,
   ShareTable,
@@ -149,6 +148,38 @@ function Attention({
             </tr>
           );
         })}
+      </tbody>
+    </DataTable>
+  );
+}
+
+/** The phone calls of the period. A header row as its neighbours have ("Queue | Count",
+ * "Recordings | Count"), so the rows of the sections side by side line up (D-159). */
+function Calls({ calls }: { calls: NonNullable<Dashboard["calls"]> }) {
+  const rows = [
+    { label: "Placed", n: calls.placed },
+    { label: "Recorded", n: calls.recorded },
+    { label: "Could not be placed", n: calls.could_not_be_placed },
+    { label: "Waiting for a person", n: calls.needs_a_person },
+    { label: "Still open", n: calls.open },
+  ];
+  return (
+    <DataTable label="Phone calls">
+      <thead>
+        <tr>
+          <th scope="col">Calls</th>
+          <th scope="col" className="num">
+            Count
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label}>
+            <th scope="row">{r.label}</th>
+            <td className="num">{r.n}</td>
+          </tr>
+        ))}
       </tbody>
     </DataTable>
   );
@@ -374,16 +405,7 @@ function Body({ data }: { data: Dashboard }) {
         ) : null}
         {data.calls && showCalls ? (
           <Panel className={span("calls")} title="Phone calls">
-            <KeyTable
-              label="Phone calls"
-              rows={[
-                { label: "Placed", value: data.calls.placed },
-                { label: "Recorded", value: data.calls.recorded },
-                { label: "Could not be placed", value: data.calls.could_not_be_placed },
-                { label: "Waiting for a person", value: data.calls.needs_a_person },
-                { label: "Still open", value: data.calls.open },
-              ]}
-            />
+            <Calls calls={data.calls} />
             <p className="muted">
               More on the <Link to="/calls">Phone calls</Link> page.
             </p>

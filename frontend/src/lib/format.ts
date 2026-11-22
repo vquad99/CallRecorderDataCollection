@@ -59,6 +59,12 @@ export function duration(seconds: number | null): string {
   return `${(seconds / 3600).toFixed(1)} h`;
 }
 
+/** People's minutes (recorded, approved, payable), one way wherever they are shown (D-159): up to
+ * two decimals, grouped, with the unit: "0.07 min", "25.5 min", "1,234 min". The server's text
+ * ("0.10") is read as the number it is. */
+export const minutes = (value: number | string): string =>
+  `${Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 })} min`;
+
 /** Hours of audio: "12 h", "2.5 h", "40 min". */
 export const hours = (h: number): string =>
   h >= 10 ? `${h.toFixed(0)} h` : h >= 1 ? `${h.toFixed(1)} h` : `${Math.round(h * 60)} min`;

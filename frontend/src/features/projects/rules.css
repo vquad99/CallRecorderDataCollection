@@ -14,13 +14,24 @@
   margin-bottom: var(--space-3);
 }
 .rules__note {
-  max-width: 900px;
   margin: 0 0 var(--space-3);
 }
-/* Help sits under its box on every Rules page (D-158), as in a row of fields: after an error,
-   which stays right under the box. The order in the page is unchanged for screen readers. */
-.rules-card__body div.field > .field__hint {
-  order: 1;
+/* One measure on every Rules page (D-159): a section's intro, a part's help, a box's help and a
+   warning all wrap at the width of a form's box (640 px), never a word alone on the last line.
+   Help goes under its box by the shared rule (global.css, D-159). */
+.rules-card__body :is(.rules__note, .field__hint, .rules__warning) {
+  max-width: 640px;
+  text-wrap: pretty;
+}
+/* A box's or a choice's help is a line or a few under it: its lines are evened out, so its last
+   line is never a word or two left alone ("personal page.", D-159). The intros keep the full
+   measure. */
+.rules-card__body .field__hint:not(.rules__note) {
+  text-wrap: balance;
+}
+/* A choice that takes two lines on a phone keeps no word alone on its last line either. */
+.rules-card__body .checkbox {
+  text-wrap: pretty;
 }
 /* A part of a section (D-158): its error just above its buttons. */
 .rules-part > .field__error {
@@ -28,7 +39,6 @@
 }
 /* What a change does before it is saved (switching consent back to online, PROJ-02). */
 .rules__warning {
-  max-width: 900px;
   margin-top: var(--space-2);
   border-color: color-mix(in srgb, var(--warn) 35%, transparent);
   background: var(--warn-soft);
@@ -243,6 +253,12 @@
   flex: 999 1 320px;
   max-width: none;
 }
+/* On a phone the key's box fills the line like the question's under it (D-159), one right edge. */
+@media (max-width: 640px) {
+  .rules-card .qc-add > .field {
+    max-width: none;
+  }
+}
 /* The moderator's reminders (D-147): the four boxes two by two on a wide screen. Two boxes side by
    side are as tall as the longer list, and each shows all its lines (D-158). */
 .rules-reminders {
@@ -349,6 +365,15 @@
 @media (max-width: 640px) {
   .target-grid {
     --target-x: 40px;
+  }
+  /* On a phone the boxes fill the line (D-159), one right edge with the rows and buttons: the
+     three targets one under the other, a pair of percents half each. 280 px stays for a narrow
+     frame on a wider screen. */
+  .target-grid--fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .target-grid--pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .target-table .field__input {
     min-height: 40px;

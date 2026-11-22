@@ -80,7 +80,7 @@ export const PAGES: Record<string, PageSpec> = {
   "/projects/:projectId/languages": { url: "/projects/p1/languages", shows: /^Add language$/ },
   "/projects/:projectId/retention": {
     url: "/projects/p1/retention",
-    shows: /Days to keep each kind of file/,
+    shows: /Days to keep files/,
   },
   "/projects/:projectId/export": {
     url: "/projects/p1/export",

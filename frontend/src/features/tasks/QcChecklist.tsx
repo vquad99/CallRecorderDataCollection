@@ -553,107 +553,101 @@ export function RecordedChecklist({ latest, open }: { latest: qc.RecordedAnswers
         </p>
       ) : null}
       {open ? (
-        // D-158: each table runs edge to edge in the section, never a box inside it.
+        // D-158: each table runs edge to edge in the section, never a box inside it. D-159: the
+        // tables straight in the grid, so the last one leaves its bottom line to the Decisions
+        // heading under it (one line between the parts, not two).
         <div className="qc-matrix qc-matrix--answers">
           <div className="qc-matrix__grid">
             {conversation.length > 0 ? (
-              <div className="qc-block">
-                <DataTable bleed className="matrix qc-table" label="Answers about the conversation">
-                  <thead>
-                    <tr>
-                      <th scope="col" className="mx-n">
-                        <span className="sr-only">Number</span>
+              <DataTable bleed className="matrix qc-table" label="Answers about the conversation">
+                <thead>
+                  <tr>
+                    <th scope="col" className="mx-n">
+                      <span className="sr-only">Number</span>
+                    </th>
+                    <th scope="col">The conversation</th>
+                    <th scope="col" className="mx-col">
+                      Answer
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conversation.map((item, i) => {
+                    const failing = fails.has(`:${item.key}`);
+                    return (
+                      <tr key={item.key}>
+                        <td className="mx-n">{i + 1}</td>
+                        <th scope="row">{item.question}</th>
+                        <td className={`mx-cell${failing ? " is-fail" : ""}`}>
+                          <Said
+                            answer={latest.conversation[item.key]}
+                            fails={failing}
+                            observation={item.fails_on === null}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </DataTable>
+            ) : null}
+            {a && b ? (
+              <DataTable bleed className="matrix qc-table" label="Answers about each speaker">
+                <thead>
+                  <tr>
+                    <th scope="col" className="mx-n">
+                      <span className="sr-only">Number</span>
+                    </th>
+                    <th scope="col">Each speaker</th>
+                    {[a, b].map((p) => (
+                      <th key={p.side} scope="col" className={`mx-${p.side.toLowerCase()} mx-col`}>
+                        <span className="mx-who">
+                          <span className="mx-who__side">Participant {p.side}</span>{" "}
+                          <span className="mx-who__meta">
+                            <span className="code-tag">{p.participant_code}</span>
+                          </span>
+                        </span>
                       </th>
-                      <th scope="col">The conversation</th>
-                      <th scope="col" className="mx-col">
-                        Answer
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {conversation.map((item, i) => {
-                      const failing = fails.has(`:${item.key}`);
-                      return (
-                        <tr key={item.key}>
-                          <td className="mx-n">{i + 1}</td>
-                          <th scope="row">{item.question}</th>
-                          <td className={`mx-cell${failing ? " is-fail" : ""}`}>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {speaker.map((item, i) => (
+                    <tr key={item.key}>
+                      <td className="mx-n">{i + 1}</td>
+                      <th scope="row">{item.question}</th>
+                      {[a, b].map((p) => {
+                        const failing = fails.has(`${p.side}:${item.key}`);
+                        return (
+                          <td key={p.side} className={`mx-cell${failing ? " is-fail" : ""}`}>
                             <Said
-                              answer={latest.conversation[item.key]}
+                              answer={p.answers[item.key]}
                               fails={failing}
                               observation={item.fails_on === null}
                             />
                           </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </DataTable>
-              </div>
-            ) : null}
-            {a && b ? (
-              <div className="qc-block">
-                <DataTable bleed className="matrix qc-table" label="Answers about each speaker">
-                  <thead>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {latest.consent_check ? (
                     <tr>
-                      <th scope="col" className="mx-n">
-                        <span className="sr-only">Number</span>
+                      <td className="mx-n" />
+                      <th scope="row">
+                        Consent form checked: signed, the right person, this project
                       </th>
-                      <th scope="col">Each speaker</th>
                       {[a, b].map((p) => (
-                        <th
+                        <td
                           key={p.side}
-                          scope="col"
-                          className={`mx-${p.side.toLowerCase()} mx-col`}
+                          className={`mx-cell${p.consent === "no" ? " is-fail" : ""}`}
                         >
-                          <span className="mx-who">
-                            <span className="mx-who__side">Participant {p.side}</span>{" "}
-                            <span className="mx-who__meta">
-                              <span className="code-tag">{p.participant_code}</span>
-                            </span>
-                          </span>
-                        </th>
+                          <Said answer={p.consent} fails={p.consent === "no"} />
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
-                    {speaker.map((item, i) => (
-                      <tr key={item.key}>
-                        <td className="mx-n">{i + 1}</td>
-                        <th scope="row">{item.question}</th>
-                        {[a, b].map((p) => {
-                          const failing = fails.has(`${p.side}:${item.key}`);
-                          return (
-                            <td key={p.side} className={`mx-cell${failing ? " is-fail" : ""}`}>
-                              <Said
-                                answer={p.answers[item.key]}
-                                fails={failing}
-                                observation={item.fails_on === null}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                    {latest.consent_check ? (
-                      <tr>
-                        <td className="mx-n" />
-                        <th scope="row">
-                          Consent form checked: signed, the right person, this project
-                        </th>
-                        {[a, b].map((p) => (
-                          <td
-                            key={p.side}
-                            className={`mx-cell${p.consent === "no" ? " is-fail" : ""}`}
-                          >
-                            <Said answer={p.consent} fails={p.consent === "no"} />
-                          </td>
-                        ))}
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </DataTable>
-              </div>
+                  ) : null}
+                </tbody>
+              </DataTable>
             ) : null}
           </div>
         </div>

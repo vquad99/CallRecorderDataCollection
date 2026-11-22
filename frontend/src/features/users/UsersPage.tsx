@@ -69,11 +69,8 @@ export function UsersPage() {
     <section aria-labelledby="users-title" className="stack">
       <div className="page-header">
         <h1 id="users-title">Users</h1>
+        {/* The main button last, as on every other page (D-159). */}
         <div className="actions">
-          <Link className="button button--primary" to="/admin/users/new">
-            <Icon name="userPlus" size={16} />
-            Add user
-          </Link>
           <Link className="button button--secondary" to="/admin/users/import">
             <Icon name="fileUp" size={16} />
             Import CSV
@@ -88,6 +85,10 @@ export function UsersPage() {
           >
             Export CSV
           </Button>
+          <Link className="button button--primary" to="/admin/users/new">
+            <Icon name="userPlus" size={16} />
+            Add user
+          </Link>
         </div>
       </div>
       <ErrorNotice error={error} />

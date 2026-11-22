@@ -211,7 +211,10 @@ function ConversationsTable({ rows }: { rows: ConversationNeed[] }) {
     <DataTable label="Conversations still to make" bleed>
       <thead>
         <tr>
-          <th scope="col">Conversations</th>
+          {/* The sub-heading says it: for screen readers only, as on the dashboard (D-159). */}
+          <th scope="col">
+            <span className="sr-only">Conversations</span>
+          </th>
           <th scope="col" className="num">
             Target
           </th>
@@ -275,8 +278,9 @@ function StillNeededPanel({ needed }: { needed: StillNeeded }) {
   ];
   const capacity = capacityText(needed.capacity);
   const id = useId();
+  // No note on the bar: the first line under it starts "To reach the targets" (D-159).
   return (
-    <Panel title="Still needed" action="To reach the targets">
+    <Panel title="Still needed">
       <p className="needs-lead">
         {parts.length > 0 ? (
           <>
@@ -616,38 +620,33 @@ function Body({ data, asOf }: { data: ProjectProgress; asOf: string }) {
 
       <StillNeededPanel needed={data.still_needed} />
 
-      <Panel
-        title="Balance against the targets"
-        action={
-          <span className="actions">
-            Variance: actual minus target
-            {districts.more}
-          </span>
-        }
-      >
+      {/* What the variance is, as the first line under the bar, so the bar keeps to one row on a
+          phone; the districts' Show all stays on the bar (D-159). */}
+      <Panel title="Balance against the targets" action={districts.more}>
+        <p className="muted">Variance: actual minus target.</p>
         <BalanceMatrix data={data} districts={districts.shown} />
       </Panel>
 
-      <div className="dash-grid">
-        <Panel className="g-6" title="Conversations by status">
-          <ShareTable
-            label="Conversations by status"
-            head="Stage"
-            countHead="Tasks"
-            parts={stageParts(talks.by_status)}
-            emptyText="No conversations yet."
-          />
-        </Panel>
-        <Panel className="g-6" title="Completed">
-          <CompletedTable done={done} />
-          {done.not_measured > 0 ? (
-            <p className="muted">
-              {done.not_measured} approved conversation{done.not_measured === 1 ? " is" : "s are"}{" "}
-              not measured yet: each counts as none until it is (shortly after it was made).
-            </p>
-          ) : null}
-        </Panel>
-      </div>
+      {/* Each a full row (D-159): side by side, the shorter was stretched to the other's height,
+          white space under its table, and its row names broke over two lines. */}
+      <Panel title="Conversations by status">
+        <ShareTable
+          label="Conversations by status"
+          head="Stage"
+          countHead="Tasks"
+          parts={stageParts(talks.by_status)}
+          emptyText="No conversations yet."
+        />
+      </Panel>
+      <Panel title="Completed">
+        <CompletedTable done={done} />
+        {done.not_measured > 0 ? (
+          <p className="muted">
+            {done.not_measured} approved conversation{done.not_measured === 1 ? " is" : "s are"} not
+            measured yet: each counts as none until it is (shortly after it was made).
+          </p>
+        ) : null}
+      </Panel>
 
       <details className="dash-notes" ref={notes}>
         <summary>How these are counted</summary>

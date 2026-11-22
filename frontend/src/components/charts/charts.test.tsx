@@ -11,7 +11,8 @@ import {
   CellBar,
   DayChart,
   Donut,
-  KeyTable,
+  Figure,
+  FigureLine,
   Kpi,
   KpiStrip,
   MatrixTable,
@@ -172,6 +173,31 @@ describe("dashboard figures", () => {
       within(figures).getByRole("progressbar", { name: "Today of the daily target" }),
     ).toHaveAttribute("aria-valuenow", "100");
   });
+
+  it("keeps each piece of a key figure's note on one line, breaking only between pieces (D-159)", () => {
+    render(
+      <FigureLine label="Call figures">
+        <Figure label="Failed or cancelled" value="143" note="64 not placed · 79 cancelled" />
+        <Figure label="Today" value="3.6 h" note="73% of the daily target (5.0 h)" />
+      </FigureLine>,
+    );
+    const figures = screen.getByRole("group", { name: "Call figures" });
+    const note = (label: string) =>
+      within(figures).getByText(label).closest(".figline__item")?.querySelector(".figline__note");
+    expect(note("Failed or cancelled")).toHaveTextContent("64 not placed · 79 cancelled");
+    expect(
+      Array.from(note("Failed or cancelled")?.querySelectorAll(".nowrap") ?? []).map(
+        (s) => s.textContent,
+      ),
+    ).toEqual(["64 not placed", "79 cancelled"]);
+    // The dot keeps to the piece before it, so a line never starts with it.
+    expect(note("Failed or cancelled")?.textContent).toBe(
+      `64 not placed${String.fromCharCode(0xa0)}· 79 cancelled`,
+    );
+    // A note of one piece wraps as any text, so a long one stays inside its column.
+    expect(note("Today")).toHaveTextContent("73% of the daily target (5.0 h)");
+    expect(note("Today")?.querySelector(".nowrap")).toBeNull();
+  });
 });
 
 describe("tables in sections (D-158)", () => {
@@ -208,32 +234,29 @@ describe("tables in sections (D-158)", () => {
 
   it("shows a dash in a cell with nothing in it", () => {
     render(
-      <>
-        <KeyTable
-          label="Phone calls"
-          rows={[
-            { label: "Placed", value: 3 },
-            { label: "Last call", value: null },
-          ]}
-        />
-        <MatrixTable<{ key: string; n: number | null }>
-          label="Reasons"
-          head="Reason"
-          columns={[{ key: "n", label: "Count", num: true, cell: (r) => r.n }]}
-          sections={[{ key: "a", title: "Cancelled", rows: [{ key: "No answer", n: null }] }]}
-          rowKey={(r) => r.key}
-          rowLabel={(r) => r.key}
-        />
-      </>,
-    );
-    expect(screen.getByRole("rowheader", { name: "Last call" }).closest("tr")).toHaveTextContent(
-      "Last call-",
-    );
-    expect(screen.getByRole("rowheader", { name: "Placed" }).closest("tr")).toHaveTextContent(
-      "Placed3",
+      <MatrixTable<{ key: string; n: number | null }>
+        label="Reasons"
+        head="Reason"
+        columns={[{ key: "n", label: "Count", num: true, cell: (r) => r.n }]}
+        sections={[
+          {
+            key: "a",
+            title: "Cancelled",
+            rows: [
+              { key: "No answer", n: null },
+              { key: "Busy", n: 3 },
+            ],
+          },
+        ]}
+        rowKey={(r) => r.key}
+        rowLabel={(r) => r.key}
+      />,
     );
     expect(screen.getByRole("rowheader", { name: "No answer" }).closest("tr")).toHaveTextContent(
       "No answer-",
+    );
+    expect(screen.getByRole("rowheader", { name: "Busy" }).closest("tr")).toHaveTextContent(
+      "Busy3",
     );
   });
 

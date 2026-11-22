@@ -71,11 +71,14 @@ export function ProjectsPage() {
     <section aria-labelledby="projects-title" className="stack">
       <div className="page-header">
         <h1 id="projects-title">Projects</h1>
+        {/* In the page's actions row, so on a phone it is a full row as on every page (D-159). */}
         {can("projects.create") ? (
-          <Link className="button button--primary" to="/projects/new">
-            <Icon name="plus" size={16} weight="bold" />
-            New project
-          </Link>
+          <div className="actions">
+            <Link className="button button--primary" to="/projects/new">
+              <Icon name="plus" size={16} weight="bold" />
+              New project
+            </Link>
+          </div>
         ) : null}
       </div>
       <SuccessNotice message={created} />

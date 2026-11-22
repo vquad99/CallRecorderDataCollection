@@ -5,6 +5,9 @@ import { useState, useSyncExternalStore } from "react";
 import { Button } from "../components/form/Button";
 import { SuccessNotice } from "../components/Notice";
 import { installOffer, isInstalled, onInstallOffer, clearInstallOffer } from "./install";
+// Loaded with the card too: the service worker's import of it runs only in the built application,
+// after the page has loaded (D-159).
+import "./pwa.css";
 
 export function InstallCard() {
   const offer = useSyncExternalStore(onInstallOffer, installOffer);
@@ -53,7 +56,8 @@ export function InstallCard() {
       ) : (
         <>
           <p>Your browser has not offered to install it on this page. You can do it yourself:</p>
-          <ul className="list">
+          {/* Its lines run edge to edge, as a table's in a section (D-159). */}
+          <ul className="list bleed">
             <li>
               <strong>Chrome or Edge on a computer:</strong> the install icon at the right end of
               the address bar, or the browser&apos;s menu, then &quot;Install Conversation

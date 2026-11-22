@@ -128,11 +128,60 @@ describe("participants tab", () => {
       }),
     );
     renderAt("/projects/p1/participants");
-    expect(await screen.findByRole("columnheader", { name: /Payable min/ })).toBeInTheDocument();
+    // One-word headings and the unit in each value, so the table fits a laptop (D-159).
+    expect(await screen.findByRole("columnheader", { name: "Payable" })).toHaveAttribute(
+      "title",
+      "Half of approved: two participants share each conversation",
+    );
+    expect(
+      screen
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent)
+        .slice(4, 7),
+    ).toEqual(["Recorded", "Approved", "Payable"]);
     const row = screen.getByRole("row", { name: /P000001/ });
-    expect(row).toHaveTextContent("9");
-    expect(row).toHaveTextContent("5");
-    expect(row).toHaveTextContent("2.5");
+    const cells = within(row)
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells.slice(4, 7)).toEqual(["9 min", "5 min", "2.5 min"]);
+    // A code in one type everywhere, as on the Participants page (D-159).
+    expect(within(row).getByRole("cell", { name: "P000001" })).toHaveClass("mono");
+  });
+
+  it("marks minutes the server did not send with a dash, without a unit (D-158)", async () => {
+    const some = {
+      conversations: 1,
+      recorded_minutes: 0.07,
+      approved_conversations: 0,
+      approved_minutes: 0,
+      payable_minutes: 0,
+    };
+    fakeApi(
+      signedInAs(["projects.view", "projects.manage", "participants.view"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+        "GET /api/v1/projects/p1/participants": () => [
+          200,
+          {
+            items: [
+              { ...asha, minutes: some },
+              { ...hidden, minutes: null },
+            ],
+            total: 2,
+            page: 1,
+            page_size: 25,
+          },
+        ],
+      }),
+    );
+    renderAt("/projects/p1/participants");
+    const row = (code: string) =>
+      within(screen.getByRole("row", { name: new RegExp(code) }))
+        .getAllByRole("cell")
+        .map((c) => c.textContent)
+        .slice(4, 7);
+    expect(await screen.findByRole("columnheader", { name: "Recorded" })).toBeInTheDocument();
+    expect(row("P000001")).toEqual(["0.07 min", "0 min", "0 min"]);
+    expect(row("P000002")).toEqual(["-", "-", "-"]);
   });
 
   it("has its buttons on the title row and the search in a filter bar, as the Participants page (D-158)", async () => {
@@ -395,7 +444,16 @@ describe("participants tab", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Add existing participant" }));
     expect(await screen.findByText("Quinn")).toBeInTheDocument();
     expect(screen.getByText("Hindi (hi) · Awadhi")).toBeInTheDocument();
-    expect(screen.getByText("1 person")).toBeInTheDocument();
+    // How many are on offer beside the search box; the title bar holds the title and Add (N)
+    // only, so it stays one row on a phone (D-159).
+    const section = screen.getByRole("region", { name: "Add an existing participant" });
+    const search = within(section).getByRole("searchbox", { name: "Search your other projects" });
+    expect(search.closest(".pick__find")).toContainElement(within(section).getByText("1 person"));
+    expect(section.querySelector(".card__head")?.textContent).toBe(
+      "Add an existing participantAdd (0)",
+    );
+    // A code in one type everywhere, as on the Participants page (D-159).
+    expect(within(section).getByRole("cell", { name: "P000009" })).toHaveClass("mono");
     await userEvent.click(screen.getByRole("button", { name: "Add P000009" }));
     expect(
       await screen.findByText("P000009 added to this project. Consent form emailed."),
@@ -434,10 +492,10 @@ describe("participants tab", () => {
     renderAt("/projects/p1/participants");
     await userEvent.click(await screen.findByRole("button", { name: "Add existing participant" }));
     expect(await screen.findByText("Person 1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add selected (0)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add (0)" })).toBeDisabled();
     await userEvent.click(screen.getByLabelText("Select P000021"));
     await userEvent.click(screen.getByLabelText("Select P000023"));
-    await userEvent.click(screen.getByRole("button", { name: "Add selected (2)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add (2)" }));
     expect(
       await screen.findByText("2 participants added to this project. Consent form emailed."),
     ).toBeInTheDocument();
@@ -447,7 +505,7 @@ describe("participants tab", () => {
     ]);
     // Select all takes every one shown.
     await userEvent.click(screen.getByLabelText(/^Select all shown/));
-    expect(screen.getByRole("button", { name: "Add selected (3)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add (3)" })).toBeEnabled();
   });
 
   it("edits a participant without sending a masked phone back as the number", async () => {

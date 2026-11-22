@@ -93,6 +93,23 @@
   white-space: normal;
 }
 
+/* Participants › Add an existing participant (D-159): how many people the search offers sits
+   beside its box, level with the text in the box, instead of on the title bar, so the bar stays
+   one row on a phone; under the box when there is no room beside it. */
+.pick__find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  align-items: last baseline;
+  gap: 8px 12px;
+  margin-bottom: var(--space-3);
+}
+.pick__find > .field {
+  flex: 1 1 200px;
+  max-width: 480px;
+  margin: 0;
+}
+
 /* Retention: what the automatic deletion does, then the four kinds two by two (the face-to-face
    pair, then the phone pair); one under the other on a phone. Its Save is on the title bar. */
 .retention__note {

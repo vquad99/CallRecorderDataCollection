@@ -266,7 +266,7 @@ The project's menu:
   code)** at the end of the list and type its code in **Language code** (for example `sw` for
   Swahili, `fil` for Filipino or `en-US`). **Add language** waits until the code is well
   formed. When a project has languages, every participant must match one.
-- **Retention**: **Days to keep each kind of file**, for the four kinds the platform keeps per
+- **Retention**: **Days to keep files**, for the four kinds the platform keeps per
   recording: **Browser original captures** and **Face-to-face 16 kHz WAV** (face to face),
   **Phone system mixed recordings** and **Phone call 16 kHz WAV** (phone calls). Once an hour the
   platform deletes, for good, a file older than its kind's days (counted from when it was
@@ -565,8 +565,9 @@ the person, like the name. QC Executives and Client Viewers do not.
 **Add existing participant** (on a project's **Participants** page): adds someone who is already
 in another of your projects, instead of creating them again. Search by code or name, then click
 **Add**. They keep their code, details and consent history. Only people who speak one of the
-project's languages, and whose age is within its speaker ages, are listed. To add many at once, tick the boxes (or **Select all shown**)
-and click **Add selected**.
+project's languages, and whose age is within its speaker ages, are listed. To add many at once,
+tick the boxes (or **Select all shown**) and click **Add (N)** on the section's title bar (N is how
+many are ticked); how many people are on offer shows beside the search box.
 
 **Native district**: the district the participant was born in (it was called **District**
 before). The dashboard can be filtered by it.
@@ -765,10 +766,11 @@ quality, Device details, Recordings, Phone calls). On the right, staying in view
 - **History**: the comment box first (**Add comment**), then the newest three entries; **Show
   all** lists the rest.
 
-When QC sends a task back for a consent form, the **Participants** table shows **New form
-needed** and a red mark on that file until a new form is uploaded. An upload from a participant's
-details window updates the task at once (**Documents of P000150 updated.**). The progress line of
-a rejected or cancelled task stops at the step where the task ended. A cancelled task keeps its
+When QC sends a task back for a consent form, the **Participants** table shows **New form** in
+the **Consent** row (point at it to read **New form needed**) and a red mark on that file until a
+new form is uploaded. An upload from a participant's details window updates the task at once
+(**Documents of P000150 updated.**). The progress line of a rejected or cancelled task stops at
+the step where the task ended. A cancelled task keeps its
 recordings, audio check and device details visible, read only, if it had any.
 
 On a phone everything is in one column, your work first.
@@ -848,8 +850,9 @@ payments. QC Executives see only the newest one.
     **Participant A** and one for **Participant B**. Type **Device make** and **Device model**
     (for example Samsung, Galaxy A14) and click **Yes** or **No** for **Bluetooth earphones
     used**, **Wired earphones used** and **Loudspeaker on** (only what the project asks). If a
-    person was recorded before in this project, **Same as last time (T000012)** at the top of
-    their column fills their last answers in; check them, then click **Save device details**.
+    person was recorded before in this project, the **Same as last time** row at the top has a
+    button with their last task's code (for example **T000012**) in their column: it fills their
+    last answers in; check them, then click **Save device details**.
     The **Still to fill** row says how many details each person still needs (point at it to see
     which).
 11. Click **Listen**. If it is good, click **Send to QC**; if not, click **Record again** and
@@ -978,10 +981,10 @@ rest. The **Figures** tab is plain tables under their headings, with one chart:
   and a row for **TxContact's own count** for the account (or why it is missing).
 - **By project** when you look at all your projects.
 
-The **All calls** tab lists every call with a link to its task; **Show** filters it (for example
-**Needs a person**). **Download calls (CSV)** saves the period's calls as a spreadsheet, times in
-India time (IST). A period with more than 20,000 calls is refused: choose a project or a shorter
-period.
+The **All calls** tab lists the calls of the period, newest first, each with a link to its task;
+**Show** filters it (for example **Needs a person**). **Download calls (CSV)** saves the period's
+calls as a spreadsheet, times in India time (IST). A period with more than 20,000 calls is
+refused: choose a project or a shorter period.
 
 Moderators have no figures, charts or CSV: only the list of their own calls. No page shows a
 full phone number: the last two digits only.
@@ -1151,8 +1154,9 @@ India time (IST). File names carry the day in India time.
 Every conversation has two participants, and its length is **split equally** between them: a
 5-minute conversation gives each participant **2.5 minutes**. The recorded, approved and payable
 minutes shown for a participant are all their share. Payment follows **approved** audio. A re-recorded task counts once (its newest finished recording). Project Admins see the
-**Recorded min**, **Approved min** and **Payable min** columns on the project's **Participants**
-page; the **Participant minutes** export gives the same numbers as a spreadsheet.
+**Recorded**, **Approved** and **Payable** columns (each value in minutes, e.g. 2.5 min) on the
+project's **Participants** page; the **Participant minutes** export gives the same numbers as a
+spreadsheet.
 
 ### Payments (Super Admin and Project Admin)
 

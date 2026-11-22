@@ -286,6 +286,8 @@ describe("install the application", () => {
     render(<InstallCard />);
     expect(screen.getByText(/has not offered to install it on this page/)).toBeInTheDocument();
     expect(screen.getByText(/Safari on an iPhone or iPad/)).toBeInTheDocument();
+    // Its lines run edge to edge in the section, as a table's (D-159).
+    expect(screen.getByRole("list")).toHaveClass("list", "bleed");
 
     const prompt = vi.fn(() => Promise.resolve());
     const offer = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
@@ -301,6 +303,15 @@ describe("install the application", () => {
     expect(await screen.findByText(/Installed\. Look for Conversation Collection/)).toBeVisible();
     // The offer can be used once.
     expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+  });
+
+  it("loads its own style with the card, not only with the built application's worker (D-159)", () => {
+    // The worker's import of pwa.css runs only in the built application, after the page loaded.
+    expect(readFileSync("src/pwa/InstallCard.tsx", "utf8")).toContain('import "./pwa.css";');
+    // Each item's words stay in line with the section's title.
+    expect(readFileSync("src/pwa/pwa.css", "utf8")).toMatch(
+      /\.list\.bleed > li \{\s*padding-inline: var\(--card-px\);/,
+    );
   });
 
   it("says so in the installed application", () => {

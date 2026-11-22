@@ -18,6 +18,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
+import { minutes } from "../../lib/format";
 import { speakerRulesOf } from "../../lib/speakers";
 import { DocumentBadges } from "../participants/Documents";
 import { DetailsMissing } from "../participants/ParticipantDetails";
@@ -28,8 +29,10 @@ import { PageActions, useProject } from "./ProjectDetailPage";
 import { StillNeededLine } from "./StillNeededLine";
 
 /** People who already exist in another of the caller's projects, added here as they are (D-090).
- * A section like any other (D-158): the count and "Add selected" on its title bar, then the search
- * and the people found as a table, edge to edge. */
+ * A section like any other (D-158): "Add (N)" for the ticked people on its title bar, then the
+ * search with how many people it offers beside it, and the people found as a table, edge to edge.
+ * The count is off the bar and the button's name short, so the bar stays one row on a phone
+ * (D-159). */
 function AddExisting({
   projectId,
   refresh,
@@ -58,38 +61,38 @@ function AddExisting({
     <section className="card" aria-labelledby="add-existing-title">
       <div className="card__head">
         <h2 id="add-existing-title">Add an existing participant</h2>
-        <div className="actions">
-          {found.state.status === "loaded" ? (
-            <span className="pick__count">
-              {people.length === 1 ? "1 person" : `${people.length} people`}
-            </span>
-          ) : null}
-          {people.length > 0 ? (
-            <Button
-              icon="plus"
-              busy={busy}
-              disabled={chosen.length === 0}
-              onClick={() => {
-                onAdd(chosen);
-                setTicked([]);
-              }}
-            >
-              Add selected ({chosen.length})
-            </Button>
-          ) : null}
-        </div>
+        {people.length > 0 ? (
+          <Button
+            icon="plus"
+            busy={busy}
+            disabled={chosen.length === 0}
+            onClick={() => {
+              onAdd(chosen);
+              setTicked([]);
+            }}
+          >
+            Add ({chosen.length})
+          </Button>
+        ) : null}
       </div>
       <p className="muted">
         People from your other projects who are not in this one yet. They keep their code, details
         and consent history.
       </p>
-      <TextField
-        label="Search your other projects"
-        type="search"
-        placeholder="Code or name, e.g. P000123"
-        value={typed}
-        onChange={(e) => setTyped(e.target.value)}
-      />
+      <div className="pick__find">
+        <TextField
+          label="Search your other projects"
+          type="search"
+          placeholder="Code or name, e.g. P000123"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        {found.state.status === "loaded" ? (
+          <span className="pick__count">
+            {people.length === 1 ? "1 person" : `${people.length} people`}
+          </span>
+        ) : null}
+      </div>
       {found.state.status === "loading" ? <LoadingState label="Searching" /> : null}
       {found.state.status === "failed" ? (
         <ErrorState error={found.state.error} onRetry={found.reload} />
@@ -128,7 +131,8 @@ function AddExisting({
                     onChange={() => flip(c.participant_code)}
                   />
                 </td>
-                <td>{c.participant_code}</td>
+                {/* Codes in one type everywhere, as on the Participants page (D-159). */}
+                <td className="mono">{c.participant_code}</td>
                 <td>{c.display_label ?? <span className="muted">Name hidden</span>}</td>
                 <td>
                   {languageLabel(c.language_code)}
@@ -154,9 +158,10 @@ function AddExisting({
   );
 }
 
-/** Minutes for people, "-" when the server sent none, grouped as on Settings (D-158). */
-const minutesText = (value: number | undefined) =>
-  value === undefined ? "-" : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+/** Minutes for people, "0.07 min" as in the details window and Payments (D-159), "-" when the
+ * server sent none. The unit is in each value, so the column headings stay one word and the table
+ * fits its frame on a laptop (D-159). */
+const minutesText = (value: number | undefined) => (value === undefined ? "-" : minutes(value));
 
 export function ParticipantsTab() {
   const { project } = useProject();
@@ -326,17 +331,17 @@ export function ParticipantsTab() {
                 {showMinutes ? (
                   <>
                     <th scope="col" className="num">
-                      Recorded min
+                      Recorded
                     </th>
                     <th scope="col" className="num">
-                      Approved min
+                      Approved
                     </th>
                     <th
                       scope="col"
                       className="num"
                       title="Half of approved: two participants share each conversation"
                     >
-                      Payable min
+                      Payable
                     </th>
                   </>
                 ) : null}
@@ -346,7 +351,7 @@ export function ParticipantsTab() {
             <tbody>
               {list.state.data.items.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.participant_code}</td>
+                  <td className="mono">{p.participant_code}</td>
                   <td>
                     {p.display_label ?? <span className="muted">Hidden</span>}
                     {p.deleted ? null : (

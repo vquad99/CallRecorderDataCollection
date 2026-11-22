@@ -26,8 +26,11 @@ describe("phone calls page", () => {
     expect(screen.getByText("50% of calls")).toBeInTheDocument();
     expect(screen.getByText("Busiest hour: 11:00 (3 calls).")).toBeInTheDocument();
     expect(screen.getByText("TxContact refused the call")).toBeInTheDocument();
-    // Today against the daily target, and tasks nobody has called yet.
-    expect(screen.getByText(/4% of the daily target \(10\.0 h\)/)).toBeInTheDocument();
+    // Today against the daily target, the target kept whole on one line (D-159); and tasks nobody
+    // has called yet.
+    const target = screen.getByText("(10.0 h)");
+    expect(target).toHaveClass("nowrap");
+    expect(target.parentElement).toHaveTextContent("4% of the daily target (10.0 h)");
     expect(screen.getByText("1 task called more than once")).toBeInTheDocument();
     expect(screen.getByText("1.3 calls for each task")).toBeInTheDocument();
     // The times on the page and in the CSV are India time, and say so.
@@ -292,6 +295,58 @@ describe("phone calls page", () => {
     expect(list.nextElementSibling).toBe(pages);
   });
 
+  it("lists the calls of the period chosen, as the CSV has them, from the first page (D-159)", async () => {
+    const api = fakeApi(
+      signedInAs(ALL_PERMISSIONS, {
+        ...worldHandlers(),
+        "GET /api/v1/calls": (_, url) => [
+          200,
+          {
+            items: [CALL_ROW],
+            total: 60,
+            page: Number(url.searchParams.get("page") ?? 1),
+            page_size: 25,
+          },
+        ],
+      }),
+    );
+    renderAt("/calls?view=calls");
+    // What the list asked of the server, the newest last.
+    const asked = () =>
+      api.calls
+        .filter((c) => c.path.startsWith("/api/v1/calls?"))
+        .map((c) => Object.fromEntries(new URLSearchParams(c.path.split("?")[1])));
+    await screen.findByRole("link", { name: "T000001" }, { timeout: 5000 });
+    expect(asked().at(-1)).toEqual({ days: "30", page: "1", page_size: "25" });
+    await userEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await waitFor(() => expect(asked().at(-1)).toMatchObject({ days: "30", page: "2" }));
+    // Another period: the list is asked again for it, from its first page.
+    await userEvent.selectOptions(screen.getByLabelText("Period"), "7");
+    await waitFor(() => expect(asked().at(-1)).toEqual({ days: "7", page: "1", page_size: "25" }));
+    expect(asked().some((q) => q.days === "7" && q.page === "2")).toBe(false);
+  });
+
+  it("puts the lengths on the right and the codes in monospace, as every list does (D-159)", async () => {
+    fakeApi(signedInAs(ALL_PERMISSIONS, worldHandlers()));
+    renderAt("/calls?view=calls");
+    const list = await screen.findByRole("region", { name: "All calls" }, { timeout: 5000 });
+    const task = await within(list).findByRole("link", { name: "T000001" });
+    expect(task).toHaveClass("mono");
+    expect(within(list).getByText("HINDI")).toHaveClass("mono");
+    for (const name of ["Call", "Recording"]) {
+      expect(within(list).getByRole("columnheader", { name })).toHaveClass("num");
+    }
+    const row = task.closest("tr") as HTMLTableRowElement;
+    expect(
+      Array.from(row.cells)
+        .filter((c) => c.classList.contains("num"))
+        .map((c) => c.textContent),
+    ).toEqual(["12.0 min", "12.0 min"]);
+    // Who made each call, for the people who run the project.
+    expect(within(list).getByRole("columnheader", { name: "Moderator" })).toBeInTheDocument();
+    expect(row).toHaveTextContent("Mona Moderator");
+  });
+
   it("gives a moderator a plain list of their own calls, and no figures (D-104)", async () => {
     const api = fakeApi(
       signedInAs(
@@ -307,6 +362,13 @@ describe("phone calls page", () => {
       "href",
       "/tasks/t1",
     );
+    // Their own calls, whatever the day: no column that repeats their own name (D-159).
+    const list = screen.getByRole("region", { name: "My calls" });
+    expect(within(list).queryByRole("columnheader", { name: "Moderator" })).toBeNull();
+    expect(within(list).queryByText(/Mona Moderator/)).toBeNull();
+    const asked = api.calls.filter((c) => c.path.startsWith("/api/v1/calls?"));
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.some((c) => c.path.includes("days="))).toBe(false);
     expect(screen.queryByText("Calls per day")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download calls (CSV)" })).not.toBeInTheDocument();
     for (const path of [

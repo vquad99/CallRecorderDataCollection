@@ -1458,6 +1458,17 @@ fieldset.card > legend,
   padding-top: 0;
   border-top: 0;
 }
+/* A table that ends a part leaves the line under it to the next part's sub-heading (D-159): one
+   line between the parts, not two a few pixels apart. Also when the table ends a block one or two
+   levels down (a part in a grid of parts). */
+:is(.card, .panel, .dialog)
+  :is(
+    .table-wrap:has(+ .subhead, + * > .subhead:first-child),
+    :has(+ .subhead, + * > .subhead:first-child) > .table-wrap:last-child,
+    :has(+ .subhead, + * > .subhead:first-child) > :last-child > .table-wrap:last-child
+  ) {
+  border-bottom: 0;
+}
 @media (max-width: 640px) {
   :root {
     --card-py: 12px;
@@ -1644,6 +1655,12 @@ fieldset.card > legend + * {
   color: var(--muted);
   font-size: 0.75rem;
 }
+/* A field's hint and example sit under its box on every form (D-159), after an error, which stays
+   right under the box; the order in the page is unchanged for screen readers. A group of choices
+   (fieldset.field) keeps its opening line above them. */
+div.field > .field__hint {
+  order: 1;
+}
 .field__input {
   width: 100%;
   min-height: 36px;
@@ -1816,9 +1833,14 @@ input[type="radio"] {
 .shell__content form .field:has(> input[type="date"]) {
   max-width: 280px;
 }
-/* Short fields side by side: labels and boxes line up because hints and examples go under the box
-   (after an error, which stays right under it); the order in the page is unchanged for screen
-   readers. */
+/* On a phone every box of a form fills the line (D-159), so the form keeps one right edge. */
+@media (max-width: 640px) {
+  .shell__content form .field:has(> input[type="number"]),
+  .shell__content form .field:has(> input[type="date"]) {
+    max-width: none;
+  }
+}
+/* Short fields side by side: labels and boxes line up as hints go under the box (above). */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
@@ -1828,9 +1850,6 @@ input[type="radio"] {
 }
 .form-grid .field {
   max-width: none;
-}
-.form-grid > .field > .field__hint {
-  order: 1;
 }
 /* A group of choices laid out like a field (checkboxes under one label). */
 fieldset.field {
@@ -2026,9 +2045,6 @@ fieldset.field legend {
   .icon-button {
     width: 40px;
     height: 40px;
-  }
-  .dialog__close {
-    padding: 11px;
   }
 }
 
@@ -2261,6 +2277,14 @@ button.tabs__link {
 }
 .dialog__close:hover {
   background: var(--surface-hover);
+}
+/* Tap-sized on a phone (40 px, D-158), after the rule above so it wins (D-159). The icon stays
+   where it was and the window's head keeps its height: the extra room overlaps its padding. */
+@media (max-width: 640px) {
+  .dialog__close {
+    margin: -5px;
+    padding: 11px;
+  }
 }
 /* A window's inner space is a section's (D-158): a .bleed table in it runs to its edges. */
 .dialog__body {

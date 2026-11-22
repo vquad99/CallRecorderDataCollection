@@ -519,11 +519,21 @@ def all_calls(
         "NEEDS_PERSON",
     ]
     | None = None,
+    # The period chosen on the Phone calls page (D-159), counted as for the CSV; left out, every
+    # call (a moderator's own list).
+    days: Days | None = None,
     page: Annotated[int, Query(ge=1, le=10_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> CallPage:
     rows, total = analytics.list_calls(
-        db, principal, settings, project_id=project_id, state=state, page=page, page_size=page_size
+        db,
+        principal,
+        settings,
+        project_id=project_id,
+        state=state,
+        days=days,
+        page=page,
+        page_size=page_size,
     )
     return CallPage(
         items=[

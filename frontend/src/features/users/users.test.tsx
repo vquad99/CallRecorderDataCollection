@@ -42,6 +42,18 @@ describe("users admin", () => {
     );
   });
 
+  it("puts the page's main button last, as on every other page (D-159)", async () => {
+    fakeApi(
+      signedInAs(["users.manage"], {
+        "GET /api/v1/users": () => [200, { items: [user(1)], total: 1, page: 1, page_size: 25 }],
+      }),
+    );
+    renderAt("/admin/users");
+    const add = await screen.findByRole("link", { name: "Add user" });
+    const buttons = [...(add.closest(".actions")?.children ?? [])].map((b) => b.textContent);
+    expect(buttons).toEqual(["Import CSV", "Export CSV", "Add user"]);
+  });
+
   it("keeps the search, filters and page when a user is opened and Back is pressed", async () => {
     const { calls } = fakeApi(
       signedInAs(["users.manage"], {

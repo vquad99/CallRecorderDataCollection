@@ -713,9 +713,10 @@ function QcChecklistRules({ draft, change }: SectionProps) {
       )}
       <Part title="Add a question">
         <div className="qc-add">
+          {/* D-159: the help's lines are evened out; "_" stays with "and", never first on a line. */}
           <TextField
             label="Key"
-            hint="Lowercase letters, digits and _, like speech_intelligible. It names the answer in the delivery."
+            hint="Lowercase letters, digits and&nbsp;_, like speech_intelligible. It names the answer in the delivery."
             value={key}
             maxLength={MAX_KEY}
             {...(tried && keyError ? { error: keyError } : {})}

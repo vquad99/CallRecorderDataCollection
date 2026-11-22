@@ -277,7 +277,20 @@ function Funnel({ funnel, className }: { funnel: tel.CallFunnel; className: stri
   );
 }
 
-function CallList({ projectId, title }: { projectId: string; title: string }) {
+/** Every call the person may see, newest first, a page at a time. `days`: only the calls of the
+ * period chosen on the page, as in its CSV (D-159); a moderator's own list has every call. */
+function CallList({
+  projectId,
+  days,
+  title,
+  showModerator = true,
+}: {
+  projectId: string;
+  days?: number;
+  title: string;
+  /** Left out of a moderator's own list, where every row would repeat their name (D-159). */
+  showModerator?: boolean;
+}) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState("");
   const list = useResource(
@@ -285,10 +298,11 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
       tel.listAllCalls({
         project_id: projectId || undefined,
         state: state || undefined,
+        days,
         page,
         page_size: 25,
       }),
-    [projectId, state, page],
+    [projectId, state, days, page],
   );
   const loaded = list.state.status === "loaded" ? list.state.data : null;
   // D-158: the list is a section (its title bar with the compact "Show" filter, the table edge to
@@ -323,10 +337,15 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
               <tr>
                 <th scope="col">Started</th>
                 <th scope="col">Task</th>
-                <th scope="col">Moderator</th>
+                {showModerator ? <th scope="col">Moderator</th> : null}
                 <th scope="col">State</th>
-                <th scope="col">Call</th>
-                <th scope="col">Recording</th>
+                {/* The lengths are numbers: on the right, as in every other table (D-159). */}
+                <th scope="col" className="num">
+                  Call
+                </th>
+                <th scope="col" className="num">
+                  Recording
+                </th>
                 <th scope="col">Why</th>
               </tr>
             </thead>
@@ -335,21 +354,26 @@ function CallList({ projectId, title }: { projectId: string; title: string }) {
                 <tr key={c.id}>
                   <td>{when(c.dialled_at)}</td>
                   <td>
-                    <Link to={`/tasks/${c.task_id}`}>{c.task_code}</Link>{" "}
-                    <span className="muted">{c.project_code}</span>
+                    {/* Codes in monospace, as in every list (D-159). */}
+                    <Link className="mono" to={`/tasks/${c.task_id}`}>
+                      {c.task_code}
+                    </Link>{" "}
+                    <span className="muted mono">{c.project_code}</span>
                   </td>
-                  <td>
-                    {c.moderator_name} <span className="muted">seat {c.agent_id}</span>
-                  </td>
+                  {showModerator ? (
+                    <td>
+                      {c.moderator_name} <span className="muted">seat {c.agent_id}</span>
+                    </td>
+                  ) : null}
                   <td>
                     <CallBadge state={c.state} stale={c.stale} />
                   </td>
-                  <td>
+                  <td className="num">
                     {c.closed_at && c.state !== "DIAL_FAILED"
                       ? duration((Date.parse(c.closed_at) - Date.parse(c.dialled_at)) / 1000)
                       : "-"}
                   </td>
-                  <td>{duration(c.recording_seconds)}</td>
+                  <td className="num">{duration(c.recording_seconds)}</td>
                   <td>
                     {c.cancel_reason
                       ? tel.CANCEL_REASONS[c.cancel_reason]
@@ -456,7 +480,10 @@ function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: s
           {shown.map((p) => (
             <tr key={p.project_id}>
               <th scope="row">
-                <Link to={`/projects/${p.project_id}`}>{p.code}</Link>{" "}
+                {/* The code in monospace, as in every list (D-159). */}
+                <Link className="mono" to={`/projects/${p.project_id}`}>
+                  {p.code}
+                </Link>{" "}
                 <span className="muted">{p.name}</span>
               </th>
               <td className="num">
@@ -529,11 +556,18 @@ function Figures({
           label="Today"
           value={minutes(data.today_recorded_minutes)}
           note={
-            target === null
-              ? "Recorded today"
-              : target > 0
-                ? `${pct(data.today_recorded_minutes, target)}% of the daily target (${minutes(target)})`
-                : "No daily target set"
+            target === null ? (
+              "Recorded today"
+            ) : target > 0 ? (
+              // The target stays whole on a narrow screen: "(5.0 h)", never "(5.0" over "h)"
+              // (D-159).
+              <>
+                {pct(data.today_recorded_minutes, target)}% of the daily target{" "}
+                <span className="nowrap">({minutes(target)})</span>
+              </>
+            ) : (
+              "No daily target set"
+            )
           }
         />
         <Figure
@@ -681,7 +715,7 @@ function MyCalls() {
       <Filters>
         <ProjectSelect value={projectId} onChange={setProjectId} />
       </Filters>
-      <CallList key={projectId} projectId={projectId} title="My calls" />
+      <CallList key={projectId} projectId={projectId} title="My calls" showModerator={false} />
     </section>
   );
 }
@@ -770,8 +804,14 @@ function CallFigures() {
           className="stack"
         >
           {view === "calls" ? (
-            // A new list for each project: it starts again at its first page.
-            <CallList key={projectId} projectId={projectId} title="All calls" />
+            // The calls of the period chosen above, as in the CSV (D-159). A new list for each
+            // project and period: it starts again at its first page.
+            <CallList
+              key={`${projectId}-${days}`}
+              projectId={projectId}
+              days={days}
+              title="All calls"
+            />
           ) : (
             <>
               {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}

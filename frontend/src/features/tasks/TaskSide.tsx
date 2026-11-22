@@ -18,8 +18,9 @@ import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { StatusBadge } from "../../components/StatusBadge";
+import { StatusBadge, type Tone } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
+import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
 import { day, when } from "../../lib/format";
 import {
@@ -196,7 +197,8 @@ export function TaskSummary({
   const showsQc = qcView !== null && (task.status !== "CANCELLED" || qcView.qc_name !== null);
   return (
     <SideCard id="task-summary-title" title="Summary">
-      <dl className="facts">
+      {/* D-159: its lines run edge to edge, as the participants table's under it. */}
+      <dl className="facts bleed">
         <ProjectFact task={task} />
         <Fact label="Status">
           <StatusBadge status={task.status} label={status(task.status)} />
@@ -290,6 +292,38 @@ function FormCell({
   );
 }
 
+/** A consent chip's words in this narrow table (D-159): one short word, so every chip fits its
+ * column on one line, also when the side column is 300 px wide. The full words are the cell's
+ * title and what a screen reader says. */
+const SHORT_CONSENT: Readonly<Record<string, string>> = {
+  "Form uploaded": "Uploaded",
+  "Consent form missing": "Missing",
+  "New form needed": "New form",
+  "No answer yet": "Not yet",
+  "Not agreed yet": "Not yet",
+  "Did not agree": "Refused",
+  Withdrawn: "Withdrew",
+};
+
+function ConsentCell({ label, tone, since }: { label: string; tone: Tone; since: string | null }) {
+  const short = SHORT_CONSENT[label];
+  const title = since ? `${label} · since ${when(since)}` : short ? label : undefined;
+  return (
+    <td title={title}>
+      {short ? (
+        <>
+          <span aria-hidden="true">
+            <StatusBadge tone={tone} label={short} />
+          </span>
+          <span className="sr-only">{label}</span>
+        </>
+      ) : (
+        <StatusBadge tone={tone} label={label} />
+      )}
+    </td>
+  );
+}
+
 /** Both participants side by side (D-152): a row per fact, a column per person. */
 export function ParticipantsMatrix({
   task,
@@ -359,11 +393,7 @@ export function ParticipantsMatrix({
                     tone: "warning",
                   } as const)
                 : consentAnswer(p.consent_status, task.consent_mode);
-              return (
-                <td key={side} title={p.consent_at ? `Since ${when(p.consent_at)}` : undefined}>
-                  <StatusBadge tone={tone} label={label} />
-                </td>
-              );
+              return <ConsentCell key={side} label={label} tone={tone} since={p.consent_at} />;
             })}
           </tr>
           {forms ? (
@@ -467,27 +497,13 @@ const FIRST = 3;
 export function Timeline({ taskId, version }: { taskId: string; version: string }) {
   const { state, reload } = useResource(() => work.getTimeline(taskId), [taskId, version]);
   const [text, setText] = useState("");
-  const [all, setAll] = useState(false);
   const { busy, error, message, run } = useAction(reload);
   const entries = state.status === "loaded" ? [...state.data].reverse() : [];
-  const shown = all ? entries : entries.slice(0, FIRST);
+  // D-159: "Show all (N)" on the bar is the compact button every other section's bar has for the
+  // same (useFirstRows), not a text link.
+  const { shown, more } = useFirstRows(entries, FIRST);
   return (
-    <SideCard
-      id="timeline-title"
-      title="History"
-      extra={
-        entries.length > FIRST ? (
-          <button
-            type="button"
-            className="linkish"
-            aria-expanded={all}
-            onClick={() => setAll(!all)}
-          >
-            {all ? "Show the newest" : `Show all (${entries.length})`}
-          </button>
-        ) : null
-      }
-    >
+    <SideCard id="timeline-title" title="History" extra={more}>
       {/* The box first (UXW-11): in the column's first screen, the newest entries under it. */}
       <form
         className="comment-form"
@@ -523,8 +539,12 @@ export function Timeline({ taskId, version }: { taskId: string; version: string 
               <li key={`${e.at}-${i}`}>
                 <div className="timeline__title">{title}</div>
                 {detail ? <div className="timeline__detail">{detail}</div> : null}
+                {/* D-159: when, who and what each stay on one line; the line breaks only after
+                    a dot, never inside "Status changed" or a name. */}
                 <span className="muted">
-                  {when(e.at)} · {e.actor ?? "Platform"} · {ENTRY_KIND[e.kind]}
+                  <span className="nowrap">{when(e.at)} ·</span>{" "}
+                  <span className="nowrap">{e.actor ?? "Platform"} ·</span>{" "}
+                  <span className="nowrap">{ENTRY_KIND[e.kind]}</span>
                 </span>
               </li>
             );

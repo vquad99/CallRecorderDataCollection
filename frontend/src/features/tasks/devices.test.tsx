@@ -4,6 +4,8 @@
 // none; Send to QC waits for them and goes once they are saved. D-152: one matrix, a row per
 // detail and a column per speaker.
 // Requirements: TASK-002, TASK-004, FTF-014, PROJ-011
+import { readFileSync } from "node:fs";
+
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -162,9 +164,22 @@ describe("device details on the task page (D-147)", () => {
       },
     );
     await screen.findByLabelText("Device make – Participant B");
-    // Only the person seen before has it, in their column's heading; their boxes stay empty
-    // until it is clicked.
+    // Only the person seen before has it; their boxes stay empty until it is clicked. D-159: in
+    // a row of its own under the headings (a dash for the person seen first here), never in a
+    // column's heading.
     expect(screen.getAllByRole("button", { name: /Same as last time/ })).toHaveLength(1);
+    const same = screen.getByRole("row", { name: /^Same as last time/ });
+    expect(Array.from(same.children, (cell) => cell.textContent)).toEqual([
+      "Same as last time",
+      "-",
+      "T000007",
+    ]);
+    const matrix = screen.getByRole("table", { name: "Device details of both speakers" });
+    expect(
+      within(within(matrix).getByRole("columnheader", { name: /^Participant B/ })).queryByRole(
+        "button",
+      ),
+    ).toBeNull();
     const make = box("B", "Device make");
     expect(make).toHaveValue("");
     await userEvent.click(
@@ -226,8 +241,10 @@ describe("device details on the task page (D-147)", () => {
       "Wired earphones used | Yes | Not answered",
       "Loudspeaker on | No | Not answered",
     ]);
-    expect(within(card).getByText(/^Filled in by Mona Moderator/)).toBeInTheDocument();
-    expect(within(card).getByText("Not filled in.")).toBeInTheDocument();
+    // D-159: who filled them and, under it, when; the row's label says "Filled in".
+    expect(within(card).getByRole("row", { name: /^Filled in/ })).toHaveTextContent(
+      /^Filled inMona Moderator22 Nov 2026, 3:30 pm ISTNot filled in\.$/,
+    );
   });
 
   it("shows only the details the project asks", async () => {
@@ -311,4 +328,27 @@ describe("device details on the task page (D-147)", () => {
       );
     },
   );
+
+  it("keeps the matrix as wide as its section beside the side column (D-159)", () => {
+    // Read from the disk: the test runner hands every stylesheet import over empty, and applies no
+    // container query of its own.
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync("src/features/tasks/moderator.css", "utf8");
+    document.head.append(sheet);
+    const rules = [...(sheet.sheet?.cssRules ?? [])];
+    sheet.remove();
+    const floor = (list: CSSRule[]) =>
+      list
+        .filter((r): r is CSSStyleRule => "selectorText" in r)
+        .filter((r) => r.selectorText === ".table.devices-matrix")
+        .map((r) => r.style.getPropertyValue("min-width"));
+    // No width of its own: the labels' column and both speakers share the section's width...
+    expect(floor(rules)).toEqual([""]);
+    // ...and only a narrow section (a laptop's main column beside the side column) keeps the
+    // boxes and switches whole, scrolling sideways inside its frame under that.
+    const narrow = rules.filter((r) =>
+      r.cssText.startsWith("@container devices (max-width: 440px)"),
+    );
+    expect(narrow.flatMap((r) => floor([...(r as CSSGroupingRule).cssRules]))).toEqual(["360px"]);
+  });
 });

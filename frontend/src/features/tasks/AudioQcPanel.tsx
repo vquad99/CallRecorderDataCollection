@@ -450,34 +450,36 @@ export function AudioQcPanel({
   return (
     <>
       <section className="card stack stack--tight qc-panel" aria-labelledby="qc-title">
-        {/* The title, the automatic check's result, and listening beside them. */}
+        {/* The title and the automatic check's result. D-159: listening and checking the file
+            again are the section's first row, so the bar is one row on a phone too (as on Check
+            your recording). */}
         <div className="card__head qc-head">
           <span className="qc-head__title">
             <h2 id="qc-title">Audio quality</h2>
             {automatic ? <Outcome outcome={automatic.outcome} /> : null}
           </span>
-          {listen?.asset_id || view.can_recheck ? (
-            <div className="actions">
-              {listen?.asset_id ? <Player assetId={listen.asset_id} /> : null}
-              {view.can_recheck ? (
-                <Button
-                  variant="secondary"
-                  icon="refresh"
-                  busy={busy !== null}
-                  onClick={() =>
-                    void run(async () => {
-                      const v = await qc.recheckQc(task.id);
-                      replace(v);
-                      if (v.task_status !== task.status) onDecided();
-                    })
-                  }
-                >
-                  Check the stored file again
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
         </div>
+        {listen?.asset_id || view.can_recheck ? (
+          <div className="actions page-actions qc-listen">
+            {listen?.asset_id ? <Player assetId={listen.asset_id} /> : null}
+            {view.can_recheck ? (
+              <Button
+                variant="secondary"
+                icon="refresh"
+                busy={busy !== null}
+                onClick={() =>
+                  void run(async () => {
+                    const v = await qc.recheckQc(task.id);
+                    replace(v);
+                    if (v.task_status !== task.status) onDecided();
+                  })
+                }
+              >
+                Check the stored file again
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <p className="qc-auto__line">
           <span className="qc-auto__label">Automatic check</span>
           {automatic ? `${automatic.comment} · ${when(automatic.created_at)}` : "Not run yet"}

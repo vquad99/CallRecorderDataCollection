@@ -264,6 +264,8 @@ export const callAnalytics = (params: { project_id?: string | undefined; days: n
 export const listAllCalls = (params: {
   project_id?: string | undefined;
   state?: string | undefined;
+  /** The last `days` days only, counted as for the CSV (D-159); left out, every call. */
+  days?: number | undefined;
   page: number;
   page_size: number;
 }) => apiRequest<Page<CallListItem>>(`/api/v1/calls${query(params)}`);

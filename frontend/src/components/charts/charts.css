@@ -355,15 +355,6 @@
   border-radius: 1px;
   background: var(--text);
 }
-/* Name and value, one per row. */
-.key-table tbody th {
-  width: 100%;
-}
-.key-table tbody tr:last-child th,
-.key-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
 /* Rows in named sections, and column groups above the headings (D-151). */
 .matrix__groups td,
 .matrix__groups th {
@@ -424,11 +415,6 @@
 .panel .table.matrix tbody td {
   padding-top: 4px;
   padding-bottom: 4px;
-}
-.panel .table.key-table th,
-.panel .table.key-table td {
-  padding-right: 6px;
-  padding-left: 6px;
 }
 .matrix__empty td {
   color: var(--muted);
@@ -767,14 +753,16 @@
   color: var(--muted);
   font-size: 0.8125rem;
   line-height: 1.35;
+  /* A note of two lines does not leave one word alone on the second, "(5.0" over "h)" (D-159). */
+  text-wrap: pretty;
+}
+/* Eight figures are always two rows of four (D-159): eight to a row left about 135 px each, too
+   little for their labels and notes even on a wide screen. */
+.figline:has(> :nth-child(8):last-child) {
+  --cols: 4;
 }
 /* A figure needs about 130 px: when they do not all fit on one line, even rows of three or four
    (a line between the rows too), and two to a row on a phone. */
-@container (max-width: 1040px) {
-  .figline:has(> :nth-child(8):last-child) {
-    --cols: 4;
-  }
-}
 @container (max-width: 910px) {
   .figline:has(> :nth-child(7):last-child) {
     --cols: 4;

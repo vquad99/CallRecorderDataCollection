@@ -328,7 +328,10 @@ export function TaskCreatePage() {
     <section aria-labelledby="new-task-title" className="stack">
       <BackLink to="/tasks">All tasks</BackLink>
       <h1 id="new-task-title">New task</h1>
-      <form className="card" onSubmit={submit} noValidate>
+      {/* D-159: a section with its title on a bar, as New project's and Add user's; Create task
+          stays at its foot (a form that makes something). */}
+      <form className="card" onSubmit={submit} noValidate aria-labelledby="task-details-title">
+        <h2 id="task-details-title">Task details</h2>
         <Select
           label="Project (active projects)"
           value={projectId}

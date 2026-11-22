@@ -17,7 +17,7 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
-import { day, duration, when } from "../../lib/format";
+import { day, duration, minutes, when } from "../../lib/format";
 import {
   consentAnswer,
   FORM_MISSING,
@@ -37,8 +37,6 @@ import {
 import { languageLabel } from "../projects/choices";
 import { DocumentBadges, DocumentsPanel } from "./Documents";
 import "./participants.css";
-
-const minutes = (n: number) => `${n.toFixed(1)} min`;
 
 /** A participant without the speaker details the project needs cannot be put on a task yet
  * (D-143, D-145); the server says so in `speaker_details_complete`. */

@@ -151,6 +151,23 @@ describe("audio quality card", () => {
     expect(within(card).queryByRole("button", { name: "Pass" })).toBeNull();
   });
 
+  it("keeps its title bar to the title and the result, listening under it (D-159)", async () => {
+    open(view({ can_decide: true, can_recheck: true }));
+    renderAt("/tasks/t1");
+    const card = await screen.findByRole("region", { name: "Audio quality" }, { timeout: 5000 });
+    const bar = within(card).getByRole("heading", { name: "Audio quality" }).closest(".card__head");
+    // One row on a phone too: no button on the bar.
+    expect(bar).toHaveTextContent(/^Audio quality/);
+    expect(within(bar as HTMLElement).queryByRole("button")).toBeNull();
+    // Listen and Check the stored file again: the section's first row, even on a phone.
+    const row = within(card).getByRole("button", { name: "Listen" }).closest(".actions");
+    expect(row).toHaveClass("page-actions");
+    expect(bar?.nextElementSibling).toBe(row);
+    expect(
+      within(row as HTMLElement).getByRole("button", { name: "Check the stored file again" }),
+    ).toBeInTheDocument();
+  });
+
   it("lets a manager assign a QC Executive, never the session's moderator", async () => {
     const { calls } = open(view({ can_assign: true }), {
       "POST /api/v1/tasks/t1/assign-qc": () => [
@@ -552,6 +569,12 @@ describe("the QC checklist (D-146)", () => {
     expect(echo.querySelector("svg")).toBeNull();
     // A question that can fail keeps its cross.
     expect(within(talk).getByText("No").closest("td")?.querySelector("svg")).not.toBeNull();
+    // D-159: both tables straight in their grid, so the last one leaves its bottom line to the
+    // Decisions heading right after the grid (the shared rule for a table before a sub-heading).
+    const grid = speakers.closest(".table-wrap")?.parentElement as HTMLElement;
+    expect(grid).toHaveClass("qc-matrix__grid");
+    expect(talk.closest(".table-wrap")?.parentElement).toBe(grid);
+    expect(grid.parentElement?.nextElementSibling).toHaveTextContent(/^Decisions$/);
   });
 });
 

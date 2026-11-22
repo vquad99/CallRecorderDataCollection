@@ -131,22 +131,36 @@ function DeviceForm({
             {people.map((p) => (
               <th key={p.side} scope="col" className={`mx-${p.side.toLowerCase()}`}>
                 <Who task={task} side={p.side} />
-                {p.last_time ? (
-                  <Button
-                    variant="secondary"
-                    icon="history"
-                    className="button button--secondary mx-last"
-                    aria-label={`Same as last time (${p.last_time.task_code}) – Participant ${p.side}`}
-                    onClick={() => p.last_time && set(p.side, valuesOf(p.last_time))}
-                  >
-                    Same as last time ({p.last_time.task_code})
-                  </Button>
-                ) : null}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
+          {/* D-159: a row of its own, not in the column headings, so both headings keep one
+              height and A and B one width, whoever has it; "-" for a person seen first here. */}
+          {people.some((p) => p.last_time) ? (
+            <tr>
+              <th scope="row">Same as last time</th>
+              {people.map((p) => (
+                <td key={p.side}>
+                  {p.last_time ? (
+                    <Button
+                      variant="secondary"
+                      icon="history"
+                      className="button button--secondary mx-last"
+                      aria-label={`Same as last time (${p.last_time.task_code}) – Participant ${p.side}`}
+                      title={`Fill in the details of task ${p.last_time.task_code}`}
+                      onClick={() => p.last_time && set(p.side, valuesOf(p.last_time))}
+                    >
+                      {p.last_time.task_code}
+                    </Button>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+              ))}
+            </tr>
+          ) : null}
           {asked.map((f) => (
             <tr key={f.key}>
               <th scope="row">{f.label}</th>
@@ -237,11 +251,17 @@ function DeviceFacts({ task, details }: { task: work.TaskDetail; details: device
         <tfoot>
           <tr>
             <th scope="row">Filled in</th>
+            {/* D-159: who, and when under it; the row's label already says "Filled in". */}
             {people.map((p) => (
               <td key={p.side}>
-                {p.filled_at
-                  ? `Filled in by ${p.filled_by ?? "someone"}, ${when(p.filled_at)}.`
-                  : "Not filled in."}
+                {p.filled_at ? (
+                  <>
+                    <div>{p.filled_by ?? "Someone"}</div>
+                    <div className="muted devices__when">{when(p.filled_at)}</div>
+                  </>
+                ) : (
+                  "Not filled in."
+                )}
               </td>
             ))}
           </tr>

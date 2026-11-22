@@ -21,3 +21,9 @@
   flex: 1;
   min-width: 220px;
 }
+
+/* "Install the application" (D-159): the list of browsers runs edge to edge in its section (global
+   .bleed), its lines as a table's; each item's words stay in line with the section's title. */
+.list.bleed > li {
+  padding-inline: var(--card-px);
+}

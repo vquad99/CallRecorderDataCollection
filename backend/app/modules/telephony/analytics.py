@@ -486,6 +486,13 @@ def _state_filter(state: str | None, stale_before: datetime) -> list[ColumnEleme
     return [Call.state == state] if state else []
 
 
+def _in_period(days: int, settings: Settings, now: datetime) -> ColumnElement[bool]:
+    """Calls of the last `days` days, today included, the days counted in the report time zone:
+    one rule for the list of calls and its CSV, so both hold the same calls (D-159)."""
+    first_day, _ = day_range(days, settings.report_timezone, now)
+    return Call.dialled_at >= start_of(first_day, ZoneInfo(settings.report_timezone))
+
+
 def list_calls(
     db: Session,
     principal: Principal,
@@ -493,12 +500,18 @@ def list_calls(
     *,
     project_id: uuid.UUID | None,
     state: str | None,
+    days: int | None,
     page: int,
     page_size: int,
 ) -> tuple[list[CallRow], int]:
+    """The calls this person may see, newest first, a page at a time. With `days`, only those
+    of the period, as in the CSV (D-159); without, every call (a moderator's own list)."""
     _check(principal)
-    stale_before = _stale_before(settings, datetime.now(UTC))
+    now = datetime.now(UTC)
+    stale_before = _stale_before(settings, now)
     conditions = [*_call_scope(principal, project_id), *_state_filter(state, stale_before)]
+    if days is not None:
+        conditions.append(_in_period(days, settings, now))
     calls, total = paginate(
         db, select(Call).where(*conditions).order_by(Call.dialled_at.desc()), page, page_size
     )
@@ -547,11 +560,10 @@ def calls_csv(
     _check_manager(principal)
     tz = ZoneInfo(settings.report_timezone)
     now = now or datetime.now(UTC)
-    first_day, _ = day_range(days, settings.report_timezone, now)
     calls = list(
         db.scalars(
             select(Call)
-            .where(*_call_scope(principal, project_id), Call.dialled_at >= start_of(first_day, tz))
+            .where(*_call_scope(principal, project_id), _in_period(days, settings, now))
             .order_by(Call.dialled_at.desc())
             .limit(MAX_CSV_ROWS + 1)
         )

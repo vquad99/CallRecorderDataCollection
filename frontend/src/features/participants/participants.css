@@ -1,8 +1,9 @@
-/* Participant details window (D-104, D-152, D-158): a header, then two columns of parts (profile
-   on the left; work, link, consent and documents on the right), the sessions under both. Each part
-   is a sub-section of the window (its title under a line, global .subhead), its rows with no frame
-   of their own: they run to the window's edges, and between the columns to the middle, where the
-   lines of the two columns meet. One column on a phone. */
+/* Participant details window (D-104, D-152, D-158, D-159): a header, then two columns of parts
+   (profile on the left; work, link, consent and documents on the right), the sessions under both.
+   Each part is a sub-section of the window (its title under a line, global .subhead), its rows
+   with no frame of their own: they run to the window's edges, and between the columns to a thin
+   upright line that splits them, so a row of one column never reads as part of a row of the
+   other (D-159). One column on a phone. */
 .pd {
   display: flex;
   flex-direction: column;
@@ -13,18 +14,35 @@
 }
 .pd-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-  /* Twice the window's inner space: each column's lines reach the middle. */
-  column-gap: calc(2 * var(--card-px));
+  grid-template-columns: minmax(0, 1fr);
 }
 .pd-col,
 .pd-section {
   min-width: 0;
 }
-@media (max-width: 760px) {
+/* Two columns on a wide window (D-159): no gap between them; each column keeps the window's inner
+   space on its side of the line, so its row and sub-heading lines end on that line. The columns
+   are as tall as each other, and the room above the first sub-headings and above the sessions is
+   the grid's and the columns' own, so the line runs from the line above the parts down to the
+   sessions' line, touching both. */
+@media (min-width: 761px) {
   .pd-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    margin-top: var(--card-py);
+  }
+  .pd-col {
+    padding-bottom: var(--card-py);
+  }
+  .pd-col:first-child {
+    padding-right: var(--card-px);
+  }
+  .pd-col + .pd-col {
+    padding-left: var(--card-px);
+    border-left: 1px solid var(--border);
+  }
+  .pd-col > .pd-section:first-child > .subhead,
+  .pd-grid + .pd-section > .subhead {
+    margin-top: 0;
   }
 }
 /* Room between a part's pieces; its title keeps its own. */
@@ -129,8 +147,9 @@
   overflow-wrap: anywhere;
 }
 
-/* How many people the project's "Add an existing participant" section offers, on its title bar
-   (D-090). Its list is a table now (D-158). */
+/* How many people the project's "Add an existing participant" section offers, beside its search
+   box (D-090; off the title bar since D-159, the row is .pick__find in projects/overview.css). Its
+   list is a table now (D-158). */
 .pick__count {
   flex: none;
   padding: 2px 10px;

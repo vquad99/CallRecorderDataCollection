@@ -416,7 +416,7 @@ describe("participants section", () => {
       screen.getByRole("group", { name: "Actions for selected participants" }),
     ).toHaveTextContent("1 selected");
     // Another search: the ticked person is no longer shown, and nothing stays selected.
-    await userEvent.type(screen.getByRole("searchbox", { name: "Search by name or code" }), "Bina");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search by code or name" }), "Bina");
     expect(screen.queryByRole("group", { name: "Actions for selected participants" })).toBeNull();
     await waitFor(() =>
       expect(calls.some((c) => c.path.includes("/participants?search=Bina"))).toBe(true),
@@ -449,11 +449,12 @@ describe("participants section", () => {
     await userEvent.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Go back" }),
     );
-    await userEvent.type(screen.getByRole("searchbox", { name: "Search by name or code" }), "zz");
+    // Worded as on the project's Participants and on Payments (D-159).
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search by code or name" }), "zz");
     expect(
       await screen.findByRole("heading", { name: "No participants match" }, wait),
     ).toBeInTheDocument();
-    expect(screen.getByText("Try another name or code.")).toBeInTheDocument();
+    expect(screen.getByText("Try another code or name.")).toBeInTheDocument();
     expect(screen.queryByText(/to get started/)).toBeNull();
   });
 
@@ -495,5 +496,32 @@ describe("participants section", () => {
     expect(panel).not.toHaveTextContent("Payable minutes");
     expect(within(panel).queryByRole("heading", { name: "Consent form" })).toBeNull();
     expect(within(panel).queryByRole("button", { name: "Download consent form" })).toBeNull();
+  });
+
+  it("writes minutes as the project's list and Payments do, up to two decimals (D-159)", async () => {
+    open({
+      "GET /api/v1/projects/p1/participants/a1/details": () => [
+        200,
+        {
+          ...DETAILS,
+          minutes: {
+            conversations: 1,
+            recorded_minutes: 0.07,
+            approved_conversations: 0,
+            approved_minutes: 0,
+            payable_minutes: 1234.5,
+          },
+        },
+      ],
+    });
+    await openList();
+    const row = (await screen.findByText("P000001", {}, wait)).closest("tr") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "View" }));
+    const panel = await screen.findByRole("dialog", { name: "Participant details" });
+    // 0.07 in the list is 0.07 here, not 0.1.
+    expect(await within(panel).findByText("0.07 min")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Recorded minutes0.07 min");
+    expect(panel).toHaveTextContent("Approved minutes0 min");
+    expect(panel).toHaveTextContent("Payable minutes1,234.5 min");
   });
 });

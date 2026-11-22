@@ -731,9 +731,10 @@ export function RetentionTab() {
           });
         }}
       >
-        {/* The Save on the section's title bar, as on the Rules pages (D-158). */}
+        {/* The Save on the section's title bar, as on the Rules pages (D-158); a short title, so
+            the bar stays one row on a phone (D-159). */}
         <div className="card__head">
-          <h2 id="retention-title">Days to keep each kind of file</h2>
+          <h2 id="retention-title">Days to keep files</h2>
           {canEdit ? (
             <Button type="submit" icon="check" busy={busy !== null} disabled={wrong}>
               Save retention

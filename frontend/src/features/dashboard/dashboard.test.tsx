@@ -138,6 +138,14 @@ describe("dashboard filters", () => {
     expect(card).toHaveTextContent("Recorded9");
     expect(card).toHaveTextContent("Could not be placed2");
     expect(card).toHaveTextContent("Waiting for a person1");
+    // A header row as its neighbours have, so the rows side by side line up (D-159).
+    const table = within(card).getByRole("table", { name: "Phone calls" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Calls", "Count"]);
+    expect(row(table, "Placed")).toEqual(["Placed", "12"]);
     expect(within(card).getByRole("link", { name: "Phone calls" })).toHaveAttribute(
       "href",
       "/calls",

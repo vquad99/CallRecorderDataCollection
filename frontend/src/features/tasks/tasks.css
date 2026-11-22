@@ -146,7 +146,8 @@
   font-size: 0.9375rem;
   font-weight: 600;
 }
-/* The summary: label left, value right, one thin line between rows. */
+/* The summary: label left, value right, one thin line between rows. D-159: the lines run edge to
+   edge (.bleed), as the participants table's under it; the words in line with the title. */
 .facts {
   margin: 0;
   font-size: 0.8125rem;
@@ -157,8 +158,12 @@
   align-items: center;
   gap: 8px;
   min-height: 30px;
-  padding: 4px 0;
+  padding: 4px var(--card-px);
   border-bottom: 1px solid var(--border);
+}
+/* A value with its icon (the recording type) is as dark as the values beside it. */
+.facts .cell-icon {
+  color: inherit;
 }
 .facts__row:last-child {
   border-bottom: 0;
@@ -224,7 +229,8 @@ a.fact-code:hover {
 }
 /* The participants matrix in the narrow column. Its first and last cells line up with the
    section's title (the shared table rule, D-158); the labels' column fits "Speaker details" on one
-   line, and the headings "Participant A" stay on one line. */
+   line, and the headings "Participant A" stay on one line. D-159: the consent chips' short words
+   fit their column on one line also in the 300 px column (TaskSide). */
 .table-wrap .table.people-matrix th,
 .table-wrap .table.people-matrix td {
   padding: 6px 8px;
@@ -234,10 +240,10 @@ a.fact-code:hover {
 }
 .table.people-matrix thead th:first-child,
 .table.people-matrix tbody th {
-  width: 124px;
+  width: 116px;
 }
 .table.people-matrix .badge {
-  padding: 2px 7px;
+  padding: 2px 6px;
 }
 .card .table-wrap .table.people-matrix tbody th {
   background: var(--surface-2);
@@ -541,9 +547,19 @@ a.fact-code:hover {
   align-items: center;
   gap: 6px 12px;
 }
-.qc-head .player {
-  width: 300px;
-  max-width: 100%;
+/* Listen and Check the stored file again (D-159): the section's first row under its bar. The
+   player, once it plays, takes the room beside the button. On a phone each takes a whole row: the
+   second's words do not fit half of one, and two rows of one width read evenly. */
+.qc-listen .player {
+  flex: 1 1 320px;
+}
+@media (max-width: 640px) {
+  .card .qc-listen.page-actions > * {
+    flex-basis: 100%;
+  }
+  .qc-listen .button {
+    width: 100%;
+  }
 }
 .qc-auto__line {
   margin: 0;
@@ -643,11 +659,21 @@ a.fact-code:hover {
 .qc-block__note {
   margin: 0 0 var(--space-2);
 }
-/* The answers of a decision, read only: two tables, a gap between them. */
+/* D-159: a checklist that ends on its last table (the consent forms, nothing under them) closes on
+   it, as a table directly in a section does: no strip of white and second line under it. */
+.qc-checklist > .qc-matrix:last-child:has(> .qc-block:last-child > .table-wrap:last-child) {
+  margin-bottom: calc(-1 * var(--card-py));
+}
+.qc-checklist > .qc-matrix:last-child > .qc-block:last-child > .table-wrap:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 8px 8px;
+}
+/* The answers of a decision, read only: two tables, a gap between them. D-159: the tables straight
+   in the grid, so the last one leaves its bottom line to the Decisions heading under it. */
 .qc-matrix--answers {
   margin-top: var(--space-3);
 }
-.qc-matrix--answers .qc-block + .qc-block {
+.qc-matrix--answers .qc-matrix__grid > .table-wrap + .table-wrap {
   margin-top: var(--space-4);
 }
 @container (min-width: 1000px) {
@@ -661,10 +687,10 @@ a.fact-code:hover {
   .qc-matrix .qc-matrix__grid .bleed {
     margin-inline: 0;
   }
-  .qc-matrix--answers .qc-matrix__grid > .qc-block + .qc-block {
+  .qc-matrix--answers .qc-matrix__grid > .table-wrap + .table-wrap {
     margin-top: 0;
   }
-  .qc-matrix .qc-matrix__grid > .qc-block + .qc-block {
+  .qc-matrix .qc-matrix__grid > :is(.qc-block, .table-wrap) + :is(.qc-block, .table-wrap) {
     border-left: 1px solid var(--border);
   }
 }
@@ -716,6 +742,8 @@ a.fact-code:hover {
 }
 .qc__hint {
   font-weight: 600;
+  /* D-159: never one word alone on its last line. */
+  text-wrap: pretty;
 }
 .qc__hint.is-fail {
   color: var(--danger);
@@ -802,8 +830,9 @@ a.fact-code:hover {
 }
 
 /* ---------- Phones: one column, tighter matrices ---------- */
-/* The decision on a phone (D-158): 12 px inside, each button's words on one line; with three
-   buttons Pass takes the first row and the other two share the next. */
+/* The decision on a phone (D-158): 12 px inside, each button's words on one line. D-159: Pass and
+   Reject share the first row evenly; with three buttons Send back for consent takes the next row
+   whole (its words do not fit half of one). */
 @media (max-width: 640px) {
   .qc-decide__text h3 {
     position: absolute;
@@ -822,10 +851,15 @@ a.fact-code:hover {
     min-width: 0;
   }
   .qc-decide__buttons > .button {
-    flex: 1 1 auto;
+    flex: 1 1 0;
   }
-  .qc-decide__buttons > .button:first-child:nth-last-child(3) {
+  .qc-decide__buttons > .button:nth-child(2):nth-last-child(2) {
     flex-basis: 100%;
+    order: 1;
+  }
+  /* Listen as wide as the buttons under it (Check your recording, Final approval). */
+  .record-card__listen .button {
+    width: 100%;
   }
 }
 

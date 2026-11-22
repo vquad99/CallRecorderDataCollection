@@ -355,7 +355,7 @@ const FORMS: Record<string, FormSpec> = {
   retention: {
     source: "src/features/projects/tabs.tsx",
     url: "/projects/p1/retention",
-    ready: /Days to keep each kind of file/,
+    ready: /Days to keep files/,
     fill: [type("Face-to-face 16 kHz WAV", "30")],
     submit: "Save retention",
     write: "PUT /api/v1/projects/p1/retention",

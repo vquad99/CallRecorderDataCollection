@@ -362,10 +362,38 @@ describe("the Progress tab", () => {
     const districts = within(balance).getByRole("rowgroup", { name: "Districts" });
     expect(within(districts).queryByText("District 11")).toBeNull();
     const more = screen.getByRole("button", { name: "Show all (12)" });
-    // On the section's title bar, as on the dashboard (D-158).
-    expect(more.closest(".panel__head")).toHaveTextContent("Balance against the targets");
+    // On the section's title bar, as on the dashboard (D-158), with nothing else (D-159).
+    expect(more.closest(".panel__head")?.textContent).toBe(
+      "Balance against the targetsShow all (12)",
+    );
     await userEvent.click(more);
     expect(within(districts).getByText("District 12")).toBeInTheDocument();
+  });
+
+  it("keeps each title bar to its title, says nothing twice, a full row for each small table (D-159)", async () => {
+    progress();
+    renderAt("/projects/p1/progress");
+    const needed = await screen.findByRole("region", { name: "Still needed" });
+    const bar = (section: HTMLElement) => section.querySelector(".panel__head")?.textContent;
+    // The first line under the bar starts "To reach the targets": the bar does not say it too.
+    expect(bar(needed)).toBe("Still needed");
+    // What the variance is: the first line in the section, so the bar stays one row on a phone.
+    const balance = screen.getByRole("region", { name: "Balance against the targets" });
+    expect(bar(balance)).toBe("Balance against the targets");
+    expect(balance.querySelector(".panel__head + p")?.textContent).toBe(
+      "Variance: actual minus target.",
+    );
+    // The sub-heading above names the conversations: their first column's heading is for screen
+    // readers only.
+    const talks = within(needed).getByRole("table", { name: "Conversations still to make" });
+    const first = within(talks).getByRole("columnheader", { name: "Conversations" });
+    expect(first.firstElementChild).toHaveClass("sr-only");
+    // A full row each: side by side the shorter was stretched to the taller one's height.
+    for (const name of ["Conversations by status", "Completed"]) {
+      const section = screen.getByRole("region", { name });
+      expect(section).not.toHaveClass("g-6");
+      expect(section.parentElement).toHaveClass("dash", "progress");
+    }
   });
 
   it("says when nothing is approved yet and when there is no target", async () => {

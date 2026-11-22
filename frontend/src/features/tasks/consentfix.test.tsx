@@ -104,7 +104,17 @@ describe("a consent form to fix (D-146)", () => {
     const people = screen.getByRole("table", { name: "Both participants" });
     const row = (name: string) =>
       within(people).getByRole("rowheader", { name }).closest("tr") as HTMLElement;
-    expect(row("Consent")).toHaveTextContent("ConsentNew form neededForm uploaded");
+    // D-159: a short word on each chip in the narrow table; the full words are the cell's title
+    // and what a screen reader says.
+    const consent = () => Array.from(row("Consent").querySelectorAll("td"));
+    const chips = () => consent().map((td) => td.querySelector(".badge")?.textContent);
+    const said = () => consent().map((td) => td.querySelector(".sr-only")?.textContent);
+    expect(chips()).toEqual(["New form", "Uploaded"]);
+    expect(said()).toEqual(["New form needed", "Form uploaded"]);
+    expect(consent()[0]).toHaveAttribute(
+      "title",
+      expect.stringMatching(/^New form needed · since /),
+    );
     const form = within(row("Consent form")).getByRole("button", {
       name: "View the signed consent form of P000001",
     });
@@ -115,7 +125,8 @@ describe("a consent form to fix (D-146)", () => {
       new File(["%PDF-1.7 signed"], "signed-again.pdf", { type: "application/pdf" }),
     );
     expect(await within(card).findByText("New form uploaded")).toBeInTheDocument();
-    expect(row("Consent")).toHaveTextContent("ConsentForm uploadedForm uploaded");
+    expect(chips()).toEqual(["Uploaded", "Uploaded"]);
+    expect(said()).toEqual(["Form uploaded", "Form uploaded"]);
     await userEvent.click(within(card).getByRole("button", { name: "Send back to QC" }));
     expect(await screen.findByText("Sent back to QC with the same recording.")).toBeInTheDocument();
     expect(calls.find((c) => c.path === "/api/v1/tasks/t1/consent-fix/send-to-qc")?.body).toEqual({
@@ -224,6 +235,8 @@ describe("a consent form to fix (D-146)", () => {
     const people = screen.getByRole("table", { name: "Both participants" });
     const consentRow = within(people).getByRole("rowheader", { name: "Consent" }).closest("tr");
     expect(consentRow).toHaveTextContent("Not agreed yet");
+    // D-159: "Not yet" on the chip in the narrow table.
+    expect(consentRow?.querySelector("td .badge")).toHaveTextContent(/^Not yet$/);
   });
 
   it("shows QC whose form and what is wrong, without the button", async () => {

@@ -35,10 +35,14 @@
   align-items: center;
   gap: 8px;
 }
-/* CSV or TSV needs little room: the filters fit one line on a laptop. */
+/* CSV or TSV needs little room, and the days do not grow (as on Payments): the five choices fit
+   one line on a laptop (D-159). */
 .export .filters .field:has(> select[name="table_format"]) {
   flex: 0 1 120px;
   min-width: auto;
+}
+.export .filters > .field:has(> input[type="date"]) {
+  flex: 0 1 160px;
 }
 /* On a phone each choice has a line of its own, so "Approved tasks only" is not cut; the two days
    share one (D-158). */

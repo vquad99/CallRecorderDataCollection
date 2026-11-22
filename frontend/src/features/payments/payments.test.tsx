@@ -36,10 +36,12 @@ describe("payments page", () => {
       { timeout: 5000 },
     );
     const row = within(table).getByText("Mona Moderator").closest("tr") as HTMLElement;
-    expect(within(row).getByText("25.50")).toBeInTheDocument();
+    // Minutes as in the participant lists ("25.5 min", D-159); amounts keep their two places.
+    expect(within(row).getByText("25.5 min")).toBeInTheDocument();
     expect(within(row).getByText("₹2.00 / min")).toBeInTheDocument();
     expect(within(row).getByText("₹51.00")).toBeInTheDocument();
-    expect(within(table).getByText("Total")).toBeInTheDocument();
+    const total = within(table).getByText("Total").closest("tr") as HTMLElement;
+    expect(within(total).getByText("25.5 min")).toBeInTheDocument();
   });
 
   it("shows participants' share, and No rate set where a project has no rate", async () => {
@@ -54,6 +56,26 @@ describe("payments page", () => {
     expect(within(row).getByText("Asha")).toBeInTheDocument();
     expect(within(row).getAllByText("No rate set")).toHaveLength(2);
     expect(within(table).getByText("Not in it: 12.75 min with no rate set")).toBeInTheDocument();
+    // The codes in the one code style of every list, not the task pages' chip (D-159).
+    expect(within(row).getByText("P000001")).toHaveClass("mono");
+    expect(within(row).getByText("HINDI")).toHaveClass("mono");
+    expect(table.querySelector(".code-tag")).toBeNull();
+  });
+
+  it("writes project codes in the one code style, on the moderators' table and the rates (D-159)", async () => {
+    open();
+    renderAt("/payments");
+    const table = await screen.findByRole(
+      "table",
+      { name: "Moderator payments" },
+      { timeout: 5000 },
+    );
+    const row = within(table).getByText("Mona Moderator").closest("tr") as HTMLElement;
+    expect(within(row).getByText("HINDI")).toHaveClass("mono");
+    const rates = await screen.findByRole("table", { name: "Rates per project" });
+    expect(within(rates).getByText("HINDI")).toHaveClass("mono");
+    // The project's name beside its code stays in the text's own letters.
+    expect(within(rates).getByText("Hindi conversations")).not.toHaveClass("mono");
   });
 
   it("sends the project, the approval days and the search, and downloads the same choice", async () => {

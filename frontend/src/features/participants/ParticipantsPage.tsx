@@ -281,7 +281,8 @@ export function ParticipantsPage() {
       {all.length === 0 ? (
         <EmptyState title="No projects" message="You are not a member of any project yet." />
       ) : (
-        // The filters, a section of their own; the project's box as wide as its names (D-158).
+        // The filters, a section of their own; the project's box as wide as its names (D-158). The
+        // search is worded as on the project's Participants and on Payments (D-159).
         <div className="filters participants-filters" role="group" aria-label="Filters">
           <Select
             label="Project"
@@ -298,7 +299,7 @@ export function ParticipantsPage() {
             ]}
           />
           <TextField
-            label="Search by name or code"
+            label="Search by code or name"
             type="search"
             value={search}
             disabled={!projectId}
@@ -401,7 +402,7 @@ export function ParticipantsPage() {
       ) : null}
       {list.state.status === "loaded" && list.state.data && rows.length === 0 ? (
         query ? (
-          <EmptyState title="No participants match" message="Try another name or code." />
+          <EmptyState title="No participants match" message="Try another code or name." />
         ) : (
           <EmptyState
             title="No participants"

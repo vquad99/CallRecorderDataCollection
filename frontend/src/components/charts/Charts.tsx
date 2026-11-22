@@ -85,7 +85,13 @@ export function Figure({
         {value}
         {of ? <span className="figline__of"> {of}</span> : null}
       </dd>
-      {note ? <dd className="figline__note">{note}</dd> : null}
+      {note ? (
+        <dd className="figline__note">
+          {/* "64 not placed · 79 cancelled" breaks only between its pieces (D-159); a note of
+              one piece wraps as any text, so a long one never runs out of its column. */}
+          {typeof note === "string" && note.includes(" · ") ? <Pieces detail={note} /> : note}
+        </dd>
+      ) : null}
     </div>
   );
 }
@@ -104,12 +110,13 @@ export function ShareBar({ percent }: { percent: number }) {
 }
 
 /** What a part is made of, "Audio QC 48 · Admin review 12", with a line break only between its
- * pieces, never inside one (D-158). */
+ * pieces, never inside one (D-158); also a key figure's note (D-159). The dot stays at the end
+ * of a line, never starts one. Keyed by place, as two pieces may read the same. */
 function Pieces({ detail }: { detail: ReactNode }) {
   if (typeof detail !== "string") return detail;
   return detail.split(" · ").map((piece, i) => (
-    <Fragment key={piece}>
-      {i > 0 ? " · " : null}
+    <Fragment key={i}>
+      {i > 0 ? "\u00a0· " : null}
       <span className="nowrap">{piece}</span>
     </Fragment>
   ));
@@ -684,28 +691,6 @@ export function CellBar({
       </span>
       <span className="cellbar__n">{children}</span>
     </span>
-  );
-}
-
-/** Two columns: a name and its value, one per row (a panel's few figures). */
-export function KeyTable({
-  label,
-  rows,
-}: {
-  label: string;
-  rows: { label: ReactNode; value: ReactNode; key?: string }[];
-}) {
-  return (
-    <DataTable label={label} className="key-table">
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={r.key ?? (typeof r.label === "string" ? r.label : i)}>
-            <th scope="row">{r.label}</th>
-            <td className="num">{orDash(r.value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </DataTable>
   );
 }
 

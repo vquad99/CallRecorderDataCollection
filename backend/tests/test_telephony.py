@@ -1064,6 +1064,50 @@ def test_a_call_left_open_is_counted_as_needing_a_person(world: dict[str, Any]) 
     assert ended.status_code == 200, ended.text
 
 
+def test_the_list_of_calls_keeps_to_the_period_chosen_as_the_csv_does(
+    world: dict[str, Any],
+) -> None:
+    """The Period on the Phone calls page narrows the list as it narrows the CSV (D-159): a call
+    from before the period is left out with `days` and kept without it (a moderator's own list
+    asks for every call)."""
+    w = world
+    give_seat(w)
+    old = start(w, w["new_task"]())
+    new = start(w, w["new_task"]())
+    w["db"].execute(
+        update(Call)
+        .where(Call.id == old["id"])
+        .values(dialled_at=datetime.now(UTC) - timedelta(days=10))
+    )
+    w["db"].commit()
+
+    def listed(api: Api, asked: str) -> list[dict[str, Any]]:
+        got = api.get(f"/api/v1/calls{asked}")
+        assert got.status_code == 200, got.text
+        items: list[dict[str, Any]] = got.json()["items"]
+        return items
+
+    def ids(items: list[dict[str, Any]]) -> list[str]:
+        return [i["id"] for i in items]
+
+    week = listed(w["pa"], "?days=7")
+    assert ids(week) == [new["id"]]
+    assert ids(listed(w["pa"], f"?project_id={w['project_id']}&days=30")) == [new["id"], old["id"]]
+    assert ids(listed(w["pa"], "")) == [new["id"], old["id"]]
+    assert ids(listed(w["mod"], "")) == [new["id"], old["id"]]
+    # With the other filters: the old call was left open (it needs a person), but not this week.
+    assert ids(listed(w["pa"], "?state=NEEDS_PERSON")) == [old["id"]]
+    assert listed(w["pa"], "?state=NEEDS_PERSON&days=7") == []
+    # The CSV of the same period holds the same calls.
+    sheet = w["pa"].get("/api/v1/calls/export?days=7")
+    assert sheet.status_code == 200, sheet.text
+    rows = list(csv.DictReader(io.StringIO(sheet.content.decode("utf-8-sig"))))
+    assert [r["task"] for r in rows] == [i["task_code"] for i in week]
+    # Periods the page does not offer are refused, as for the figures and the CSV.
+    for days in (0, 91):
+        assert w["pa"].get(f"/api/v1/calls?days={days}").status_code == 422
+
+
 def test_the_progress_report_lists_each_tasks_calls(world: dict[str, Any]) -> None:
     w = world
     _, call = started_and_closed(w)

@@ -16,20 +16,15 @@
   margin-top: 3px;
 }
 
-/* ---------- Matrices (D-152): rows of questions or details, a column per speaker ---------- */
-.table-wrap .table.matrix th,
-.table-wrap .table.matrix td,
-.card .table-wrap .table.matrix th,
-.card .table-wrap .table.matrix td {
+/* ---------- Matrices (D-152): rows of questions or details, a column per speaker ----------
+   D-159: the task pages' own tables only (the QC checklist, the automatic checks, the device
+   details, the participants and a call's steps). This file loads with the task pages; it never
+   restyles the charts' matrices (Dashboard, Progress, Phone calls) once a task was opened. Their
+   headings are the standard ones (13 px / 500), as in every other table. The participants table in
+   the side column has its own spacing (tasks.css). */
+.table-wrap .table:is(.qc-table, .qc-checks, .devices-matrix, .call-events) :is(th, td) {
   padding: 6px 10px;
   vertical-align: middle;
-}
-.card .table-wrap .table.matrix thead th,
-.table-wrap .table.matrix thead th {
-  background: var(--k-200);
-  color: var(--text-2);
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 /* Each speaker's column heading in their own tint (as in a grouped heading row). */
 .card .table-wrap .table.matrix thead th.mx-a,
@@ -44,31 +39,34 @@
   background: var(--tint-violet);
   color: var(--text);
 }
-/* Both speakers' names start on the same line, also when one has "Same as last time" under it. */
+/* Both speakers' names start on the same line, also when only one has a name shown. */
 .table-wrap .table.matrix thead th:is(.mx-a, .mx-b),
 .card .table-wrap .table.matrix thead th:is(.mx-a, .mx-b) {
   vertical-align: top;
 }
-.table.matrix tbody th {
+.table:is(.qc-table, .qc-checks, .devices-matrix, .people-matrix, .call-events) tbody th {
   color: var(--text);
   font-weight: 400;
   text-align: left;
   white-space: normal;
 }
-.table.matrix tfoot th {
+.table.devices-matrix tfoot th {
   text-align: left;
 }
-.table.matrix tbody tr:hover {
+.table:is(.qc-table, .qc-checks, .devices-matrix, .people-matrix, .call-events) tbody tr:hover {
   background: transparent;
 }
-.table.matrix tbody tr:hover th,
-.table.matrix tbody tr:hover td {
+.table:is(.qc-table, .qc-checks, .devices-matrix, .people-matrix, .call-events)
+  tbody
+  tr:hover
+  :is(th, td) {
   background-color: var(--k-100);
 }
-/* The row number, quiet. */
-.table.matrix td.mx-n,
-.table.matrix th.mx-n {
-  width: 28px;
+/* The row number, quiet. D-159: one width in every QC table, also where it is empty (the consent
+   row), so the questions of every table start on one line: the section's inner line and two
+   digits; the question's own space after it. */
+.table-wrap .table.qc-table :is(th, td).mx-n {
+  width: calc(var(--card-px) + 2ch);
   padding-right: 0;
   color: var(--muted);
   font-size: 0.75rem;
@@ -124,7 +122,9 @@
 .mx-fails {
   display: inline-flex;
 }
-.mx-view.button {
+/* A small button in a cell: View (a signed form), Same as last time (D-159: a row of its own). */
+.mx-view.button,
+.mx-last.button {
   min-height: 28px;
   padding: 2px 8px;
   font-size: 0.75rem;
@@ -210,15 +210,43 @@
 }
 
 /* Device details (D-147) as a matrix: a row per detail, a column per speaker. D-158: the matrix
-   runs edge to edge under the section's title bar, its Save on the bar, editable or not. */
+   runs edge to edge under the section's title bar, its Save on the bar, editable or not. D-159:
+   the labels' column has one width and A and B share the rest evenly, whoever has "Same as last
+   time"; the table is as wide as its section, never wider. */
+.devices-card {
+  container: devices / inline-size;
+}
 .devices__hint {
   margin: 0 0 var(--space-3);
 }
-.table.devices-matrix tbody th {
+.table.devices-matrix {
+  table-layout: fixed;
+}
+.table.devices-matrix thead th:first-child,
+.table.devices-matrix tbody th,
+.table.devices-matrix tfoot th {
   width: 190px;
 }
-.table.devices-matrix td {
-  min-width: 170px;
+/* A label of two lines splits evenly ("Bluetooth" / "earphones used"), never one word alone. */
+.table.devices-matrix tbody th {
+  text-wrap: balance;
+}
+/* A narrow section (D-159): the task page's main column beside the side column, in a window about
+   900 to 1110 px wide. The labels take a third and the cells' inner space is smaller, so both
+   speakers' boxes and Yes / No switches stay whole; only under 360 px (a window narrower than
+   950 px) does the table scroll sideways inside its frame. A phone has its own widths below. */
+@container devices (max-width: 440px) {
+  .table.devices-matrix {
+    min-width: 360px;
+  }
+  .table.devices-matrix thead th:first-child,
+  .table.devices-matrix tbody th,
+  .table.devices-matrix tfoot th {
+    width: 34%;
+  }
+  .table-wrap .table.devices-matrix :is(th, td) {
+    padding-inline: 8px;
+  }
 }
 .mx-input.field__input {
   width: 100%;
@@ -226,37 +254,34 @@
   padding: 4px 8px;
   font-size: 0.8125rem;
 }
-.mx-last.button {
-  min-height: 26px;
-  margin-top: 6px;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
+/* Who filled them, and when under it (D-159): both start at the top of the row; in a narrow
+   column the time breaks into even lines ("22 Nov 2026," / "7:46 am IST"). */
 .table.devices-matrix tfoot td {
   font-size: 0.8125rem;
   white-space: normal;
 }
-.table.matrix tfoot th,
-.table.matrix tfoot td {
+.devices__when {
+  text-wrap: balance;
+}
+.table-wrap .table.devices-matrix tfoot :is(th, td) {
+  vertical-align: top;
+}
+.table.devices-matrix tfoot th,
+.table.devices-matrix tfoot td {
   font-weight: 400;
 }
-.table.matrix tfoot th {
+.table.devices-matrix tfoot th {
   font-weight: 500;
 }
 @media (max-width: 640px) {
-  .table-wrap .table.matrix th,
-  .table-wrap .table.matrix td,
-  .card .table-wrap .table.matrix th,
-  .card .table-wrap .table.matrix td {
+  .table-wrap .table:is(.qc-table, .qc-checks, .devices-matrix, .call-events) :is(th, td) {
     padding: 5px 6px;
   }
-  .table.matrix td.mx-n,
-  .table.matrix th.mx-n {
+  .table.qc-table :is(td, th).mx-n {
     display: none;
   }
   /* Without the number, the question is the first column: in line with the section's title. */
-  .card .bleed .table.matrix tr > .mx-n + :is(th, td) {
+  .card .bleed .table.qc-table tr > .mx-n + :is(th, td) {
     padding-left: var(--card-px);
   }
   /* Tap-sized on a phone (D-158): the switches, boxes and small buttons in the matrices. */
@@ -266,30 +291,22 @@
     padding: 0 8px;
   }
   .mx-input.field__input,
-  .mx-view.button {
-    min-height: 40px;
-  }
-  /* "Same as last time (T000007)" may take two lines in a narrow column, never one word each. */
+  .mx-view.button,
   .mx-last.button {
     min-height: 40px;
-    line-height: 1.25;
-    text-align: left;
-    white-space: normal;
   }
+  /* The whole width of the phone, never wider. The labels' column fits "Bluetooth earphones used"
+     on two lines at most. */
   .table.devices-matrix {
-    table-layout: fixed;
+    min-width: 0;
   }
-  /* The labels' column fits "Bluetooth earphones used" on two lines at most. */
   .table.devices-matrix tbody th,
   .table.devices-matrix thead th:first-child,
   .table.devices-matrix tfoot th {
     width: 36%;
   }
-  .table.devices-matrix td {
-    min-width: 0;
-  }
-  .table.matrix td,
-  .table.matrix tbody th {
+  .table:is(.qc-table, .qc-checks, .devices-matrix, .people-matrix, .call-events) td,
+  .table:is(.qc-table, .qc-checks, .devices-matrix, .people-matrix, .call-events) tbody th {
     white-space: normal;
   }
 }

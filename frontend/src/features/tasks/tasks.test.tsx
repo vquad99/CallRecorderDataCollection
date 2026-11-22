@@ -106,7 +106,10 @@ describe("tasks", () => {
     );
     renderAt("/tasks");
     const row = (await screen.findByRole("link", { name: "T000001" })).closest("tr") as HTMLElement;
-    expect(within(row).getByText("VOICE")).toBeInTheDocument();
+    // D-159: a project code in plain monospace, as the task's and the people's codes.
+    expect(within(row).getByText("VOICE")).toHaveClass("mono");
+    // D-159: New task among the title row's actions, so on a phone it fills its row.
+    expect(screen.getByRole("link", { name: "New task" }).parentElement).toHaveClass("actions");
     await userEvent.selectOptions(screen.getByLabelText("Status"), "ON_HOLD");
     expect(calls.some((c) => c.path.includes("status=ON_HOLD"))).toBe(true);
   });
@@ -503,6 +506,12 @@ describe("tasks", () => {
     renderAt("/tasks/new");
     await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
     expect(await screen.findByText(/This project has no participants/)).toBeInTheDocument();
+    // D-159: the fields are a section with its title on a bar; Create task stays at its foot.
+    const details = screen.getByRole("form", { name: "Task details" });
+    expect(details.firstElementChild).toHaveTextContent(/^Task details$/);
+    expect(details.lastElementChild).toBe(
+      within(details).getByRole("button", { name: "Create task" }),
+    );
     expect(screen.getByRole("link", { name: "Add participants to the project" })).toHaveAttribute(
       "href",
       "/projects/p1/participants",
@@ -942,6 +951,8 @@ describe("one task on one screen (D-152)", () => {
       "Waiting for Mona Moderator to start the session.",
     );
     const summary = within(side).getByRole("region", { name: "Summary" });
+    // D-159: its lines run edge to edge, as the participants table's under it.
+    expect(summary.querySelector("dl")).toHaveClass("facts", "bleed");
     expect(summary).toHaveTextContent("ModeratorMona Moderator");
     expect(summary).toHaveTextContent("Recording typeFace-to-face");
     // The browser tab names the task (UXA-08).
@@ -974,9 +985,23 @@ describe("one task on one screen (D-152)", () => {
       Array.from(log.querySelectorAll(".timeline__title"), (el) => el.textContent);
     await within(log).findByText("On hold → Assigned");
     expect(titles()).toEqual(["Assigned → On hold", "On hold → Assigned", "Assigned → On hold"]);
-    await userEvent.click(within(log).getByRole("button", { name: "Show all (5)" }));
+    // D-159: when, who and what each stay whole; the line breaks only after a dot.
+    const meta = log.querySelector(".timeline li > .muted") as HTMLElement;
+    expect(Array.from(meta.querySelectorAll(".nowrap"), (s) => s.textContent)).toEqual([
+      expect.stringMatching(/^14 Nov 2026, .+ IST ·$/),
+      "Ada ·",
+      "Status changed",
+    ]);
+    // D-159: the compact button every other section's bar has for the same, not a text link.
+    const more = within(log).getByRole("button", { name: "Show all (5)" });
+    expect(more).toHaveClass("button", "button--secondary");
+    await userEvent.click(more);
     expect(titles()).toHaveLength(5);
     expect(titles()[4]).toBe("Created as Draft");
+    expect(within(log).getByRole("button", { name: "Show fewer" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("asks for a moderator in the work column while nobody is assigned", async () => {

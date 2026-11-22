@@ -4,7 +4,10 @@
 // India time. A project with no rate yet shows its minutes and "No rate set". A long list is shown
 // a page at a time; its totals and the CSV always cover every row. D-158: one filter bar for the
 // page (the project, the days and the search), the tab's table in a section of its own with the
-// CSV download on its title bar, and the rates' first rows with the rest on request.
+// CSV download on its title bar, and the rates' first rows with the rest on request. D-159: project
+// and participant codes in the one code style (.mono, global), as on the other lists; not the task
+// pages' chip, whose style loads only with those pages. Minutes written as in the participant lists
+// and the participant's details window ("25.5 min"); amounts keep their two places.
 import { useId, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
@@ -21,7 +24,7 @@ import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
-import { rupees, typedDay, when } from "../../lib/format";
+import { minutes, rupees, typedDay, when } from "../../lib/format";
 import "./payments.css";
 
 const VIEWS: { id: pay.Payee; label: string }[] = [
@@ -44,13 +47,13 @@ function Totals({ totals, columns }: { totals: pay.PayTotals; columns: number })
           Total
         </th>
         <td className="num">{totals.count}</td>
-        <td className="num">{totals.minutes}</td>
+        <td className="num">{minutes(totals.minutes)}</td>
         <td />
         <td className="num">
           <strong>{rupees(totals.amount)}</strong>
           {Number(totals.minutes_without_rate) > 0 ? (
             <div className="muted">
-              Not in it: {totals.minutes_without_rate} min with no rate set
+              Not in it: {minutes(totals.minutes_without_rate)} with no rate set
             </div>
           ) : null}
         </td>
@@ -89,10 +92,10 @@ function ModeratorTable({ rows, totals }: Shown<pay.ModeratorPay>) {
       <tbody>
         {rows.map((r) => (
           <tr key={`${r.project_id}-${r.user_id}`}>
-            <td>{r.project_code}</td>
+            <td className="mono">{r.project_code}</td>
             <td>{r.name}</td>
             <td className="num">{r.approved_tasks}</td>
-            <td className="num">{r.approved_minutes}</td>
+            <td className="num">{minutes(r.approved_minutes)}</td>
             <td className="num">{rate(r.rate)}</td>
             <td className="num">{amount(r.amount)}</td>
           </tr>
@@ -128,13 +131,11 @@ function ParticipantTable({ rows, totals }: Shown<pay.ParticipantPay>) {
       <tbody>
         {rows.map((r) => (
           <tr key={`${r.project_id}-${r.participant_id}`}>
-            <td>{r.project_code}</td>
-            <td>
-              <span className="code-tag">{r.participant_code}</span>
-            </td>
+            <td className="mono">{r.project_code}</td>
+            <td className="mono">{r.participant_code}</td>
             <td>{r.name ?? "-"}</td>
             <td className="num">{r.approved_sessions}</td>
-            <td className="num">{r.payable_minutes}</td>
+            <td className="num">{minutes(r.payable_minutes)}</td>
             <td className="num">{rate(r.rate)}</td>
             <td className="num">{amount(r.amount)}</td>
           </tr>
@@ -321,7 +322,7 @@ function Rates({
               {shown.map((p) => (
                 <tr key={p.project_id}>
                   <td>
-                    {p.project_code}{" "}
+                    <span className="mono">{p.project_code}</span>{" "}
                     <span className="muted rates-table__extra">{p.project_name}</span>
                   </td>
                   <td>{rate(p.moderator_rate)}</td>

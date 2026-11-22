@@ -174,9 +174,11 @@ export function TasksPage({
           {newTask ? <PageActions>{newTask}</PageActions> : null}
         </>
       ) : (
+        // D-159: New task in the title row's actions, so on a phone it fills its row as every
+        // page's buttons do (and as on the project's Tasks tab).
         <div className="page-header">
           <h1 id="tasks-title">Tasks</h1>
-          {newTask}
+          {newTask ? <div className="actions">{newTask}</div> : null}
         </div>
       )}
       {/* D-158: the page's filters, a framed bar of their own, as on every other page. */}
@@ -302,7 +304,8 @@ export function TasksPage({
                       {t.task_code}
                     </Link>
                   </td>
-                  {inProject ? null : <td>{codes[t.project_id] ?? "-"}</td>}
+                  {/* D-159: a code in a list is plain monospace, as the task's and the people's. */}
+                  {inProject ? null : <td className="mono">{codes[t.project_id] ?? "-"}</td>}
                   {showsPeople ? <td className="tasks-table__pair">{pairOf(t)}</td> : null}
                   {showsMode ? (
                     <td>
