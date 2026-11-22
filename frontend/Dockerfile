@@ -1,4 +1,4 @@
-FROM node:22.23.4-alpine AS build
+FROM node:26.13.1-alpine AS build
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 WORKDIR /src
 COPY package.json package-lock.json ./
