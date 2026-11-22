@@ -46,7 +46,7 @@ jobs:
       REQUIRE_FFPROBE: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           version: "0.13.1"
           python-version: "3.12"
@@ -116,7 +116,7 @@ jobs:
       STORAGE_CREATE_BUCKET: "true"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           version: "0.13.1"
           python-version: "3.12"
