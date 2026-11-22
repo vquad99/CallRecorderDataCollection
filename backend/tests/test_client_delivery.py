@@ -189,7 +189,7 @@ def test_the_export_settings_start_as_the_clients_and_save_with_the_project(
 ) -> None:
     made = world["sa"].post(
         "/api/v1/projects",
-        json={"name": "Konkani", "allows_telephony": True, "allows_face_to_face": True},
+        json={"name": "Konkani", "allows_telephony": False, "allows_face_to_face": True},
     )
     assert made.status_code == 201, made.text
     assert {k: made.json()[k] for k in SETTINGS} == {

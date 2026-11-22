@@ -383,11 +383,38 @@ def require_agreed(
 
 @dataclass(frozen=True)
 class TaskInput:
-    recording_mode: str
+    # None = the project's one recording type (D-153); a project made before D-153 that allows
+    # both needs it.
+    recording_mode: str | None
     participant_a_id: uuid.UUID
     participant_b_id: uuid.UUID
     priority: str
     due_at: datetime | None
+
+
+_MODE_WORDS = {"TELEPHONY": "phone calls", "FACE_TO_FACE": "face-to-face conversations"}
+
+
+def recording_mode_for(project: Project, asked: str | None) -> str:
+    """A new task's recording type (D-153): the project's one type when none is asked; a type the
+    project does not record is refused (422 MODE_NOT_ALLOWED). A project made before D-153 that
+    allows both needs the type (422 MODE_REQUIRED)."""
+    only = project.only_mode
+    if asked is None:
+        if only is None:
+            raise AppError(
+                "Choose the recording type: this project allows face-to-face and phone calls",
+                code="MODE_REQUIRED",
+                status_code=422,
+            )
+        return only
+    if only is not None and asked != only:
+        raise AppError(
+            f"This project records {_MODE_WORDS[only]} only",
+            code="MODE_NOT_ALLOWED",
+            status_code=422,
+        )
+    return asked
 
 
 def create_task(
@@ -395,15 +422,7 @@ def create_task(
 ) -> Task:
     project = get_manageable(db, principal, project_id, Perm.TASKS_ASSIGN)
     ensure_accepts_new_work(project)
-    allowed = (data.recording_mode == "TELEPHONY" and project.allows_telephony) or (
-        data.recording_mode == "FACE_TO_FACE" and project.allows_face_to_face
-    )
-    if not allowed:
-        raise AppError(
-            "This project does not allow that recording mode",
-            code="MODE_NOT_ALLOWED",
-            status_code=422,
-        )
+    mode = recording_mode_for(project, data.recording_mode)
     if data.participant_a_id == data.participant_b_id:
         raise AppError(
             "Participant A and B must be different people", code="SAME_PARTICIPANT", status_code=422
@@ -415,7 +434,7 @@ def create_task(
     # held until this task is saved, so two at once cannot both take the last place.
     pairing.lock(db, project.id)
     pairing.check(pairing.tally(db, project, [a.id, b.id]), a, b)
-    if data.recording_mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
+    if mode == "TELEPHONY" and not (a.phone_e164_enc and b.phone_e164_enc):
         raise AppError(
             "Telephony tasks need a phone number for both participants",
             code="PHONE_REQUIRED",
@@ -426,7 +445,7 @@ def create_task(
         id=uuid.uuid4(),
         task_code=code,
         project_id=project.id,
-        recording_mode=data.recording_mode,
+        recording_mode=mode,
         status="DRAFT",
         priority=data.priority,
         due_at=data.due_at,
@@ -450,7 +469,7 @@ def create_task(
         ip=ip,
         after={
             "task_code": code,
-            "mode": data.recording_mode,
+            "mode": mode,
             "participants": [a.participant_code, b.participant_code],
         },
     )

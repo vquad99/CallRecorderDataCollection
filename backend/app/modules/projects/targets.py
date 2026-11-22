@@ -234,3 +234,21 @@ def district_of(
 
 def hours_target(value: Decimal | None) -> float | None:
     return None if value is None else float(value)
+
+
+def split(total: int, weights: Sequence[int]) -> list[int]:
+    """`total` shared out by whole-number `weights` (percents, or products of percents) as whole
+    numbers that add up to `total` exactly (D-153, the "Still needed" targets): the largest
+    remainder method. Each part first gets the whole part of its exact share; the ones left over go
+    to the parts with the largest fractions, the first in order on a tie. Integer arithmetic only,
+    so the same targets always give the same parts. No weight at all: every part is 0."""
+    whole = sum(weights)
+    if whole <= 0:
+        return [0 for _ in weights]
+    parts = [divmod(total * w, whole) for w in weights]
+    out = [quotient for quotient, _ in parts]
+    left = total - sum(out)
+    order = sorted(range(len(parts)), key=lambda i: (-parts[i][1], i))
+    for i in order[:left]:
+        out[i] += 1
+    return out

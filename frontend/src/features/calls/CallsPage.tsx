@@ -1,7 +1,8 @@
 // Phone calls (D-101, D-102, D-103): how calls are going, from the platform's own call records,
 // plus TxContact's own count of calls per hour; and, on its own tab, every call with a link to its
-// task. Moderators see a plain list of their own calls (D-104). The figures are one dashboard
-// (D-151): key figures in one strip, then charts and tables in a grid.
+// task. Moderators see a plain list of their own calls (D-104). The figures are laid out plainly
+// (D-154): the key figures as one line, one chart (calls per day), and a heading over each table;
+// the calls per hour as one matrix (our count and TxContact's, hour by hour).
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -11,18 +12,17 @@ import { useAuth } from "../../auth/AuthContext";
 import {
   CellBar,
   DayChart,
-  Donut,
-  Kpi,
-  KpiStrip,
+  Figure,
+  FigureLine,
   MatrixTable,
   Panel,
+  ShareTable,
   type MatrixSection,
 } from "../../components/charts/Charts";
 import { stageParts } from "../../components/charts/stages";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -35,60 +35,129 @@ import { CallBadge } from "./callUi";
 
 const minutes = (m: number | null) => duration(m === null ? null : m * 60);
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const two = (h: number) => String(h).padStart(2, "0");
 
-/** Calls started in each hour of the day (one series: the title names it). */
-function CallsByHour({
-  hours,
-  title,
-  className,
-}: {
-  hours: number[];
-  title: string;
-  className?: string | undefined;
-}) {
+/** TxContact's own hour-of-day counts: its answer's shape is not described, so a map or list of
+ * numbers is read; anything else is only described, with the answer for the Super Admin. */
+function useProviderHours(days: number) {
+  const { state, reload } = useResource(() => tel.providerTraffic(days), [days]);
+  if (state.status !== "loaded") return { state, reload, hours: null, source: null };
+  const t = state.data;
+  if (!t.available) return { state, reload, hours: null, source: null };
+  const hours = HOURS.map(() => 0);
+  let readable = false;
+  const source = t.data;
+  if (Array.isArray(source) && source.every((v) => typeof v === "number")) {
+    source.slice(0, 24).forEach((v, i) => (hours[i] = v as number));
+    readable = true;
+  } else if (source && typeof source === "object") {
+    for (const [k, v] of Object.entries(source as Record<string, unknown>)) {
+      const h = Number.parseInt(k, 10);
+      if (Number.isInteger(h) && h >= 0 && h < 24 && typeof v === "number") {
+        hours[h] = v;
+        readable = true;
+      }
+    }
+  }
+  return { state, reload, hours: readable ? hours : null, source };
+}
+
+/** One row of the hours matrix: a count per shown hour, each cell shaded by its share of the
+ * row's busiest hour. */
+function HourCells({ hours, shown }: { hours: number[]; shown: number[] }) {
   const max = Math.max(1, ...hours);
-  const busiest = hours.indexOf(Math.max(...hours));
-  const hour = (h: number) => `${String(h).padStart(2, "0")}:00`;
   return (
-    <Panel className={className} icon="clock" title={title}>
-      {hours.every((n) => n === 0) ? (
-        <p className="muted">No calls in this period yet.</p>
-      ) : (
-        <>
-          <ol className="hours" aria-hidden="true">
-            {hours.map((n, h) => (
-              <li key={h} title={`${hour(h)} · ${n} call(s)`}>
-                <span className="hours__bar" style={{ height: `${(n / max) * 100}%` }} />
-                <span className="hours__tick">{h % 3 === 0 ? String(h).padStart(2, "0") : ""}</span>
-              </li>
+    <>
+      {shown
+        .map((h) => ({ h, n: hours[h] ?? 0 }))
+        .map(({ h, n }) => (
+          <td
+            key={h}
+            className="num"
+            style={
+              n > 0
+                ? {
+                    background: `color-mix(in srgb, var(--icon-blue) ${Math.round((n / max) * 38) + 4}%, transparent)`,
+                  }
+                : undefined
+            }
+          >
+            {n > 0 ? n : <span className="muted">·</span>}
+          </td>
+        ))}
+    </>
+  );
+}
+
+/** Calls started in each hour of the day as one matrix (D-154): our own count, and TxContact's
+ * own count beside it (or why it is missing). */
+function CallsByHour({ ours, days }: { ours: number[]; days: number }) {
+  const superAdmin = Boolean(useAuth().user?.roles.includes("SUPER_ADMIN"));
+  const provider = useProviderHours(days);
+  const busiest = ours.indexOf(Math.max(...ours));
+  // Only the hours from the first to the last with any call (on either row): the night stays out.
+  const used = HOURS.filter((h) => (ours[h] ?? 0) > 0 || (provider.hours?.[h] ?? 0) > 0);
+  const shown = used.length > 0 ? HOURS.slice(used[0], (used[used.length - 1] ?? 23) + 1) : HOURS;
+  const theirs = provider.state;
+  const providerRow =
+    provider.hours !== null ? (
+      <HourCells hours={provider.hours} shown={shown} />
+    ) : (
+      <td colSpan={shown.length} className="hours-matrix__note">
+        {theirs.status === "loading" ? (
+          "Asking TxContact…"
+        ) : theirs.status === "failed" ? (
+          <>
+            {theirs.error.message}{" "}
+            <button type="button" className="linkish" onClick={provider.reload}>
+              Try again
+            </button>
+          </>
+        ) : !theirs.data.available ? (
+          `Not available: ${theirs.data.message}.`
+        ) : (
+          "TxContact answered, but not with counts per hour."
+        )}
+      </td>
+    );
+  return (
+    <Panel title="Calls by hour of the day">
+      <DataTable label="Calls by hour of the day" className="hours-matrix">
+        <thead>
+          <tr>
+            <th scope="col">Hour</th>
+            {shown.map((h) => (
+              <th key={h} scope="col" className="num">
+                {two(h)}
+              </th>
             ))}
-          </ol>
-          <p className="muted">
-            Busiest hour: {hour(busiest)} ({hours[busiest]} call(s)).
-          </p>
-          <details className="chart__table">
-            <summary>Show as a table</summary>
-            <DataTable label={title}>
-              <thead>
-                <tr>
-                  <th scope="col">Hour</th>
-                  <th scope="col">Calls</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hours.map((n, h) =>
-                  n > 0 ? (
-                    <tr key={h}>
-                      <td>{hour(h)}</td>
-                      <td>{n}</td>
-                    </tr>
-                  ) : null,
-                )}
-              </tbody>
-            </DataTable>
-          </details>
-        </>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Calls made</th>
+            <HourCells hours={ours} shown={shown} />
+          </tr>
+          <tr>
+            <th scope="row">TxContact&apos;s own count</th>
+            {providerRow}
+          </tr>
+        </tbody>
+      </DataTable>
+      {ours.some((n) => n > 0) ? (
+        <p className="muted">
+          Busiest hour: {two(busiest)}:00 ({ours[busiest]} call(s)).
+        </p>
+      ) : (
+        <p className="muted">No calls in this period yet.</p>
       )}
+      {superAdmin && provider.source !== null && provider.hours === null ? (
+        <details className="tech-log">
+          <summary>Technical details</summary>
+          <pre className="calls-raw">{JSON.stringify(provider.source, null, 2)}</pre>
+        </details>
+      ) : null}
     </Panel>
   );
 }
@@ -184,7 +253,7 @@ const FUNNEL: { key: keyof tel.CallFunnel; label: string }[] = [
 /** From dial to approval: where calls are lost on the way. */
 function Funnel({ funnel, className }: { funnel: tel.CallFunnel; className: string }) {
   return (
-    <Panel className={className} icon="target" title="From call to approval">
+    <Panel className={className} title="From call to approval">
       <DataTable label="From call to approval" className="funnel">
         <thead>
           <tr>
@@ -213,62 +282,6 @@ function Funnel({ funnel, className }: { funnel: tel.CallFunnel; className: stri
           ))}
         </tbody>
       </DataTable>
-    </Panel>
-  );
-}
-
-/** TxContact's own hour-of-day counts: its answer's shape is not described, so a map or list of
- * numbers is drawn; anything else is only described, with the answer for the Super Admin. */
-function ProviderTraffic({ days, className }: { days: number; className?: string | undefined }) {
-  const superAdmin = Boolean(useAuth().user?.roles.includes("SUPER_ADMIN"));
-  const { state, reload } = useResource(() => tel.providerTraffic(days), [days]);
-  const title = "TxContact: calls per hour (its own count)";
-  if (state.status === "loading")
-    return (
-      <Panel className={className} icon="clock" title={title}>
-        <LoadingState label="Asking TxContact" />
-      </Panel>
-    );
-  if (state.status === "failed")
-    return (
-      <Panel className={className} icon="clock" title={title}>
-        <ErrorState error={state.error} onRetry={reload} />
-      </Panel>
-    );
-  const t = state.data;
-  if (!t.available) {
-    return (
-      <Panel className={className} icon="clock" title={title}>
-        <p className="muted">Not available: {t.message}.</p>
-      </Panel>
-    );
-  }
-  const hours = Array.from({ length: 24 }, () => 0);
-  let drawable = false;
-  const source = t.data;
-  if (Array.isArray(source) && source.every((v) => typeof v === "number")) {
-    source.slice(0, 24).forEach((v, i) => (hours[i] = v as number));
-    drawable = true;
-  } else if (source && typeof source === "object") {
-    for (const [k, v] of Object.entries(source as Record<string, unknown>)) {
-      const h = Number.parseInt(k, 10);
-      if (Number.isInteger(h) && h >= 0 && h < 24 && typeof v === "number") {
-        hours[h] = v;
-        drawable = true;
-      }
-    }
-  }
-  return drawable ? (
-    <CallsByHour hours={hours} title={title} className={className} />
-  ) : (
-    <Panel className={className} icon="clock" title={title}>
-      <p className="muted">TxContact answered, but not with counts per hour that can be drawn.</p>
-      {superAdmin ? (
-        <details className="tech-log">
-          <summary>Technical details</summary>
-          <pre className="calls-raw">{JSON.stringify(source, null, 2)}</pre>
-        </details>
-      ) : null}
     </Panel>
   );
 }
@@ -372,12 +385,12 @@ function ByModerator({ rows, className }: { rows: tel.ModeratorCalls[]; classNam
   const { shown, more } = useFirstRows(rows);
   const most = Math.max(0, ...rows.map((m) => m.calls));
   return (
-    <Panel className={className} icon="people" title="By moderator">
+    <Panel className={className} title="By moderator">
       {rows.length === 0 ? (
         <p className="muted">No calls in this period yet.</p>
       ) : (
         <>
-          <DataTable label="By moderator">
+          <DataTable label="By moderator" className="names">
             <thead>
               <tr>
                 <th scope="col">Moderator</th>
@@ -426,8 +439,8 @@ function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: s
   const { shown, more } = useFirstRows(rows);
   const most = Math.max(0, ...rows.map((p) => p.calls));
   return (
-    <Panel className={className} icon="projects" title="By project">
-      <DataTable label="By project">
+    <Panel className={className} title="By project">
+      <DataTable label="By project" className="names">
         <thead>
           <tr>
             <th scope="col">Project</th>
@@ -472,12 +485,11 @@ function ByProject({ rows, className }: { rows: tel.ProjectCalls[]; className: s
 function Figures({
   data,
   allProjects,
-  traffic,
+  days,
 }: {
   data: tel.CallAnalytics;
   allProjects: boolean;
-  /** TxContact's own count, loaded on its own. */
-  traffic: ReactNode;
+  days: number;
 }) {
   const target = data.target_minutes_per_day;
   const byProject = allProjects && data.by_project.length > 1;
@@ -489,56 +501,36 @@ function Figures({
           shown. Choose a project or a shorter period.
         </p>
       ) : null}
-      <KpiStrip label="Call figures">
-        <Kpi
-          icon="phone"
-          label="Calls"
-          value={String(data.calls)}
-          note={`${data.in_call} on a call now`}
-        />
-        <Kpi
-          icon="verified"
+      <FigureLine label="Call figures">
+        <Figure label="Calls" value={String(data.calls)} note={`${data.in_call} on a call now`} />
+        <Figure
           label="Recorded"
           value={String(data.recorded)}
           note={data.success_pct === null ? "No calls yet" : `${data.success_pct}% of calls`}
         />
-        <Kpi
-          icon="failed"
+        <Figure
           label="Failed or cancelled"
           value={String(data.dial_failed + data.cancelled)}
           note={`${data.dial_failed} not placed · ${data.cancelled} cancelled`}
         />
-        <Kpi
-          icon="warning"
+        <Figure
           label="Needs a person"
           value={String(data.needs_person)}
           note={`${data.stale_calls} left open · ${data.waiting_for_recording} being fetched`}
         />
-        <Kpi
-          icon="clock"
+        <Figure
           label="Average call"
           value={minutes(data.avg_call_minutes)}
           note={data.calls_per_task === null ? "" : `${data.calls_per_task} call(s) for each task`}
         />
-        <Kpi
-          icon="waveform"
+        <Figure
           label="Recorded audio"
           value={minutes(data.recorded_minutes)}
-          note={`Arrives ${minutes(data.avg_fetch_minutes)} after closing, on average`}
+          note={`arrives ${minutes(data.avg_fetch_minutes)} after closing`}
         />
-        <Kpi
-          icon="target"
+        <Figure
           label="Today"
           value={minutes(data.today_recorded_minutes)}
-          meter={
-            target !== null && target > 0
-              ? {
-                  percent: pct(data.today_recorded_minutes, target),
-                  label: "Recorded today of the daily target",
-                  text: `${pct(data.today_recorded_minutes, target)}%`,
-                }
-              : undefined
-          }
           note={
             target === null
               ? "Recorded today"
@@ -547,19 +539,18 @@ function Figures({
                 : "No daily target set"
           }
         />
-        <Kpi
-          icon="tasks"
+        <Figure
           label="Tasks not called yet"
           value={String(data.tasks_not_called)}
           note={`${data.tasks_called_again} task(s) called more than once`}
         />
-      </KpiStrip>
+      </FigureLine>
       <div className="dash-grid">
         <div className="panel g-8">
           <DayChart
             title="Calls per day"
             wholeNumbers
-            height={196}
+            height={180}
             days={data.by_day}
             emptyText="No calls in this period yet."
             series={[
@@ -578,20 +569,20 @@ function Figures({
         </div>
         <Funnel className="g-4" funnel={data.funnel} />
         <ByModerator className="g-8" rows={data.by_moderator} />
-        <Panel className="g-4" icon="tasks" title="Phone tasks by status">
-          <Donut
+        <Panel className="g-4" title="Phone tasks by status">
+          <ShareTable
             label="Phone tasks by status"
-            unit="tasks"
-            emptyText="No phone tasks yet."
+            head="Stage"
+            countHead="Tasks"
             parts={stageParts(data.tasks_by_status)}
+            emptyText="No phone tasks yet."
           />
         </Panel>
-        <Panel className="g-8" icon="warning" title="Checks, decisions and reasons">
+        <Panel title="Checks, decisions and reasons">
           <Reasons data={data} />
         </Panel>
-        <div className="dash-col g-4">
-          <CallsByHour hours={data.by_hour} title="Calls by hour of the day" />
-          {traffic}
+        <div>
+          <CallsByHour ours={data.by_hour} days={days} />
         </div>
         {byProject ? <ByProject className="" rows={data.by_project} /> : null}
       </div>
@@ -618,18 +609,31 @@ function ProjectSelect({ value, onChange }: { value: string; onChange: (id: stri
   );
 }
 
-function Header({ title, lead, children }: { title: string; lead: string; children: ReactNode }) {
+/** The title row (with its actions on the right) and the one row of filters under it (D-154). */
+function Header({
+  title,
+  lead,
+  actions,
+  children,
+}: {
+  title: string;
+  lead: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <div className="page-header">
-      <div className="page-header__text">
-        <h1 id="calls-title">
-          <IconTile name="phone" />
-          {title}
-        </h1>
-        <p className="page-header__lead">{lead}</p>
+    <>
+      <div className="page-header">
+        <div className="page-header__text">
+          <h1 id="calls-title">{title}</h1>
+          <p className="page-header__lead">{lead}</p>
+        </div>
+        {actions ? <div className="actions">{actions}</div> : null}
       </div>
-      <div className="toolbar">{children}</div>
-    </div>
+      <div className="filters" role="group" aria-label="Filters">
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -675,7 +679,24 @@ function CallFigures() {
   );
   return (
     <section aria-labelledby="calls-title" className="stack stack--tight calls-page">
-      <Header title="Phone calls" lead="Calls made through TxContact: how many and how they ended.">
+      <Header
+        title="Phone calls"
+        lead="Calls made through TxContact: how many and how they ended."
+        actions={
+          <Button
+            variant="secondary"
+            icon="fileCsv"
+            busy={download.busy !== null}
+            onClick={() =>
+              void download.run(() =>
+                tel.downloadCallsCsv({ project_id: projectId || undefined, days }),
+              )
+            }
+          >
+            Download calls (CSV)
+          </Button>
+        }
+      >
         <ProjectSelect value={projectId} onChange={setProjectId} />
         <Select
           label="Period"
@@ -687,18 +708,6 @@ function CallFigures() {
             { value: "90", label: "Last 90 days" },
           ]}
         />
-        <Button
-          variant="secondary"
-          icon="fileCsv"
-          busy={download.busy !== null}
-          onClick={() =>
-            void download.run(() =>
-              tel.downloadCallsCsv({ project_id: projectId || undefined, days }),
-            )
-          }
-        >
-          Download calls (CSV)
-        </Button>
       </Header>
       <ErrorNotice error={download.error} />
       <div className="tabs" role="tablist" aria-label="Phone call views">
@@ -726,14 +735,8 @@ function CallFigures() {
             {state.status === "loading" ? <LoadingState label="Loading call figures" /> : null}
             {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
             {state.status === "loaded" && state.data ? (
-              <Figures
-                data={state.data}
-                allProjects={projectId === ""}
-                traffic={<ProviderTraffic days={days} />}
-              />
-            ) : (
-              <ProviderTraffic days={days} />
-            )}
+              <Figures data={state.data} allProjects={projectId === ""} days={days} />
+            ) : null}
           </>
         )}
       </div>

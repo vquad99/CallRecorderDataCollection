@@ -10,7 +10,6 @@ import * as devices from "../../api/devices";
 import type * as work from "../../api/work";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -274,10 +273,7 @@ function DeviceCard({
     });
   return (
     <section className="card devices-card" aria-labelledby={titleId}>
-      <h2 id={titleId} className="with-icon">
-        <IconTile name="phone" size={28} />
-        Device details
-      </h2>
+      <h2 id={titleId}>Device details</h2>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data ? (

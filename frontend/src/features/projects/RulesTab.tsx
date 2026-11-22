@@ -14,7 +14,6 @@ import { useAuth } from "../../auth/AuthContext";
 import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { useAction } from "../../hooks/useAction";
 import {
@@ -879,6 +878,10 @@ function TargetRules({ draft, change }: SectionProps) {
     set({ districts: t.districts.map((d, j) => (j === i ? { ...d, ...patch } : d)) });
   const share = t.districts.length > 0 ? Math.round(10000 / t.districts.length) / 100 : 0;
   const counted = draft.progress_counts === "FULL" ? "full length" : "effective speech";
+  // A project records one type (D-153): the face-to-face and phone split only means something in a
+  // project made before that which records both (the client's 50/50 is two projects now).
+  const { project } = useProject();
+  const bothTypes = project.allows_face_to_face && project.allows_telephony;
   const whole = (label: string, key: "speakers" | "conversations") => (
     <TextField
       label={label}
@@ -894,9 +897,10 @@ function TargetRules({ draft, change }: SectionProps) {
   return (
     <>
       <p className="field__hint rules__note">
-        The Progress page shows what was collected against these. Age, gender and districts are
-        shares of the speakers with an approved conversation; face-to-face and phone are shares of
-        the approved conversations. The first client&apos;s targets are where a project starts.
+        The Progress page shows what was collected against these, and what is still needed. Age,
+        gender and districts are shares of the speakers with an approved conversation
+        {bothTypes ? "; face-to-face and phone are shares of the approved conversations" : ""}. The
+        first client&apos;s targets are where a project starts.
       </p>
       <div className="form-grid">
         <TextField
@@ -985,14 +989,16 @@ function TargetRules({ draft, change }: SectionProps) {
         error={errors.gender}
         onChange={([male, female]) => set({ male, female })}
       />
-      <PercentPair
-        legend="Face-to-face and phone (percent of approved conversations)"
-        hint="Both empty: no target."
-        labels={["Face-to-face (%)", "Phone call (%)"]}
-        values={[t.face_to_face, t.telephony]}
-        error={errors.modes}
-        onChange={([face_to_face, telephony]) => set({ face_to_face, telephony })}
-      />
+      {bothTypes ? (
+        <PercentPair
+          legend="Face-to-face and phone (percent of approved conversations)"
+          hint="Both empty: no target."
+          labels={["Face-to-face (%)", "Phone call (%)"]}
+          values={[t.face_to_face, t.telephony]}
+          error={errors.modes}
+          onChange={([face_to_face, telephony]) => set({ face_to_face, telephony })}
+        />
+      ) : null}
       <fieldset className="field">
         <legend className="field__label">Districts (by native district)</legend>
         <p className="field__hint">
@@ -1205,10 +1211,7 @@ function RulesSection({ sectionKey }: { sectionKey: string }) {
     >
       <section className="card rules-card" aria-labelledby={titleId}>
         <div className="rules-card__head">
-          <h2 id={titleId} className="with-icon">
-            <IconTile name={meta.icon} size={28} />
-            {meta.title}
-          </h2>
+          <h2 id={titleId}>{meta.title}</h2>
           {canEdit ? (
             <Button type="submit" icon="check" busy={busy !== null} disabled={wrong}>
               Save rules

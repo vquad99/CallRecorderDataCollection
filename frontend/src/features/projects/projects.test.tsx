@@ -645,7 +645,7 @@ describe("project detail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Audio rules" }));
     expect(await screen.findByRole("group", { name: "Phone call" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Languages" }));
-    expect(await screen.findByText(/Hindi \(hi\), Awadhi/)).toBeInTheDocument();
+    expect(await screen.findByRole("row", { name: /Hindi \(hi\) Awadhi/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Retention" }));
     expect(await screen.findByLabelText("Browser original captures")).toBeInTheDocument();
@@ -670,12 +670,34 @@ describe("project detail", () => {
     expect(screen.queryByLabelText("Conversations per speaker (at most)")).toBeNull();
     expect(screen.queryByRole("radio", { name: /^Online/ })).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /QC pass is the final approval/ })).toBeNull();
+    // One recording type, chosen by the admin (D-153): nothing is sent until it is.
+    const type = screen.getByRole("group", { name: /Recording type/ });
+    expect(
+      within(type)
+        .getAllByRole("radio")
+        .map((r) => (r as HTMLInputElement).checked),
+    ).toEqual([false, false]);
+    await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+    expect(
+      within(type).getByText("Choose one recording type: face-to-face or phone call."),
+    ).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    await userEvent.click(within(type).getByRole("radio", { name: "Face-to-face" }));
+    const hours = screen.getByLabelText("Face-to-face target (hours per day)");
+    await userEvent.clear(hours);
+    await userEvent.type(hours, "4");
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
     expect(
       await screen.findByText(/^PRJ0009 Tamil talk created\. It starts as Draft/),
     ).toBeInTheDocument();
     const sent = calls.find((c) => c.method === "POST")?.body as Record<string, unknown>;
-    expect(sent).toMatchObject({ name: "Tamil talk" });
+    expect(sent).toMatchObject({
+      name: "Tamil talk",
+      allows_face_to_face: true,
+      allows_telephony: false,
+      target_face_to_face_hours_per_day: "4",
+      target_telephony_hours_per_day: "0",
+    });
     for (const rule of [
       "speaker_min_age",
       "required_speaker_details",
@@ -861,5 +883,100 @@ describe("project detail", () => {
       "href",
       "/tasks/new?project=p1",
     );
+  });
+});
+
+describe("one recording type per project (D-153)", () => {
+  // A project made before D-153 that allows both types.
+  const legacy = {
+    ...project,
+    allows_face_to_face: true,
+    target_face_to_face_hours_per_day: "5.00",
+  };
+
+  it("asks a project that allows both to choose one on its next save", async () => {
+    const { calls } = fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, legacy],
+        "PATCH /api/v1/projects/p1": (body) => [200, { ...legacy, ...(body as object) }],
+      }),
+    );
+    renderAt("/projects/p1");
+    expect(
+      await screen.findByText(
+        "This project allows both types. Choose one: from now on a project records one type.",
+      ),
+    ).toBeInTheDocument();
+    const type = screen.getByRole("group", { name: /Recording type/ });
+    expect(within(type).getByRole("radio", { name: "Face-to-face" })).not.toBeChecked();
+    expect(within(type).getByRole("radio", { name: "Phone call" })).not.toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    expect(type).toHaveAccessibleDescription(
+      /A project records one type\. For the other, make another project\. Choose one recording type/,
+    );
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    // Phone call: its daily target stays, the face-to-face one goes.
+    await userEvent.click(within(type).getByRole("radio", { name: "Phone call" }));
+    expect(screen.getByLabelText("Phone call target (hours per day)")).toHaveValue(10);
+    expect(screen.queryByLabelText("Face-to-face target (hours per day)")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Save project" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+        allows_telephony: true,
+        allows_face_to_face: false,
+        target_telephony_hours_per_day: "10.00",
+        target_face_to_face_hours_per_day: "0",
+      }),
+    );
+  });
+
+  it("shows a one-type project's type chosen, and no split by type among the targets", async () => {
+    fakeApi(
+      signedInAs(["projects.view", "projects.manage"], {
+        "GET /api/v1/projects/p1": () => [200, project],
+      }),
+    );
+    renderAt("/projects/p1");
+    const type = await screen.findByRole("group", { name: /Recording type/ });
+    expect(within(type).getByRole("radio", { name: "Phone call" })).toBeChecked();
+    expect(screen.queryByText(/This project allows both types/)).toBeNull();
+    await userEvent.click(screen.getByRole("link", { name: "Rules" }));
+    await userEvent.click(await screen.findByRole("link", { name: "Targets" }));
+    const targets = await screen.findByRole("region", { name: "Targets" });
+    expect(within(targets).getByRole("spinbutton", { name: "Male (%)" })).toBeInTheDocument();
+    expect(within(targets).queryByRole("spinbutton", { name: "Face-to-face (%)" })).toBeNull();
+  });
+
+  it("names each project's type in the list", async () => {
+    const face = {
+      ...project,
+      id: "p2",
+      code: "FACE",
+      allows_telephony: false,
+      allows_face_to_face: true,
+    };
+    fakeApi(
+      signedInAs(["projects.view"], {
+        "GET /api/v1/projects": () => [
+          200,
+          {
+            items: [project, face, { ...legacy, id: "p3", code: "OLD" }],
+            total: 3,
+            page: 1,
+            page_size: 25,
+          },
+        ],
+      }),
+    );
+    renderAt("/projects");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Recording type" })).toBeInTheDocument();
+    const typeOf = (code: string) =>
+      within(table).getByRole("link", { name: code }).closest("tr")?.cells[3]?.textContent;
+    expect([typeOf("HINDI"), typeOf("FACE"), typeOf("OLD")]).toEqual([
+      "Phone call",
+      "Face-to-face",
+      "Phone call, Face-to-face",
+    ]);
   });
 });

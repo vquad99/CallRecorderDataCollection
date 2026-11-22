@@ -1,39 +1,20 @@
-/* Dashboard page styles, loaded with the page (not part of the first screen). The panels, key
-   figures, charts and tables are in components/charts (D-151). */
+/* Dashboard page styles, loaded with the page (not part of the first screen). The sections, key
+   figures, chart and tables are in components/charts (D-151, D-154). */
 
-/* The filters in one compact row under the title. */
-.dash-page .toolbar .field {
-  min-width: 180px;
-}
-.dash-page .toolbar .field__input,
-.filters.dash-filters .field__input {
-  min-height: 32px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-  font-size: 0.8125rem;
-}
+/* The filters: one row of compact fields under the title (D-154). */
 .filters.dash-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
   gap: 8px 10px;
-  padding: 8px 12px 10px;
 }
 .filters.dash-filters .field {
-  flex: 1 1 150px;
-  gap: 2px;
-  max-width: 230px;
-  margin: 0;
+  flex: 1 1 105px;
+  max-width: 220px;
 }
-.dash-page .field__label {
-  color: var(--text-2);
-  font-size: 0.75rem;
+/* The project's name is the longest choice, then the period's. */
+.filters.dash-filters .field:first-child {
+  flex-basis: 170px;
 }
-.filters.dash-filters > .button {
-  min-height: 32px;
-  margin: 0;
-  padding-top: 4px;
-  padding-bottom: 4px;
+.filters.dash-filters .field:nth-child(2) {
+  flex-basis: 135px;
 }
 
 /* Face-to-face beside phone: the total column a shade darker. */
@@ -41,16 +22,9 @@
   background: var(--surface-2);
   font-weight: 600;
 }
-.panel .table.by-mode .cell-icon {
-  gap: 5px;
-}
 
 /* Queues that need someone: a queue with work in it has its count in amber. */
-.attention .cell-icon {
-  gap: 8px;
-  color: var(--text);
-}
-.attention tr:not(.is-active) .cell-icon {
+.attention tr:not(.is-active) th {
   color: var(--text-2);
 }
 .attention__n {
@@ -67,26 +41,11 @@
   color: var(--warn);
 }
 
-/* Moderators: a smaller avatar for the compact rows. */
-.dash-page .panel .avatar {
-  width: 22px;
-  height: 22px;
-  font-size: 0.625rem;
-}
-.dash-page .panel .cell-person {
-  gap: 8px;
-}
+/* Moderators: the hours column with its bar. */
 .dash-page .team__hours {
   width: 40%;
 }
-.dash-page .panel .cell-person {
-  white-space: nowrap;
-}
-/* On a phone: no icons in the recording-type headings, and a narrower bar for the hours. */
 @container (max-width: 360px) {
-  .panel .table.by-mode thead .icon {
-    display: none;
-  }
   .dash-page .team__hours {
     width: 30%;
   }
@@ -94,9 +53,4 @@
 .dash-foot {
   max-width: 1000px;
   margin: 0;
-}
-.dash-storage {
-  color: var(--text);
-  font-size: 1.125rem;
-  font-weight: 600;
 }

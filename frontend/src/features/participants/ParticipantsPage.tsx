@@ -12,7 +12,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button, IconButton } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon, IconTile } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
@@ -241,10 +241,7 @@ export function ParticipantsPage() {
   return (
     <section aria-labelledby="participants-title" className="stack">
       <div className="page-header">
-        <h1 id="participants-title">
-          <IconTile name="people" />
-          Participants
-        </h1>
+        <h1 id="participants-title">Participants</h1>
         <div className="actions">
           <Button
             variant="secondary"

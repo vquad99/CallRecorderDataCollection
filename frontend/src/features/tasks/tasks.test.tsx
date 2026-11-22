@@ -682,7 +682,9 @@ describe("new task: the project's pairing rules (D-143)", () => {
     );
     renderAt("/tasks/new");
     await userEvent.selectOptions(await screen.findByLabelText("Project (active projects)"), "p1");
-    await userEvent.selectOptions(await screen.findByLabelText("Recording type"), "FACE_TO_FACE");
+    // A face-to-face project: its tasks take its type, nothing to choose (D-153).
+    expect(await screen.findByText("(the project's type)")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Recording type" })).toBeNull();
     const options = (label: string) =>
       within(screen.getByLabelText(label))
         .getAllByRole("option")
@@ -725,7 +727,9 @@ describe("new task: the project's pairing rules (D-143)", () => {
         "P000001 and P000005 already have a conversation together in this project.",
       ),
     ).toBeInTheDocument();
-    expect(calls.filter((c) => c.method === "POST" && c.path === "/api/v1/tasks")).toHaveLength(1);
+    const posted = calls.filter((c) => c.method === "POST" && c.path === "/api/v1/tasks");
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.body).toMatchObject({ recording_mode: "FACE_TO_FACE" });
   });
 
   it("clears B when the new A has already been paired with them", async () => {

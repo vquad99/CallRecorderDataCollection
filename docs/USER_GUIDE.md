@@ -30,6 +30,10 @@ A project has its own menu beside the side menu (Progress, Team, Participants, T
 Rules, Languages, Retention, Export; on a phone, a row of buttons at the top) for the Super Admin
 and Project Admin only. Everyone else sees the project's **Overview**.
 
+Pages are plain: the title with its buttons, one row of filters, then tables under their headings,
+with a thin line between parts. Where this guide says a **card** (for example the **Device details**
+card), it means that part of the page: its heading and what is under it.
+
 ---
 
 ## 2. Signing in
@@ -171,16 +175,23 @@ consent buttons.
 
 - The **project code** is given by the platform: `PRJ0001`, `PRJ0002`, and so on. You do not type it.
 - **Name**, **Description**.
-- **Recording types allowed**: tick **Face-to-face**, **Phone call**, or both. Phone calls are new:
-  read section 11 first.
-- **Phone call target** and **Face-to-face target (hours per day)**: the daily goals shown on
-  dashboards.
+- **Recording type**: choose **Face-to-face** or **Phone call**. A project records one type; for
+  the other, make another project (the client's mix of face-to-face and phone is two projects).
+  **Create project** waits until one is chosen. Phone calls are new: read section 11 first.
+- **Face-to-face target** or **Phone call target (hours per day)**, for the chosen type: the daily
+  goal shown on dashboards.
 - **Who may see participant phone numbers**.
 - **Consent form text**: what participants read and agree to. A sample text is already filled in;
   change it to fit the project. Change **Consent policy version** whenever you change the text.
 
 The project's rules (speaker ages and details, pairing, consent, approval) are not on this form:
 a new project starts with the usual ones, and you change them under its **Rules** (below).
+
+A project made before one type per project may still allow both. It keeps working as it is, and
+**New task** still asks which type. Its **Overview** says "This project allows both types. Choose
+one: from now on a project records one type.", and **Save project** waits until you choose one;
+the other type's daily target goes to 0. Tasks already made keep their type. The project list
+shows each project's **Recording type**.
 
 After **Create project** you return to the project list. A new project starts as **Draft**: click
 its code to open it and, on **Overview → Status**, click **Make active**. Only **Active**
@@ -296,7 +307,8 @@ and older projects have them too. Every change is saved in the audit log with th
     client's age bands**.
   - **Gender (percent of speakers)**: **Male (%)** and **Female (%)**, 50 and 50 at the start;
     both empty for no gender target.
-  - **Face-to-face and phone (percent of approved conversations)**: 50 and 50 at the start.
+  - **Face-to-face and phone (percent of approved conversations)**: shown only for a project made
+    before one type per project that still records both; 50 and 50 at the start.
   - **Districts (by native district)**: a line per district with its **State**. None at the start;
     **Use the client's Konkani districts** fills in North Goa and South Goa (Goa), Uttara
     Kannada, Udupi and Dakshina Kannada (Karnataka), Sindhudurg, Ratnagiri and Raigad
@@ -325,28 +337,59 @@ Tasks made before a change stay as they are.
 ### Progress (project admins)
 
 Open the project and click **Progress** (right after **Overview**). Only the people who run the
-project see it. It is one screen:
+project see it. It is plain tables under headings, from the top:
 
-- A strip of four figures at the top, each with a bar to its target: **Completed** (the approved
-  conversations' effective speech, or their full length, as the project's **Completed minutes
-  count** says, against **Hours completed**), **Approved conversations** (against the target),
-  **Speakers** (people with at least one approved conversation, against the target) and
-  **Effective speech** (how much of the recorded audio is speech).
+- One line of figures: **Completed** (the approved conversations' effective speech, or their full
+  length, as the project's **Completed minutes count** says, against **Hours completed**),
+  **Approved conversations** (against the target), **Speakers** (people with at least one
+  approved conversation, against the target), **Registered** (people in the project, and how many
+  reached the **Conversations per speaker** limit) and **Effective speech** (how much of the
+  recorded audio is speech).
+- **Still needed**: what kind of participants to recruit, and how many conversations to make, to
+  reach the targets. A sentence first, for example "To reach the targets: 495 more speakers and
+  595 more conversations. Even if every one of the 6 registered speakers records 2 conversations,
+  594 more speakers are needed for the 595 conversations still to make." Then:
+  - **Speakers by age band and gender**: a row per age band (and **Other ages**, **Not given**
+    when anyone is in them), columns **Male**, **Female** and **Total**, and a **Total** row. Each
+    cell shows in bold the speakers **still needed** (green 0 when none), and under it the
+    **target**, those **done** (with an approved conversation) and those **registered** (in the
+    project, no approved conversation yet: they still have to record). Point at a cell to read it
+    in words.
+  - **Speakers by native district**: a row per listed district with its **Target**, **Done**,
+    **Registered** and **Still needed**, then other districts and a **Total**. With no districts
+    listed it says so.
+  - **Conversations**: the **Target**, **Approved**, **Open tasks** (not started, in progress,
+    waiting for QC or approval) and **Still to make** (by type too in a project that records
+    both).
 - **Balance against the targets**: one table with a section each for **Age bands**,
-  **Gender**, **Face-to-face and phone** and **Districts**. For each group: under **Actual** the
-  count, the percent and a bar with a tick at the target; under **Target** the target percent and
-  the **Variance**: actual minus target, "+4 %" above (green), "−6 %" below (red). Age, gender
-  and districts are shares of the speakers with an approved conversation, each counted once, with
-  their details as they are now (district: native district); people without that detail are under
-  **Not given**. Face-to-face and phone are shares of the approved conversations. The first 10
-  districts are shown; **Show all** shows the rest.
-- Beside it, **Conversations**: a ring with the tasks by stage (approved; waiting for QC or
-  approval; in progress; not started; rejected; cancelled) and a table with each count and share.
+  **Gender**, **Face-to-face and phone** (only in a project that records both) and **Districts**.
+  For each group: under **Actual** the count, the percent and a bar with a tick at the target;
+  under **Target** the target percent and the **Variance**: actual minus target, "+4 %" above
+  (green), "−6 %" below (red). Age, gender and districts are shares of the speakers with an
+  approved conversation, each counted once, with their details as they are now (district: native
+  district); people without that detail are under **Not given**. Face-to-face and phone are shares
+  of the approved conversations. The first 10 districts are shown; **Show all** shows the rest.
+- **Conversations by status**: a table of the tasks by stage (approved; waiting for QC or
+  approval; in progress; not started; rejected; cancelled) with each count and share.
 - **Completed**: for approved conversations and for those recorded but not yet approved, how many,
   their full length and their effective speech; and how many approved ones are not measured yet.
-- **Speakers**: with an approved conversation against the target, registered in the project, and
-  how many reached the **Conversations per speaker** limit.
-- **How these are counted** (click to open) under the table gives these definitions.
+- **How these are counted** (click to open) at the foot gives these definitions.
+
+**How "Still needed" is worked out.** A group's target is the **Speakers** target shared out by
+the age band's percent times the gender's percent (500 speakers, 20-30 at 40 % and male at 50 %:
+100), or a district's equal share, in whole people that add up to the target exactly: each group
+first gets the whole part of its share, and the people left over go to the groups with the
+largest fractions (the first in order on a tie; 500 over 8 districts is 63 for the first four and
+62 for the others). **Still needed** is the target less those done and those registered, never
+below 0. A total adds up its groups: extra people in one group do not fill another, and people
+without an age or gender fill none. **Conversations still to make** is the target less the
+approved conversations and the open tasks. Each conversation needs two speakers, and each speaker
+gives at most the project's **Conversations per speaker**, so the page says when the registered
+people cannot give them all and how many more speakers that needs.
+
+The project's **Participants** page says the same in one line for the people who recruit:
+"Still needed: 495 speakers to recruit for the target of 500. Which ages, genders and districts:
+see Progress."
 
 **Effective speech** is the time someone speaks: the recording without its silences (quieter than
 −50 dBFS on every channel; on a phone call, speech on either side counts once). Gaps under 0.3 s
@@ -540,8 +583,9 @@ same person.
 
 ## 6. Project Admin: tasks
 
-**Tasks → New task**: choose **Project (active projects)**, **Recording type** (**Face-to-face**,
-or **Phone call** when the project allows it),
+**Tasks → New task**: choose **Project (active projects)**. The task takes the project's
+**Recording type**, shown under it ("Face-to-face (the project's type)"); only a project made
+before one type per project that still allows both asks you to choose it. Then choose
 **Participant A** and **Participant B** (two different people), **Priority**, **Moderator** (choose
 now and the task starts as **Assigned**, or **Assign later**) and **Due date**, then **Create task**. Each task gets a code such as `T000045`.
 
@@ -575,7 +619,9 @@ Write participants by their code (`P000001`); both must have agreed to the conse
 the row says who has not. The pairing rules apply to each row too, counting the rows above it: a
 row says when someone lacks speaker details, is outside the speaker ages, has reached the most conversations, or is
 already paired with the other person (in the project or higher up in the file). `mode` is `face_to_face` or `telephony` (a phone
-call; empty means face-to-face), `priority` is `low`, `normal`, `high` or `urgent` (empty means
+call); empty means the project's type (face-to-face in a project made before one type per project
+that allows both), and the other type is refused on its row ("This project records phone calls
+only"), `priority` is `low`, `normal`, `high` or `urgent` (empty means
 normal), `due_date` is `YYYY-MM-DD`, and `moderator` is the moderator's email (the task is then assigned at once; empty
 leaves it in Draft). **Download sample CSV** gives a file with the right first line and two example
 rows to fill in. Click **Check rows**, then **Add N tasks**. Up to 500 rows.
@@ -764,21 +810,22 @@ later, or cancel the call. A project admin can do the same, and cancel a call, f
 moderator's page is **My phone calls**: the list of their own calls, newest first, each with a
 link to its task. Admins choose a **Project** and a **Period** (7, 30 or 90 days). Their page has
 two tabs, **Figures** and **All calls**. Long tables show 10 rows; click **Show all** for the
-rest. The **Figures** tab is one dashboard:
+rest. The **Figures** tab is plain tables under their headings, with one chart:
 
-- A strip of eight figures: calls; recorded (and the share of calls); failed or cancelled;
+- One line of eight figures: calls; recorded (and the share of calls); failed or cancelled;
   **needs a person** (also calls left open); average call; recorded audio and how long recordings
-  take to arrive; **Today** against the project's daily phone call target, with a bar; phone tasks
-  **not called yet**.
+  take to arrive; **Today** against the project's daily phone call target; phone tasks **not
+  called yet**.
 - **Calls per day** (recorded, still open, failed or cancelled), with a table view, beside **From
   call to approval**: a table of calls started, accepted by TxContact, closed by the moderator,
   recording stored, tasks sent to QC and tasks approved, each with its share of the calls started.
-- **By moderator**, beside **Phone tasks by status** (a ring by stage with its table).
+- **By moderator**, beside **Phone tasks by status** (a table: each stage, its count and its
+  share as a short bar).
 - **Checks, decisions and reasons**: two tables with a section each for the **Automatic audio
   check** and the **QC decisions** on call recordings, **Why calls were cancelled** and
   **Problems getting the recording**, each reason with its count.
-- **Calls by hour of the day**, and for project admins **TxContact: calls per hour**,
-  TxContact's own count for the account.
+- **Calls by hour of the day**: one table, an hour per column, with a row for the calls made
+  and a row for **TxContact's own count** for the account (or why it is missing).
 - **By project** when you look at all your projects.
 
 The **All calls** tab lists every call with a link to its task; **Show** filters it (for example
@@ -1006,17 +1053,16 @@ Under the page title is a row of filters. Each one narrows every figure on the p
 **Clear filters** takes them all off. Without chosen days the totals at the top count
 everything ever recorded; with chosen days they count those days only.
 
-The page is one screen: a strip of key figures (recorded, approved and completed hours with a
-small trend line, today against the daily target and approved tasks, each with a bar), then
-**Hours per day** beside **By recording type** (one table: face-to-face, phone and the total, for
-recordings, recorded, effective speech, approved, completed and the daily target). Staff also see
-**Tasks by status** (a ring by stage, each stage's statuses named under it, with a table of
-counts and shares) and **Audio QC** (the QC decisions, and the automatic check of the recordings
-waiting, as two bars with their counts).
+The page is plain tables under their headings. At the top, one line of key figures: recorded,
+effective speech, approved and completed hours, today against the daily target, approved tasks
+(and, for managers, the storage used). Then **Hours per day** (the one chart) beside **By
+recording type** (one table: face-to-face, phone and the total, for recordings, recorded,
+effective speech, approved, completed and the daily target). Staff also see **Tasks by status**
+(a table: each stage, its statuses named under it, its count and its share as a short bar) and
+**Audio QC** (one table: the QC decisions, and the automatic check of the recordings waiting).
 
-Managers also see **Needs attention**, **Moderator output** (10 rows; **Show all** for the rest),
-**Phone calls** (placed, recorded, could not be placed, waiting for a person, still open) and
-**Storage used**. In **Needs attention**, a queue with work in it has its count in amber; the
+Managers also see **Needs attention**, **Moderator output** (10 rows; **Show all** for the rest)
+and **Phone calls** (placed, recorded, could not be placed, waiting for a person, still open). In **Needs attention**, a queue with work in it has its count in amber; the
 **Waiting for audio QC**, **Tasks on hold** and **Consent forms to fix** (sent back by QC for a
 new signed form) rows open the **Tasks** list filtered to those tasks.
 

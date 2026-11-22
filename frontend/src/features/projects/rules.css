@@ -1,8 +1,10 @@
 /* A project's Rules (D-145). Loaded with the page, not with the first screen. */
 /* One section of the rules on its own page (D-150): its title and Save at the top, kept in view
-   under the top bar while a long section scrolls. */
-.rules-card {
+   under the top bar while a long section scrolls; plain fields under it, no box (D-154). */
+.rules-card,
+* + .rules-card {
   padding-top: 0;
+  border-top: 0;
 }
 .rules-card__head {
   position: sticky;
@@ -13,10 +15,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  margin: 0 calc(-1 * var(--space-5)) var(--space-4);
-  padding: 10px var(--space-5);
+  margin: 0 0 var(--space-4);
+  padding: 8px 0;
   border-bottom: 1px solid var(--border);
-  border-radius: var(--radius) var(--radius) 0 0;
   background: var(--surface);
 }
 .rules-card > .notice {
@@ -164,7 +165,7 @@
   }
   .qc-matrix__head {
     position: sticky;
-    top: calc(var(--topbar-h) + 57px);
+    top: calc(var(--topbar-h) + 53px);
     z-index: 4;
     display: grid;
     align-items: center;

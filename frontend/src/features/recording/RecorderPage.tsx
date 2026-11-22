@@ -15,7 +15,7 @@ import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
-import { Icon, IconTile } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { Stepper } from "../../components/Stepper";
@@ -580,10 +580,7 @@ export function RecorderPage() {
   return (
     <section aria-labelledby="rec-title" className="stack">
       <BackLink to={`/tasks/${t.id}`}>Back to the task</BackLink>
-      <h1 id="rec-title">
-        <IconTile name="mic" />
-        Record task {t.task_code}
-      </h1>
+      <h1 id="rec-title">Record task {t.task_code}</h1>
       <div className="card">
         <Stepper
           steps={STEPS}

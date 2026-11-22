@@ -1,7 +1,8 @@
 /* Task pages: the task list's priority marks, and on one task (D-152) a compact stepper, the work
    and the task's records on the left, a summary, the participants matrix and the history on the
-   right; the next step as one card (D-091, D-092), the QC checklist as matrices (D-146) with its
-   decision bar, and the audio player. The matrices' own pieces are in moderator.css. */
+   right; the next step with its buttons (D-091, D-092), the QC checklist as matrices (D-146) with
+   its decision bar, and the audio player. Plain sections, no boxes (D-154): only tables keep a
+   frame. The matrices' own pieces are in moderator.css. */
 
 .priority {
   display: inline-flex;
@@ -43,12 +44,10 @@
 .task-page > .page-header h1 {
   font-size: 1.375rem;
 }
-/* The stepper, smaller than elsewhere: a strip under the title. */
+/* The stepper, smaller than elsewhere: a strip under the title, a thin line under it. */
 .task-steps {
-  padding: 8px 12px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
 }
 .task-steps .stepper__step {
   gap: 3px;
@@ -102,6 +101,11 @@
 .task-work:empty {
   display: none;
 }
+/* The records under the work: the same thin line as between the work's own sections. */
+.task-work:not(:empty) ~ .task-rest > :first-child {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
 .task-side {
   position: sticky;
   top: calc(var(--topbar-h) + 12px);
@@ -134,15 +138,14 @@
     max-height: none;
     overflow: visible;
   }
+  /* One column: the side's first section gets the line between sections too. */
+  .task-work:not(:empty) ~ .task-side {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+  }
 }
 
-/* The card with the person's next step: a coloured edge marks it as the work. */
-.work-card {
-  border-left: 3px solid var(--icon-blue);
-}
-.task-page .card {
-  padding: 14px 18px;
-}
+/* The person's next step: a plain section like the others; its button is the page's main one. */
 .task-page .card > h2,
 .task-page .card > h3 {
   margin-bottom: 10px;
@@ -155,9 +158,6 @@
 }
 
 /* ---------- The side column ---------- */
-.task-page .side-card {
-  padding: 10px 12px 12px;
-}
 .side-card__head {
   display: flex;
   align-items: center;
@@ -166,11 +166,8 @@
   margin-bottom: 8px;
 }
 .side-card__head h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 /* The summary: label left, value right, one thin line between rows. */
@@ -580,16 +577,13 @@
 .qc-checklist__head p {
   margin: 0;
 }
-/* "Answered 31 / 43 · 2 failing" and its bar. */
+/* "Answered 31 / 43 · 2 failing" and its bar: one plain line. */
 .qc-progress {
   display: grid;
   grid-template-columns: auto minmax(120px, 1fr) auto;
   align-items: center;
   gap: 6px 14px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  padding: 2px 0;
 }
 .qc-progress__text {
   white-space: nowrap;
@@ -685,10 +679,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  margin: 4px -18px -14px;
-  padding: 10px 18px;
+  margin: 4px 0 0;
+  padding: 10px 0;
   border-top: 1px solid var(--border-strong);
-  border-radius: 0 0 var(--radius) var(--radius);
   background: var(--surface);
   box-shadow: 0 -6px 16px rgb(30 33 42 / 0.08);
 }
@@ -702,7 +695,7 @@
 .qc-decide__text h3 {
   margin: 0;
   color: var(--text-2);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -722,16 +715,10 @@
 .qc__hint.is-ok {
   color: var(--ok);
 }
-/* Not followed by more of the card: no space under the bar. */
-.qc-panel > .qc-decide:last-child {
-  margin-bottom: -14px;
-}
 
 /* ---------- The task list: compact rows ---------- */
 .table.tasks-table th,
-.table.tasks-table td,
-.card .table-wrap .table.tasks-table th,
-.card .table-wrap .table.tasks-table td {
+.table.tasks-table td {
   padding-top: 7px;
   padding-bottom: 7px;
 }
@@ -739,13 +726,11 @@
   font-family: var(--font-mono);
 }
 
-/* Who acts next, for someone with nothing to do on the task now. */
+/* Who acts next, for someone with nothing to do on the task now: one line. */
 .next-step {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-left: 3px solid var(--border-strong);
-  background: var(--surface);
 }
 .next-step p {
   margin: 0;
@@ -765,14 +750,10 @@
   white-space: nowrap;
 }
 
-/* ---------- Phones: one column, tighter cards and matrices ---------- */
+/* ---------- Phones: one column, tighter matrices ---------- */
 @media (max-width: 640px) {
-  .task-page .card {
-    padding: 12px;
-  }
   .qc-decide {
-    margin: 4px -12px -12px;
-    padding: 8px 12px;
+    padding: 8px 0;
   }
   .qc-decide__text h3 {
     position: absolute;

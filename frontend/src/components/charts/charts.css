@@ -1,5 +1,6 @@
-/* Figures and charts of the dashboard, the Phone calls page and the Progress tab (D-151): one
-   grid of panels, a strip of key figures, tables instead of stacks of cards. Series colours:
+/* Figures and charts of the dashboard, the Phone calls page and the Progress tab (D-151, D-154):
+   one grid of plain sections (a heading over a table or a chart, no box), the key figures as one
+   line, tables instead of stacks of cards. Series colours:
    KoboToolbox blue and amber for approved and waiting (D-099); blue, orange and red for the calls;
    the six task stages in stages.ts. Checked with the dataviz validator on #ffffff; the legend and
    the table view carry the same information as the colours. Text stays in the text colours. */
@@ -101,17 +102,14 @@
   }
 }
 
-/* A panel: white, a thin line, a small heading. Its content answers to the panel's own width. */
+/* A section (D-154): its heading over its table or chart, no box of its own. Its content answers
+   to the section's own width. */
 .panel {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
 }
 .panel__head {
   display: flex;
@@ -126,12 +124,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 .panel__action {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 .panel > .muted,
 .panel > p {
@@ -266,26 +264,21 @@
   background: var(--icon-blue);
 }
 
-/* ---------- Tables in panels: compact rows, the grey heading row kept ---------- */
-/* A panel's table is short: it shows whole, without the long tables' own scroll frame. */
+/* ---------- Tables in sections: compact rows, the grey heading row kept ---------- */
+/* A section's table is short: it shows whole in its own thin frame. */
 .panel .table-wrap {
   flex: none;
   max-height: none;
-  border: 0;
-  border-radius: 0;
 }
 .panel .table th,
 .panel .table td {
-  padding: 5px 10px;
+  padding: 6px 10px;
 }
 .panel .table thead th {
   padding-top: 6px;
   padding-bottom: 6px;
-  font-size: 0.75rem;
 }
 .panel .table tbody th {
-  background: transparent;
-  color: var(--text);
   font-weight: 400;
   white-space: normal;
 }
@@ -394,7 +387,7 @@
 .matrix__note {
   margin-left: 8px;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 400;
 }
 .panel .table.matrix tbody th[scope="row"] {
@@ -549,7 +542,7 @@
   padding: 0;
   list-style: none;
   color: var(--text-2);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 .legend li {
   display: inline-flex;
@@ -639,7 +632,7 @@
 }
 .chart__table summary {
   color: var(--primary);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -665,4 +658,102 @@
 .dash-notes p {
   max-width: 900px;
   margin: 0 0 6px;
+}
+
+/* ---------- Key figures as one line (D-154): a label over each value, thin lines between ---------- */
+.figs {
+  container-type: inline-size;
+}
+.figline {
+  display: flex;
+  margin: 0;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+.figline__item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 14px;
+  border-left: 1px solid var(--border);
+}
+.figline__item:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.figline dt {
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+.figline dd {
+  margin: 0;
+}
+.figline__value {
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.figline__of {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.figline__note {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+/* Narrower: two or three to a row, a thin line above each. */
+@container (max-width: 780px) {
+  .figline {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    column-gap: 16px;
+    padding: 0;
+  }
+  .figline__item,
+  .figline__item:first-child {
+    padding: 6px 0 8px;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+/* ---------- A share as a short bar and its percent; a whole in parts as a table ---------- */
+.sharebar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sharebar__track {
+  display: block;
+  width: 72px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tint-blue);
+}
+.sharebar__track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--icon-blue);
+}
+.sharebar__n {
+  min-width: 3.2em;
+  text-align: right;
+}
+.share-table__detail {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* A table whose rows are named after people or projects: the names stay on one line. */
+.table.names tbody th {
+  white-space: nowrap;
 }

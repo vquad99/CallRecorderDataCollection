@@ -82,7 +82,8 @@ PAGES = [
     ("sa", "/api/v1/projects/{project}/member-candidates"),
     ("sa", "/api/v1/projects/{project}/participants?page_size=100"),
     ("sa", "/api/v1/projects/{project}/participants/export"),
-    # D-148: the Progress tab, a few set-based queries over the project's tasks.
+    # D-148: the Progress tab, a few set-based queries over the project's tasks; D-153's "still
+    # needed" comes from the same three (8 in all, for 2 people or 10).
     ("sa", "/api/v1/projects/{project}/progress"),
     ("sa", "/api/v1/tasks?page_size=100"),
     ("mod", "/api/v1/tasks?page_size=100"),

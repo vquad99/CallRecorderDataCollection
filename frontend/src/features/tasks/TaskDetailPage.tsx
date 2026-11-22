@@ -14,7 +14,7 @@ import { BackLink } from "../../components/BackLink";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { Icon, IconTile } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -734,10 +734,7 @@ export function TaskDetailPage() {
       <BackLink to="/tasks">All tasks</BackLink>
       <div className="page-header">
         <span className="page-header__title">
-          <h1 id="task-title">
-            <IconTile name={task.recording_mode === "TELEPHONY" ? "phone" : "mic"} />
-            Task {task.task_code}
-          </h1>
+          <h1 id="task-title">Task {task.task_code}</h1>
           <StatusBadge status={task.status} label={status(task.status)} />
         </span>
         <TaskActions task={task} onChange={onChange} />

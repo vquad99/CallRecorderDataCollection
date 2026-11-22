@@ -6,6 +6,9 @@
  * Content keeps KoboToolbox's greys and blue, and Roboto. The signed-out pages keep the
  * paper-and-teal look the owner chose (D-087), scoped under .public. Styles used by one feature
  * only live in that feature's own file. Icons: Phosphor.
+ * D-154: pages are plain. A page is its title row, one filter row, then sections: a heading over
+ * a table, a chart or plain fields, a thin line between sections. Only a table has a frame (its
+ * own border); no boxes around sections, no tile per number.
  */
 
 /* ---------- Tokens ---------- */
@@ -618,9 +621,11 @@ h1 > .tile {
   flex-direction: column;
   min-width: 0;
 }
+/* The content area is white (D-154): sections sit on it without boxes of their own. */
 .shell__main {
   flex: 1;
   min-width: 0;
+  background: var(--surface);
 }
 .shell__content {
   max-width: 1440px;
@@ -1201,18 +1206,50 @@ h1 > .tile {
   align-items: center;
   gap: 8px;
 }
-/* Panels: white with a thin grey line; 16 px above and below, 20 px at the sides (D-150). */
-.card,
-.state {
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+/* A section (D-154): no box. A thin line parts it from what comes before it; its heading, then
+   its table, chart or plain fields. Only a table keeps a frame (its own border). */
+.card {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
+}
+* + .card {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
 }
 .card > h2,
 .card > h3 {
   margin-bottom: var(--space-3);
+}
+/* Two short sections side by side on a wide screen, under one line. */
+.section-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  align-items: start;
+  gap: var(--space-4) var(--space-6);
+  container-type: inline-size;
+}
+* + .section-pair {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.section-pair > .card {
+  padding-top: 0;
+  border-top: 0;
+}
+/* One under the other when narrow: the line between them again. */
+@container (max-width: 783px) {
+  .section-pair > .card + .card {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+  }
+}
+/* Loading and empty: plain lines on the page. A failure keeps a light red frame. */
+.state {
+  padding: var(--space-3) 0;
 }
 .with-icon {
   display: flex;
@@ -1223,7 +1260,19 @@ fieldset.card {
   min-width: 0;
   margin: 0;
 }
-fieldset.card legend,
+/* A group of fields as a section: its legend is the section's heading, above the line's text, not
+   in it (floated out of the border). */
+fieldset.card > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 500;
+}
+fieldset.card > legend + * {
+  clear: both;
+}
 .plain-fieldset legend {
   padding: 0 6px;
   font-weight: 600;
@@ -1439,28 +1488,31 @@ input[type="radio"] {
   margin: 0;
   accent-color: var(--primary);
 }
+/* A page's filters (D-154): one plain row of compact fields under the title, no box. */
 .filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 0 12px;
-  padding: 12px 16px 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
 }
 .filters .field {
-  margin-bottom: 12px;
+  flex: 1 1 170px;
+  gap: 2px;
+  max-width: 280px;
+  margin: 0;
 }
-.card .filters {
-  padding: 0;
-  border: 0;
+.filters .field__label {
+  color: var(--text-2);
+}
+.filters .field__input {
+  min-height: 34px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 /* The button that takes the filters off sits on the line of the fields (D-108). */
 .filters > .button {
-  align-self: end;
-  justify-self: start;
-  margin-bottom: 12px;
+  min-height: 34px;
+  margin: 0;
 }
 /* Forms on a wide screen (D-141): a field keeps a readable width instead of running across the
    page, and figures and dates are short. Filter bars and windows keep their own layout. */
@@ -1557,6 +1609,7 @@ fieldset.field legend {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.table tbody tr:last-child th,
 .table tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -1578,19 +1631,11 @@ fieldset.field legend {
 .table tbody tr:hover {
   background: var(--k-100);
 }
-.card .table th,
-.card .table td {
-  padding-left: 0;
+/* A row's name (a th in the body) reads as text, not as a heading cell. */
+.table tbody th {
   background: transparent;
-}
-/* A table inside a card keeps its own padding when it has its own frame (table-wrap); its heading
-   row stays opaque as it scrolls. */
-.card .table-wrap .table th,
-.card .table-wrap .table td {
-  padding-left: 12px;
-}
-.card .table-wrap .table thead th {
-  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
 }
 .row--invalid td {
   color: var(--danger);
@@ -2008,6 +2053,7 @@ form.dialog__body > h2 {
 }
 .state--empty {
   align-items: center;
+  padding: var(--space-6) 0;
   text-align: center;
 }
 .state--empty p {
@@ -2015,7 +2061,9 @@ form.dialog__body > h2 {
   color: var(--muted);
 }
 .state--error {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--radius);
 }
 .state--error .state__title {
   color: var(--danger);
@@ -2068,6 +2116,12 @@ form.dialog__body > h2 {
 .status--not_ready {
   background: var(--danger-soft);
   color: var(--danger);
+}
+.card__head .status {
+  margin: 0;
+}
+.status-table__name::first-letter {
+  text-transform: uppercase;
 }
 .status--ready::before,
 .status--not_ready::before {

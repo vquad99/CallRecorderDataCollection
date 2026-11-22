@@ -12,7 +12,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon, IconTile } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
@@ -142,10 +142,7 @@ export function TasksPage({ fixedProjectId }: { fixedProjectId?: string } = {}) 
         </div>
       ) : (
         <div className="page-header">
-          <h1 id="tasks-title">
-            <IconTile name="tasks" />
-            Tasks
-          </h1>
+          <h1 id="tasks-title">Tasks</h1>
           {newTask}
         </div>
       )}

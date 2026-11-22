@@ -397,27 +397,44 @@ export function LanguagesTab() {
       {project.languages.length === 0 ? (
         <EmptyState title="No languages yet" />
       ) : (
-        <ul className="card list list--rows">
-          {project.languages.map((l) => (
-            <li key={`${l.language_code}/${l.dialect}`}>
-              {name(l)}
+        <DataTable label="Languages">
+          <thead>
+            <tr>
+              <th scope="col">Language</th>
+              <th scope="col">Dialect</th>
               {canManage ? (
-                <Button
-                  variant="secondary"
-                  icon="trash"
-                  disabled={busy !== null}
-                  onClick={() => remove(l)}
-                >
-                  Remove
-                </Button>
+                <th scope="col">
+                  <span className="sr-only">Action</span>
+                </th>
               ) : null}
-            </li>
-          ))}
-        </ul>
+            </tr>
+          </thead>
+          <tbody>
+            {project.languages.map((l) => (
+              <tr key={`${l.language_code}/${l.dialect}`}>
+                <td>{languageLabel(l.language_code)}</td>
+                <td>{l.dialect || <span className="muted">-</span>}</td>
+                {canManage ? (
+                  <td className="actions">
+                    <Button
+                      variant="secondary"
+                      icon="trash"
+                      disabled={busy !== null}
+                      onClick={() => remove(l)}
+                    >
+                      Remove
+                    </Button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
       )}
       {canManage ? (
         <form
           className="card"
+          aria-labelledby="add-language-title"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
@@ -433,6 +450,7 @@ export function LanguagesTab() {
             }, "add");
           }}
         >
+          <h2 id="add-language-title">Add a language</h2>
           <Select
             label="Language"
             required

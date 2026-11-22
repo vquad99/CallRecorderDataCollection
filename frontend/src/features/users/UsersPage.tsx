@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 import { useAction } from "../../hooks/useAction";
 import { useDebounced } from "../../hooks/useDebounced";
 import { useResource } from "../../hooks/useResource";
-import { Avatar, Icon, IconTile } from "../../components/Icon";
+import { Avatar, Icon } from "../../components/Icon";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAuth } from "../../auth/AuthContext";
 import { DataTable } from "../../components/DataTable";
@@ -45,10 +45,7 @@ export function UsersPage() {
   return (
     <section aria-labelledby="users-title" className="stack">
       <div className="page-header">
-        <h1 id="users-title">
-          <IconTile name="users" />
-          Users
-        </h1>
+        <h1 id="users-title">Users</h1>
         <div className="actions">
           <Link className="button button--primary" to="/admin/users/new">
             <Icon name="userPlus" size={16} />

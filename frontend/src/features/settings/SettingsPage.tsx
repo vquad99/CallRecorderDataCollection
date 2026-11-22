@@ -8,7 +8,6 @@ import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
-import { IconTile } from "../../components/Icon";
 
 const LABELS: Record<string, string> = {
   "capacity.staff_accounts": "Staff accounts",
@@ -68,10 +67,7 @@ export function SettingsPage() {
   const { state, reload, replace } = useResource(getSettings, []);
   return (
     <section aria-labelledby="settings-title" className="stack">
-      <h1 id="settings-title">
-        <IconTile name="settings" />
-        Capacity targets
-      </h1>
+      <h1 id="settings-title">Capacity targets</h1>
       <p>Targets used for planning and reports. They are goals, not proof of capacity.</p>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}

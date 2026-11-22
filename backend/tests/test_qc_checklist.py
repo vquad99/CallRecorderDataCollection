@@ -110,7 +110,7 @@ def test_a_project_starts_with_the_clients_checklist_and_changes_it(
     root = world["api"]("root@example.org")
     made = root.post(
         "/api/v1/projects",
-        json={"name": "Konkani", "allows_telephony": True, "allows_face_to_face": True},
+        json={"name": "Konkani", "allows_telephony": False, "allows_face_to_face": True},
     )
     assert made.status_code == 201, made.text
     default = made.json()["qc_checklist"]

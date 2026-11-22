@@ -42,7 +42,10 @@ test("each role lands on its own dashboard view", async ({ browser }) => {
     await signIn(page, ADMIN_EMAIL, SEEDED_PASSWORD);
     await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Storage used" })).toBeVisible();
+    // D-154: the storage used is one of the key figures, in the one line at the top.
+    await expect(
+      page.getByRole("group", { name: "Key figures" }).getByText("Storage used"),
+    ).toBeVisible();
     const asked = page.waitForRequest((r) => r.url().includes("/api/v1/dashboard?days=7"));
     await page.getByLabel("Period").selectOption("7");
     await asked;

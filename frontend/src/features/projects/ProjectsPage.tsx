@@ -82,7 +82,7 @@ export function ProjectsPage() {
                 <th scope="col">Code</th>
                 <th scope="col">Name</th>
                 <th scope="col">Status</th>
-                <th scope="col">Recording types</th>
+                <th scope="col">Recording type</th>
               </tr>
             </thead>
             <tbody>

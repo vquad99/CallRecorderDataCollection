@@ -111,30 +111,37 @@ function Reports({ projectId }: { projectId: string }) {
   return (
     <section className="card stack stack--tight" aria-labelledby="export-reports">
       <h2 id="export-reports">Reports</h2>
-      <ul className="export__reports">
-        {REPORTS.map((r) => (
-          <li key={r.value} className="export__report">
-            <div>
-              <strong>{r.label}</strong>
-              <p className="muted">{r.detail}</p>
-            </div>
-            <div className="actions">
-              {(["csv", "tsv"] as const).map((format) => (
-                <a
-                  key={format}
-                  className="button button--secondary"
-                  href={`${apiBase()}${api.reportPath(projectId, r.value, format)}`}
-                  download
-                  aria-label={`${r.label} as ${format.toUpperCase()}`}
-                >
-                  <Icon name={TABLE_ICON[format]} size={16} />
-                  {format.toUpperCase()}
-                </a>
-              ))}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <DataTable label="Reports">
+        <thead>
+          <tr>
+            <th scope="col">Report</th>
+            <th scope="col">What it holds</th>
+            <th scope="col">Download</th>
+          </tr>
+        </thead>
+        <tbody>
+          {REPORTS.map((r) => (
+            <tr key={r.value}>
+              <th scope="row">{r.label}</th>
+              <td className="export__detail">{r.detail}</td>
+              <td className="actions">
+                {(["csv", "tsv"] as const).map((format) => (
+                  <a
+                    key={format}
+                    className="button button--secondary"
+                    href={`${apiBase()}${api.reportPath(projectId, r.value, format)}`}
+                    download
+                    aria-label={`${r.label} as ${format.toUpperCase()}`}
+                  >
+                    <Icon name={TABLE_ICON[format]} size={16} />
+                    {format.toUpperCase()}
+                  </a>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
     </section>
   );
 }

@@ -16,7 +16,6 @@ import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -501,10 +500,7 @@ function CallHistory({ task, calls }: { task: work.TaskDetail; calls: Calls }) {
   const refresh = () => void calls.refresh();
   return (
     <section className="card" aria-labelledby="calls-title">
-      <h2 id="calls-title" className="with-icon">
-        <IconTile name="phone" size={28} />
-        Phone calls
-      </h2>
+      <h2 id="calls-title">Phone calls</h2>
       {state.status === "loading" ? <LoadingState /> : null}
       {state.status === "failed" ? <ErrorState error={state.error} onRetry={reload} /> : null}
       {state.status === "loaded" && state.data.length === 0 ? (

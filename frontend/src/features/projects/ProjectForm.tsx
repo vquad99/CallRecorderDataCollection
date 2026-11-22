@@ -1,11 +1,13 @@
 // Shared fields for creating and editing a project (PROJ-001..005). The project's rules (speakers,
 // pairing, consent, approval) are on its Rules tab (D-145); a new project starts with the defaults.
-import { useState, type FormEvent } from "react";
+// A project records one type, face-to-face or phone calls (D-153): two choices, one daily target.
+import { useId, useState, type FormEvent } from "react";
 
 import type { ProjectSettings } from "../../api/projects";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { onlyMode, type RecordingMode } from "./recordingType";
 
 /** Filled in on every new project; the admin edits it to fit the project (D-083). */
 export const SAMPLE_CONSENT_TEXT = `Consent to be recorded
@@ -33,17 +35,28 @@ If you have a question, ask the moderator or the project team before you agree.
 
 By clicking "I agree" you confirm that you have read this form, you are 18 years or older, and you agree to be recorded.`;
 
+/** A new project: no recording type chosen yet (D-153), the admin picks one. */
 export const EMPTY_FIELDS: ProjectSettings = {
   name: "",
   description: "",
-  allows_telephony: true,
-  allows_face_to_face: true,
+  allows_telephony: false,
+  allows_face_to_face: false,
   target_telephony_hours_per_day: "0",
   target_face_to_face_hours_per_day: "0",
   phone_visibility_policy: "ADMINS_ONLY",
   consent_policy_version: "1",
   consent_text: SAMPLE_CONSENT_TEXT,
 };
+
+const TYPES: readonly { value: RecordingMode; label: string }[] = [
+  { value: "FACE_TO_FACE", label: "Face-to-face" },
+  { value: "TELEPHONY", label: "Phone call" },
+];
+const HOURS_KEY = {
+  FACE_TO_FACE: "target_face_to_face_hours_per_day",
+  TELEPHONY: "target_telephony_hours_per_day",
+} as const;
+const CHOOSE_ONE_TYPE = "Choose one recording type: face-to-face or phone call.";
 
 export function ProjectForm({
   initial,
@@ -59,12 +72,29 @@ export function ProjectForm({
   onSubmit: (fields: ProjectSettings) => void;
 }) {
   const [f, setF] = useState<ProjectSettings>(initial);
+  // A project made before D-153 may allow both: nothing is chosen until the admin picks one.
+  const [mode, setMode] = useState<RecordingMode | null>(() => onlyMode(initial));
+  const [missing, setMissing] = useState(false);
+  const both = initial.allows_telephony && initial.allows_face_to_face;
+  const typeHint = useId();
+  const typeError = useId();
   const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) =>
     setF({ ...f, [key]: value });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    onSubmit(f);
+    if (mode === null) {
+      setMissing(true);
+      return;
+    }
+    // The one type, and a daily target only for it (the server refuses one for the other).
+    const other = HOURS_KEY[mode === "TELEPHONY" ? "FACE_TO_FACE" : "TELEPHONY"];
+    onSubmit({
+      ...f,
+      allows_face_to_face: mode === "FACE_TO_FACE",
+      allows_telephony: mode === "TELEPHONY",
+      [other]: Number(f[other]) > 0 ? "0" : f[other],
+    });
   }
 
   return (
@@ -93,43 +123,52 @@ export function ProjectForm({
             onChange={(e) => set("description", e.target.value)}
           />
         </div>
-        <fieldset className="field">
-          <legend className="field__label">Recording types allowed</legend>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={f.allows_telephony}
-              onChange={(e) => set("allows_telephony", e.target.checked)}
-            />
-            Phone call
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={f.allows_face_to_face}
-              onChange={(e) => set("allows_face_to_face", e.target.checked)}
-            />
-            Face-to-face
-          </label>
+        {both ? (
+          <p className="notice notice--info">
+            {disabled
+              ? "This project allows both types: it was made before a project recorded one type."
+              : "This project allows both types. Choose one: from now on a project records one type."}
+          </p>
+        ) : null}
+        <fieldset
+          className="field"
+          aria-describedby={missing && mode === null ? `${typeHint} ${typeError}` : typeHint}
+        >
+          <legend className="field__label">
+            Recording type <span aria-hidden="true">*</span>
+          </legend>
+          {TYPES.map((t) => (
+            <label key={t.value} className="checkbox">
+              <input
+                type="radio"
+                name="recording_type"
+                value={t.value}
+                checked={mode === t.value}
+                aria-invalid={missing && mode === null ? true : undefined}
+                onChange={() => setMode(t.value)}
+              />
+              {t.label}
+            </label>
+          ))}
+          <p id={typeHint} className="field__hint">
+            A project records one type. For the other, make another project.
+          </p>
+          {missing && mode === null ? (
+            <p id={typeError} className="field__error">
+              {CHOOSE_ONE_TYPE}
+            </p>
+          ) : null}
         </fieldset>
-        <div className="form-grid">
+        {mode !== null ? (
           <TextField
-            label="Phone call target (hours per day)"
+            label={`${mode === "TELEPHONY" ? "Phone call" : "Face-to-face"} target (hours per day)`}
             type="number"
             min={0}
             step="0.5"
-            value={f.target_telephony_hours_per_day}
-            onChange={(e) => set("target_telephony_hours_per_day", e.target.value)}
+            value={f[HOURS_KEY[mode]]}
+            onChange={(e) => set(HOURS_KEY[mode], e.target.value)}
           />
-          <TextField
-            label="Face-to-face target (hours per day)"
-            type="number"
-            min={0}
-            step="0.5"
-            value={f.target_face_to_face_hours_per_day}
-            onChange={(e) => set("target_face_to_face_hours_per_day", e.target.value)}
-          />
-        </div>
+        ) : null}
         <Select
           label="Who may see participant phone numbers"
           value={f.phone_visibility_policy}

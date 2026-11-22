@@ -240,9 +240,25 @@ def _values(data: ProjectInput) -> dict[str, object]:
     return values
 
 
-def _check_modes(data: ProjectInput) -> None:
-    if not (data.allows_telephony or data.allows_face_to_face):
-        raise AppError("Allow at least one recording mode", code="MODE_REQUIRED", status_code=422)
+ONE_RECORDING_TYPE = (
+    "Choose one recording type: face-to-face or phone call. Make another project for the other."
+)
+
+
+def _check_modes(data: ProjectInput, project: Project | None = None) -> None:
+    """A project records one type (D-153): face-to-face or phone calls, never both or neither
+    (422 ONE_RECORDING_TYPE). A project made before D-153 that allows both may keep both while
+    it is saved unchanged (the Rules tab sends them back as they are); choosing one is for the
+    Overview, and once it is one type it stays one."""
+    both = data.allows_telephony and data.allows_face_to_face
+    kept = both and project is not None and project.only_mode is None
+    if not (data.allows_telephony or data.allows_face_to_face) or (both and not kept):
+        raise AppError(
+            ONE_RECORDING_TYPE,
+            code="ONE_RECORDING_TYPE",
+            status_code=422,
+            details=[{"field": "recording_mode"}],
+        )
     if not data.allows_telephony and data.target_telephony_hours_per_day > 0:
         raise AppError(
             "Telephony target needs telephony allowed", code="MODE_NOT_ALLOWED", status_code=422
@@ -373,7 +389,7 @@ def update_project(
         raise AppError(
             "Reopen the project before editing it", code="PROJECT_ARCHIVED", status_code=409
         )
-    _check_modes(data)
+    _check_modes(data, project)
     values = _values(data)
     before = _snapshot(project)
     for key, value in values.items():
@@ -500,7 +516,10 @@ def set_audio_rules(
     modes = [r.mode for r in rules]
     if len(set(modes)) != len(modes):
         raise AppError("Each mode may appear once", code="DUPLICATE_MODE", status_code=422)
-    if set(modes) != allowed:
+    # A type the project no longer records (it chose one, D-153) keeps its rule for its earlier
+    # tasks, so the Audio rules tab may send it back.
+    kept = {a.mode for a in project.audio_rules}
+    if not allowed <= set(modes) or not set(modes) <= allowed | kept:
         raise AppError(
             f"Give exactly one rule per allowed mode: {', '.join(sorted(allowed))}",
             code="MODE_NOT_ALLOWED",

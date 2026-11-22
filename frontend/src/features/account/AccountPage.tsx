@@ -9,7 +9,6 @@ import { TwoStepEnrol } from "../../auth/TwoStepEnrol";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -190,10 +189,7 @@ export function AccountPage() {
   const { user } = useAuth();
   return (
     <section aria-labelledby="account-title" className="stack">
-      <h1 id="account-title">
-        <IconTile name="user" />
-        My account
-      </h1>
+      <h1 id="account-title">My account</h1>
       <p>
         {user?.display_name} ({user?.email})
       </p>
@@ -203,8 +199,11 @@ export function AccountPage() {
           hasPassword={user.telephony_has_password ?? false}
         />
       ) : null}
-      <ChangePassword />
-      <TwoStep />
+      {/* Two short forms side by side on a wide screen (D-154). */}
+      <div className="section-pair">
+        <ChangePassword />
+        <TwoStep />
+      </div>
       <Sessions />
       <InstallCard />
     </section>

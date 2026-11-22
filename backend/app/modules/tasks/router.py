@@ -222,7 +222,9 @@ def list_tasks(
 
 class CreateTaskBody(BaseModel):
     project_id: uuid.UUID
-    recording_mode: Mode
+    # Left out: the project's one recording type (D-153). A type the project does not record is
+    # refused; a project made before D-153 that allows both needs it.
+    recording_mode: Mode | None = None
     participant_a_id: uuid.UUID
     participant_b_id: uuid.UUID
     priority: Priority = "NORMAL"

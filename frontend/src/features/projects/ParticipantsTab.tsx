@@ -23,6 +23,7 @@ import { addedText, useParticipantWindows } from "../participants/ParticipantEdi
 import "../participants/participants.css";
 import { languageLabel } from "./choices";
 import { useProject } from "./ProjectDetailPage";
+import { StillNeededLine } from "./StillNeededLine";
 
 /** People who already exist in another of the caller's projects, added here as they are (D-090). */
 function AddExisting({
@@ -190,6 +191,8 @@ export function ParticipantsTab() {
 
   return (
     <div className="stack">
+      {/* D-153: who the recruiters still need to find, from the targets. */}
+      <StillNeededLine projectId={project.id} />
       <div className="actions">
         {canManage ? (
           <Button icon="userPlus" onClick={() => windows.open({ kind: "add" })}>

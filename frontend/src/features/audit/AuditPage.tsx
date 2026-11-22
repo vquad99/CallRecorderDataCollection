@@ -5,7 +5,6 @@ import { listAudit } from "../../api/work";
 import { DataTable } from "../../components/DataTable";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { IconTile } from "../../components/Icon";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useDebounced } from "../../hooks/useDebounced";
@@ -58,10 +57,7 @@ export function AuditPage() {
   );
   return (
     <section aria-labelledby="audit-title" className="stack">
-      <h1 id="audit-title">
-        <IconTile name="audit" />
-        Audit log
-      </h1>
+      <h1 id="audit-title">Audit log</h1>
       <div className="filters">
         <Select
           label="Area"
@@ -89,7 +85,8 @@ export function AuditPage() {
         />
         <TextField
           label="Action"
-          hint="Optional: the exact action, for example recording.completed."
+          placeholder="e.g. recording.completed"
+          title="Optional: the exact action, for example recording.completed."
           value={action}
           onChange={(e) => {
             setAction(e.target.value);

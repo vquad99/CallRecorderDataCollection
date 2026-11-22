@@ -13,13 +13,14 @@ from tests.conftest import Api, make_project, make_user
 
 pytestmark = pytest.mark.db
 
+# A project records one type (D-153): this one phone calls.
 NEW_PROJECT = {
     "code": "hindi-01",
     "name": "Hindi conversations",
     "allows_telephony": True,
-    "allows_face_to_face": True,
+    "allows_face_to_face": False,
     "target_telephony_hours_per_day": "62.5",
-    "target_face_to_face_hours_per_day": "62.5",
+    "target_face_to_face_hours_per_day": "0",
 }
 
 
@@ -39,14 +40,25 @@ def test_create_project_with_spec_defaults(admin: Api) -> None:
     assert project["status"] == "DRAFT"
     assert project["accepts_new_work"] is False
     rules = {r["mode"]: r for r in project["audio_rules"]}
+    assert list(rules) == ["TELEPHONY"], "an audio rule for the project's one type"
     assert (
         rules["TELEPHONY"]["sample_rate"],
         rules["TELEPHONY"]["bit_depth"],
         rules["TELEPHONY"]["channels"],
     ) == (16000, 16, 2)  # stereo: TxContact's recordings are 16 kHz stereo (D-134)
-    assert rules["FACE_TO_FACE"]["channels"] == 1
     assert rules["TELEPHONY"]["max_silence_pct"] == "25.00"
     assert rules["TELEPHONY"]["max_clipping_pct"] is None
+    face = admin.post(
+        "/api/v1/projects",
+        json={
+            **NEW_PROJECT,
+            "code": "face-01",
+            "allows_telephony": False,
+            "allows_face_to_face": True,
+            "target_telephony_hours_per_day": "0",
+        },
+    ).json()
+    assert [(r["mode"], r["channels"]) for r in face["audio_rules"]] == [("FACE_TO_FACE", 1)]
     dup = admin.post("/api/v1/projects", json=NEW_PROJECT)
     assert dup.json()["error"]["code"] == "PROJECT_CODE_TAKEN"
 
@@ -68,13 +80,21 @@ def test_a_project_without_a_code_gets_the_next_prj_code(admin: Api) -> None:
 
 
 def test_mode_and_target_validation(admin: Api) -> None:
-    none = admin.post(
-        "/api/v1/projects",
-        json={**NEW_PROJECT, "allows_telephony": False, "allows_face_to_face": False},
-    )
-    assert none.json()["error"]["code"] == "MODE_REQUIRED"
+    """D-153: one recording type per project, never both or neither; a daily target only for it."""
+    for both in (False, True):
+        answer = admin.post(
+            "/api/v1/projects",
+            json={**NEW_PROJECT, "allows_telephony": both, "allows_face_to_face": both},
+        )
+        assert answer.status_code == 422, answer.text
+        assert answer.json()["error"]["code"] == "ONE_RECORDING_TYPE"
+        assert answer.json()["error"]["message"] == (
+            "Choose one recording type: face-to-face or phone call. Make another project for "
+            "the other."
+        )
     mismatch = admin.post(
-        "/api/v1/projects", json={**NEW_PROJECT, "code": "X2", "allows_telephony": False}
+        "/api/v1/projects",
+        json={**NEW_PROJECT, "code": "X2", "target_face_to_face_hours_per_day": "5"},
     )
     assert mismatch.json()["error"]["code"] == "MODE_NOT_ALLOWED"
 
@@ -104,23 +124,21 @@ def test_languages_audio_rules_retention(admin: Api) -> None:
     }
     ok = admin.put(
         f"/api/v1/projects/{pid}/audio-rules",
-        json={
-            "rules": [
-                {**rule, "mode": "TELEPHONY", "channels": 2},
-                {**rule, "mode": "FACE_TO_FACE", "channels": 1},
-            ]
-        },
+        json={"rules": [{**rule, "mode": "TELEPHONY", "channels": 2}]},
     )
     assert ok.status_code == 200
     assert {r["mode"]: r["max_silence_pct"] for r in ok.json()["audio_rules"]} == {
-        "FACE_TO_FACE": "20.00",
         "TELEPHONY": "20.00",
     }
-    missing_mode = admin.put(
-        f"/api/v1/projects/{pid}/audio-rules",
-        json={"rules": [{**rule, "mode": "TELEPHONY", "channels": 2}]},
-    )
-    assert missing_mode.json()["error"]["code"] == "MODE_NOT_ALLOWED"
+    for rules in (
+        [{**rule, "mode": "FACE_TO_FACE", "channels": 1}],  # its own type missing
+        [
+            {**rule, "mode": "TELEPHONY", "channels": 2},
+            {**rule, "mode": "FACE_TO_FACE", "channels": 1},  # a type it does not record
+        ],
+    ):
+        wrong = admin.put(f"/api/v1/projects/{pid}/audio-rules", json={"rules": rules})
+        assert wrong.json()["error"]["code"] == "MODE_NOT_ALLOWED"
     retention = admin.put(
         f"/api/v1/projects/{pid}/retention",
         json={"rules": [{"asset_kind": "BROWSER_ORIGINAL", "retain_days": 90}]},

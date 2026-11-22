@@ -1,6 +1,7 @@
 // The project's Progress tab (D-148): completed minutes, conversations and speakers against the
-// project's targets. Its own module, so only the Progress tab's chunk loads it (the first screen is
-// near its budget).
+// project's targets, and what is still needed to finish (D-153). Its own module, so only the
+// Progress tab's chunk (and the Participants page's "Still needed" line) loads it (the first screen
+// is near its budget).
 import { apiRequest } from "./client";
 import type { ProgressCounts } from "./projects";
 
@@ -24,10 +25,71 @@ export interface Share {
   rows: ShareRow[];
 }
 
+/** Speakers wanted in one group, and how far it is (D-153). `registered`: people registered in the
+ * project with no approved conversation yet. `still_needed`: target - done - registered, at least
+ * 0 (a total adds up its groups'); null without a target. */
+export interface Need {
+  target: number | null;
+  done: number;
+  registered: number;
+  still_needed: number | null;
+}
+
+/** One row of the age band x gender matrix: an age band, "Other ages", "Not given", "All ages"
+ * (no age bands), or the total. */
+export interface AgeGenderNeed {
+  key: string;
+  label: string;
+  male: Need;
+  female: Need;
+  total: Need;
+}
+
+export interface DistrictNeed extends Need {
+  key: string;
+  label: string;
+}
+
+export interface ConversationNeed {
+  /** ALL, then FACE_TO_FACE and TELEPHONY for a project made before D-153 that records both. */
+  key: string;
+  label: string;
+  target: number | null;
+  approved: number;
+  /** Open tasks: not started, in progress, waiting for QC or approval. */
+  in_pipeline: number;
+  still_to_make: number | null;
+}
+
+/** What is still needed to reach the targets (D-153). */
+export interface StillNeeded {
+  speakers: {
+    target: number | null;
+    by_age: boolean;
+    by_gender: boolean;
+    rows: AgeGenderNeed[];
+    total: AgeGenderNeed;
+  };
+  districts: { has_target: boolean; rows: DistrictNeed[]; total: DistrictNeed | null };
+  conversations: ConversationNeed[];
+  capacity: {
+    limit: number | null;
+    registered: number;
+    /** Conversations the registered people may still take part in, added up (two a
+     * conversation); null without a limit. */
+    places_left: number | null;
+    conversations_to_make: number | null;
+    more_speakers_needed: number | null;
+  };
+}
+
 /** The project's Progress tab (D-148), GET /projects/{id}/progress. Lengths in milliseconds. */
 export interface ProjectProgress {
   project_id: string;
   pause_limit_seconds: number;
+  /** The project's one recording type (D-153); null for a project made before it that records
+   * both. */
+  recording_mode: "FACE_TO_FACE" | "TELEPHONY" | null;
   completed: {
     counts: ProgressCounts;
     completed_ms: number;
@@ -64,10 +126,13 @@ export interface ProjectProgress {
   };
   age_bands: Share;
   gender: Share;
-  modes: Share;
+  /** Null for a project that records one type: the split means nothing there (D-153). */
+  modes: Share | null;
   districts: Share;
+  still_needed: StillNeeded;
 }
 
-/** The Progress tab: for the people who manage the project. */
+/** The Progress tab (and the Participants page's "Still needed" line): for the people who manage
+ * the project. */
 export const getProgress = (id: string) =>
   apiRequest<ProjectProgress>(`/api/v1/projects/${id}/progress`);

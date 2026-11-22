@@ -292,6 +292,141 @@ def test_only_the_people_who_manage_the_project_see_it(world: dict[str, Any]) ->
     assert _progress(world["root"], world["project"]).status_code == 200
 
 
+# ------------------------------------------------------------------------ still needed (D-153)
+
+
+def _need(cell: dict[str, Any]) -> tuple[int | None, int, int, int | None]:
+    return (cell["target"], cell["done"], cell["registered"], cell["still_needed"])
+
+
+def _matrix(speakers: dict[str, Any]) -> dict[str, tuple[Any, Any, Any]]:
+    """label -> (male, female, total), each (target, done, registered, still needed)."""
+    return {
+        r["label"]: (_need(r["male"]), _need(r["female"]), _need(r["total"]))
+        for r in [*speakers["rows"], speakers["total"]]
+    }
+
+
+def test_still_needed_shares_the_targets_out_and_counts_who_is_on_the_way(
+    world: dict[str, Any],
+) -> None:
+    """500 speakers by age band (40/30/20/10) and gender (50/50); F (30, male) is registered
+    with no approved conversation yet; E (55) has no gender and so fills neither cell."""
+    _set(world, world["project"], target_districts=list(targets.CLIENT_DISTRICTS))
+    body = _progress(world["pa"], world["project"]).json()
+    assert body["recording_mode"] is None, "made before D-153: both types"
+    needed = body["still_needed"]
+    speakers = needed["speakers"]
+    assert (speakers["target"], speakers["by_age"], speakers["by_gender"]) == (500, True, True)
+    assert _matrix(speakers) == {
+        "20-30": ((100, 0, 0, 100), (100, 2, 0, 98), (200, 2, 0, 198)),  # A 25 F, D 22 F
+        "30-40": ((75, 1, 1, 73), (75, 0, 0, 75), (150, 1, 1, 148)),  # B 35 M; F 30 M waiting
+        "40-50": ((50, 1, 0, 49), (50, 0, 0, 50), (100, 1, 0, 99)),  # C 45 M
+        "50-60": ((25, 0, 0, 25), (25, 0, 0, 25), (50, 1, 0, 50)),  # E 55, no gender
+        "Total": ((250, 2, 1, 247), (250, 2, 0, 248), (500, 5, 1, 495)),
+    }
+    # Each listed district an equal share of 500: 62.5 each, the first four get the 4 left over.
+    districts = {
+        r["label"]: _need(r) for r in [*needed["districts"]["rows"], needed["districts"]["total"]]
+    }
+    assert needed["districts"]["has_target"] is True
+    assert districts == {
+        "North Goa (Goa)": (63, 2, 1, 60),  # A, E's "north goa "; F waiting
+        "South Goa (Goa)": (63, 1, 0, 62),
+        "Uttara Kannada (Karnataka)": (63, 0, 0, 63),
+        "Udupi (Karnataka)": (63, 1, 0, 62),
+        "Dakshina Kannada (Karnataka)": (62, 0, 0, 62),
+        "Sindhudurg (Maharashtra)": (62, 0, 0, 62),
+        "Ratnagiri (Maharashtra)": (62, 0, 0, 62),
+        "Raigad (Maharashtra)": (62, 0, 0, 62),
+        "Other districts": (None, 1, 0, None),  # D from Pune
+        "Total": (500, 5, 1, 495),
+    }
+    # 600 conversations: 3 approved, T4 and T5 open; a project that records both also by type.
+    assert [
+        (c["key"], c["target"], c["approved"], c["in_pipeline"], c["still_to_make"])
+        for c in needed["conversations"]
+    ] == [
+        ("ALL", 600, 3, 2, 595),
+        ("FACE_TO_FACE", 300, 2, 1, 297),
+        ("TELEPHONY", 300, 1, 1, 298),
+    ]
+    # At most 2 conversations each: A, B, C and F have 2, D and E 1 (rejected and cancelled
+    # aside), so the 6 registered people have 2 places left; 595 conversations need 1190.
+    assert needed["capacity"] == {
+        "limit": 2,
+        "registered": 6,
+        "places_left": 2,
+        "conversations_to_make": 595,
+        "more_speakers_needed": 594,
+    }
+
+
+def test_the_targets_are_shared_out_in_whole_people_that_add_up() -> None:
+    """The largest remainder: whole parts first, the ones left to the largest fractions, the
+    first in order on a tie."""
+    cells = [a * g for a in (40, 30, 20, 10) for g in (50, 50)]
+    assert targets.split(7, cells) == [2, 1, 1, 1, 1, 1, 0, 0]
+    assert sum(targets.split(7, cells)) == 7
+    assert targets.split(500, [1] * 8) == [63, 63, 63, 63, 62, 62, 62, 62]
+    assert targets.split(601, [50, 50]) == [301, 300]
+    assert targets.split(0, [1, 1]) == [0, 0]
+    assert targets.split(5, []) == []
+    for total in range(0, 120):
+        assert sum(targets.split(total, cells)) == total
+
+
+def test_still_needed_without_targets_shows_who_there_is(world: dict[str, Any]) -> None:
+    _set(
+        world,
+        world["project"],
+        target_speakers=None,
+        target_conversations=None,
+        target_age_bands=[],
+        target_gender={},
+        target_districts=[],
+        max_conversations_per_speaker=None,
+    )
+    needed = _progress(world["pa"], world["project"]).json()["still_needed"]
+    assert (needed["speakers"]["by_age"], needed["speakers"]["by_gender"]) == (False, False)
+    assert _matrix(needed["speakers"]) == {
+        "All ages": ((None, 2, 1, None), (None, 2, 0, None), (None, 5, 1, None)),
+        "Total": ((None, 2, 1, None), (None, 2, 0, None), (None, 5, 1, None)),
+    }
+    assert needed["districts"] == {"has_target": False, "rows": [], "total": None}
+    assert needed["conversations"][0] == {
+        "key": "ALL",
+        "label": "All conversations",
+        "target": None,
+        "approved": 3,
+        "in_pipeline": 2,
+        "still_to_make": None,
+    }
+    assert needed["capacity"] == {
+        "limit": None,
+        "registered": 6,
+        "places_left": None,
+        "conversations_to_make": None,
+        "more_speakers_needed": None,
+    }
+
+
+def test_a_project_of_one_type_has_no_split_by_type(world: dict[str, Any]) -> None:
+    """D-153: the face-to-face and phone split means nothing in a project that records one."""
+    _set(world, world["project"], allows_telephony=False, target_telephony_hours_per_day=0)
+    body = _progress(world["pa"], world["project"]).json()
+    assert body["recording_mode"] == "FACE_TO_FACE"
+    assert body["modes"] is None
+    assert [c["key"] for c in body["still_needed"]["conversations"]] == ["ALL"]
+
+
+def test_an_empty_project_still_needs_everything(world: dict[str, Any]) -> None:
+    needed = _progress(world["pa"], world["other"]).json()["still_needed"]
+    assert [r["label"] for r in needed["speakers"]["rows"]] == ["20-30", "30-40", "40-50", "50-60"]
+    assert _need(needed["speakers"]["total"]["total"]) == (500, 0, 0, 500)
+    assert needed["capacity"]["registered"] == 0
+
+
 # ------------------------------------------------------------------------ the dashboard
 
 
@@ -393,7 +528,7 @@ def _save(api: Api, project: Any, **changes: Any) -> Any:
 def test_a_new_project_starts_with_the_clients_targets(world: dict[str, Any]) -> None:
     made = world["root"].post(
         "/api/v1/projects",
-        json={"name": "Konkani", "allows_telephony": True, "allows_face_to_face": True},
+        json={"name": "Konkani", "allows_telephony": False, "allows_face_to_face": True},
     )
     assert made.status_code == 201, made.text
     body = made.json()

@@ -250,6 +250,14 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         lazy="select", cascade="all, delete-orphan", order_by="ProjectRetentionRule.asset_kind"
     )
 
+    @property
+    def only_mode(self) -> str | None:
+        """The project's one recording type (D-153): TELEPHONY or FACE_TO_FACE; None for a
+        project made before D-153 that still allows both (it keeps both until it is edited)."""
+        if self.allows_telephony and self.allows_face_to_face:
+            return None
+        return "TELEPHONY" if self.allows_telephony else "FACE_TO_FACE"
+
 
 class ProjectLanguage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "project_languages"

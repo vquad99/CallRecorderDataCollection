@@ -124,10 +124,12 @@ describe("dashboard filters", () => {
     open(() => ({ ...DASHBOARD, effective_pending: 2 }));
     renderAt("/dashboard");
     const figures = await screen.findByRole("group", { name: "Key figures" }, wait);
-    const completed = within(figures).getByText("Completed").closest(".kpi") as HTMLElement;
-    expect(completed).toHaveTextContent("6.0 h");
-    expect(completed).toHaveTextContent("approved, as each project counts it");
-    expect(screen.getByText("30 recordings, 9.4 h effective speech")).toBeInTheDocument();
+    const figure = (label: string) =>
+      within(figures).getByText(label).closest(".figline__item") as HTMLElement;
+    expect(figure("Completed")).toHaveTextContent("6.0 h");
+    expect(figure("Completed")).toHaveTextContent("as each project counts it");
+    expect(figure("Recorded")).toHaveTextContent("30 recordings");
+    expect(figure("Effective speech")).toHaveTextContent("9.4 h");
     // Face-to-face beside phone and both together, one row per figure (D-151).
     const modes = screen.getByRole("table", { name: "By recording type" });
     expect(row(modes, "Effective speech")).toEqual(["Effective speech", "5.6 h", "3.8 h", "9.4 h"]);
@@ -139,18 +141,16 @@ describe("dashboard filters", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the key figures, tasks by stage and audio QC as compact charts and tables (D-151)", async () => {
+  it("shows the key figures as one line, and tasks, queues and audio QC as plain tables (D-154)", async () => {
     open();
     renderAt("/dashboard");
     const figures = await screen.findByRole("group", { name: "Key figures" }, wait);
-    const tile = (label: string) => within(figures).getByText(label).closest(".kpi") as HTMLElement;
-    expect(tile("Today")).toHaveTextContent("1.5 h");
-    expect(tile("Today")).toHaveTextContent("of the 4 h daily target");
-    expect(
-      within(tile("Today")).getByRole("progressbar", { name: "Today of the daily target" }),
-    ).toHaveAttribute("aria-valuenow", "38");
-    expect(tile("Tasks approved")).toHaveTextContent("22 / 40");
-    expect(tile("Tasks approved")).toHaveTextContent("55%");
+    const figure = (label: string) =>
+      within(figures).getByText(label).closest(".figline__item") as HTMLElement;
+    expect(figure("Today")).toHaveTextContent("1.5 h of 4 h");
+    expect(figure("Today")).toHaveTextContent("38% of the daily target");
+    expect(figure("Tasks approved")).toHaveTextContent("22 / 40");
+    expect(figure("Tasks approved")).toHaveTextContent("55% of all tasks");
     // The tasks by stage, each status named under its stage.
     const stages = screen.getByRole("table", { name: "Tasks by status" });
     expect(row(stages, "Approved")).toEqual(["Approved", "22", "55%"]);
@@ -161,18 +161,22 @@ describe("dashboard filters", () => {
     ]);
     expect(row(stages, "In progress")).toEqual(["In progress", "4", "10%"]);
     expect(row(stages, /^Not started/)).toEqual(["Not startedAssigned 8", "8", "20%"]);
-    // Audio QC: the decisions, and the automatic check of those waiting.
-    const qc = screen.getByRole("region", { name: "Audio QC" });
-    expect(qc).toHaveTextContent("QC decisions29");
-    expect(qc).toHaveTextContent("Passed22Rejected1Waiting6");
-    expect(qc).toHaveTextContent("All checks passed4Listen and decide1Failed a check1");
-    // The moderators, and the storage used.
+    expect(row(stages, "Total")).toEqual(["Total", "40", ""]);
+    // Audio QC as one table: the decisions, and the automatic check of those waiting.
+    const qc = screen.getByRole("table", { name: "Audio QC" });
+    expect(within(qc).getByRole("rowgroup", { name: "QC decisions" })).toHaveTextContent(
+      "QC decisions29Passed22Rejected1Waiting6",
+    );
+    expect(
+      within(qc).getByRole("rowgroup", { name: "Automatic check of those waiting" }),
+    ).toHaveTextContent("All checks passed4Listen and decide1Failed a check1");
+    // The moderators, and the storage used (a key figure).
     expect(row(screen.getByRole("table", { name: "Moderator output" }), "Max Moderator")).toEqual([
-      "MMMax Moderator",
+      "Max Moderator",
       "30",
       "13 h",
     ]);
-    expect(screen.getByRole("region", { name: "Storage used" })).toHaveTextContent("3.0 GB");
+    expect(figure("Storage used")).toHaveTextContent("3.0 GB");
   });
 
   it("gives a client viewer the filters that are about the recordings only", async () => {

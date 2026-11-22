@@ -9,7 +9,8 @@ Columns: participant_a,participant_b,mode,priority,due_date,moderator
   agreed to the project's consent form (D-129) and be within the project's pairing rules (D-143:
   complete speaker details, conversations per speaker, each pair once, counting the rows above),
   which the check already says.
-- mode: face_to_face or telephony; empty = face_to_face, or the project's only mode.
+- mode: face_to_face or telephony; empty = the project's one recording type (D-153), or face_to_face
+  in a project made before D-153 that allows both; another type than the project's is refused.
 - priority: low, normal, high or urgent; empty = normal.
 - due_date: YYYY-MM-DD; may be empty.
 - moderator: the moderator's email; empty leaves the task in Draft for assigning later.
@@ -72,18 +73,17 @@ def _participant(db: Session, project_id: uuid.UUID, code: str, side: str) -> Pa
 
 
 def _mode(project: Project, value: str) -> str:
+    """The row's recording type: empty is the project's one type (D-153), or face-to-face in a
+    project made before D-153 that allows both."""
     if not value:
-        if project.allows_face_to_face:
-            return "FACE_TO_FACE"
-        return "TELEPHONY"
+        return project.only_mode or "FACE_TO_FACE"
     mode = MODES.get(value.strip().upper().replace(" ", "_"))
     if mode is None:
         raise _bad("Mode must be face_to_face or telephony")
-    if (mode == "TELEPHONY" and not project.allows_telephony) or (
-        mode == "FACE_TO_FACE" and not project.allows_face_to_face
-    ):
-        raise _bad("This project does not allow that recording mode")
-    return mode
+    try:
+        return service.recording_mode_for(project, mode)
+    except AppError as exc:
+        raise _bad(exc.message) from None
 
 
 def _due(value: str) -> datetime | None:

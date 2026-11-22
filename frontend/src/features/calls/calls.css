@@ -1,33 +1,12 @@
-/* Phone calls page (D-102, one dashboard in D-151) and the call card on a task page (D-103). The
-   panels, key figures, day chart and tables are in components/charts. */
-.calls-page .toolbar .field {
-  min-width: 180px;
-}
-.calls-page .toolbar .field__input {
-  min-height: 32px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-  font-size: 0.8125rem;
-}
-.calls-page .toolbar .field__label {
-  color: var(--text-2);
-  font-size: 0.75rem;
-}
-.calls-page .toolbar .field {
-  gap: 2px;
-}
-.calls-page .toolbar > .button {
-  min-height: 32px;
-  padding-top: 4px;
-  padding-bottom: 4px;
-}
-.calls-page .panel .hours ~ p {
+/* Phone calls page (D-102; plain tables in D-154) and the call card on a task page (D-103). The
+   sections, key figures, day chart and tables are in components/charts. */
+.calls-page .panel > p {
   margin: 0;
 }
 .funnel tbody th {
   white-space: nowrap;
 }
-/* The counted reasons: two tables side by side, one under the other in a narrow panel. */
+/* The counted reasons: two tables side by side, one under the other in a narrow section. */
 .reasons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -40,38 +19,27 @@
   }
 }
 
-/* Calls by hour of the day: 24 thin bars, one series. */
-.hours {
-  display: grid;
-  grid-template-columns: repeat(24, minmax(0, 1fr));
-  align-items: end;
-  gap: 2px;
-  height: 110px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* Calls by hour of the day: one matrix, an hour per column, each count shaded by its share of
+   the row's busiest hour (D-154). */
+.panel .table.hours-matrix th,
+.panel .table.hours-matrix td {
+  padding-right: 4px;
+  padding-left: 4px;
 }
-.hours li {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  height: 100%;
+.panel .table.hours-matrix th:first-child {
+  padding-left: 10px;
+  white-space: nowrap;
 }
-.hours__bar {
-  display: block;
-  min-height: 1px;
-  border-radius: 4px 4px 0 0;
-  background: var(--primary);
+.table.hours-matrix tbody td {
+  min-width: 30px;
 }
-.hours li:hover .hours__bar {
-  opacity: 0.8;
+.table.hours-matrix tbody tr:hover {
+  background: transparent;
 }
-.hours__tick {
-  height: 16px;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-  text-align: center;
+.panel .table.hours-matrix .hours-matrix__note {
+  padding-left: 10px;
+  color: var(--text-2);
+  text-align: left;
 }
 
 .calls-list__head {

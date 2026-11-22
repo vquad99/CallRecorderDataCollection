@@ -1,11 +1,12 @@
 """A project's progress against its targets (D-148): the Progress tab,
-`GET /projects/{id}/progress`.
+`GET /projects/{id}/progress`, with what is still needed to finish it (D-153).
 
 For the people who manage the project (`projects.manage`, like the other tabs, D-104). Everything
-comes from three set-based queries over this project's tasks only (D-142), whatever its size: the
-tasks by status and mode with their finished conversations (lengths and effective speech from
-exports/minutes.py), the speakers of approved conversations grouped by their details, and the
-people registered in the project with those who reached the conversations-per-speaker limit.
+comes from three set-based queries over this project's tasks and people only (D-142), whatever its
+size: the tasks by status and mode with their finished conversations (lengths and effective speech
+from exports/minutes.py), the people of the project (the speakers of approved conversations and
+everyone registered) grouped by their details, and the people registered with those who reached
+the conversations-per-speaker limit and the conversations they may still give.
 
 Definitions (also on the page):
 - Completed: the approved conversations' effective speech, or their full length, as the project's
@@ -15,13 +16,29 @@ Definitions (also on the page):
 - Speakers: distinct participants with at least one approved conversation. Age bands, gender and
   districts are shares of these speakers, each counted once, with their details as they are now;
   "Not given" holds people without that detail. Face-to-face and phone are shares of the approved
-  conversations.
+  conversations, shown only for a project made before D-153 that records both.
 - Variance: the actual percent minus the target percent, in percentage points.
+
+Still needed (D-153), from the targets:
+- A group's target: the speakers target shared out by the age band's percent times the gender's
+  percent (or by the district's equal share), in whole people that add up to the target
+  (targets.split, the largest remainder).
+- Done: speakers with an approved conversation in the group (the basis above). Registered: people
+  registered in the project (not removed) with details in the group and no approved conversation
+  yet; they are on their way. Still needed: the target less done and registered, never below 0.
+  A total adds up its groups' still needed: extra people in one group do not fill another, and
+  people without the detail fill none.
+- Conversations: the target less the approved ones and the open tasks (not started, in progress,
+  waiting for QC or approval).
+- Capacity: the conversations the registered people may still give under the conversations-per-
+  speaker limit (each at most the limit, less the conversations they have, rejected and cancelled
+  ones aside), against the two places each conversation still to make needs.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from pydantic import BaseModel
@@ -40,8 +57,9 @@ from app.modules.tasks.pairing import NOT_COUNTED
 NOT_STARTED = ("DRAFT", "ASSIGNED")
 IN_PROGRESS = ("IN_PROGRESS", "RECORDED", "ON_HOLD", "CONSENT_FIX")
 WAITING_QC = ("AUDIO_QC", "ADMIN_REVIEW")
+OPEN = NOT_STARTED + IN_PROGRESS + WAITING_QC
 MAX_DISTRICT_ROWS = 30  # districts shown when the project lists none
-OTHER, NOT_GIVEN = "OTHER", "NOT_GIVEN"
+OTHER, NOT_GIVEN, ALL = "OTHER", "NOT_GIVEN", "ALL"
 GENDER_WORDS = {"MALE": "Male", "FEMALE": "Female"}
 MODE_WORDS = {"FACE_TO_FACE": "Face-to-face", "TELEPHONY": "Phone call"}
 
@@ -99,16 +117,88 @@ class Speakers(BaseModel):
     at_limit: int | None
 
 
+class Need(BaseModel):
+    """Speakers wanted in one group, and how far the group is (D-153)."""
+
+    target: int | None  # None: no target for this group
+    done: int  # with an approved conversation
+    registered: int  # registered in the project, no approved conversation yet
+    still_needed: int | None  # target - done - registered, at least 0; None without a target
+
+
+class AgeGenderNeed(BaseModel):
+    """One row of the age band x gender matrix: an age band (or "Other ages", "Not given", or
+    "All ages" when the project has no age bands), by gender and in all."""
+
+    key: str
+    label: str
+    male: Need
+    female: Need
+    total: Need  # people without a gender too
+
+
+class SpeakersNeeded(BaseModel):
+    target: int | None
+    by_age: bool  # the project has age bands
+    by_gender: bool  # the project has a gender target
+    rows: list[AgeGenderNeed]
+    total: AgeGenderNeed
+
+
+class DistrictNeed(Need):
+    key: str
+    label: str
+
+
+class DistrictsNeeded(BaseModel):
+    has_target: bool  # the project lists districts; otherwise no rows
+    rows: list[DistrictNeed]
+    total: DistrictNeed | None
+
+
+class ConversationNeed(BaseModel):
+    key: str  # ALL, then FACE_TO_FACE and TELEPHONY for a project that records both
+    label: str
+    target: int | None
+    approved: int
+    in_pipeline: int  # open tasks: not started, in progress, waiting for QC or approval
+    still_to_make: int | None  # target - approved - in_pipeline, at least 0
+
+
+class Capacity(BaseModel):
+    """Whether the registered people can give the conversations still to make (D-143 limit)."""
+
+    limit: int | None  # conversations per speaker; None = no limit
+    registered: int
+    # Conversations the registered people may still take part in, added up (each conversation
+    # takes two of these places); None without a limit.
+    places_left: int | None
+    conversations_to_make: int | None
+    # More people needed even if every registered one gives the limit; None without a limit or a
+    # conversations target.
+    more_speakers_needed: int | None
+
+
+class StillNeeded(BaseModel):
+    speakers: SpeakersNeeded
+    districts: DistrictsNeeded
+    conversations: list[ConversationNeed]
+    capacity: Capacity
+
+
 class Progress(BaseModel):
     project_id: uuid.UUID
     pause_limit_seconds: int
+    # The project's one recording type (D-153); None for a project made before it that allows both.
+    recording_mode: str | None
     completed: Completed
     conversations: Conversations
     speakers: Speakers
     age_bands: Share
     gender: Share
-    modes: Share
+    modes: Share | None  # None for a project that records one type: the split means nothing
     districts: Share
+    still_needed: StillNeeded
 
 
 def _pct(part: float, whole: float) -> float:
@@ -143,11 +233,30 @@ def _band_label(band: dict[str, int]) -> str:
     return f"{band['from']}-{band['to']}"
 
 
+def _age_key(age: int | None, bands: list[dict[str, int]]) -> str:
+    """A person's age band as a row key: the band's index, OTHER outside them, NOT_GIVEN."""
+    if age is None:
+        return NOT_GIVEN
+    index = targets.band_of(age, bands)
+    return OTHER if index is None else str(index)
+
+
+def _gender_key(gender: str | None) -> str:
+    return gender if gender in GENDER_WORDS else NOT_GIVEN
+
+
+def _district_key(person: Any, wanted: list[dict[str, str]]) -> str:
+    """A person's listed district as a row key: its index, OTHER for another one, NOT_GIVEN."""
+    if not person.district:
+        return NOT_GIVEN
+    index = targets.district_of(person.native_state, person.district, wanted)
+    return OTHER if index is None else str(index)
+
+
 def _age_share(people: list[Any], bands: list[dict[str, int]], total: int) -> Share:
     counts: dict[str, int] = {}
     for p in people:
-        index = targets.band_of(p.age, bands)
-        key = NOT_GIVEN if p.age is None else (OTHER if index is None else str(index))
+        key = _age_key(p.age, bands)
         counts[key] = counts.get(key, 0) + int(p.n)
     rows = [
         _row(_band_label(b), _band_label(b), counts.get(str(i), 0), total, float(b["percent"]))
@@ -162,7 +271,7 @@ def _age_share(people: list[Any], bands: list[dict[str, int]], total: int) -> Sh
 def _gender_share(people: list[Any], wanted: dict[str, int], total: int) -> Share:
     counts: dict[str, int] = {}
     for p in people:
-        key = p.gender if p.gender in GENDER_WORDS else NOT_GIVEN
+        key = _gender_key(p.gender)
         counts[key] = counts.get(key, 0) + int(p.n)
     rows = [
         _row(code, words, counts.get(code, 0), total, _target(wanted, code))
@@ -185,18 +294,21 @@ def _most_written(spellings: dict[str, int]) -> str:
     return min(spellings, key=lambda written: (-spellings[written], written))
 
 
+def _district_label(d: dict[str, str]) -> str:
+    return f"{d['district']} ({d['state']})"
+
+
 def _district_share(people: list[Any], wanted: list[dict[str, str]], total: int) -> Share:
     counts: dict[str, int] = {}
     if wanted:
         for p in people:
-            index = targets.district_of(p.native_state, p.district, wanted)
-            key = NOT_GIVEN if not p.district else (OTHER if index is None else str(index))
+            key = _district_key(p, wanted)
             counts[key] = counts.get(key, 0) + int(p.n)
         each = 100 / len(wanted)
         rows = [
             _row(
                 f"{d['state']}|{d['district']}",
-                f"{d['district']} ({d['state']})",
+                _district_label(d),
                 counts.get(str(i), 0),
                 total,
                 each,
@@ -223,9 +335,159 @@ def _district_share(people: list[Any], wanted: list[dict[str, str]], total: int)
     return Share(basis="speakers", total=total, has_target=False, rows=rows)
 
 
+# ---------------------------------------------------------------------- still needed (D-153)
+
+
+def _need(target: int | None, done: int, registered: int) -> Need:
+    still = None if target is None else max(0, target - done - registered)
+    return Need(target=target, done=done, registered=registered, still_needed=still)
+
+
+def _sum_targets(values: Iterable[int | None]) -> int | None:
+    found = [v for v in values if v is not None]
+    return sum(found) if found else None
+
+
+def _added(needs: Sequence[Need]) -> Need:
+    """Groups added up: their targets, done and registered, and their still needed (extra people in
+    one group do not fill another)."""
+    return Need(
+        target=_sum_targets(n.target for n in needs),
+        done=sum(n.done for n in needs),
+        registered=sum(n.registered for n in needs),
+        still_needed=_sum_targets(n.still_needed for n in needs),
+    )
+
+
+def _tally(rows: Iterable[Any], key: Any) -> dict[Any, int]:
+    counts: dict[Any, int] = {}
+    for r in rows:
+        k = key(r)
+        counts[k] = counts.get(k, 0) + int(r.n)
+    return counts
+
+
+def _speakers_needed(project: Project, done: list[Any], waiting: list[Any]) -> SpeakersNeeded:
+    """The age band x gender matrix: each cell's target (the speakers target shared out by band
+    percent times gender percent, adding up to the target), done, registered and still needed."""
+    bands = list(project.target_age_bands)
+    wanted = dict(project.target_gender)
+    target = project.target_speakers
+    genders = list(GENDER_WORDS)
+
+    def cell(r: Any) -> tuple[str, str]:
+        return (_age_key(r.age, bands) if bands else ALL, _gender_key(r.gender))
+
+    done_n, waiting_n = _tally(done, cell), _tally(waiting, cell)
+
+    def counted(row: str, genders_in: Sequence[str]) -> tuple[int, int]:
+        return (
+            sum(done_n.get((row, g), 0) for g in genders_in),
+            sum(waiting_n.get((row, g), 0) for g in genders_in),
+        )
+
+    every = [*genders, NOT_GIVEN]
+    keys = [str(i) for i in range(len(bands))] or [ALL]
+    labels = [_band_label(b) for b in bands] or ["All ages"]
+    band_weights = [int(b["percent"]) for b in bands] or [1]
+    gender_weights = [int(wanted[g]) for g in genders] if wanted else [1]
+    shares: list[int | None] = (
+        list(targets.split(target, [a * g for a in band_weights for g in gender_weights]))
+        if target is not None
+        else [None] * (len(band_weights) * len(gender_weights))
+    )
+    rows: list[AgeGenderNeed] = []
+    width = len(gender_weights)
+    for i, (key, label) in enumerate(zip(keys, labels, strict=True)):
+        own = shares[i * width : (i + 1) * width]
+        by_gender = {
+            g: _need(own[j] if wanted else None, *counted(key, [g])) for j, g in enumerate(genders)
+        }
+        row_target = _sum_targets(own)
+        everyone = _need(row_target, *counted(key, every))
+        if wanted and row_target is not None:
+            # Still needed adds up the genders: people without a gender fill neither.
+            everyone.still_needed = _sum_targets(n.still_needed for n in by_gender.values())
+        rows.append(
+            AgeGenderNeed(
+                key=_band_label(bands[i]) if bands else ALL,
+                label=label,
+                male=by_gender["MALE"],
+                female=by_gender["FEMALE"],
+                total=everyone,
+            )
+        )
+    for key, label in ((OTHER, "Other ages"), (NOT_GIVEN, "Not given")):
+        if bands and (counted(key, every) != (0, 0)):
+            rows.append(
+                AgeGenderNeed(
+                    key=key,
+                    label=label,
+                    male=_need(None, *counted(key, ["MALE"])),
+                    female=_need(None, *counted(key, ["FEMALE"])),
+                    total=_need(None, *counted(key, every)),
+                )
+            )
+    total = AgeGenderNeed(
+        key="TOTAL",
+        label="Total",
+        male=_added([r.male for r in rows]),
+        female=_added([r.female for r in rows]),
+        total=_added([r.total for r in rows]),
+    )
+    return SpeakersNeeded(
+        target=target, by_age=bool(bands), by_gender=bool(wanted), rows=rows, total=total
+    )
+
+
+def _districts_needed(project: Project, done: list[Any], waiting: list[Any]) -> DistrictsNeeded:
+    """Each listed district's equal share of the speakers target (adding up to it), done,
+    registered and still needed; people from other districts or without one after them."""
+    wanted = list(project.target_districts)
+    if not wanted:
+        return DistrictsNeeded(has_target=False, rows=[], total=None)
+    target = project.target_speakers
+    shares: list[int | None] = (
+        list(targets.split(target, [1] * len(wanted)))
+        if target is not None
+        else [None] * len(wanted)
+    )
+    done_n = _tally(done, lambda r: _district_key(r, wanted))
+    waiting_n = _tally(waiting, lambda r: _district_key(r, wanted))
+
+    def row(key: str, label: str, index: str, share: int | None) -> DistrictNeed:
+        need = _need(share, done_n.get(index, 0), waiting_n.get(index, 0))
+        return DistrictNeed(key=key, label=label, **need.model_dump())
+
+    rows = [
+        row(f"{d['state']}|{d['district']}", _district_label(d), str(i), shares[i])
+        for i, d in enumerate(wanted)
+    ]
+    for key, label in ((OTHER, "Other districts"), (NOT_GIVEN, "Not given")):
+        if done_n.get(key) or waiting_n.get(key):
+            rows.append(row(key, label, key, None))
+    total = DistrictNeed(key="TOTAL", label="Total", **_added(rows).model_dump())
+    return DistrictsNeeded(has_target=True, rows=rows, total=total)
+
+
+def _conversation_need(
+    key: str, label: str, target: int | None, approved: int, pipeline: int
+) -> ConversationNeed:
+    still = None if target is None else max(0, target - approved - pipeline)
+    return ConversationNeed(
+        key=key,
+        label=label,
+        target=target,
+        approved=approved,
+        in_pipeline=pipeline,
+        still_to_make=still,
+    )
+
+
 def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progress:
     """The Progress tab: completed minutes, conversations and speakers against the project's
-    targets, and the shares by age band, gender, recording type and district (module docstring)."""
+    targets, the shares by age band, gender, recording type and district, and what is still
+    needed (module docstring)."""
     project: Project = get_manageable(db, principal, project_id)
     in_project = Task.project_id == project.id
 
@@ -265,6 +527,13 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
             and (mode is None or row.mode == mode)
         )
 
+    def open_tasks(mode: str | None = None) -> int:
+        return sum(
+            int(row.tasks)
+            for row in rows
+            if row.status in OPEN and (mode is None or row.mode == mode)
+        )
+
     approved_ms = total("ms", is_approved=True)
     approved_effective = total("effective_ms", is_approved=True)
     completed_ms = approved_ms if project.progress_counts == "FULL" else approved_effective
@@ -297,82 +566,155 @@ def progress(db: Session, principal: Principal, project_id: uuid.UUID) -> Progre
         by_status=statuses,
     )
 
-    # 2. The speakers of approved conversations, grouped by the details the shares need.
+    # 2. The people of the project grouped by the details the shares and the matrix need: the
+    # speakers of approved conversations (each once, whether or not still registered) and the
+    # people registered in the project (not removed) without one yet.
+    is_approved = (in_project, Task.status == "APPROVED")
     sides = union(
-        select(Task.participant_a_id.label("pid")).where(in_project, Task.status == "APPROVED"),
-        select(Task.participant_b_id.label("pid")).where(in_project, Task.status == "APPROVED"),
+        select(Task.participant_a_id.label("pid")).where(*is_approved),
+        select(Task.participant_b_id.label("pid")).where(*is_approved),
     ).subquery()
-    people = list(
+    everyone = union(
+        select(sides.c.pid),
+        select(ParticipantProjectLink.participant_id.label("pid")).where(
+            ParticipantProjectLink.project_id == project.id
+        ),
+    ).subquery()
+    approved_flag = sides.c.pid.is_not(None)
+    grouped = list(
         db.execute(
             select(
                 Participant.age,
                 Participant.gender,
                 Participant.native_state,
                 Participant.district,
+                approved_flag.label("approved"),
                 func.count().label("n"),
             )
-            .where(Participant.id.in_(select(sides.c.pid)))
+            .select_from(everyone)
+            .join(Participant, Participant.id == everyone.c.pid)
+            .outerjoin(sides, sides.c.pid == everyone.c.pid)
+            .where(approved_flag | Participant.deleted_at.is_(None))
             .group_by(
                 Participant.age,
                 Participant.gender,
                 Participant.native_state,
                 Participant.district,
+                approved_flag,
             )
         )
     )
+    people = [p for p in grouped if p.approved]
+    waiting = [p for p in grouped if not p.approved]
     with_approved = sum(int(p.n) for p in people)
 
-    # 3. The people registered in the project, and who reached the conversations-per-speaker
-    # limit (D-143: cancelled and rejected tasks do not count), in one round trip.
-    registered = (
-        select(func.count())
-        .select_from(ParticipantProjectLink)
+    # 3. The people registered in the project, who reached the conversations-per-speaker limit
+    # (D-143: cancelled and rejected tasks do not count), and the conversations the registered
+    # ones have under the limit, in one round trip.
+    registered_ids = (
+        select(ParticipantProjectLink.participant_id)
         .join(Participant, Participant.id == ParticipantProjectLink.participant_id)
         .where(ParticipantProjectLink.project_id == project.id, Participant.deleted_at.is_(None))
-        .scalar_subquery()
     )
+    registered = select(func.count()).select_from(registered_ids.subquery()).scalar_subquery()
     limit = project.max_conversations_per_speaker
     at_limit_q: Any = null()
+    used_q: Any = null()
     if limit is not None:
         counted = (in_project, Task.status.not_in(NOT_COUNTED))
         each = union_all(
             select(Task.participant_a_id.label("pid")).where(*counted),
             select(Task.participant_b_id.label("pid")).where(*counted),
         ).subquery()
-        full = select(each.c.pid).group_by(each.c.pid).having(func.count() >= limit).subquery()
-        at_limit_q = select(func.count()).select_from(full).scalar_subquery()
-    registered_n, at_limit = db.execute(select(registered, at_limit_q)).one()
-
-    modes = [
-        _row(
-            mode,
-            words,
-            total("n", is_approved=True, mode=mode),
-            completed.approved_conversations,
-            _target(project.target_modes, mode),
+        per = select(each.c.pid, func.count().label("used")).group_by(each.c.pid).subquery()
+        at_limit_q = (
+            select(func.count()).select_from(per).where(per.c.used >= limit).scalar_subquery()
         )
-        for mode, words in MODE_WORDS.items()
+        used_q = (
+            select(func.coalesce(func.sum(func.least(per.c.used, limit)), 0))
+            .where(per.c.pid.in_(registered_ids))
+            .scalar_subquery()
+        )
+    registered_n, at_limit, used = db.execute(select(registered, at_limit_q, used_q)).one()
+    registered_n = int(registered_n or 0)
+
+    one_mode = project.only_mode
+    modes = None
+    if one_mode is None:
+        modes = Share(
+            basis="conversations",
+            total=completed.approved_conversations,
+            has_target=bool(project.target_modes),
+            rows=[
+                _row(
+                    mode,
+                    words,
+                    total("n", is_approved=True, mode=mode),
+                    completed.approved_conversations,
+                    _target(project.target_modes, mode),
+                )
+                for mode, words in MODE_WORDS.items()
+            ],
+        )
+
+    # Still needed (D-153).
+    talks_target = project.target_conversations
+    talks = [
+        _conversation_need(ALL, "All conversations", talks_target, approved_count, open_tasks())
     ]
+    if one_mode is None:
+        wanted_modes = dict(project.target_modes)
+        per_mode: list[int | None] = (
+            list(targets.split(talks_target, [int(wanted_modes[m]) for m in MODE_WORDS]))
+            if talks_target is not None and wanted_modes
+            else [None] * len(MODE_WORDS)
+        )
+        talks += [
+            _conversation_need(
+                mode,
+                words,
+                per_mode[i],
+                total("tasks", is_approved=True, mode=mode),
+                open_tasks(mode),
+            )
+            for i, (mode, words) in enumerate(MODE_WORDS.items())
+        ]
+    to_make = talks[0].still_to_make
+    places = None if limit is None else max(0, registered_n * limit - int(used or 0))
+    more = None
+    if limit is not None and places is not None and to_make is not None:
+        short = max(0, 2 * to_make - places)
+        more = -(-short // limit)  # whole people, rounded up
+    still_needed = StillNeeded(
+        speakers=_speakers_needed(project, people, waiting),
+        districts=_districts_needed(project, people, waiting),
+        conversations=talks,
+        capacity=Capacity(
+            limit=limit,
+            registered=registered_n,
+            places_left=places,
+            conversations_to_make=to_make,
+            more_speakers_needed=more,
+        ),
+    )
+
     return Progress(
         project_id=project.id,
         pause_limit_seconds=project.pause_limit_seconds,
+        recording_mode=one_mode,
         completed=completed,
         conversations=conversations,
         speakers=Speakers(
             with_approved=with_approved,
             target=project.target_speakers,
             percent_of_target=_of_target(with_approved, project.target_speakers),
-            registered=int(registered_n or 0),
+            registered=registered_n,
             limit=limit,
             at_limit=None if at_limit is None else int(at_limit),
         ),
         age_bands=_age_share(people, list(project.target_age_bands), with_approved),
         gender=_gender_share(people, dict(project.target_gender), with_approved),
-        modes=Share(
-            basis="conversations",
-            total=completed.approved_conversations,
-            has_target=bool(project.target_modes),
-            rows=modes,
-        ),
+        modes=modes,
         districts=_district_share(people, list(project.target_districts), with_approved),
+        still_needed=still_needed,
     )

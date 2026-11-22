@@ -14,7 +14,6 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { IconTile } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge, type Tone } from "../../components/StatusBadge";
@@ -400,10 +399,7 @@ export function AudioQcPanel({
       {/* The title, the automatic check's result, and listening beside them. */}
       <div className="card__head qc-head">
         <span className="qc-head__title">
-          <h2 id="qc-title" className="with-icon">
-            <IconTile name="waveform" size={28} />
-            Audio quality
-          </h2>
+          <h2 id="qc-title">Audio quality</h2>
           {automatic ? <Outcome outcome={automatic.outcome} /> : null}
         </span>
         {listen?.asset_id || view.can_recheck ? (

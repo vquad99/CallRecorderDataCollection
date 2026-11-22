@@ -31,12 +31,15 @@ describe("phone calls page", () => {
     expect(
       within(funnel).getByRole("rowheader", { name: "Recording stored" }).closest("tr"),
     ).toHaveTextContent("Recording stored250%");
-    // The key figures in one strip (D-151).
+    // The key figures as one line (D-154).
     const figures = screen.getByRole("group", { name: "Call figures" });
     expect(within(figures).getByText("Tasks not called yet")).toBeInTheDocument();
+    // Calls per hour as one matrix: our count, and TxContact's beside it (D-154).
+    const byHour = screen.getByRole("table", { name: "Calls by hour of the day" });
+    expect(within(byHour).getByRole("columnheader", { name: "11" })).toBeInTheDocument();
     expect(
-      within(figures).getByRole("progressbar", { name: "Recorded today of the daily target" }),
-    ).toHaveAttribute("aria-valuenow", "4");
+      within(byHour).getByRole("rowheader", { name: "Calls made" }).closest("tr"),
+    ).toHaveTextContent(/3/);
     // The counted lists as tables with a section per kind and a row per reason.
     const problems = screen.getByRole("rowgroup", { name: "Problems getting the recording" });
     expect(

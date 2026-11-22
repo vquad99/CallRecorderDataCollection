@@ -1,8 +1,9 @@
 // Figures and charts shared by the dashboard, the Phone calls page and a project's Progress tab
-// (D-151): a panel, a strip of key figures, bars per day, a donut with its legend as a table, a
-// bar to a target for table cells, a light bar behind a number, and tables with row sections.
-// SVG and CSS only. Every chart has its numbers as text too: the donut's legend is a table, the
-// day chart has "Show as a table", and the bars in table cells repeat a number in the same row.
+// (D-151, D-154): a plain section with its heading, the key figures as one line, bars per day, a
+// whole in parts as a table with a bar in each row, a bar to a target for table cells, a light bar
+// behind a number, and tables with row sections. SVG and CSS only. Every chart has its numbers as
+// text too: the day chart has "Show as a table", and the bars in table cells repeat a number in
+// the same row.
 import {
   Children,
   useId,
@@ -18,10 +19,10 @@ import { DataTable } from "../DataTable";
 import { IconTile, type IconName, type Tone } from "../Icon";
 import "./charts.css";
 
-/** A dashboard panel: a small heading, an optional link or note on its right, and its content. */
+/** A section of a dashboard (D-154): its heading, an optional link or note on its right, and its
+ * table or chart under it; no box. `icon` is accepted from older callers and not drawn. */
 export function Panel({
   title,
-  icon,
   action,
   className,
   children,
@@ -36,14 +37,115 @@ export function Panel({
   return (
     <section className={className ? `panel ${className}` : "panel"} aria-labelledby={id}>
       <div className="panel__head">
-        <h2 id={id}>
-          {icon ? <IconTile name={icon} size={22} /> : null}
-          {title}
-        </h2>
+        <h2 id={id}>{title}</h2>
         {action ? <div className="panel__action">{action}</div> : null}
       </div>
       {children}
     </section>
+  );
+}
+
+/** The key figures as one line (D-154): each a label over its value, with an optional "of" and a
+ * short note under it, thin lines between them; two columns on a phone. */
+export function FigureLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="figs" role="group" aria-label={label}>
+      <dl className="figline">{children}</dl>
+    </div>
+  );
+}
+
+export function Figure({
+  label,
+  value,
+  of,
+  note,
+}: {
+  label: string;
+  value: string;
+  /** What the value is out of, written smaller after it: "/ 600", "of 12 h". */
+  of?: string | undefined;
+  note?: ReactNode;
+}) {
+  return (
+    <div className="figline__item">
+      <dt>{label}</dt>
+      <dd className="figline__value">
+        {value}
+        {of ? <span className="figline__of"> {of}</span> : null}
+      </dd>
+      {note ? <dd className="figline__note">{note}</dd> : null}
+    </div>
+  );
+}
+
+/** A share as a short bar and its percent, for a table cell. */
+export function ShareBar({ percent }: { percent: number }) {
+  const width = Math.max(0, Math.min(100, percent));
+  return (
+    <span className="sharebar">
+      <span className="sharebar__track" aria-hidden="true">
+        <span style={{ width: `${width}%` }} />
+      </span>
+      <span className="sharebar__n">{Math.round(percent)}%</span>
+    </span>
+  );
+}
+
+/** A whole in parts as a plain table (D-154): a row per part with its count and its share as a
+ * bar, a second line under a part's name for what it is made of, and the total at the foot. */
+export function ShareTable({
+  label,
+  head,
+  countHead,
+  parts,
+  emptyText,
+}: {
+  label: string;
+  /** The first column's heading: "Stage". */
+  head: string;
+  /** The count column's heading: "Tasks". */
+  countHead: string;
+  parts: DonutPart[];
+  emptyText: string;
+}) {
+  const total = parts.reduce((n, p) => n + p.n, 0);
+  if (total === 0) return <p className="muted">{emptyText}</p>;
+  return (
+    <DataTable label={label} className="share-table">
+      <thead>
+        <tr>
+          <th scope="col">{head}</th>
+          <th scope="col" className="num">
+            {countHead}
+          </th>
+          <th scope="col" className="num">
+            Share
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {parts.map((p) => (
+          <tr key={p.key}>
+            <th scope="row">
+              {p.label}
+              {p.detail ? <span className="share-table__detail">{p.detail}</span> : null}
+            </th>
+            <td className="num">{p.n}</td>
+            <td className="num">
+              <ShareBar percent={(p.n / total) * 100} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">Total</th>
+          <td className="num">{total}</td>
+          <td />
+        </tr>
+      </tfoot>
+    </DataTable>
   );
 }
 

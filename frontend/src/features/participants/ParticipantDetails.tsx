@@ -11,7 +11,6 @@ import { CALL_STATE_LABELS } from "../../api/telephony";
 import * as work from "../../api/work";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
-import { Icon, IconTile, type IconName } from "../../components/Icon";
 import { ErrorNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -62,14 +61,11 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Block({ icon, title, children }: { icon: IconName; title: string; children: ReactNode }) {
+function Block({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
     <section className="pd-section" aria-labelledby={id}>
-      <h3 id={id}>
-        <Icon name={icon} size={18} />
-        {title}
-      </h3>
+      <h3 id={id}>{title}</h3>
       {children}
     </section>
   );
@@ -79,7 +75,7 @@ function Work({ d }: { d: work.ParticipantDetails }) {
   const m = d.minutes;
   const c = d.calls;
   return (
-    <Block icon="chart" title="Work in this project">
+    <Block title="Work in this project">
       <dl className="pd-kv pd-kv--figures">
         <Fact label="Sessions">{d.sessions_total}</Fact>
         {m ? (
@@ -119,7 +115,7 @@ function Profile({ d, required }: { d: work.ParticipantDetails; required: readon
     .filter(Boolean)
     .join(", ");
   return (
-    <Block icon="id" title="Profile">
+    <Block title="Profile">
       <dl className="pd-kv">
         <Fact label="Code">
           <span className="mono">{p.participant_code}</span>
@@ -166,7 +162,7 @@ function Profile({ d, required }: { d: work.ParticipantDetails; required: readon
 
 function PersonalLink({ link }: { link: work.ParticipantDetails["link"] }) {
   return (
-    <Block icon="mail" title="Personal link">
+    <Block title="Personal link">
       {link ? (
         <dl className="pd-kv">
           <Fact label="State">{link.active ? "Working" : "Stopped or run out"}</Fact>
@@ -186,7 +182,7 @@ function PersonalLink({ link }: { link: work.ParticipantDetails["link"] }) {
 function ConsentForm({ form }: { form: work.ConsentFormView }) {
   const now = form.current;
   return (
-    <Block icon="verified" title="Consent form">
+    <Block title="Consent form">
       <dl className="pd-kv">
         <Fact label="Answer">{now ? consentAnswer(now.status).label : "No answer yet"}</Fact>
         {now ? <Fact label="Answered on">{when(now.answered_at)}</Fact> : null}
@@ -217,7 +213,7 @@ function ConsentForm({ form }: { form: work.ConsentFormView }) {
 
 function Sessions({ d }: { d: work.ParticipantDetails }) {
   return (
-    <Block icon="tasks" title="Sessions">
+    <Block title="Sessions">
       {d.sessions.length === 0 ? (
         <p className="muted">This participant has not been part of a session yet.</p>
       ) : (
@@ -300,7 +296,6 @@ function Head({
   const badge = consentBadge(p.consent_status, mode);
   return (
     <div className="pd-head">
-      <IconTile name="user" size={46} />
       <div className="pd-head__text">
         <h3>
           {p.participant_code}
@@ -388,7 +383,7 @@ export function ParticipantDetails({
           <PersonalLink link={d.link} />
           {form ? <ConsentForm form={form} /> : null}
           {/* D-144: the signed consent form and the address proof, as in the Documents window. */}
-          <Block icon="fileText" title="Documents">
+          <Block title="Documents">
             <DocumentsPanel
               projectId={projectId}
               participantId={participantId}

@@ -12,7 +12,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -54,16 +54,14 @@ export function useSignedForms(task: work.TaskDetail, onChange: OnTaskChange) {
   return { ...action, upload, view };
 }
 
-/** A side panel with its small title. */
+/** A section of the side column: its title over its table or list, no box (D-154). */
 function SideCard({
   id,
-  icon,
   title,
   extra,
   children,
 }: {
   id: string;
-  icon: IconName;
   title: string;
   extra?: ReactNode;
   children: ReactNode;
@@ -71,10 +69,7 @@ function SideCard({
   return (
     <section className="card side-card" aria-labelledby={id}>
       <div className="side-card__head">
-        <h2 id={id}>
-          <Icon name={icon} size={18} />
-          {title}
-        </h2>
+        <h2 id={id}>{title}</h2>
         {extra}
       </div>
       {children}
@@ -177,7 +172,7 @@ export function TaskSummary({
 }) {
   const qcView = audio.state.status === "loaded" ? audio.state.data : null;
   return (
-    <SideCard id="task-summary-title" icon="tasks" title="Summary">
+    <SideCard id="task-summary-title" title="Summary">
       <dl className="facts">
         <Fact label="Status">
           <StatusBadge status={task.status} label={status(task.status)} />
@@ -287,7 +282,7 @@ export function ParticipantsMatrix({
   const asksDevices = Boolean(task.device_fields?.length);
   const manages = can("participants.manage");
   return (
-    <SideCard id="task-people-title" icon="people" title="Participants">
+    <SideCard id="task-people-title" title="Participants">
       <DataTable className="matrix people-matrix" label="Both participants">
         <thead>
           <tr>
@@ -429,7 +424,6 @@ export function Timeline({ taskId, version }: { taskId: string; version: string 
   return (
     <SideCard
       id="timeline-title"
-      icon="history"
       title="History"
       extra={
         entries.length > FIRST ? (

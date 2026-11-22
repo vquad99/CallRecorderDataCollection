@@ -59,6 +59,11 @@ const tick =
   async () => {
     await userEvent.click(screen.getByRole("checkbox", { name: label }));
   };
+const pick =
+  (label: string): Step =>
+  async () => {
+    await userEvent.click(screen.getByRole("radio", { name: label }));
+  };
 
 // A phone call in progress on task t1 (D-101).
 const LIVE_CALL = {
@@ -269,22 +274,24 @@ const FORMS: Record<string, FormSpec> = {
     source: "src/features/projects/ProjectForm.tsx",
     url: "/projects/new",
     ready: /New project/,
-    fill: [type("Name", "Tamil talk")],
+    // One recording type per project, chosen by the admin (D-153).
+    fill: [type("Name", "Tamil talk"), pick("Face-to-face")],
     submit: "Create project",
     write: "POST /api/v1/projects",
     reply: [201, PROJECT],
-    body: { name: "Tamil talk" },
+    body: { name: "Tamil talk", allows_face_to_face: true, allows_telephony: false },
     kept: "Name",
   },
   "edit project": {
     source: "src/features/projects/ProjectForm.tsx",
     url: "/projects/p1",
     ready: /This project accepts new work/, // the Overview tab itself has loaded
-    fill: [type("Name", "Renamed")],
+    // The world's project allows both types (made before D-153): saving chooses one.
+    fill: [type("Name", "Renamed"), pick("Phone call")],
     submit: "Save project",
     write: "PATCH /api/v1/projects/p1",
     reply: [200, PROJECT],
-    body: { name: "Renamed" },
+    body: { name: "Renamed", allows_telephony: true, allows_face_to_face: false },
     kept: "Name",
   },
   "project status": {

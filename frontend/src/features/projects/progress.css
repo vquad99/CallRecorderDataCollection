@@ -1,5 +1,90 @@
-/* A project's Progress tab (D-148, D-151). Loaded with the tab, not with the first screen. The
-   panels, key figures and tables are in components/charts. */
+/* A project's Progress tab (D-148, D-151, D-153). Loaded with the tab, not with the first screen.
+   The sections, key figures and tables are in components/charts. */
+
+/* ---------- Still needed (D-153) ---------- */
+.needs-lead {
+  max-width: 900px;
+  margin: 0;
+  color: var(--text);
+}
+.progress h3.needs-title {
+  margin: 8px 0 2px;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.needs-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.needs-key {
+  max-width: 900px;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+/* The number still needed: bold; green when nothing more is needed; a dash without a target. */
+.need {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.need--met {
+  color: var(--text-green);
+}
+.need--none {
+  color: var(--muted);
+  font-weight: 400;
+}
+td:not(.need-cell) > .need {
+  display: inline;
+  font-size: inherit;
+}
+/* Under it, the target, done and registered, small: one line with dots between on a wide screen,
+   one line each on a phone so the four columns fit. */
+.need__sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: normal;
+}
+.need__part + .need__part::before {
+  content: " · ";
+}
+.progress .table.needs td.need-cell {
+  min-width: 112px;
+  vertical-align: top;
+  white-space: normal;
+}
+.progress .table.needs tbody th[scope="row"],
+.progress .table.needs tfoot th[scope="row"] {
+  vertical-align: top;
+}
+@container (max-width: 560px) {
+  .need__part {
+    display: block;
+  }
+  .need__part + .need__part::before {
+    content: none;
+  }
+  .progress .panel .table.needs th,
+  .progress .panel .table.needs td {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+  .progress .table.needs td.need-cell {
+    min-width: 0;
+  }
+  /* Short tables: their headings may take two lines rather than scroll. */
+  .progress .panel .table thead th {
+    white-space: normal;
+  }
+}
 
 /* The variance as a small signed pill: below the target red, above it green (text 5.3:1 and more
    on its tint); the sign says the same as the colour. */

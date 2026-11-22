@@ -1,4 +1,6 @@
-// Create a recording task (TASK-001); the project's allowed modes drive the choices (PROJ-011).
+// Create a recording task (TASK-001); the project's allowed modes drive the choices (PROJ-011). A
+// project records one type (D-153): its tasks take it, and only a project made before that allows
+// both asks for it.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
@@ -21,10 +23,11 @@ import { useAction } from "../../hooks/useAction";
 import { useResource } from "../../hooks/useResource";
 import { DataTable } from "../../components/DataTable";
 import { consentCounts, MODE_LABELS, PRIORITY_LABELS } from "../../lib/labels";
+import { onlyMode } from "../projects/recordingType";
 
 const SAMPLE =
   "participant_a,participant_b,mode,priority,due_date,moderator\n" +
-  "P000001,P000002,face_to_face,normal,2026-12-31,moderator@example.org\n" +
+  "P000001,P000002,,normal,2026-12-31,moderator@example.org\n" +
   "P000003,P000004,,,,\n";
 
 /** Save the sample as a CSV file the admin fills in (D-085). */
@@ -55,8 +58,9 @@ function BulkTasks({ projectId }: { projectId: string }) {
         participants by their code (P000001); both must have agreed to the consent form, have the
         speaker details the project needs and be within its speaker ages, and the project&apos;s
         limits on conversations per speaker and pairs apply, counting the rows above. Mode,
-        priority, due date (YYYY-MM-DD) and moderator (their email) may be empty; with a moderator
-        the task is assigned at once. Check the rows first; only rows without a problem are added.
+        priority, due date (YYYY-MM-DD) and moderator (their email) may be empty; an empty mode is
+        the project&apos;s recording type, and with a moderator the task is assigned at once. Check
+        the rows first; only rows without a problem are added.
       </p>
       <div className="field">
         <label htmlFor="bulk-tasks-csv" className="field__label">
@@ -181,6 +185,9 @@ export function TaskCreatePage() {
   );
 
   const detail = project.state.status === "loaded" ? project.state.data : null;
+  // The project's one type (D-153); a project made before it that allows both still asks.
+  const only = detail ? onlyMode(detail) : null;
+  const chosenMode = only ?? mode;
   const modes = detail
     ? [
         ...(detail.allows_telephony ? [{ value: "TELEPHONY", label: MODE_LABELS.TELEPHONY }] : []),
@@ -237,7 +244,7 @@ export function TaskCreatePage() {
     void run(async () => {
       const task = await createTask({
         project_id: projectId,
-        recording_mode: mode,
+        recording_mode: chosenMode,
         participant_a_id: a,
         participant_b_id: b,
         priority,
@@ -304,12 +311,21 @@ export function TaskCreatePage() {
         ) : null}
         {projectId ? (
           <>
-            <Select
-              label="Recording type"
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              options={[{ value: "", label: "Choose a recording type" }, ...modes]}
-            />
+            {only ? (
+              <p className="field">
+                <span className="field__label">Recording type</span>
+                <span>
+                  {MODE_LABELS[only]} <span className="muted">(the project&apos;s type)</span>
+                </span>
+              </p>
+            ) : detail ? (
+              <Select
+                label="Recording type"
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+                options={[{ value: "", label: "Choose a recording type" }, ...modes]}
+              />
+            ) : null}
             <Select
               label="Participant A"
               value={a}
@@ -374,7 +390,7 @@ export function TaskCreatePage() {
           type="submit"
           icon="plus"
           busy={busy !== null}
-          disabled={!projectId || !mode || !a || !b}
+          disabled={!projectId || !chosenMode || !a || !b}
         >
           Create task
         </Button>

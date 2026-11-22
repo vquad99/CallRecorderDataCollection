@@ -589,11 +589,111 @@ const shareRow = (
   variance: target === null ? null : Math.round((percent - target) * 10) / 10,
 });
 
+/** One group of the Progress tab's "Still needed" (D-153). */
+const need = (target: number | null, done: number, registered: number) => ({
+  target,
+  done,
+  registered,
+  still_needed: target === null ? null : Math.max(0, target - done - registered),
+});
+
+/** What the targets still need (D-153), worked out as backend/tests/test_progress.py does. */
+const STILL_NEEDED = {
+  speakers: {
+    target: 500,
+    by_age: true,
+    by_gender: true,
+    // A total's still needed adds up its genders': E (50-60) has no gender and fills neither.
+    rows: [
+      {
+        key: "20-30",
+        label: "20-30",
+        male: need(100, 0, 0),
+        female: need(100, 2, 0),
+        total: { target: 200, done: 2, registered: 0, still_needed: 198 },
+      },
+      {
+        key: "30-40",
+        label: "30-40",
+        male: need(75, 1, 1),
+        female: need(75, 0, 0),
+        total: { target: 150, done: 1, registered: 1, still_needed: 148 },
+      },
+      {
+        key: "40-50",
+        label: "40-50",
+        male: need(50, 1, 0),
+        female: need(50, 0, 0),
+        total: { target: 100, done: 1, registered: 0, still_needed: 99 },
+      },
+      {
+        key: "50-60",
+        label: "50-60",
+        male: need(25, 0, 0),
+        female: need(25, 0, 0),
+        total: { target: 50, done: 1, registered: 0, still_needed: 50 },
+      },
+    ],
+    total: {
+      key: "TOTAL",
+      label: "Total",
+      male: { target: 250, done: 2, registered: 1, still_needed: 247 },
+      female: { target: 250, done: 2, registered: 0, still_needed: 248 },
+      total: { target: 500, done: 5, registered: 1, still_needed: 495 },
+    },
+  },
+  districts: {
+    has_target: true,
+    rows: [
+      { key: "Goa|North Goa", label: "North Goa (Goa)", ...need(63, 2, 1) },
+      { key: "Goa|South Goa", label: "South Goa (Goa)", ...need(63, 1, 0) },
+      { key: "OTHER", label: "Other districts", ...need(null, 1, 0) },
+    ],
+    total: { key: "TOTAL", label: "Total", target: 126, done: 4, registered: 1, still_needed: 122 },
+  },
+  conversations: [
+    {
+      key: "ALL",
+      label: "All conversations",
+      target: 600,
+      approved: 3,
+      in_pipeline: 2,
+      still_to_make: 595,
+    },
+    {
+      key: "FACE_TO_FACE",
+      label: "Face-to-face",
+      target: 300,
+      approved: 2,
+      in_pipeline: 1,
+      still_to_make: 297,
+    },
+    {
+      key: "TELEPHONY",
+      label: "Phone call",
+      target: 300,
+      approved: 1,
+      in_pipeline: 1,
+      still_to_make: 298,
+    },
+  ],
+  capacity: {
+    limit: 2,
+    registered: 6,
+    places_left: 2,
+    conversations_to_make: 595,
+    more_speakers_needed: 594,
+  },
+};
+
 /** A project's Progress tab (D-148): 3 approved conversations of 5 speakers, one of them without
- * a gender, one conversation not measured yet. */
+ * a gender, one conversation not measured yet; the project allows both types (made before D-153).
+ */
 export const PROGRESS = {
   project_id: "p1",
   pause_limit_seconds: 3,
+  recording_mode: null as "FACE_TO_FACE" | "TELEPHONY" | null,
+  still_needed: STILL_NEEDED,
   completed: {
     counts: "EFFECTIVE",
     completed_ms: 660_000,

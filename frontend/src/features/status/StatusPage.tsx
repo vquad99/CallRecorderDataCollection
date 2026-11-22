@@ -8,9 +8,9 @@ import {
   type VersionInfo,
   getSystemStatus,
 } from "../../api/system";
+import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { ErrorState, LoadingState } from "../../components/StateViews";
-import { IconTile } from "../../components/Icon";
 import { when } from "../../lib/format";
 
 type LoadState =
@@ -51,35 +51,49 @@ export function StatusPage() {
   }, []);
 
   return (
-    <section aria-labelledby="status-title">
-      <h1 id="status-title">
-        <IconTile name="status" />
-        System status
-      </h1>
+    <section aria-labelledby="status-title" className="stack">
+      <div className="page-header">
+        <h1 id="status-title">System status</h1>
+        {state.kind === "loaded" ? (
+          <Button variant="secondary" icon="refresh" onClick={retry}>
+            Check again
+          </Button>
+        ) : null}
+      </div>
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}
       {state.kind === "failed" ? (
         <ErrorState title="Server status unavailable" error={state.error} onRetry={retry} />
       ) : null}
       {state.kind === "loaded" ? (
-        <div className="card">
-          <p className={`status status--${state.readiness.status}`}>
-            {state.readiness.status === "ready" ? "Ready" : "Not ready"}
-          </p>
-          <dl className="checks">
-            {Object.entries(state.readiness.checks).map(([name, value]) => (
-              <div key={name} className="checks__row">
-                <dt>{name}</dt>
-                <dd>{CHECK_LABELS[value] ?? value}</dd>
-              </div>
-            ))}
-          </dl>
+        <section className="card stack stack--tight" aria-labelledby="server-title">
+          <div className="card__head">
+            <h2 id="server-title">Server</h2>
+            <p className={`status status--${state.readiness.status}`}>
+              {state.readiness.status === "ready" ? "Ready" : "Not ready"}
+            </p>
+          </div>
+          <DataTable label="Server checks" className="status-table">
+            <thead>
+              <tr>
+                <th scope="col">Part</th>
+                <th scope="col">State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(state.readiness.checks).map(([name, value]) => (
+                <tr key={name}>
+                  <th scope="row" className="status-table__name">
+                    {name}
+                  </th>
+                  <td>{CHECK_LABELS[value] ?? value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
           <p className="state__meta">
             Version {state.version.version} ({state.version.environment})
           </p>
-          <Button variant="secondary" icon="refresh" onClick={retry}>
-            Check again
-          </Button>
-        </div>
+        </section>
       ) : null}
       {state.kind === "loaded" && state.alerts ? (
         <section className="card stack stack--tight" aria-labelledby="attention-title">

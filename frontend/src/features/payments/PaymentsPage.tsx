@@ -10,7 +10,6 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { IconTile } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
 import { ErrorState, LoadingState } from "../../components/StateViews";
@@ -278,13 +277,12 @@ function Rates({
             {projects.map((p) => (
               <tr key={p.project_id}>
                 <td>
-                  {p.project_code}
-                  <div className="muted">{p.project_name}</div>
+                  {p.project_code} <span className="muted">{p.project_name}</span>
                 </td>
                 <td>{rate(p.moderator_rate)}</td>
                 <td>{rate(p.participant_rate)}</td>
                 <td>{p.updated_at ? `${when(p.updated_at)} · ${p.updated_by ?? "-"}` : "-"}</td>
-                <td>
+                <td className="actions">
                   <Button
                     variant="secondary"
                     icon="pencil"
@@ -337,10 +335,7 @@ export function PaymentsPage() {
     <section aria-labelledby="payments-title" className="stack">
       <div className="page-header">
         <div className="page-header__text">
-          <h1 id="payments-title">
-            <IconTile name="money" />
-            Payments
-          </h1>
+          <h1 id="payments-title">Payments</h1>
           <p className="page-header__lead">
             What moderators and participants earned on approved tasks, at each project&apos;s rate
             per approved minute.

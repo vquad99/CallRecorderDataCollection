@@ -61,7 +61,8 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
       .click();
     await admin.getByRole("link", { name: "New project" }).click();
     await admin.getByLabel(/^Name/).fill(name);
-    await admin.getByRole("checkbox", { name: "Face-to-face" }).check();
+    // One recording type per project (D-153).
+    await admin.getByRole("radio", { name: "Face-to-face" }).check();
     await admin.getByRole("button", { name: "Create project" }).click();
     // The platform gives the project code (D-083) and goes back to the list (D-084).
     const note = admin.getByRole("status").filter({ hasText: `${name} created.` });
@@ -76,7 +77,7 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin.getByRole("link", { name: "Languages" }).click();
     await admin.getByRole("combobox", { name: /^Language/ }).selectOption("hi");
     await admin.getByRole("button", { name: "Add language" }).click();
-    await expect(admin.getByRole("listitem").filter({ hasText: /^Hindi \(hi\)/ })).toBeVisible();
+    await expect(admin.getByRole("row").filter({ hasText: /^Hindi \(hi\)/ })).toBeVisible();
   });
 
   await test.step("the Super Admin invites a moderator by email", async () => {
@@ -163,7 +164,8 @@ test("set up a project, invite a moderator, and record a face-to-face conversati
     await admin
       .getByLabel("Project (active projects)")
       .selectOption({ label: `${projectCode} ${name}` });
-    await admin.getByLabel("Recording type").selectOption("FACE_TO_FACE");
+    // The project records face-to-face only: its tasks take that type, nothing to choose (D-153).
+    await expect(admin.getByText("(the project's type)")).toBeVisible();
     await pickParticipant(admin, "Participant A", `Asha ${code}`);
     await pickParticipant(admin, "Participant B", `Bina ${code}`);
     await admin.getByRole("button", { name: "Create task" }).click();

@@ -73,28 +73,7 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
 
   return (
     <div className="stack">
-      <form
-        noValidate
-        className="card"
-        onSubmit={(e) => {
-          e.preventDefault();
-          save();
-        }}
-      >
-        <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-        <TextField
-          label="Email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <RoleCheckboxes value={roles} onChange={setRoles} />
-        <Button type="submit" busy={busy === "save"} disabled={roles.length === 0}>
-          Save changes
-        </Button>
-      </form>
-      <div className="card actions">
+      <div className="actions" role="group" aria-label="Account actions">
         <Button
           variant="secondary"
           icon={active ? "prohibit" : "ok"}
@@ -135,6 +114,28 @@ function Editor({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
           </Button>
         ) : null}
       </div>
+      <form
+        noValidate
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <h2>Details</h2>
+        <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+        <TextField
+          label="Email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <RoleCheckboxes value={roles} onChange={setRoles} />
+        <Button type="submit" busy={busy === "save"} disabled={roles.length === 0}>
+          Save changes
+        </Button>
+      </form>
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       {confirm.dialog}

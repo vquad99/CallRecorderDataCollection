@@ -1,6 +1,7 @@
 // Dashboard (DASH-001..006). One page, three views decided by the server: a client sees collection
 // progress only; moderators and QC see their own work; managers also see what needs attention.
-// Laid out as one screen (D-151): the key figures in one strip, then a grid of charts and tables.
+// Laid out plainly (D-154, after D-151): the title, one row of filters, the key figures as one
+// line, then a heading over each table, and one chart where the trend is the point (hours per day).
 import { Link } from "react-router";
 import { useState } from "react";
 
@@ -8,19 +9,18 @@ import { getDashboard, type Dashboard, type DashboardFilters } from "../../api/d
 import {
   CellBar,
   DayChart,
-  Donut,
+  Figure,
+  FigureLine,
   KeyTable,
-  Kpi,
-  KpiStrip,
+  MatrixTable,
   Panel,
-  SplitBar,
+  ShareTable,
 } from "../../components/charts/Charts";
 import { stageParts } from "../../components/charts/stages";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
-import { Avatar, Icon, type IconName, IconTile } from "../../components/Icon";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
@@ -39,20 +39,15 @@ const percent = (part: number, whole: number) =>
   whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0;
 
 /** What needs someone. A queue of tasks in one status opens the task list filtered to it. */
-const QUEUES: { key: string; label: string; icon: IconName; status?: string }[] = [
-  { key: "waiting_for_qc", label: "Waiting for audio QC", icon: "verified", status: "AUDIO_QC" },
-  { key: "processing", label: "Being processed", icon: "waveform" },
-  { key: "failed_processing", label: "Processing failed", icon: "failed" },
-  { key: "interrupted", label: "Interrupted recordings", icon: "warning" },
-  { key: "stale_uploads", label: "Stalled uploads", icon: "upload" },
-  { key: "on_hold", label: "Tasks on hold", icon: "pause", status: "ON_HOLD" },
+const QUEUES: { key: string; label: string; status?: string }[] = [
+  { key: "waiting_for_qc", label: "Waiting for audio QC", status: "AUDIO_QC" },
+  { key: "processing", label: "Being processed" },
+  { key: "failed_processing", label: "Processing failed" },
+  { key: "interrupted", label: "Interrupted recordings" },
+  { key: "stale_uploads", label: "Stalled uploads" },
+  { key: "on_hold", label: "Tasks on hold", status: "ON_HOLD" },
   // D-146: QC sent them back to their moderator for a new signed consent form.
-  {
-    key: "consent_forms_to_fix",
-    label: "Consent forms to fix",
-    icon: "fileUp",
-    status: "CONSENT_FIX",
-  },
+  { key: "consent_forms_to_fix", label: "Consent forms to fix", status: "CONSENT_FIX" },
 ];
 
 /** The task list filtered to a status (and the chosen project). */
@@ -94,10 +89,7 @@ function ByMode({ data }: { data: Dashboard }) {
           </th>
           {modes.map((m) => (
             <th key={m.mode} scope="col" className="num">
-              <span className="cell-icon">
-                <Icon name={m.mode === "TELEPHONY" ? "phone" : "mic"} size={14} />
-                {labelFor(MODE_LABELS, m.mode)}
-              </span>
+              {labelFor(MODE_LABELS, m.mode)}
             </th>
           ))}
           <th scope="col" className="num">
@@ -132,16 +124,21 @@ function Attention({
 }) {
   return (
     <DataTable label="Needs attention" className="attention">
+      <thead>
+        <tr>
+          <th scope="col">Queue</th>
+          <th scope="col" className="num">
+            Count
+          </th>
+        </tr>
+      </thead>
       <tbody>
         {QUEUES.map((q) => {
           const n = queues[q.key] ?? 0;
           return (
             <tr key={q.key} className={n > 0 ? "is-active" : undefined}>
               <th scope="row">
-                <span className="cell-icon">
-                  <Icon name={q.icon} size={16} />
-                  {q.status ? <Link to={tasksLink(q.status, projectId)}>{q.label}</Link> : q.label}
-                </span>
+                {q.status ? <Link to={tasksLink(q.status, projectId)}>{q.label}</Link> : q.label}
               </th>
               <td className="num">
                 <span className="attention__n">{n}</span>
@@ -154,31 +151,38 @@ function Attention({
   );
 }
 
-const GOOD = "var(--icon-green)";
-const WAIT = "var(--series-waiting)";
-const BAD = "var(--icon-rose)";
-
-/** Audio QC: the decisions, and the automatic check of the recordings still waiting. */
+/** Audio QC as one table: the decisions, and the automatic check of the recordings still waiting. */
 function AudioQc({ qc }: { qc: NonNullable<Dashboard["qc"]> }) {
+  type Row = { key: string; label: string; n: number };
   return (
-    <>
-      <SplitBar
-        title="QC decisions"
-        parts={[
-          { key: "passed", label: "Passed", n: qc.passed, color: GOOD },
-          { key: "rejected", label: "Rejected", n: qc.rejected, color: BAD },
-          { key: "waiting", label: "Waiting", n: qc.waiting, color: WAIT },
-        ]}
-      />
-      <SplitBar
-        title="Automatic check of those waiting"
-        parts={[
-          { key: "pass", label: "All checks passed", n: qc.auto_pass, color: GOOD },
-          { key: "review", label: "Listen and decide", n: qc.auto_review, color: WAIT },
-          { key: "fail", label: "Failed a check", n: qc.auto_fail, color: BAD },
-        ]}
-      />
-    </>
+    <MatrixTable<Row>
+      label="Audio QC"
+      head="Recordings"
+      columns={[{ key: "n", label: "Count", num: true, cell: (r) => r.n }]}
+      sections={[
+        {
+          key: "decisions",
+          title: "QC decisions",
+          note: String(qc.passed + qc.rejected + qc.waiting),
+          rows: [
+            { key: "passed", label: "Passed", n: qc.passed },
+            { key: "rejected", label: "Rejected", n: qc.rejected },
+            { key: "waiting", label: "Waiting", n: qc.waiting },
+          ],
+        },
+        {
+          key: "auto",
+          title: "Automatic check of those waiting",
+          rows: [
+            { key: "pass", label: "All checks passed", n: qc.auto_pass },
+            { key: "review", label: "Listen and decide", n: qc.auto_review },
+            { key: "fail", label: "Failed a check", n: qc.auto_fail },
+          ],
+        },
+      ]}
+      rowKey={(r) => r.key}
+      rowLabel={(r) => r.label}
+    />
   );
 }
 
@@ -187,11 +191,11 @@ function Team({ team, className }: { team: NonNullable<Dashboard["team"]>; class
   const { shown, more } = useFirstRows(team);
   const most = Math.max(0, ...team.map((t) => t.recorded_hours));
   return (
-    <Panel className={className} icon="people" title="Moderator output">
+    <Panel className={className} title="Moderator output">
       {team.length === 0 ? (
         <p className="muted">No finished recordings yet.</p>
       ) : (
-        <DataTable label="Moderator output">
+        <DataTable label="Moderator output" className="names team">
           <thead>
             <tr>
               <th scope="col">Moderator</th>
@@ -206,12 +210,7 @@ function Team({ team, className }: { team: NonNullable<Dashboard["team"]>; class
           <tbody>
             {shown.map((t) => (
               <tr key={t.name}>
-                <th scope="row">
-                  <span className="cell-person">
-                    <Avatar name={t.name} />
-                    {t.name}
-                  </span>
-                </th>
+                <th scope="row">{t.name}</th>
                 <td className="num">{t.recordings}</td>
                 <td className="num">
                   <CellBar value={t.recorded_hours} max={most}>
@@ -235,97 +234,68 @@ function Body({ data }: { data: Dashboard }) {
     data.calls !== null &&
     (data.calls.placed > 0 ||
       data.by_mode.some((m) => m.mode === "TELEPHONY" && m.target_hours_per_day > 0));
-  // The third row holds what this view has: tasks by status, what needs attention, audio QC
-  // (widest first: the status legend, then the queues, then the two QC bars).
-  const third = [data.view !== "client", data.queues !== null, data.qc !== null].filter(
+  // The second row holds what this view has: tasks by status, what needs attention, audio QC.
+  const second = [data.view !== "client", data.queues !== null, data.qc !== null].filter(
     Boolean,
   ).length;
-  const spans = third === 3 ? ["g-5", "g-4", "g-3"] : third === 2 ? ["g-6", "g-6"] : [""];
+  const spans = second === 3 ? ["g-4", "g-4", "g-4"] : second === 2 ? ["g-6", "g-6"] : ["g-6"];
   const [statusSpan, attentionSpan, qcSpan] = [
     data.view !== "client" ? spans.shift() : "",
     data.queues ? spans.shift() : "",
     data.qc ? spans.shift() : "",
   ];
-  const notes = (
-    <>
-      Effective speech is the time someone speaks (silences left out). Completed counts each
-      project&apos;s approved recordings as its rules say: effective speech or the full length;
-      several projects add up their own.
-      {data.effective_pending > 0
-        ? ` ${data.effective_pending} recording${data.effective_pending === 1 ? " is" : "s are"} still being measured and count${data.effective_pending === 1 ? "s" : ""} no effective speech yet.`
-        : ""}{" "}
-      Days are counted in{" "}
-      {data.timezone === "Asia/Kolkata"
-        ? "India Standard Time"
-        : `${data.timezone.replace("_", " ")} time`}
-      .
-    </>
-  );
   return (
     <div className="dash">
-      <KpiStrip label="Key figures">
-        <Kpi
-          icon="mic"
+      <FigureLine label="Key figures">
+        <Figure
           label="Recorded"
           value={hours(data.recorded_hours)}
-          note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}, ${hours(data.effective_hours)} effective speech`}
-          spark={data.daily.map((d) => d.recorded_hours)}
+          note={`${data.recordings} recording${data.recordings === 1 ? "" : "s"}`}
         />
-        <Kpi
-          icon="verified"
+        <Figure
+          label="Effective speech"
+          value={hours(data.effective_hours)}
+          note="silences left out"
+        />
+        <Figure
           label="Approved"
           value={hours(data.approved_hours)}
-          note={`${percent(data.approved_hours, data.recorded_hours)}% of recorded hours`}
-          spark={data.daily.map((d) => d.approved_hours)}
+          note={`${percent(data.approved_hours, data.recorded_hours)}% of recorded`}
         />
         {/* D-148: approved recordings counted as each project's rules say. */}
-        <Kpi
-          icon="ok"
+        <Figure
           label="Completed"
           value={hours(data.completed_hours)}
-          note={`approved, as each project counts it (effective speech ${hours(data.approved_effective_hours)})`}
-          spark={data.daily.map((d) => d.completed_hours)}
+          note="as each project counts it"
         />
-        <Kpi
-          icon="clock"
+        <Figure
           label="Today"
           value={hours(data.today_hours)}
-          meter={
-            data.view !== "worker" && daily > 0
-              ? {
-                  percent: percent(data.today_hours, daily),
-                  label: "Today of the daily target",
-                  text: `${percent(data.today_hours, daily)}%`,
-                }
-              : undefined
-          }
+          of={data.view !== "worker" && daily > 0 ? `of ${daily} h` : undefined}
           note={
             data.view === "worker"
-              ? "recorded by you today"
+              ? "recorded by you"
               : daily > 0
-                ? `of the ${daily} h daily target`
+                ? `${percent(data.today_hours, daily)}% of the daily target`
                 : "No daily target set"
           }
         />
-        <Kpi
-          icon="tasks"
+        <Figure
           label="Tasks approved"
           value={String(data.tasks_approved)}
           of={`/ ${data.tasks_total}`}
-          meter={{
-            percent: percent(data.tasks_approved, data.tasks_total),
-            label: "Tasks approved of all tasks",
-            text: `${percent(data.tasks_approved, data.tasks_total)}%`,
-          }}
-          note="tasks complete"
+          note={`${percent(data.tasks_approved, data.tasks_total)}% of all tasks`}
         />
-      </KpiStrip>
+        {data.storage_bytes !== null ? (
+          <Figure label="Storage used" value={bytes(data.storage_bytes)} note="private storage" />
+        ) : null}
+      </FigureLine>
 
       <div className="dash-grid">
         <div className="panel g-7">
           <DayChart
             title="Hours per day"
-            height={196}
+            height={180}
             days={data.daily}
             target={daily}
             emptyText="No finished recordings in this period yet."
@@ -343,71 +313,64 @@ function Body({ data }: { data: Dashboard }) {
             ]}
           />
         </div>
-        <Panel className="g-5" icon="mic" title="By recording type">
+        <Panel className="g-5" title="By recording type">
           <ByMode data={data} />
         </Panel>
 
         {data.view !== "client" ? (
-          <Panel className={statusSpan} icon="tasks" title="Tasks by status">
-            <Donut
+          <Panel className={statusSpan} title="Tasks by status">
+            <ShareTable
               label="Tasks by status"
+              head="Stage"
+              countHead="Tasks"
               parts={statuses}
-              unit="tasks"
               emptyText="No tasks yet."
             />
           </Panel>
         ) : null}
         {data.queues ? (
-          <Panel className={attentionSpan} icon="warning" title="Needs attention">
+          <Panel className={attentionSpan} title="Needs attention">
             <Attention queues={data.queues} projectId={data.project_id} />
           </Panel>
         ) : null}
         {data.qc ? (
-          <Panel className={qcSpan} icon="verified" title="Audio QC">
+          <Panel className={qcSpan} title="Audio QC">
             <AudioQc qc={data.qc} />
           </Panel>
         ) : null}
 
         {data.team ? <Team team={data.team} className="g-8" /> : null}
-        {data.team || showCalls || data.storage_bytes !== null ? (
-          <div className={data.team ? "dash-col g-4" : "dash-col"}>
-            {data.calls && showCalls ? (
-              <Panel icon="phone" title="Phone calls">
-                <KeyTable
-                  label="Phone calls"
-                  rows={[
-                    { label: "Placed", value: data.calls.placed },
-                    { label: "Recorded", value: data.calls.recorded },
-                    { label: "Could not be placed", value: data.calls.could_not_be_placed },
-                    { label: "Waiting for a person", value: data.calls.needs_a_person },
-                    { label: "Still open", value: data.calls.open },
-                  ]}
-                />
-                <p className="muted">
-                  More on the <Link to="/calls">Phone calls</Link> page.
-                </p>
-              </Panel>
-            ) : null}
-            {data.storage_bytes !== null ? (
-              <Panel
-                icon="archive"
-                title="Storage used"
-                action={<strong className="dash-storage">{bytes(data.storage_bytes)}</strong>}
-              >
-                <p className="muted">
-                  Files kept in private storage, before retention deletes them.
-                </p>
-              </Panel>
-            ) : null}
-            {data.team ? (
-              <Panel icon="info" title="How these are counted">
-                <p className="muted">{notes}</p>
-              </Panel>
-            ) : null}
-          </div>
+        {data.calls && showCalls ? (
+          <Panel className="g-4" title="Phone calls">
+            <KeyTable
+              label="Phone calls"
+              rows={[
+                { label: "Placed", value: data.calls.placed },
+                { label: "Recorded", value: data.calls.recorded },
+                { label: "Could not be placed", value: data.calls.could_not_be_placed },
+                { label: "Waiting for a person", value: data.calls.needs_a_person },
+                { label: "Still open", value: data.calls.open },
+              ]}
+            />
+            <p className="muted">
+              More on the <Link to="/calls">Phone calls</Link> page.
+            </p>
+          </Panel>
         ) : null}
       </div>
-      {data.team ? null : <p className="muted dash-foot">{notes}</p>}
+      <p className="muted dash-foot">
+        Effective speech is the time someone speaks (silences left out). Completed counts each
+        project&apos;s approved recordings as its rules say: effective speech or the full length;
+        several projects add up their own.
+        {data.effective_pending > 0
+          ? ` ${data.effective_pending} recording${data.effective_pending === 1 ? " is" : "s are"} still being measured and count${data.effective_pending === 1 ? "s" : ""} no effective speech yet.`
+          : ""}{" "}
+        Days are counted in{" "}
+        {data.timezone === "Asia/Kolkata"
+          ? "India Standard Time"
+          : `${data.timezone.replace("_", " ")} time`}
+        .
+      </p>
     </div>
   );
 }
@@ -461,40 +424,36 @@ export function DashboardPage() {
     <section aria-labelledby="dash-title" className="stack stack--tight dash-page">
       <div className="page-header">
         <div className="page-header__text">
-          <h1 id="dash-title">
-            <IconTile name="chart" />
-            {HEADINGS[view].title}
-          </h1>
+          <h1 id="dash-title">{HEADINGS[view].title}</h1>
           <p className="page-header__lead">{HEADINGS[view].lead}</p>
         </div>
-        <div className="toolbar">
-          <Select
-            label="Project"
-            value={projectId}
-            onChange={(e) => {
-              setProjectId(e.target.value);
-              // Another project has other people and languages.
-              set({ language: "", dialect: "", district: "", staffId: "" });
-            }}
-            options={[
-              { value: "", label: "All my projects" },
-              ...projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
-            ]}
-          />
-          <Select
-            label="Period"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            options={[
-              { value: "7", label: "Last 7 days" },
-              { value: "30", label: "Last 30 days" },
-              { value: "90", label: "Last 90 days" },
-              { value: "custom", label: "Choose dates (from – to)" },
-            ]}
-          />
-        </div>
       </div>
+      {/* One row of filters (D-154): the project and the period first. */}
       <div className="filters dash-filters" role="group" aria-label="Filters">
+        <Select
+          label="Project"
+          value={projectId}
+          onChange={(e) => {
+            setProjectId(e.target.value);
+            // Another project has other people and languages.
+            set({ language: "", dialect: "", district: "", staffId: "" });
+          }}
+          options={[
+            { value: "", label: "All my projects" },
+            ...projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
+          ]}
+        />
+        <Select
+          label="Period"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          options={[
+            { value: "7", label: "Last 7 days" },
+            { value: "30", label: "Last 30 days" },
+            { value: "90", label: "Last 90 days" },
+            { value: "custom", label: "Choose dates (from – to)" },
+          ]}
+        />
         {custom ? (
           <>
             <TextField
@@ -517,7 +476,7 @@ export function DashboardPage() {
           value={filters.mode}
           onChange={(e) => set({ mode: e.target.value })}
           options={[
-            { value: "", label: "Every recording type" },
+            { value: "", label: "All" },
             ...Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })),
           ]}
         />
@@ -526,7 +485,7 @@ export function DashboardPage() {
           value={filters.language}
           onChange={(e) => set({ language: e.target.value })}
           options={[
-            { value: "", label: "Every language" },
+            { value: "", label: "All" },
             ...(options.languages ?? []).map((code) => ({
               value: code,
               label: languageLabel(code),
@@ -539,7 +498,7 @@ export function DashboardPage() {
             value={filters.dialect}
             onChange={(e) => set({ dialect: e.target.value })}
             options={[
-              { value: "", label: "Every dialect" },
+              { value: "", label: "All" },
               ...(options.dialects ?? []).map((d) => ({ value: d, label: d })),
             ]}
           />
@@ -550,7 +509,7 @@ export function DashboardPage() {
             value={filters.district}
             onChange={(e) => set({ district: e.target.value })}
             options={[
-              { value: "", label: "Every district" },
+              { value: "", label: "All" },
               ...(options.districts ?? []).map((d) => ({ value: d, label: d })),
             ]}
           />
@@ -561,7 +520,7 @@ export function DashboardPage() {
             value={filters.status}
             onChange={(e) => set({ status: e.target.value })}
             options={[
-              { value: "", label: "Every status" },
+              { value: "", label: "All" },
               ...Object.entries(TASK_STATUS_LABELS).map(([value, label]) => ({ value, label })),
             ]}
           />
