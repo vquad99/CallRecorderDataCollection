@@ -10,6 +10,7 @@ import {
 } from "../../api/system";
 import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
+import { PageHeader } from "../../components/PageHeader";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { when } from "../../lib/format";
 
@@ -52,20 +53,19 @@ export function StatusPage() {
 
   return (
     <section aria-labelledby="status-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="status-title">System status</h1>
-          <p className="page-header__lead">Whether the server and its services are working.</p>
-        </div>
-        {/* The page's button, as on every page: its own row on a phone (D-158). */}
-        {state.kind === "loaded" ? (
-          <div className="actions">
+      {/* The page's button, as on every page: its own row on a phone (D-158). */}
+      <PageHeader
+        id="status-title"
+        title="System status"
+        lead="Whether the server and its services are working."
+        actions={
+          state.kind === "loaded" ? (
             <Button variant="secondary" icon="refresh" onClick={retry}>
               Check again
             </Button>
-          </div>
-        ) : null}
-      </div>
+          ) : null
+        }
+      />
       {state.kind === "loading" ? <LoadingState label="Checking the server" /> : null}
       {state.kind === "failed" ? (
         <ErrorState title="Server status unavailable" error={state.error} onRetry={retry} />

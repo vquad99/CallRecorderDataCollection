@@ -23,6 +23,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { PageHeader } from "../../components/PageHeader";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useFirstRows } from "../../hooks/useFirstRows";
 import { useResource } from "../../hooks/useResource";
@@ -482,12 +483,7 @@ export function DashboardPage() {
   const set = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
   return (
     <section aria-labelledby="dash-title" className="stack dash-page">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="dash-title">{HEADINGS[view].title}</h1>
-          <p className="page-header__lead">{HEADINGS[view].lead}</p>
-        </div>
-      </div>
+      <PageHeader id="dash-title" title={HEADINGS[view].title} lead={HEADINGS[view].lead} />
       {/* D-158: the filters, the key figures and the sections, each a white section, 12 px apart. */}
       <div className="dash">
         {/* One row of filters (D-154): the project and the period first. */}

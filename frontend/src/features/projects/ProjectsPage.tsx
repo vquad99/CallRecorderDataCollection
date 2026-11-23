@@ -12,6 +12,7 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -69,23 +70,20 @@ export function ProjectsPage() {
 
   return (
     <section aria-labelledby="projects-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="projects-title">Projects</h1>
-          <p className="page-header__lead">
-            Your projects and their status. Open one to manage it.
-          </p>
-        </div>
-        {/* In the page's actions row, so on a phone it is a full row as on every page (D-159). */}
-        {can("projects.create") ? (
-          <div className="actions">
+      {/* New project in the page's buttons, so on a phone it is a full row as on every page (D-159). */}
+      <PageHeader
+        id="projects-title"
+        title="Projects"
+        lead="Your projects and their status. Open one to manage it."
+        actions={
+          can("projects.create") ? (
             <Link className="button button--primary" to="/projects/new">
               <Icon name="plus" size={16} weight="bold" />
               New project
             </Link>
-          </div>
-        ) : null}
-      </div>
+          ) : null
+        }
+      />
       <SuccessNotice message={created} />
       {/* The filters in a framed bar of their own, Clear filters last, as on every list (D-158). */}
       <div className="filters" role="group" aria-label="Filters">

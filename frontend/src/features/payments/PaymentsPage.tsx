@@ -18,6 +18,7 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -389,14 +390,11 @@ export function PaymentsPage() {
   const narrowed = Boolean(projectId || from || to || search);
   return (
     <section aria-labelledby="payments-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="payments-title">Payments</h1>
-          <p className="page-header__lead">
-            What moderators and participants earned on approved tasks.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        id="payments-title"
+        title="Payments"
+        lead="What moderators and participants earned on approved tasks."
+      />
       {/* One filter bar for the page, a section of its own (D-158). */}
       <div className="filters payments-filters" role="group" aria-label="Filters">
         <Select

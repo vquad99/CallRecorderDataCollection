@@ -16,6 +16,7 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -176,13 +177,12 @@ export function TasksPage({
       ) : (
         // D-159: New task in the title row's actions, so on a phone it fills its row as every
         // page's buttons do (and as on the project's Tasks tab).
-        <div className="page-header">
-          <div className="page-header__text">
-            <h1 id="tasks-title">Tasks</h1>
-            <p className="page-header__lead">Recording tasks and the step each one is at.</p>
-          </div>
-          {newTask ? <div className="actions">{newTask}</div> : null}
-        </div>
+        <PageHeader
+          id="tasks-title"
+          title="Tasks"
+          lead="Recording tasks and the step each one is at."
+          actions={newTask}
+        />
       )}
       {/* D-158: the page's filters, a framed bar of their own, as on every other page. */}
       <div className="filters" role="group" aria-label="Filters">

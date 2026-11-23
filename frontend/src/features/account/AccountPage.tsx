@@ -11,6 +11,7 @@ import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -216,14 +217,11 @@ export function AccountPage() {
   const { user } = useAuth();
   return (
     <section aria-labelledby="account-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="account-title">My account</h1>
-          <p className="page-header__lead">
-            {user?.display_name} ({user?.email})
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        id="account-title"
+        title="My account"
+        lead={`${user?.display_name ?? ""} (${user?.email ?? ""})`}
+      />
       {user?.telephony_agent_id ? (
         <PhoneSeat
           seat={user.telephony_agent_id}

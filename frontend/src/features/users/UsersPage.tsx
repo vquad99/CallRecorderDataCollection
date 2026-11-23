@@ -10,6 +10,7 @@ import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -67,33 +68,34 @@ export function UsersPage() {
 
   return (
     <section aria-labelledby="users-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="users-title">Users</h1>
-          <p className="page-header__lead">Staff accounts, their roles and their projects.</p>
-        </div>
-        {/* The main button last, as on every other page (D-159). */}
-        <div className="actions">
-          <Link className="button button--secondary" to="/admin/users/import">
-            <Icon name="fileUp" size={16} />
-            Import CSV
-          </Link>
-          <Button
-            variant="secondary"
-            icon="fileCsv"
-            busy={busy === "export"}
-            onClick={() =>
-              void run(() => apiDownload("/api/v1/users/export", "users.csv"), "export")
-            }
-          >
-            Export CSV
-          </Button>
-          <Link className="button button--primary" to="/admin/users/new">
-            <Icon name="userPlus" size={16} />
-            Add user
-          </Link>
-        </div>
-      </div>
+      {/* The main button last, as on every other page (D-159). */}
+      <PageHeader
+        id="users-title"
+        title="Users"
+        lead="Staff accounts, their roles and their projects."
+        actions={
+          <>
+            <Link className="button button--secondary" to="/admin/users/import">
+              <Icon name="fileUp" size={16} />
+              Import CSV
+            </Link>
+            <Button
+              variant="secondary"
+              icon="fileCsv"
+              busy={busy === "export"}
+              onClick={() =>
+                void run(() => apiDownload("/api/v1/users/export", "users.csv"), "export")
+              }
+            >
+              Export CSV
+            </Button>
+            <Link className="button button--primary" to="/admin/users/new">
+              <Icon name="userPlus" size={16} />
+              Add user
+            </Link>
+          </>
+        }
+      />
       <ErrorNotice error={error} />
       {/* The filters, a section of their own (D-158). */}
       <div className="filters" role="group" aria-label="Filters">

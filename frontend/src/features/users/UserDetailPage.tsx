@@ -11,6 +11,7 @@ import { useConfirm } from "../../components/ConfirmDialog";
 import { Button } from "../../components/form/Button";
 import { TextField } from "../../components/form/TextField";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { SavedPassword } from "../../components/SavedPassword";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -66,57 +67,66 @@ function Header({ user, onSaved }: { user: admin.User; onSaved: (u: admin.User) 
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="user-title">{user.display_name}</h1>
-          <p className="page-header__lead">
+      <PageHeader
+        id="user-title"
+        title={user.display_name}
+        lead={
+          <>
             Status: {active ? "Active" : "Disabled"} · Two-step sign-in:{" "}
             {user.mfa_enabled ? "on" : "off"} · Password:{" "}
             {user.password_set ? "set" : "invitation pending"}
-          </p>
-        </div>
-        <div className="actions" role="group" aria-label="Account actions">
-          <Button
-            variant="secondary"
-            icon={active ? "prohibit" : "ok"}
-            busy={busy === "status"}
-            disabled={busy !== null}
-            onClick={active ? disable : enable}
-          >
-            {active ? "Disable account" : "Enable account"}
-          </Button>
-          <Button
-            variant="secondary"
-            icon="mail"
-            busy={busy === "link"}
-            disabled={!active || busy !== null}
-            onClick={() =>
-              void run(
-                async () =>
-                  (await admin.sendPasswordLink(user.id)).sent
-                    ? "Password link sent by email."
-                    : "The email could not be sent. Check the email settings.",
-                "link",
-              )
-            }
-          >
-            Send password link
-          </Button>
-          <Button
-            variant="secondary"
-            icon="logout"
-            disabled={busy !== null}
-            onClick={signOutEverywhere}
-          >
-            Sign out everywhere
-          </Button>
-          {user.mfa_enabled ? (
-            <Button variant="secondary" icon="key" disabled={busy !== null} onClick={resetTwoStep}>
-              Reset two-step sign-in
+          </>
+        }
+        actionsLabel="Account actions"
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon={active ? "prohibit" : "ok"}
+              busy={busy === "status"}
+              disabled={busy !== null}
+              onClick={active ? disable : enable}
+            >
+              {active ? "Disable account" : "Enable account"}
             </Button>
-          ) : null}
-        </div>
-      </div>
+            <Button
+              variant="secondary"
+              icon="mail"
+              busy={busy === "link"}
+              disabled={!active || busy !== null}
+              onClick={() =>
+                void run(
+                  async () =>
+                    (await admin.sendPasswordLink(user.id)).sent
+                      ? "Password link sent by email."
+                      : "The email could not be sent. Check the email settings.",
+                  "link",
+                )
+              }
+            >
+              Send password link
+            </Button>
+            <Button
+              variant="secondary"
+              icon="logout"
+              disabled={busy !== null}
+              onClick={signOutEverywhere}
+            >
+              Sign out everywhere
+            </Button>
+            {user.mfa_enabled ? (
+              <Button
+                variant="secondary"
+                icon="key"
+                disabled={busy !== null}
+                onClick={resetTwoStep}
+              >
+                Reset two-step sign-in
+              </Button>
+            ) : null}
+          </>
+        }
+      />
       <ErrorNotice error={error} />
       <SuccessNotice message={message} />
       {confirm.dialog}

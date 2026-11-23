@@ -26,6 +26,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { ErrorNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { useAction } from "../../hooks/useAction";
@@ -682,15 +683,7 @@ function ProjectSelect({ value, onChange }: { value: string; onChange: (id: stri
 
 /** The title row, with its actions on the right. */
 function Header({ title, lead, actions }: { title: string; lead: string; actions?: ReactNode }) {
-  return (
-    <div className="page-header">
-      <div className="page-header__text">
-        <h1 id="calls-title">{title}</h1>
-        <p className="page-header__lead">{lead}</p>
-      </div>
-      {actions ? <div className="actions">{actions}</div> : null}
-    </div>
-  );
+  return <PageHeader id="calls-title" title={title} lead={lead} actions={actions} />;
 }
 
 /** The one row of filters under the title (D-154), a white bar of its own (D-158). */

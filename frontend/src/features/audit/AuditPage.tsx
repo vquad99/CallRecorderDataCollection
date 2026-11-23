@@ -8,6 +8,7 @@ import { DataTable } from "../../components/DataTable";
 import { Button } from "../../components/form/Button";
 import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { useDebounced } from "../../hooks/useDebounced";
@@ -132,12 +133,7 @@ export function AuditPage() {
   );
   return (
     <section aria-labelledby="audit-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="audit-title">Audit log</h1>
-          <p className="page-header__lead">Who did what, and when.</p>
-        </div>
-      </div>
+      <PageHeader id="audit-title" title="Audit log" lead="Who did what, and when." />
       {/* The filters, a section of their own (D-158). */}
       <div className="filters" role="group" aria-label="Filters">
         <Select

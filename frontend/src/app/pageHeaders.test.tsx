@@ -24,6 +24,25 @@ const MENU = [
   "/account",
 ];
 
+// Every page builds its title row with the one shared PageHeader (D-162), so no page can drift. A
+// task's page is the one exception: its title carries the task's status beside it.
+const SOURCES = import.meta.glob<string>("../features/**/*.tsx", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+describe("title rows", () => {
+  it("are all built with the shared PageHeader", () => {
+    const ownRows = Object.entries(SOURCES)
+      .filter(([file]) => !file.endsWith(".test.tsx") && !file.endsWith("/TaskDetailPage.tsx"))
+      .filter(([, source]) => source.includes('className="page-header"'))
+      .map(([file]) => file);
+    expect(ownRows).toEqual([]);
+    expect(Object.keys(SOURCES).length).toBeGreaterThan(20);
+  });
+});
+
 describe.each(MENU)("%s", (path) => {
   it("has the title row every page has: the title with a short line under it", async () => {
     const spec = PAGES[path];
@@ -39,5 +58,8 @@ describe.each(MENU)("%s", (path) => {
     expect(lead?.textContent?.trim()).toBeTruthy();
     // One short line: it fits beside the page's buttons on a laptop screen.
     expect(lead?.textContent?.length ?? 0).toBeLessThanOrEqual(100);
+    // The page's buttons, if any, sit in the row's one group on the right.
+    for (const button of text?.parentElement?.querySelectorAll(".button") ?? [])
+      expect(button.parentElement).toHaveClass("actions");
   });
 });

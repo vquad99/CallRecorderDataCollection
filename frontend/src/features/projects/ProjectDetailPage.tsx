@@ -13,6 +13,7 @@ import { getProject, type Project } from "../../api/projects";
 import { useAuth } from "../../auth/AuthContext";
 import { BackLink } from "../../components/BackLink";
 import { Icon, type IconName } from "../../components/Icon";
+import { PageHeader } from "../../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useResource } from "../../hooks/useResource";
@@ -214,13 +215,7 @@ export function ProjectDetailPage() {
     <div className="section-layout">
       <ProjectMenu project={project} pages={pages} />
       <section aria-labelledby="project-title" className="section-layout__main stack">
-        <div className="page-header">
-          <div className="page-header__text">
-            <h1 id="project-title">{title}</h1>
-            <p ref={setLead} className="page-header__lead" />
-          </div>
-          <div ref={setActions} className="actions" />
-        </div>
+        <PageHeader id="project-title" title={title} leadRef={setLead} actionsRef={setActions} />
         {content}
       </section>
     </div>

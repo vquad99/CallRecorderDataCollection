@@ -16,6 +16,7 @@ import { Select } from "../../components/form/Select";
 import { TextField } from "../../components/form/TextField";
 import { Icon } from "../../components/Icon";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice";
+import { PageHeader } from "../../components/PageHeader";
 import { Pagination } from "../../components/Pagination";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -258,29 +259,30 @@ export function ParticipantsPage() {
 
   return (
     <section aria-labelledby="participants-title" className="stack">
-      <div className="page-header">
-        <div className="page-header__text">
-          <h1 id="participants-title">Participants</h1>
-          <p className="page-header__lead">The people who record, project by project.</p>
-        </div>
-        <div className="actions">
-          <Button
-            variant="secondary"
-            icon="fileUp"
-            disabled={!projectId}
-            onClick={() => setBulkAdd(!bulkAdd)}
-          >
-            Add many
-          </Button>
-          <Button
-            icon="userPlus"
-            disabled={!projectId}
-            onClick={() => windows.open({ kind: "add" })}
-          >
-            Add participant
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        id="participants-title"
+        title="Participants"
+        lead="The people who record, project by project."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon="fileUp"
+              disabled={!projectId}
+              onClick={() => setBulkAdd(!bulkAdd)}
+            >
+              Add many
+            </Button>
+            <Button
+              icon="userPlus"
+              disabled={!projectId}
+              onClick={() => windows.open({ kind: "add" })}
+            >
+              Add participant
+            </Button>
+          </>
+        }
+      />
       {all.length === 0 ? (
         <EmptyState title="No projects" message="You are not a member of any project yet." />
       ) : (
