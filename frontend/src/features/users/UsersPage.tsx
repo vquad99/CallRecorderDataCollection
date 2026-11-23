@@ -68,7 +68,10 @@ export function UsersPage() {
   return (
     <section aria-labelledby="users-title" className="stack">
       <div className="page-header">
-        <h1 id="users-title">Users</h1>
+        <div className="page-header__text">
+          <h1 id="users-title">Users</h1>
+          <p className="page-header__lead">Staff accounts, their roles and their projects.</p>
+        </div>
         {/* The main button last, as on every other page (D-159). */}
         <div className="actions">
           <Link className="button button--secondary" to="/admin/users/import">

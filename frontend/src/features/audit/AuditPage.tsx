@@ -133,7 +133,10 @@ export function AuditPage() {
   return (
     <section aria-labelledby="audit-title" className="stack">
       <div className="page-header">
-        <h1 id="audit-title">Audit log</h1>
+        <div className="page-header__text">
+          <h1 id="audit-title">Audit log</h1>
+          <p className="page-header__lead">Who did what, and when.</p>
+        </div>
       </div>
       {/* The filters, a section of their own (D-158). */}
       <div className="filters" role="group" aria-label="Filters">

@@ -53,7 +53,10 @@ export function StatusPage() {
   return (
     <section aria-labelledby="status-title" className="stack">
       <div className="page-header">
-        <h1 id="status-title">System status</h1>
+        <div className="page-header__text">
+          <h1 id="status-title">System status</h1>
+          <p className="page-header__lead">Whether the server and its services are working.</p>
+        </div>
         {/* The page's button, as on every page: its own row on a phone (D-158). */}
         {state.kind === "loaded" ? (
           <div className="actions">

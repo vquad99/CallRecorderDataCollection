@@ -259,7 +259,10 @@ export function ParticipantsPage() {
   return (
     <section aria-labelledby="participants-title" className="stack">
       <div className="page-header">
-        <h1 id="participants-title">Participants</h1>
+        <div className="page-header__text">
+          <h1 id="participants-title">Participants</h1>
+          <p className="page-header__lead">The people who record, project by project.</p>
+        </div>
         <div className="actions">
           <Button
             variant="secondary"

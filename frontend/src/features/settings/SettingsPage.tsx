@@ -136,8 +136,7 @@ export function SettingsPage() {
         <div className="page-header__text">
           <h1 id="settings-title">Settings</h1>
           <p className="page-header__lead">
-            The account limit and the daily figures the platform is planned for. Changes apply at
-            once.
+            The account limit and daily planning figures. Changes apply at once.
           </p>
         </div>
       </div>

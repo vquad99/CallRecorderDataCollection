@@ -710,7 +710,7 @@ function MyCalls() {
     <section aria-labelledby="calls-title" className="stack">
       <Header
         title="My phone calls"
-        lead="The calls you made, newest first. Open a task to continue with its call."
+        lead="Your calls, newest first. Open a task to continue its call."
       />
       <Filters>
         <ProjectSelect value={projectId} onChange={setProjectId} />
@@ -747,7 +747,7 @@ function CallFigures() {
     <section aria-labelledby="calls-title" className="stack calls-page">
       <Header
         title="Phone calls"
-        lead="Calls made through TxContact: how many and how they ended. Times are in India time (IST), here and in the CSV."
+        lead="TxContact calls and how they ended. Times are in India time (IST), here and in the CSV."
         actions={
           <Button
             variant="secondary"

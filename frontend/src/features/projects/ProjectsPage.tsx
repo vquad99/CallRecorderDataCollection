@@ -70,7 +70,12 @@ export function ProjectsPage() {
   return (
     <section aria-labelledby="projects-title" className="stack">
       <div className="page-header">
-        <h1 id="projects-title">Projects</h1>
+        <div className="page-header__text">
+          <h1 id="projects-title">Projects</h1>
+          <p className="page-header__lead">
+            Your projects and their status. Open one to manage it.
+          </p>
+        </div>
         {/* In the page's actions row, so on a phone it is a full row as on every page (D-159). */}
         {can("projects.create") ? (
           <div className="actions">

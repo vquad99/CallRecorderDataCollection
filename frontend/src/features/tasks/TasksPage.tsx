@@ -177,7 +177,10 @@ export function TasksPage({
         // D-159: New task in the title row's actions, so on a phone it fills its row as every
         // page's buttons do (and as on the project's Tasks tab).
         <div className="page-header">
-          <h1 id="tasks-title">Tasks</h1>
+          <div className="page-header__text">
+            <h1 id="tasks-title">Tasks</h1>
+            <p className="page-header__lead">Recording tasks and the step each one is at.</p>
+          </div>
           {newTask ? <div className="actions">{newTask}</div> : null}
         </div>
       )}

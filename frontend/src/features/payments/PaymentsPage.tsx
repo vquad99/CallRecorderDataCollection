@@ -393,8 +393,7 @@ export function PaymentsPage() {
         <div className="page-header__text">
           <h1 id="payments-title">Payments</h1>
           <p className="page-header__lead">
-            What moderators and participants earned on approved tasks, at each project&apos;s rate
-            per approved minute.
+            What moderators and participants earned on approved tasks.
           </p>
         </div>
       </div>
