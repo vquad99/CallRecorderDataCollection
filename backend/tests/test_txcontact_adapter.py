@@ -70,9 +70,9 @@ class FakeServer:
 
 def make(server: FakeServer, **overrides: Any) -> TxContact:
     settings = build_settings(
-        txcontact_dialer_username="dsc_user",
+        txcontact_dialer_username="test_dialer",
         txcontact_dialer_password=DIAL_PASSWORD,
-        txcontact_record_user="rec_user",
+        txcontact_record_user="test_recorder",
         txcontact_record_password=RECORD_PASSWORD,
         **overrides,
     )
@@ -94,7 +94,7 @@ def test_only_indian_mobile_numbers_are_dialled() -> None:
 
 def test_dial_sends_the_documented_request_and_keeps_no_secret() -> None:
     server = FakeServer()
-    server.answer("/txdialer/api/contact/add", 200, b"Contact added 9876543210 for dsc_user")
+    server.answer("/txdialer/api/contact/add", 200, b"Contact added 9876543210 for test_dialer")
     result = make(server).dial(PHONE, "70001")
     assert result.accepted is True
     assert result.http_status == 200
@@ -102,14 +102,14 @@ def test_dial_sends_the_documented_request_and_keeps_no_secret() -> None:
     assert sent.get_method() == "GET"
     query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(sent.full_url).query))
     assert query == {
-        "username": "dsc_user",
+        "username": "test_dialer",
         "password": DIAL_PASSWORD,
         "cmp-ref": "dc-new-call",
         "phone": "9876543210",
         "preferred-agent": "70001",
         "source": "webapi",
     }
-    for secret in (DIAL_PASSWORD, "9876543210", "dsc_user"):
+    for secret in (DIAL_PASSWORD, "9876543210", "test_dialer"):
         assert secret not in result.response_excerpt
     assert "Contact added" in result.response_excerpt
 
@@ -173,7 +173,7 @@ def test_search_signs_in_pages_through_results_and_reads_times_in_the_provider_z
     assert found[1].start is None
     auth = server.requests[0]
     assert isinstance(auth.data, bytes)
-    assert json.loads(auth.data) == {"user_id": "rec_user", "password": RECORD_PASSWORD}
+    assert json.loads(auth.data) == {"user_id": "test_recorder", "password": RECORD_PASSWORD}
     search = server.requests[1]
     assert search.get_header("Authorization") == "Token tok123"
     query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(search.full_url).query))
@@ -403,7 +403,9 @@ def test_basic_sign_in_sends_the_record_login_and_fetches_no_token() -> None:
         "/txrecord/api/search"
     ]
     header = server.requests[0].get_header("Authorization")
-    assert header == "Basic " + base64.b64encode(f"rec_user:{RECORD_PASSWORD}".encode()).decode()
+    assert (
+        header == "Basic " + base64.b64encode(f"test_recorder:{RECORD_PASSWORD}".encode()).decode()
+    )
     # A refused Basic login is not retried with a fresh token: it is reported.
     refused = FakeServer()
     refused.answer("/txrecord/api/search", 403, b"forbidden")

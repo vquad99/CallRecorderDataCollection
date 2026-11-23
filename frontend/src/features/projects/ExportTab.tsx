@@ -559,7 +559,7 @@ function ExportList({
                         onClick={() => download(job)}
                       />
                     ) : null}
-                    {job.state === "READY" || job.state === "QUEUED" ? (
+                    {job.can_remove && (job.state === "READY" || job.state === "QUEUED") ? (
                       <IconButton
                         icon="trash"
                         label={`Remove ${job.file_name}`}

@@ -156,6 +156,7 @@ when all is clear.
 | N recordings have waited for processing (`RECORDINGS_STUCK`) | The worker is not running | Render dashboard > `ccp-worker`: is it live? Restart it. `python -m app.cli recover-recordings` sends everything waiting again |
 | N phone calls wait for a person (`CALLS_NEED_PERSON`) | The provider listed several calls or none, or the file could not be fetched | **Phone calls** page > Show: Needs a person. Open the task: pick the right call, or **Look for the recording again** |
 | N exports failed (`EXPORTS_FAILED`) | A stored file did not match its checksum, or storage was down | Project > Export: the reason is under the export's name. A checksum mismatch means a stored file is damaged: `python -m app.cli verify-assets` |
+| N phone numbers belong to people in other projects (`DUPLICATE_PROBING`) | Someone added (or tried to add) many participants whose phone numbers are already in projects they cannot see: possibly testing numbers (D-160) | Audit log, action `participant.duplicate_refused`: it names who. Each person is stopped after 20 a day (429 `DUPLICATE_LIMIT`). If it is real work, a Super Admin links those people to the project |
 
 Other situations:
 

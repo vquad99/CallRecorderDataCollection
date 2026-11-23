@@ -14,10 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.contact import normalize_email
-from app.core.email import EmailSender, EmailSendError, OutgoingEmail
+from app.core.email import EmailSender, EmailSendError, OutgoingEmail, one_line
 from app.core.errors import AppError, not_found
 from app.core.ratelimit import address_key
 from app.modules.audit import service as audit
+from app.modules.auth import passwords
 from app.modules.auth.models import LoginAttempt, PasswordResetToken, User, UserSession
 from app.modules.auth.security import (
     FieldCipher,
@@ -52,6 +53,10 @@ def check_password_policy(settings: Settings, password: str, email: str) -> None
         raise AppError(
             "Password must not be your email address", code="WEAK_PASSWORD", status_code=422
         )
+    # Long enough is not enough: common and trivial passwords are refused too (D-160).
+    reason = passwords.weakness(password, email)
+    if reason:
+        raise AppError(reason, code="WEAK_PASSWORD", status_code=422)
 
 
 def _user(db: Session, user_id: uuid.UUID) -> User:
@@ -89,6 +94,28 @@ def _failures_since(
 # everyone only after this many times that number from anywhere: a stranger who knows an email can
 # no longer keep its owner out with five wrong passwords (security review 2026-11-11, D-088).
 ACCOUNT_CEILING_FACTOR = 10
+# ... but not for an address the account signed in from lately: strangers failing from many
+# addresses cannot keep the owner out of their own office or phone (security audit 2026-11-23,
+# D-160). That address still has its own limit of login_max_failures_per_account.
+KNOWN_ADDRESS_DAYS = 30
+
+
+def _known_address(db: Session, email: str, ip: str) -> bool:
+    since = datetime.now(UTC) - timedelta(days=KNOWN_ADDRESS_DAYS)
+    return (
+        db.scalar(
+            select(LoginAttempt.id)
+            .where(
+                LoginAttempt.email == email,
+                LoginAttempt.ip == ip,
+                LoginAttempt.succeeded.is_(True),
+                LoginAttempt.created_at > since,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
 
 # Wrong authenticator codes after the right password, from any address: an account takes this many
 # per window, then nobody signs in to it until the window has passed (security review 2026-11-22).
@@ -124,11 +151,14 @@ def ensure_not_throttled(
     if ip:
         checks = [
             (and_(LoginAttempt.email == email, LoginAttempt.ip == ip), per_account, True),
-            (LoginAttempt.email == email, per_account * ACCOUNT_CEILING_FACTOR, True),
             # Not reset by a success: signing in to one's own account must not buy more guesses
             # at other accounts from the same address.
             (LoginAttempt.ip == ip, settings.login_max_failures_per_ip, False),
         ]
+        if not _known_address(db, email, ip):
+            checks.insert(
+                1, (LoginAttempt.email == email, per_account * ACCOUNT_CEILING_FACTOR, True)
+            )
     else:
         checks = [(LoginAttempt.email == email, per_account, True)]
     if codes:
@@ -171,7 +201,7 @@ def _warn_owner(settings: Settings, sender: EmailSender, user: User) -> None:
     """Someone has this account's password: tell its owner. A failed email does not change the
     answer to the sign-in; it is logged."""
     body = (
-        f"Hello {user.display_name},\n\n"
+        f"Hello {one_line(user.display_name)},\n\n"
         "Your password was just entered correctly but the authenticator code was wrong. "
         "If this was not you, change your password:\n\n"
         f"{settings.public_app_url}/forgot-password\n"
@@ -387,26 +417,35 @@ def issue_password_link(
         if purpose == "INVITE"
         else timedelta(minutes=settings.password_reset_minutes)
     )
+    # Only the newest link works: the ones sent before stop when a new one is issued (security
+    # audit 2026-11-23, D-160), so an old email left in an inbox cannot be used later.
+    now = datetime.now(UTC)
+    db.execute(
+        update(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .values(used_at=now)
+    )
     db.add(
         PasswordResetToken(
             user_id=user.id,
             token_hash=hash_token(token),
             purpose=purpose,
-            expires_at=datetime.now(UTC) + lifetime,
+            expires_at=now + lifetime,
         )
     )
     db.commit()
     link = f"{settings.public_app_url}/reset-password?token={token}"
+    name = one_line(user.display_name)
     if purpose == "INVITE":
         subject = "You have been invited to Conversation Collection"
         body = (
-            f"Hello {user.display_name},\n\nAn account was created for you. Set your password here "
+            f"Hello {name},\n\nAn account was created for you. Set your password here "
             f"(valid for {settings.invite_hours} hours):\n\n{link}\n"
         )
     else:
         subject = "Reset your Conversation Collection password"
         body = (
-            f"Hello {user.display_name},\n\nUse this link to set a new password (valid for "
+            f"Hello {name},\n\nUse this link to set a new password (valid for "
             f"{settings.password_reset_minutes} minutes):\n\n{link}\n\n"
             "If you did not ask for this, you can ignore this email.\n"
         )

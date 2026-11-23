@@ -78,7 +78,7 @@ S = sensitive column (personal data or secret reference), protection noted in SE
 | transcript_qc_results | transcript_id, revision_id, outcome, error_category, reviewer_id, comment, reviewed_at | index transcript_id | restrict |
 | exports | project_id, requested_by, filters, formats, status, file_count, manifest_sha256, includes_personal_data, authorized_by, expires_at | index (project_id, created_at) | restrict |
 | export_items | export_id, task_id, asset_id, path_in_package, sha256 | unique (export_id, path_in_package) | cascade |
-| audit_logs | actor_id, action, entity_type, entity_id, project_id, before_summary, after_summary, ip (S), user_agent, request_id, occurred_at | append-only (no UPDATE/DELETE grant); index (entity_type, entity_id), (occurred_at) | never deleted inside retention |
+| audit_logs | actor_id, action, entity_type, entity_id, project_id, before_summary, after_summary, ip (S), user_agent, request_id, occurred_at | append-only: a trigger refuses UPDATE and DELETE, and the app's own role (D-160, when used) has no UPDATE, DELETE or TRUNCATE grant; index (entity_type, entity_id), (occurred_at) | never deleted inside retention |
 | system_settings | key, value_type, value_text, value_int, updated_by | unique key | restrict |
 
 Raw provider payloads are not stored as opaque blobs in the database. Fields the workflow reads get

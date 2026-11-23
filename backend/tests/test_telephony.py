@@ -167,9 +167,9 @@ def world(
     # clocks that far ahead of the real time (D-131). Otherwise StandIn plays the provider.
     ahead: int | None = getattr(request, "param", None)
     txcontact: dict[str, Any] = {
-        "txcontact_dialer_username": "dsc_user",
+        "txcontact_dialer_username": "test_dialer",
         "txcontact_dialer_password": "dial-pass",
-        "txcontact_record_user": "rec_user",
+        "txcontact_record_user": "test_recorder",
         "txcontact_record_password": "rec-pass",
     }
     if ahead is not None:

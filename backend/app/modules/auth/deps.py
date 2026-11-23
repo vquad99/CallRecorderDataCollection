@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import AppError, forbidden
 from app.core.permissions import Perm, Role
+from app.core.ratelimit import count_invalid_session
 from app.core.security import (
     BACKGROUND_HEADER,
     CSRF_COOKIE,
@@ -118,11 +119,10 @@ def current_principal(request: Request, db: DbSession) -> Principal:
         .join(User, User.id == UserSession.user_id)
         .where(UserSession.token_hash == hash_token(token))
     ).one_or_none()
-    if found is None:
+    if found is None or found[0].revoked_at is not None:
+        count_invalid_session(request)
         raise unauthenticated()
     session, user = found
-    if session.revoked_at is not None:
-        raise unauthenticated()
     settings: Settings = request.app.state.settings
     now = datetime.now(UTC)
     idle_limit = session.last_seen_at + timedelta(minutes=settings.session_idle_minutes)

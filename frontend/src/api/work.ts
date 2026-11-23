@@ -1,6 +1,6 @@
 // Participants, tasks and audit-log API calls (Phase 3).
 import type { TaskStatus } from "../lib/labels";
-import { ApiError, apiRequest, query, type Page } from "./client";
+import { ApiError, apiRequest, query, seg, type Page } from "./client";
 import type { ConsentMode, DeviceField } from "./projects";
 
 export type { TaskStatus };
@@ -229,7 +229,7 @@ export interface AuditEntry {
 }
 
 type Params = Record<string, string | number | undefined>;
-const pp = (projectId: string) => `/api/v1/projects/${projectId}/participants`;
+const pp = (projectId: string) => `/api/v1/projects/${seg(projectId)}/participants`;
 
 export const listParticipants = (projectId: string, params: Params) =>
   apiRequest<Page<Participant>>(`${pp(projectId)}${query(params)}`);
@@ -252,15 +252,18 @@ export const linkParticipant = (projectId: string, participantCode: string) =>
 export const createParticipant = (projectId: string, body: ParticipantFields) =>
   apiRequest<AddedParticipant>(pp(projectId), { method: "POST", body });
 export const correctParticipant = (projectId: string, id: string, body: ParticipantFields) =>
-  apiRequest<Participant>(`${pp(projectId)}/${id}`, { method: "PATCH", body });
+  apiRequest<Participant>(`${pp(projectId)}/${seg(id)}`, { method: "PATCH", body });
 export const deleteParticipant = (projectId: string, id: string, reason: string) =>
-  apiRequest<Participant>(`${pp(projectId)}/${id}/delete`, { method: "POST", body: { reason } });
+  apiRequest<Participant>(`${pp(projectId)}/${seg(id)}/delete`, {
+    method: "POST",
+    body: { reason },
+  });
 export const consentHistory = (projectId: string, id: string) =>
-  apiRequest<Consent[]>(`${pp(projectId)}/${id}/consent`);
+  apiRequest<Consent[]>(`${pp(projectId)}/${seg(id)}/consent`);
 
 export const listTasks = (params: Params) =>
   apiRequest<Page<TaskListItem>>(`/api/v1/tasks${query(params)}`);
-export const getTask = (id: string) => apiRequest<TaskDetail>(`/api/v1/tasks/${id}`);
+export const getTask = (id: string) => apiRequest<TaskDetail>(`/api/v1/tasks/${seg(id)}`);
 export const createTask = (body: {
   project_id: string;
   recording_mode: string;
@@ -272,35 +275,38 @@ export const createTask = (body: {
 }) => apiRequest<TaskDetail>("/api/v1/tasks", { method: "POST", body });
 /** Delete a task made by mistake, while nothing has happened on it (D-115). */
 export const deleteTask = (id: string, reason: string) =>
-  apiRequest<null>(`/api/v1/tasks/${id}/delete`, { method: "POST", body: { reason } });
+  apiRequest<null>(`/api/v1/tasks/${seg(id)}/delete`, { method: "POST", body: { reason } });
 export const assignModerator = (id: string, userId: string, reason: string) =>
-  apiRequest<TaskDetail>(`/api/v1/tasks/${id}/assign`, {
+  apiRequest<TaskDetail>(`/api/v1/tasks/${seg(id)}/assign`, {
     method: "POST",
     body: { user_id: userId, reason: reason || null },
   });
 export const transitionTask = (id: string, to: TaskStatus, reasonCode: string, comment: string) =>
-  apiRequest<TaskDetail>(`/api/v1/tasks/${id}/transition`, {
+  apiRequest<TaskDetail>(`/api/v1/tasks/${seg(id)}/transition`, {
     method: "POST",
     body: { to, reason_code: reasonCode || null, comment },
   });
 /** The moderator (or an admin) sends the same recording back to QC once the consent forms QC
  * found not right were replaced (D-146). */
 export const sendBackToQc = (id: string, comment = "") =>
-  apiRequest<TaskDetail>(`/api/v1/tasks/${id}/consent-fix/send-to-qc`, {
+  apiRequest<TaskDetail>(`/api/v1/tasks/${seg(id)}/consent-fix/send-to-qc`, {
     method: "POST",
     body: { comment },
   });
 export const addComment = (id: string, body: string) =>
-  apiRequest<TimelineEntry>(`/api/v1/tasks/${id}/comments`, { method: "POST", body: { body } });
+  apiRequest<TimelineEntry>(`/api/v1/tasks/${seg(id)}/comments`, {
+    method: "POST",
+    body: { body },
+  });
 export const getTimeline = (id: string) =>
-  apiRequest<TimelineEntry[]>(`/api/v1/tasks/${id}/timeline`);
+  apiRequest<TimelineEntry[]>(`/api/v1/tasks/${seg(id)}/timeline`);
 
 export const listAudit = (params: Params) =>
   apiRequest<Page<AuditEntry>>(`/api/v1/audit-logs${query(params)}`);
 
 export const emailPortalLink = (projectId: string, participantId: string) =>
   apiRequest<{ sent: boolean; expires_at: string }>(
-    `${pp(projectId)}/${participantId}/portal-link/email`,
+    `${pp(projectId)}/${seg(participantId)}/portal-link/email`,
     { method: "POST" },
   );
 
@@ -386,7 +392,7 @@ export interface ConsentFormView {
   earlier: ConsentAnswer[];
 }
 export const consentFormFileUrl = (projectId: string, participantId: string) =>
-  `${pp(projectId)}/${participantId}/consent-form/file`;
+  `${pp(projectId)}/${seg(participantId)}/consent-form/file`;
 
 /** One session (task) a participant was part of, as the details view lists it (D-104). */
 export interface ParticipantSession {
@@ -430,7 +436,7 @@ export interface ParticipantDetails {
   } | null;
 }
 export const participantDetails = (projectId: string, participantId: string) =>
-  apiRequest<ParticipantDetails>(`${pp(projectId)}/${participantId}/details`);
+  apiRequest<ParticipantDetails>(`${pp(projectId)}/${seg(participantId)}/details`);
 
 // ------------------------------------------------- uploaded documents (D-144)
 
@@ -473,7 +479,7 @@ export interface ParticipantDocuments {
 }
 
 export const participantDocuments = (projectId: string, participantId: string) =>
-  apiRequest<ParticipantDocuments>(`${pp(projectId)}/${participantId}/documents`);
+  apiRequest<ParticipantDocuments>(`${pp(projectId)}/${seg(participantId)}/documents`);
 
 /** What is wrong with a file before it is sent (type or size), or "" when it can go. */
 export function documentProblem(file: File | null | undefined): string {
@@ -497,7 +503,7 @@ export const uploadDocument = (
   file: File,
 ) =>
   apiRequest<ParticipantDocument>(
-    `${pp(projectId)}/${participantId}/documents/${KIND_PATH[kind]}`,
+    `${pp(projectId)}/${seg(participantId)}/documents/${KIND_PATH[kind]}`,
     {
       method: "POST",
       file,
@@ -512,6 +518,6 @@ export const uploadDocument = (
 /** A short-lived link to look at the file (it opens in the browser). */
 export const documentLink = (projectId: string, participantId: string, documentId: string) =>
   apiRequest<{ url: string; expires_in: number }>(
-    `${pp(projectId)}/${participantId}/documents/${documentId}/url`,
+    `${pp(projectId)}/${seg(participantId)}/documents/${seg(documentId)}/url`,
     { method: "POST" },
   );

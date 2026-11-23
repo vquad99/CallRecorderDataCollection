@@ -40,8 +40,15 @@ pytestmark = pytest.mark.db
 BUCKET = "ccp-docs"
 ROOT = Path(__file__).resolve().parents[2]
 PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
-JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 64
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+# Complete files: the upload checks what follows the first bytes too (D-160).
+JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 64 + b"\xff\xd9"
+PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    + b"\x00\x00\x00\x0dIHDR"
+    + b"\x00" * 13
+    + b"\x00" * 4
+    + b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 // project's targets, and what is still needed to finish (D-153); and its download as Excel or
 // CSV. Its own module, so only the Progress tab's chunk (and the Participants page's "Still
 // needed" line) loads it (the first screen is near its budget).
-import { apiRequest } from "./client";
+import { apiRequest, seg } from "./client";
 import type { ProgressCounts } from "./projects";
 
 /** One row of a share on the Progress tab: actual count and percent, the target percent and the
@@ -142,11 +142,11 @@ export interface ProjectProgress {
 /** The Progress tab (and the Participants page's "Still needed" line): for the people who manage
  * the project. */
 export const getProgress = (id: string) =>
-  apiRequest<ProjectProgress>(`/api/v1/projects/${id}/progress`);
+  apiRequest<ProjectProgress>(`/api/v1/projects/${seg(id)}/progress`);
 
 /** The Progress tab as a file: an Excel workbook with a sheet per table, or one long CSV table. */
 export type ProgressExportFormat = "xlsx" | "csv";
 
 /** Where the Progress tab's download is (the same people as the tab; audited), for apiDownload. */
 export const progressExportPath = (id: string, format: ProgressExportFormat) =>
-  `/api/v1/projects/${id}/progress/export?format=${format}`;
+  `/api/v1/projects/${seg(id)}/progress/export?format=${format}`;

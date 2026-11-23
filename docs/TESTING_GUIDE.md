@@ -12,14 +12,14 @@ the live site. All four accounts are members of Test project.
 
 | Role | Email |
 |---|---|
-| Project Admin | test.projectadmin@dubdesk.live |
-| Moderator | test.moderator@dubdesk.live |
-| QC Executive | test.qc@dubdesk.live |
-| Client Viewer | test.client@dubdesk.live |
+| Project Admin | sent to you with the password |
+| Moderator | sent to you with the password |
+| QC Executive | sent to you with the password |
+| Client Viewer | sent to you with the password |
 
-The passwords are sent to you separately; they are never written in this repository. The
-`@dubdesk.live` addresses have no mailbox, so **Forgot your password?** does not work for these
-four accounts; ask us for a new password instead.
+The sign-in addresses and passwords are sent to you separately; they are never written in this
+repository. The `@dubdesk.live` addresses have no mailbox, so **Forgot your password?** does not
+work for these four accounts; ask us for a new password instead.
 
 One person can test every role: sign out (top right) and sign in as the next role.
 

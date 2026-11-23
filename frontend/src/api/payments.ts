@@ -1,6 +1,6 @@
 // Payments (D-137): each project's rates (rupees per approved minute) and what moderators and
 // participants earned on approved tasks. Money and minutes travel as text with two places.
-import { apiDownload, apiRequest, query } from "./client";
+import { apiDownload, apiRequest, query, seg } from "./client";
 
 export type Payee = "moderators" | "participants";
 
@@ -71,11 +71,11 @@ export const listRates = () => apiRequest<ProjectRates[]>(`${base}/rates`);
 export const setRates = (
   projectId: string,
   body: { moderator_rate: string | null; participant_rate: string | null },
-) => apiRequest<ProjectRates>(`${base}/rates/${projectId}`, { method: "PUT", body });
+) => apiRequest<ProjectRates>(`${base}/rates/${seg(projectId)}`, { method: "PUT", body });
 export const moderatorPay = (filters: PayFilters) =>
   apiRequest<Payments<ModeratorPay>>(`${base}/moderators${query({ ...filters })}`);
 export const participantPay = (filters: PayFilters) =>
   apiRequest<Payments<ParticipantPay>>(`${base}/participants${query({ ...filters })}`);
 /** The tab as a spreadsheet, with a Total line (spreadsheet-safe cells). */
 export const downloadPay = (who: Payee, filters: PayFilters) =>
-  apiDownload(`${base}/${who}/export${query({ ...filters })}`);
+  apiDownload(`${base}/${seg(who)}/export${query({ ...filters })}`);

@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
 
 from app.core.config import ConfigError, Settings, load_settings
 from app.core.permissions import Role
@@ -247,8 +247,22 @@ def migrate(settings: Settings) -> None:
     from alembic.config import Config
 
     config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
-    config.set_main_option("sqlalchemy.url", settings.database_url.get_secret_value())
+    owner = settings.migration_database_url or settings.database_url
+    config.set_main_option("sqlalchemy.url", owner.get_secret_value())
     command.upgrade(config, "head")
+
+
+def run_grant_app_role(settings: Settings, name: str) -> str:
+    """The app's own database role (D-160), granted as the owner: MIGRATION_DATABASE_URL, else
+    DATABASE_URL. The password comes from APP_ROLE_PASSWORD (needed to create the role)."""
+    from app.db.roles import grant_app_role
+
+    owner = settings.migration_database_url or settings.database_url
+    engine = create_engine(owner.get_secret_value())
+    try:
+        return grant_app_role(engine, name, os.environ.get("APP_ROLE_PASSWORD") or None)
+    finally:
+        engine.dispose()
 
 
 def prepare_deploy(settings: Settings) -> int:
@@ -257,6 +271,12 @@ def prepare_deploy(settings: Settings) -> int:
     (Render ran a quoted `sh -c` command as a single word)."""
     migrate(settings)
     print("prepare-deploy: database migrated")
+    # New tables get the app role's grants too (D-160), and audit_logs stays append-only for it.
+    app_role = os.environ.get("APP_DATABASE_ROLE", "")
+    if app_role:
+        print(
+            f"prepare-deploy: app database role {app_role} {run_grant_app_role(settings, app_role)}"
+        )
     email = os.environ.get("ADMIN_EMAIL", "")
     if email:
         outcome = create_admin(
@@ -459,6 +479,11 @@ def main(argv: list[str] | None = None) -> int:
         "prepare-deploy",
         help="before a deploy: migrate, create the first admin, seed demo data if allowed",
     )
+    grant = sub.add_parser(
+        "grant-app-role",
+        help="create or update the app's database role: rows only, audit log append-only",
+    )
+    grant.add_argument("name", help="the role's name, e.g. ccp_app")
     admin = sub.add_parser(
         "create-admin",
         help="create the first Super Admin from ADMIN_EMAIL and ADMIN_PASSWORD (any environment)",
@@ -520,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"seed-dev: {len(created)} account(s) created; passwords from DEMO_PASSWORD")
         elif args.command == "prepare-deploy":
             return prepare_deploy(settings)
+        elif args.command == "grant-app-role":
+            print(f"grant-app-role: {args.name} {run_grant_app_role(settings, args.name)}")
         elif args.command == "create-admin":
             email = os.environ.get("ADMIN_EMAIL", "")
             if not email:
@@ -556,7 +583,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "backup-prune":
             removed = run_backup_prune(settings, args.keep_days)
             print(f"backup-prune: {len(removed)} backup(s) deleted")
-    except (ConfigError, SeedRefused) as exc:
+    except (ConfigError, SeedRefused, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

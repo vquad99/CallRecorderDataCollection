@@ -1,4 +1,4 @@
-import { ApiError, apiRequest, query, type Page } from "./client";
+import { ApiError, apiRequest, query, seg, type Page } from "./client";
 
 export type ProjectStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type Mode = "TELEPHONY" | "FACE_TO_FACE";
@@ -258,7 +258,7 @@ export const needsStatusReason = (from: ProjectStatus, to: ProjectStatus) =>
   (to === "ARCHIVED" && (from === "ACTIVE" || from === "PAUSED")) ||
   (to === "ACTIVE" && (from === "COMPLETED" || from === "ARCHIVED"));
 
-const base = (id: string) => `/api/v1/projects/${id}`;
+const base = (id: string) => `/api/v1/projects/${seg(id)}`;
 
 export const listProjects = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<ProjectSummary>>(`/api/v1/projects${query(params)}`);
@@ -384,6 +384,8 @@ export interface ExportJob {
   sha256: string | null;
   error: string | null;
   requested_by: string | null;
+  /** Its maker or a project admin may remove it (D-160). */
+  can_remove: boolean;
   created_at: string;
   finished_at: string | null;
   expires_at: string | null;
@@ -414,14 +416,14 @@ export const listExports = (id: string) =>
 /** A link to a prepared bundle that works for a few minutes; every link is audited. */
 export const exportLink = (id: string, jobId: string) =>
   apiRequest<{ url: string; valid_seconds: number; file_name: string; sha256: string | null }>(
-    `${base(id)}/exports/${jobId}/download-link`,
+    `${base(id)}/exports/${seg(jobId)}/download-link`,
     { method: "POST" },
   );
 export const removeExport = (id: string, jobId: string) =>
-  apiRequest<ExportJob>(`${base(id)}/exports/${jobId}`, { method: "DELETE" });
+  apiRequest<ExportJob>(`${base(id)}/exports/${seg(jobId)}`, { method: "DELETE" });
 export const listCandidates = (id: string, search: string) =>
   apiRequest<Candidate[]>(`${base(id)}/member-candidates${query({ search })}`);
 export const addMember = (id: string, userId: string) =>
   apiRequest<null>(`${base(id)}/members`, { method: "POST", body: { user_id: userId } });
 export const removeMember = (id: string, userId: string) =>
-  apiRequest<null>(`${base(id)}/members/${userId}`, { method: "DELETE" });
+  apiRequest<null>(`${base(id)}/members/${seg(userId)}`, { method: "DELETE" });

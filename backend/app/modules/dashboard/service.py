@@ -45,7 +45,7 @@ from sqlalchemy import and_, case, exists, func, or_, select, union_all
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.core.days import day_bounds
+from app.core.days import check_days, day_bounds
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm
 from app.modules.audio_qc.models import AudioQcResult
@@ -192,6 +192,7 @@ def summary(
 
     today = datetime.now(UTC).astimezone(ZoneInfo(timezone)).date()
     chosen_days = f.date_from is not None or f.date_to is not None
+    check_days(f.date_from, f.date_to)  # before any arithmetic on them (D-160)
     # Without chosen days: the last N days up to today.
     last_day = f.date_to or today
     first_day = f.date_from or last_day - timedelta(days=days - 1)

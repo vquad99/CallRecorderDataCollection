@@ -1,4 +1,4 @@
-import { apiRequest, query, type Page } from "./client";
+import { apiRequest, query, seg, type Page } from "./client";
 
 export interface User {
   id: string;
@@ -43,25 +43,27 @@ export const ROLE_CODES = Object.keys(ROLE_LABELS);
 
 export const listUsers = (params: Record<string, string | number | undefined>) =>
   apiRequest<Page<User>>(`/api/v1/users${query(params)}`);
-export const getUser = (id: string) => apiRequest<User>(`/api/v1/users/${id}`);
+export const getUser = (id: string) => apiRequest<User>(`/api/v1/users/${seg(id)}`);
 export const createUser = (body: { email: string; display_name: string; roles: string[] }) =>
   apiRequest<{ user: User; invite_sent: boolean }>("/api/v1/users", { method: "POST", body });
 export const updateUser = (id: string, body: { email?: string; display_name?: string }) =>
-  apiRequest<User>(`/api/v1/users/${id}`, { method: "PATCH", body });
+  apiRequest<User>(`/api/v1/users/${seg(id)}`, { method: "PATCH", body });
 export const setUserStatus = (id: string, active: boolean) =>
-  apiRequest<User>(`/api/v1/users/${id}/${active ? "enable" : "disable"}`, { method: "POST" });
+  apiRequest<User>(`/api/v1/users/${seg(id)}/${active ? "enable" : "disable"}`, { method: "POST" });
 export const setUserRoles = (id: string, roles: string[]) =>
-  apiRequest<User>(`/api/v1/users/${id}/roles`, { method: "PUT", body: { roles } });
+  apiRequest<User>(`/api/v1/users/${seg(id)}/roles`, { method: "PUT", body: { roles } });
 export const sendPasswordLink = (id: string) =>
-  apiRequest<{ sent: boolean }>(`/api/v1/users/${id}/send-password-link`, { method: "POST" });
+  apiRequest<{ sent: boolean }>(`/api/v1/users/${seg(id)}/send-password-link`, { method: "POST" });
 export const revokeUserSessions = (id: string) =>
-  apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${id}/sessions/revoke`, {
+  apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${seg(id)}/sessions/revoke`, {
     method: "POST",
   });
 /** For someone who lost their authenticator: two-step sign-in off, signed out everywhere
  * (D-106). */
 export const resetUserMfa = (id: string) =>
-  apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${id}/mfa/reset`, { method: "POST" });
+  apiRequest<{ sessions_revoked: number }>(`/api/v1/users/${seg(id)}/mfa/reset`, {
+    method: "POST",
+  });
 export const previewImport = (csv: string) =>
   apiRequest<{ rows: ImportRow[]; valid_count: number; invalid_count: number }>(
     "/api/v1/users/import/preview",

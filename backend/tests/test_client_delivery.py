@@ -49,8 +49,9 @@ world = test_telephony.world
 FRONTEND_DELIVERY = (
     Path(__file__).resolve().parents[2] / "frontend/src/features/projects/delivery.ts"
 )
-CONSENT_PDF = b"%PDF-1.4 signed consent form of speaker 001"
-PROOF_JPEG = b"\xff\xd8\xff\xe0 address proof of speaker 001"
+# Complete files: the upload checks what follows the first bytes too (D-160).
+CONSENT_PDF = b"%PDF-1.4 signed consent form of speaker 001\n%%EOF\n"
+PROOF_JPEG = b"\xff\xd8\xff\xe0 address proof of speaker 001\xff\xd9"
 KONKANI = "कोंकणी"
 
 # Speaker-level files and the tables every bundle in the client's format has.

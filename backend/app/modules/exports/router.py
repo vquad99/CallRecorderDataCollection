@@ -81,6 +81,8 @@ class ExportJobOut(BaseModel):
     sha256: str | None
     error: str | None
     requested_by: str | None
+    # Whether this person may remove the bundle (its maker or a project manager, D-160).
+    can_remove: bool
     created_at: datetime
     finished_at: datetime | None
     expires_at: datetime | None
@@ -99,7 +101,7 @@ class ExportLink(BaseModel):
     sha256: str | None
 
 
-def _out(job: ExportJob, requested_by: str | None) -> ExportJobOut:
+def _out(job: ExportJob, requested_by: str | None, can_remove: bool) -> ExportJobOut:
     return ExportJobOut(
         id=job.id,
         state=job.state,
@@ -115,6 +117,7 @@ def _out(job: ExportJob, requested_by: str | None) -> ExportJobOut:
         sha256=job.sha256,
         error=job.error,
         requested_by=requested_by,
+        can_remove=can_remove,
         created_at=job.created_at,
         finished_at=job.finished_at,
         expires_at=job.expires_at,
@@ -208,7 +211,7 @@ def request_export(
         client_ip(request),
     )
     dispatch_export(request.app, job.id, background)
-    return _out(job, principal.display_name)
+    return _out(job, principal.display_name, True)
 
 
 @router.get("/exports", response_model=ExportJobPage)
@@ -221,7 +224,7 @@ def list_exports(
 ) -> ExportJobPage:
     listed, total = jobs.list_jobs(db, principal, project_id, page, page_size)
     return ExportJobPage(
-        items=[_out(x.job, x.requested_by) for x in listed],
+        items=[_out(x.job, x.requested_by, x.can_remove) for x in listed],
         total=total,
         page=page,
         page_size=page_size,
@@ -233,7 +236,7 @@ def get_export(
     project_id: uuid.UUID, job_id: uuid.UUID, principal: CurrentPrincipal, db: DbSession
 ) -> ExportJobOut:
     found = jobs.get(db, principal, project_id, job_id)
-    return _out(found.job, found.requested_by)
+    return _out(found.job, found.requested_by, found.can_remove)
 
 
 @router.post("/exports/{job_id}/download-link", response_model=ExportLink)
@@ -271,7 +274,7 @@ def remove_export(
     job = jobs.remove(
         db, request.app.state.storage, principal, project_id, job_id, client_ip(request)
     )
-    return _out(job, None)
+    return _out(job, None, True)
 
 
 def _send(body: IO[bytes]) -> Iterator[bytes]:

@@ -5,7 +5,7 @@
 // buttons on its title row, the search in a filter bar of its own, then the table.
 import { useState } from "react";
 
-import { apiDownload } from "../../api/client";
+import { apiDownload, seg } from "../../api/client";
 import * as work from "../../api/work";
 import { useAuth } from "../../auth/AuthContext";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -236,7 +236,7 @@ export function ParticipantsTab() {
             onClick={() =>
               void run(async () => {
                 await apiDownload(
-                  `/api/v1/projects/${project.id}/participants/export`,
+                  `/api/v1/projects/${seg(project.id)}/participants/export`,
                   "participants.csv",
                 );
                 return "Contact list downloaded.";

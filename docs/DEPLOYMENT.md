@@ -106,6 +106,37 @@ Notes:
 - Free plans are not used: a free Postgres is deleted after 30 days and private services and
   workers have no free plan.
 
+### Security settings from the audit of 2026-11-23 (D-160)
+
+Both are off until set, so a deploy changes nothing on its own.
+
+**A separate database role for the app.** The role that owns the tables can change them and can
+drop the trigger that keeps `audit_logs` append-only, so the app should not run as it.
+
+1. In the `ccp-api` shell, with `APP_ROLE_PASSWORD` set to a new random password:
+   `python -m app.cli grant-app-role ccp_app`. It creates the role (login, no superuser), lets it
+   read and write every table, and takes away `UPDATE`, `DELETE` and `TRUNCATE` on `audit_logs`
+   and every write on `alembic_version`.
+2. On `ccp-api` and `ccp-worker`: set `MIGRATION_DATABASE_URL` to the current `DATABASE_URL` (the
+   owner, used only by the pre-deploy migrations), then set `DATABASE_URL` to the same address
+   with `ccp_app` and its password, and `APP_DATABASE_ROLE=ccp_app` (each deploy then grants new
+   tables to it).
+3. Deploy; check `/health/ready` and sign in. To undo, put the owner's address back in
+   `DATABASE_URL`.
+
+On AWS the same applies: never run the app as the RDS master user.
+
+**A virus check of uploaded documents (ClamAV).** Scanned consent forms and address proofs are
+already refused when they carry more than a page (scripts, attached files, content after the
+image). To scan them for viruses as well, run a ClamAV daemon the API can reach (on Render a
+private service from the `clamav/clamav` image, at least 2 GB of memory; on AWS one more container
+in the compose file) and set on `ccp-api`:
+
+- `CLAMAV_HOST` (the private service's host name) and `CLAMAV_PORT` (3310);
+- `CLAMAV_REQUIRED=true` to refuse uploads while the scanner cannot be reached (otherwise they are
+  stored and the failure is logged as `virus_scan_failed`);
+- `CLAMAV_TIMEOUT_SECONDS` (20).
+
 ## 4. Release procedure (Phase 10)
 
 1. CI green on the release commit (lint, types, tests, secret and dependency scans).

@@ -238,7 +238,7 @@ def _build_side(db: Any, api: Callable[[str], Api], code: str, admin: str, moder
     proof = pa.post(
         f"/api/v1/projects/{project_id}/participants/{a['id']}/documents/address-proof",
         json=None,
-        content=b"%PDF-1.4 an address proof",
+        content=b"%PDF-1.4 an address proof\n%%EOF\n",
         headers={"Content-Type": "application/pdf"},
     )
     assert proof.status_code == 201, proof.text
@@ -721,7 +721,8 @@ CASES: list[Case] = [
         "DELETE",
         P + "/exports/{job_id}",
         lambda e, s: f"/api/v1/projects/{s.project}/exports/{s.export}",
-        {SA, PA, CV},
+        # Removed by its maker or a project manager only, not by every exporter (D-160).
+        {SA, PA},
         Perm.EXPORTS_CREATE,
         before=_export_ready,
     ),

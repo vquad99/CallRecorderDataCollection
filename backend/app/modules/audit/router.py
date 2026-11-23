@@ -63,7 +63,11 @@ def list_audit(
         .where(in_projects(principal, AuditLog.project_id))
     )
     if action:
-        query = query.where(or_(AuditLog.action == action, AuditLog.action.like(f"{action}.%")))
+        query = query.where(
+            or_(
+                AuditLog.action == action, AuditLog.action.startswith(f"{action}.", autoescape=True)
+            )
+        )
     if entity_type:
         query = query.where(AuditLog.entity_type == entity_type)
     if entity_id:

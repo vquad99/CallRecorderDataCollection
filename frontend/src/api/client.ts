@@ -60,6 +60,10 @@ export interface Page<T> {
   page_size: number;
 }
 
+/** One path segment of an API address, encoded: an id taken from the address bar cannot add
+ *  segments, ".." or a query of its own (security audit 2026-11-23, D-160). */
+export const seg = (value: string | number): string => encodeURIComponent(String(value));
+
 /** "?a=1&b=x" from the given values; empty and missing values are left out. */
 export function query(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();

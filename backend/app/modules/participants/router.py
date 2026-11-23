@@ -833,6 +833,7 @@ async def upload_document(
         data,
         x_file_name,
         client_ip(request),
+        request.app.state.settings,
     )
     return document_out(doc, {principal.user_id: principal.display_name})
 

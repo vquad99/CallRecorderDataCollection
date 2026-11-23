@@ -18,7 +18,9 @@ def _database_url() -> str:
         return explicit
     from app.core.config import load_settings
 
-    return load_settings().database_url.get_secret_value()
+    settings = load_settings()
+    # As the schema's owner when the app itself uses a role without DDL rights (D-160).
+    return (settings.migration_database_url or settings.database_url).get_secret_value()
 
 
 def run_migrations_online() -> None:

@@ -78,7 +78,9 @@ def test_made_up_session_cookies_share_one_allowance_per_address(migrated_db: st
         client.cookies.set("ccp_session", secrets.token_urlsafe(32))
         statuses.append(client.get("/api/v1/auth/me").status_code)
     assert 429 in statuses, "a fresh fake cookie must not reset the limit"
-    assert statuses.index(429) == 20  # ten times the per-session allowance
+    # No more than without a cookie: a cookie that is not a live session counts as signed out
+    # (D-160; before, it bought ten times the per-session allowance).
+    assert statuses.index(429) == 2
 
 
 @pytest.mark.db

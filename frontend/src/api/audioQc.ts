@@ -1,6 +1,6 @@
 // Audio quality check of a task's recording (D-079): the automatic result, the QC Executive's
 // decision with the QC checklist's answers (D-146), assignment and a re-check from storage.
-import { apiRequest } from "./client";
+import { apiRequest, seg } from "./client";
 import type { ChecklistItem } from "./projects";
 
 export type QcOutcome = "PASS" | "NEEDS_REVIEW" | "FAIL" | "SEND_BACK_CONSENT";
@@ -100,7 +100,7 @@ export interface AudioQcView {
   results: QcResult[];
 }
 
-const base = (taskId: string) => `/api/v1/tasks/${taskId}`;
+const base = (taskId: string) => `/api/v1/tasks/${seg(taskId)}`;
 
 export const getAudioQc = (taskId: string) => apiRequest<AudioQcView>(`${base(taskId)}/audio-qc`);
 export const assignQc = (taskId: string, userId: string, reason: string) =>

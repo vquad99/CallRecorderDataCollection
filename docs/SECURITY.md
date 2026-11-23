@@ -315,6 +315,30 @@ own code (D-107): the secret is sent to no other service to draw it.
 | A new version never reloads a page by itself | The page reloads only after the person clicks Reload | src/pwa/pwa.test.tsx |
 | The worker and the manifest come from the same address only | The site's rules (`default-src 'self'`) cover workers and manifests | checked with nginx 1.28 (docs/evidence/phase10/pwa_2026-11-14.txt) |
 
+## 9i. Security audit in 14 categories, 2026-11-23 (D-160)
+
+Access control, IDs in addresses, keys, payments, sign-in and codes, script injection, uploads,
+environment and git exposure, and database queries, tested on a local copy with a few read-only
+checks of the live site. No Critical, High or Medium finding; the 14 Low ones are fixed:
+
+| Rule | Where it is kept | Test |
+|---|---|---|
+| An export is removed only by its maker or a project manager | `exports/jobs.py` `may_remove` | tests/test_security_review_4.py |
+| A Super Admin is never added to a project by anyone else | `projects/service.py` `add_member` | same |
+| A made-up session cookie buys no extra requests | `core/ratelimit.py`, `auth/deps.py` | same |
+| Only the newest password link works; common and trivial passwords are refused | `auth/service.py`, `auth/passwords.py` | same |
+| Strangers cannot lock an account out of an address it used | `auth/service.py` `_known_address` | same |
+| Ids are encoded into API paths | `frontend/src/api/client.ts` `seg` | src/api/paths.test.ts |
+| Names in emails stay on one line | `core/email.py` `one_line`, `users/service.py` | tests/test_security_review_4.py |
+| Documents hold only their page; optional ClamAV scan | `core/filecheck.py`, `core/virus.py` | same |
+| Days outside 2000-2100 are refused | `core/days.py` | same |
+| The app's database role cannot change the audit log (when used) | `db/roles.py`, `cli.py grant-app-role` | same |
+| Import previews do not reveal other projects' phone numbers; probing is limited and reported | `participants/service.py`, `operations/service.py` | same |
+
+Still for the owner: the production bucket's privacy and key scope, the two test encryption keys
+in git history against the live key, rotating the keys shared during setup, switching on the app
+role and ClamAV (docs/DEPLOYMENT.md).
+
 ## 10. Open security questions
 
 - Call-recording consent law and provider terms in India: NOT VERIFIED (DECISIONS.md B-10).

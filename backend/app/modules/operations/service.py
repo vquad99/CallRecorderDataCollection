@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.email import EmailSender, OutgoingEmail
+from app.modules.audit.models import AuditLog
 from app.modules.exports.models import ExportJob
 from app.modules.operations.models import OperationAlert
 from app.modules.recordings.models import Recording
@@ -47,6 +48,10 @@ class Problem:
 
 def _plural(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
+
+
+# Refused duplicates from other projects in a day before the people who run the platform hear.
+DUPLICATE_PROBES_ALERT = 20
 
 
 def find_problems(db: Session, settings: Settings, checks: dict[str, Any]) -> list[Problem]:
@@ -133,6 +138,28 @@ def find_problems(db: Session, settings: Settings, checks: dict[str, Any]) -> li
                 "EXPORTS_FAILED",
                 exports,
                 f"{_plural(exports, 'export', 'exports')} failed in the last 24 hours.",
+            )
+        )
+    # Phone numbers that matched people in projects the person adding them cannot see (D-160).
+    probes = int(
+        db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.action == "participant.duplicate_refused",
+                AuditLog.created_at >= now - timedelta(days=1),
+            )
+        )
+        or 0
+    )
+    if probes >= DUPLICATE_PROBES_ALERT:
+        problems.append(
+            Problem(
+                "DUPLICATE_PROBING",
+                probes,
+                f"{probes} phone numbers added in the last 24 hours belong to people in other "
+                "projects: someone may be testing numbers. The audit log names who "
+                "(participant.duplicate_refused).",
             )
         )
     return problems

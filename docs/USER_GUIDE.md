@@ -42,6 +42,9 @@ says a **card** (for example the **Device details** card), it means one of these
 **First time.** The Super Admin adds you. You get an email from **no-reply@dubdesk.live** with the
 subject **"You have been invited to Conversation Collection"**. Click the link (it works for 72
 hours), type a password twice (12 to 128 characters, not your email) and click **Set password**.
+A password that is easy to guess is refused with the reason: fewer than 5 different characters, a
+run such as abcdefgh or 12345678, or a common word or your own name with numbers added
+("Password2026!"). A short sentence of your own works well.
 Then sign in at https://dubdesk.live with your email and password.
 
 **Typing mistakes.** An empty box, or an email without @, is pointed out under the box before
@@ -51,6 +54,7 @@ password**.
 
 **Forgot your password.** On the sign-in page click **Forgot your password?**, type your email,
 click **Send reset link**. The emailed link works for 30 minutes. At most 3 links per hour.
+Only the newest link works: asking again ends the links sent before.
 A link that has expired or was used already says **This link is invalid or has expired**; click
 **Request a new link** on that page.
 
@@ -64,7 +68,8 @@ you see **Cannot reach the server. You are still signed in. Try again in a momen
 tries again by itself every 5 seconds; **Try again** asks at once.
 
 **Locked out.** After 5 wrong passwords in 15 minutes the account waits 15 minutes. You see
-**"Too many failed sign-in attempts. Try again later."**
+**"Too many failed sign-in attempts. Try again later."** If strangers try your account from many
+places, you can still sign in from a place you used in the last 30 days.
 
 **Two-step sign-in.** With it, signing in needs your password and a 6-digit code from an
 authenticator app on your phone (Google Authenticator, Microsoft Authenticator or another one).
@@ -1101,7 +1106,8 @@ it) or **the platform's own layout**, with an example audio file name and a link
 6. The export appears under **Prepared exports**: **Waiting**, **Being prepared**, then **Ready**.
    The page checks by itself; you can leave it and come back.
 7. Click **Download**. The link works for 5 minutes; click again for a new one. A prepared
-   export is kept for 24 hours, then removed. **Remove** takes it away sooner.
+   export is kept for 24 hours, then removed. **Remove** (the bin) takes it away sooner; it is
+   shown to the person who asked for that export and to the project's admins.
 
 If an export shows **Failed**, the reason is written under its name: it names the task or speaker
 whose file does not match its checksum or is missing from storage. Prepare it again; if it fails
@@ -1279,6 +1285,7 @@ The link works for 30 days. If it stops working, the project team sends a new on
 | New task: **Create task** stays grey | Choose both participants. If the lists are empty, the project needs at least two participants: use **Add participants to the project**. |
 | New task: a participant is not in the list | Only people who agreed to the consent form can be chosen. If their email was lost, click **Email consent form again** on the Participants page. In an Upload project, upload their signed consent form with **Documents**. |
 | An upload says "Only PDF, JPEG or PNG files can be uploaded" or "larger than 10 MB" | Scan the page again as a PDF or a photo (JPEG or PNG), at a lower resolution if it is large. |
+| An upload says "This file holds more than a scanned page" or "This file is damaged or incomplete" | The file has something besides the page in it (a script, another file) or was cut off. Scan the page again, or save it again as a plain PDF or photo. |
 | New task: a participant is greyed out | The reason is after their name: **details missing** (add them with **Edit**), **3 conversations already**, or **already paired with the chosen A**. See section 6. |
 | **This page could not be shown** | Click **Try again** (it reloads the page) or **Go to the start page**. The menu stays, so you can also choose another page. If it keeps happening, tell your administrator. |
 | **Cannot reach the server** | The server is restarting or the connection dropped. You are still signed in; the page tries again by itself. |

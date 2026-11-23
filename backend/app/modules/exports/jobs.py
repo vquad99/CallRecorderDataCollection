@@ -19,7 +19,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import AppError, not_found
+from app.core.errors import AppError, forbidden, not_found
+from app.core.permissions import Perm
 from app.core.storage import ObjectStorage
 from app.db.paging import paginate
 from app.modules.audit import service as audit
@@ -43,6 +44,17 @@ HEARTBEAT_SECONDS = 30  # how often a running export says it is still alive
 class Listed:
     job: ExportJob
     requested_by: str | None
+    can_remove: bool = False
+
+
+def may_remove(principal: Principal, project: Project, job: ExportJob) -> bool:
+    """Who may take a bundle out early (security audit 2026-11-23, D-160): the people who manage
+    the project, or the person who asked for it. Holding exports.create alone is not enough: a
+    Client Viewer could otherwise remove bundles an admin made for the client."""
+    return (
+        principal.can_in_project(Perm.PROJECTS_MANAGE, project.id)
+        or job.requested_by == principal.user_id
+    )
 
 
 def _conflict(message: str, code: str) -> AppError:
@@ -131,7 +143,9 @@ def list_jobs(
         page_size,
     )
     names = display_names(db, (j.requested_by for j in jobs))
-    return [Listed(j, names.get(j.requested_by)) for j in jobs], total
+    return [
+        Listed(j, names.get(j.requested_by), may_remove(principal, project, j)) for j in jobs
+    ], total
 
 
 def get(db: Session, principal: Principal, project_id: uuid.UUID, job_id: uuid.UUID) -> Listed:
@@ -140,7 +154,8 @@ def get(db: Session, principal: Principal, project_id: uuid.UUID, job_id: uuid.U
     job = db.get(ExportJob, job_id)
     if job is None or job.project_id != project.id:
         raise not_found("Project")
-    return Listed(job, display_names(db, [job.requested_by]).get(job.requested_by))
+    name = display_names(db, [job.requested_by]).get(job.requested_by)
+    return Listed(job, name, may_remove(principal, project, job))
 
 
 def download_link(
@@ -193,10 +208,15 @@ def remove(
 ) -> ExportJob:
     """Takes a bundle out of storage before its time, or withdraws one not yet started."""
     project = _project(db, principal, project_id)
-    bundle.check(db, principal, project, bundle.Selection())
     job = db.scalar(select(ExportJob).where(ExportJob.id == job_id).with_for_update())
     if job is None or job.project_id != project.id:
         raise not_found("Project")
+    # The same check as its download (this very selection), and only its maker or a manager.
+    bundle.check(db, principal, project, bundle.Selection.from_filters(job.filters))
+    if not may_remove(principal, project, job):
+        raise forbidden(
+            "Only the person who asked for this export or a project admin can remove it"
+        )
     if job.state == "RUNNING":
         raise _conflict("This export is being made; remove it when it is ready", "EXPORT_RUNNING")
     if job.state not in ("READY", "QUEUED"):

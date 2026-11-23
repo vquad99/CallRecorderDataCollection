@@ -1,5 +1,5 @@
 // Participant personal page (D-067). The link's secret travels in a header, never in an address.
-import { apiRequest } from "./client";
+import { apiRequest, seg } from "./client";
 
 export interface PortalSession {
   task_code: string;
@@ -43,4 +43,6 @@ export const answerConsent = (token: string, decision: "GIVEN" | "REFUSED") =>
   });
 /** The participant's page as they see it, for a Super Admin; read-only (D-100). */
 export const getParticipantPage = (projectId: string, participantId: string) =>
-  apiRequest<PortalView>(`/api/v1/projects/${projectId}/participants/${participantId}/page`);
+  apiRequest<PortalView>(
+    `/api/v1/projects/${seg(projectId)}/participants/${seg(participantId)}/page`,
+  );

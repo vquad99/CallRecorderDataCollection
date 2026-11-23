@@ -20,6 +20,12 @@ from app.core.config import Settings
 logger = logging.getLogger("app.email")
 
 
+def one_line(text: str) -> str:
+    """A name put into an email's text, on one line: line breaks in it cannot add paragraphs of
+    their own to a platform email (security audit 2026-11-23, D-160)."""
+    return " ".join(text.split())
+
+
 class EmailSendError(RuntimeError):
     pass
 

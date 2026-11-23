@@ -120,11 +120,14 @@ the first deploy.
 
 | Account | Role | Notes |
 |---|---|---|
-| dubdesk24@gmail.com | Super Admin | Owner; created by `prepare-deploy` |
-| test.projectadmin@dubdesk.live | Project Admin | Test account |
-| test.moderator@dubdesk.live | Moderator | Test account |
-| test.qc@dubdesk.live | QC Executive | Test account |
-| test.client@dubdesk.live | Client Viewer | Test account |
+| The owner's Gmail address | Super Admin | Owner; created by `prepare-deploy` |
+| Test Project Admin account | Project Admin | Test account |
+| Test Moderator account | Moderator | Test account |
+| Test QC Executive account | QC Executive | Test account |
+| Test Client Viewer account | Client Viewer | Test account |
+
+The sign-in addresses are kept with the passwords in the private handover notes, not in this
+public repository (security audit 2026-11-23, D-160).
 
 The four test accounts and project `TEST` ("Test project", face-to-face, Active) were created on
 2026-11-10 by a one-off job on `ccp-api` (the audit log shows "Platform / anonymous" as who, with

@@ -21,8 +21,22 @@ def local_now(tz_name: str) -> datetime:
     return datetime.now(ZoneInfo(tz_name))
 
 
+# The days anyone may choose: wide enough for every real report, narrow enough that turning a day
+# into a moment never runs off the calendar (9999-12-31 + 1 day failed with a 500; security audit
+# 2026-11-23, D-160).
+EARLIEST_DAY = date(2000, 1, 1)
+LATEST_DAY = date(2100, 12, 31)
+
+
 def check_days(first: date | None, last: date | None) -> None:
-    """422 when both days are given and the first is after the last."""
+    """422 when a day is outside 2000-2100, or both are given and the first is after the last."""
+    for day in (first, last):
+        if day is not None and not EARLIEST_DAY <= day <= LATEST_DAY:
+            raise AppError(
+                f"Choose a day between {EARLIEST_DAY.year} and {LATEST_DAY.year}",
+                code="VALIDATION_ERROR",
+                status_code=422,
+            )
     if first and last and first > last:
         raise AppError(
             "The first day must not be after the last day",

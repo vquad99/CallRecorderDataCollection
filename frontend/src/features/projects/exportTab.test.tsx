@@ -47,6 +47,7 @@ const JOB = {
   sha256: "ab".repeat(32),
   error: null,
   requested_by: "Priya Admin",
+  can_remove: true,
   created_at: "2026-11-11T09:00:00Z",
   finished_at: "2026-11-11T09:01:00Z",
   expires_at: "2026-11-12T09:01:00Z",

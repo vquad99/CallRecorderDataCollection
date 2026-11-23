@@ -1,7 +1,7 @@
 // The device each speaker used in a conversation (D-147): filled by the task's moderator (or a
 // project admin) before the task goes to QC, read only afterwards. Loaded with the task and
 // recorder pages only, not with the first screen.
-import { apiRequest } from "./client";
+import { apiRequest, seg } from "./client";
 import type { DeviceField } from "./projects";
 
 export type { DeviceField };
@@ -40,14 +40,14 @@ export interface DeviceDetails {
 }
 
 export const getDeviceDetails = (taskId: string) =>
-  apiRequest<DeviceDetails>(`/api/v1/tasks/${taskId}/device-details`);
+  apiRequest<DeviceDetails>(`/api/v1/tasks/${seg(taskId)}/device-details`);
 
 /** Both people's details at once, by side. */
 export const saveDeviceDetails = (
   taskId: string,
   participants: (DeviceValues & { side: "A" | "B" })[],
 ) =>
-  apiRequest<DeviceDetails>(`/api/v1/tasks/${taskId}/device-details`, {
+  apiRequest<DeviceDetails>(`/api/v1/tasks/${seg(taskId)}/device-details`, {
     method: "PUT",
     body: { participants },
   });

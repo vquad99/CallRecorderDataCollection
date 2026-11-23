@@ -674,6 +674,10 @@ def add_member(
         raise not_found("User")
     if user.status != "ACTIVE":
         raise AppError("Disabled users cannot be added", code="USER_DISABLED", status_code=409)
+    # The picker never offers a Super Admin to anyone else (member_candidates); adding one by id
+    # is refused the same way (security audit 2026-11-23, D-160). They see every project anyway.
+    if not principal.is_super_admin and _is_super_admin(db, user.id):
+        raise not_found("User")
     exists = db.scalar(
         select(ProjectMembership.id).where(
             ProjectMembership.project_id == project.id, ProjectMembership.user_id == user.id
@@ -765,6 +769,17 @@ def remove_member(
         before={"user_id": str(user_id)},
     )
     db.commit()
+
+
+def _is_super_admin(db: Session, user_id: uuid.UUID) -> bool:
+    return (
+        db.scalar(
+            select(UserRole.user_id)
+            .join(RoleRecord)
+            .where(UserRole.user_id == user_id, RoleRecord.code == Role.SUPER_ADMIN.value)
+        )
+        is not None
+    )
 
 
 def member_candidates(

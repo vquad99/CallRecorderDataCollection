@@ -10,7 +10,12 @@ code in each phase; this file lists the planned surface so the traceability tabl
 - JSON bodies; UTF-8; ISO-8601 UTC timestamps.
 - Error body: `{"error": {"code": "...", "message": "...", "request_id": "..."}}`; no stack traces.
 - Validation errors 422; auth 401; permission 403; not found or not visible 404; conflict 409
-  (state transition, stale version); rate limit 429 with `Retry-After`.
+  (state transition, stale version); rate limit 429 with `Retry-After`. A session cookie that is
+  not a live session counts as signed out (and calls that never use one, such as sign-in, the
+  password links and the participant's page, always do), so a made-up cookie buys no extra
+  requests (D-160).
+- Days (`date_from`, `date_to`, `recorded_from`, `recorded_to`) are between 2000-01-01 and
+  2100-12-31, else 422 `VALIDATION_ERROR` (D-160).
 - State-changing requests need the CSRF header; session is an HttpOnly cookie.
 - List endpoints: `page`, `page_size`, `sort`, filters as query parameters.
 - External service not configured: 503 with code `NOT_CONFIGURED` (GEN-004).
@@ -47,10 +52,10 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | GET | /auth/me | authenticated. Carries `mfa_setup_required` (D-106), `session_idle_minutes` (D-122, D-125), and the user's own phone seat: `telephony_agent_id`, `telephony_has_password` (D-130; never the password) |
 | GET | /auth/phone-seat/password | authenticated, own seat only. `{password}`: the saved password of the caller's phone seat; 404 when none is saved. Audited as `user.seat_password_shown` (D-130). `?purpose=line`: taken by the caller's page to sign the seat in to TxContact (D-133), audited as `user.phone_line_signed_in` instead |
 | POST | /auth/password/forgot | public, throttled; same response whether or not the email exists |
-| POST | /auth/password/reset | public, single-use token |
+| POST | /auth/password/reset | public, single-use token; only the newest link a person was sent works (a new link ends the earlier ones, D-160) |
 | GET | /auth/sessions | authenticated (own). Only sessions that still work: not signed out, not past their absolute end, not idle longer than `SESSION_IDLE_MINUTES` (D-155) |
-| DELETE | /auth/sessions/{id} | authenticated (own) or `users.manage` |
-| POST | /auth/password/change | authenticated |
+| DELETE | /auth/sessions/{id} | authenticated (own sessions only; an admin ends someone else's with `POST /users/{id}/sessions/revoke`) |
+| POST | /auth/password/change | authenticated. New passwords (here, on reset and on an invitation): at least 12 characters, not the email address, at least 5 different characters, no run of letters, digits or keys, and not a common password or the account's own name with digits or symbols added (422 `WEAK_PASSWORD` with the reason, D-160) |
 | POST | /auth/mfa/enroll, /auth/mfa/confirm, /auth/mfa/disable | authenticated |
 
 ## Users and roles (USER-*, ROLE-*)
@@ -86,14 +91,14 @@ code in each phase; this file lists the planned surface so the traceability tabl
 | POST | /projects/{id}/status | `projects.manage` (reopen needs reason) |
 | GET, PUT | /projects/{id}/languages, /audio-rules, /retention | member / `projects.manage` (guidelines withdrawn, D-062). D-155: a PUT on an archived project is 409 `PROJECT_ARCHIVED` "Reopen the project before editing it" (like PATCH; members can still be added and removed). `project.languages_changed`, `project.audio_rules_changed` and `project.retention_changed` are written only when something changed. The audio-rules entry carries every setting of each rule, before and after, in the same form (`mode`, `sample_rate`, `bit_depth`, `channels`, `max_silence_pct`, `max_clipping_pct`, `min_duration_seconds`, `max_duration_seconds`): numbers stay numbers, percents are text (`"25.00"`), none is null. Retention: `asset_kind` is one of `BROWSER_ORIGINAL`, `FTF_DERIVED_PCM`, `PROVIDER_ORIGINAL_MIXED`, `TELEPHONY_DERIVED_PCM` (the files a recording keeps in storage), at most 4 rules; another kind is 422 `VALIDATION_ERROR`. A rule saved before for another kind still shows in GET. The rules are applied once an hour to files of closed tasks only, when `RETENTION_SWEEP_ENABLED` is on (off by default) |
 | GET, PUT | /projects/{id}/asr | member / `projects.manage` (AI transcription on/off, Deepgram settings; shows Not configured without a key) |
-| GET, POST, DELETE | /projects/{id}/members | GET: `tasks.assign` in the project (Super Admin, Project Admin; 403 for others, D-112); POST/DELETE: `projects.members`. DELETE is 409 `MEMBER_HAS_OPEN_TASKS` while work in the project still needs the person: the active moderator of a task at ASSIGNED, IN_PROGRESS, RECORDED, ON_HOLD or CONSENT_FIX, or the active QC Executive of a task that is not APPROVED, REJECTED, CANCELLED or ADMIN_REVIEW. Message: "<name> still has 2 open tasks in this project (T000001, T000002). Reassign them, or let them finish, before removing this person."; `details[0]`: `{open_tasks, task_codes}` (the first 5) (D-155) |
+| GET, POST, DELETE | /projects/{id}/members | GET: `tasks.assign` in the project (Super Admin, Project Admin; 403 for others, D-112); POST/DELETE: `projects.members`. DELETE is 409 `MEMBER_HAS_OPEN_TASKS` while work in the project still needs the person: the active moderator of a task at ASSIGNED, IN_PROGRESS, RECORDED, ON_HOLD or CONSENT_FIX, or the active QC Executive of a task that is not APPROVED, REJECTED, CANCELLED or ADMIN_REVIEW. Message: "<name> still has 2 open tasks in this project (T000001, T000002). Reassign them, or let them finish, before removing this person."; `details[0]`: `{open_tasks, task_codes}` (the first 5) (D-155) POST by anyone but a Super Admin: a Super Admin as the new member is 404 "User not found", as the picker never offers one (D-160) |
 | GET | /projects/{id}/member-candidates | `projects.members` (D-032) |
 
 ## Participants (PART-*)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks. POST answers the participant with `consent_email` (D-129). Rows carry the speaker details, `speaker_details_complete` and, for people with `tasks.assign`, `pairing` (D-143). POST: 409 `DUPLICATE_PARTICIPANT` "Already in this project as P000123" (`details[0].participant_code`) when a participant not removed has the same name (trimmed, any case) and the same email (any case); the same email with another name is allowed (D-155) |
+| GET, POST | /projects/{id}/participants | `participants.manage` in the project for both (the whole list: Super Admin, Project Admin; 403 for others, D-112). Others see the participants of their own tasks on those tasks. POST answers the participant with `consent_email` (D-129). Rows carry the speaker details, `speaker_details_complete` and, for people with `tasks.assign`, `pairing` (D-143). POST: 409 `DUPLICATE_PARTICIPANT` "Already in this project as P000123" (`details[0].participant_code`) when a participant not removed has the same name (trimmed, any case) and the same email (any case); the same email with another name is allowed (D-155). A phone number already held by someone in a project the caller cannot see: 409 `DUPLICATE_PARTICIPANT` without the code, audited as `participant.duplicate_refused`; after 20 of those in a day the caller gets 429 `DUPLICATE_LIMIT` (Super Admins excepted), and 20 in a day platform-wide raise the `DUPLICATE_PROBING` alert. An import's preview reports only duplicates the caller can see (D-160) |
 | POST | /projects/{id}/participants/link | `participants.manage` (add an existing participant by code); answers with `consent_email` (D-129) |
 | GET, PATCH | /projects/{id}/participants/{pid} | `participants.view` / `participants.manage` (corrections audited) |
 | POST | /projects/{id}/participants/{pid}/delete | `participants.manage` (reason required; removes personal data) |
@@ -218,9 +223,9 @@ reports are one table each.
 | GET | /projects/{id}/export | `?content=progress/participants&format=csv/tsv`: one report as a table, as an attachment, UTF-8 with BOM, named `<content>_<CODE>_<YYYYMMDD>` (the day in `REPORT_TIMEZONE`). The progress report's `created_at` and `approved_at` are in `REPORT_TIMEZONE` (India time), written YYYY-MM-DD HH:MM (D-155). Audited as `project.exported` |
 | POST | /projects/{id}/exports | `{content, scope, table_format, mode?, language?, recorded_from?, recorded_to?, originals?, contact?}`: 202 with the job (`QUEUED`). `originals` needs `projects.manage` and `contact` needs `participants.export` (403). 422 `NOTHING_TO_EXPORT`, `TOO_LARGE` (more than 5000 recordings, or more than 300 GB of audio: "This export would be larger than 300 GB: narrow it by mode, language or days", D-155); 409 `TOO_MANY_EXPORTS` (3 open per project). Bundles are made on their own Celery queue, `exports` (D-155). The bundle takes the project's layout (D-149), kept in the job's `filters.layout`; in the client's format it needs `participants.manage` too (403, below). Audited as `export.requested` (with `missing`) |
 | GET | /projects/{id}/exports | `?page&page_size` (max 50), newest first |
-| GET | /projects/{id}/exports/{job_id} | The job: `state` (QUEUED, RUNNING, READY, FAILED, EXPIRED), `recordings`, `files`, `missing` (D-149: counted when asked for, again when made), `size_bytes`, `sha256`, `error`, `expires_at`, `downloads`, `requested_by`. A stored file that does not match its checksum, or is missing from storage, stops the bundle: `state` FAILED with `error` naming its task or speaker, e.g. "A stored file of T000002 is missing from storage: export stopped" (D-155) |
+| GET | /projects/{id}/exports/{job_id} | The job: `state` (QUEUED, RUNNING, READY, FAILED, EXPIRED), `recordings`, `files`, `missing` (D-149: counted when asked for, again when made), `size_bytes`, `sha256`, `error`, `expires_at`, `downloads`, `requested_by`. A stored file that does not match its checksum, or is missing from storage, stops the bundle: `state` FAILED with `error` naming its task or speaker, e.g. "A stored file of T000002 is missing from storage: export stopped" (D-155) Every job carries `can_remove` (its maker or a project manager, D-160) |
 | POST | /projects/{id}/exports/{job_id}/download-link | `{url, valid_seconds, file_name, sha256}`: a link that works for `SIGNED_URL_SECONDS` (300). The caller must be allowed to ask for the job's own choice (403). 409 `EXPORT_NOT_READY`, `EXPORT_EXPIRED`. Audited as `export.download_link` |
-| DELETE | /projects/{id}/exports/{job_id} | Takes a READY bundle out of storage now, or withdraws a QUEUED one (state `EXPIRED`); 409 while it is being made. Audited as `export.removed` |
+| DELETE | /projects/{id}/exports/{job_id} | Takes a READY bundle out of storage now, or withdraws a QUEUED one (state `EXPIRED`); 409 while it is being made. Only the person who asked for it or someone with `projects.manage` in the project, and only if they may ask for the job's own choice (403 otherwise, D-160). Audited as `export.removed` |
 
 In the platform's layout (`PLATFORM`; the client's format is D-149's, below) a bundle holds `face_to_face/` and `telephony/` (each with `audio/`, `originals/` when asked for,
 `metadata/`, `consent/`), `recordings.csv` or `.tsv`, `recordings.json`, `participants.csv` or
@@ -426,6 +431,9 @@ A document: `{id, kind (CONSENT_FORM, ADDRESS_PROOF), file_name, content_type, s
 |---|---|---|
 | `INVALID_FILE_TYPE` | 422 | Not a PDF, JPEG or PNG by its first bytes (`%PDF-`, `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`), whatever its name or `Content-Type`: "Only PDF, JPEG or PNG files can be uploaded, and this file is none of them. ..." |
 | `INVALID_FILE` | 422 | An empty file |
+| `INVALID_FILE_CONTENT` | 422 | More than a scanned page inside (D-160): bytes after a PNG's IEND or a JPEG's end marker (zero padding aside), a PDF without `%%EOF` at its end, HTML in it, or a JavaScript, launch, submit-form, import, embedded-file, rich-media or XFA name (also #-escaped, and inside compressed object streams) |
+| `INFECTED_FILE` | 422 | The ClamAV virus check (when `CLAMAV_HOST` is set) found something (D-160) |
+| `SCANNER_UNAVAILABLE` | 503 | `CLAMAV_REQUIRED=true` and the virus check cannot be reached |
 | `PAYLOAD_TOO_LARGE` | 413 | Over 10 MB (10485760 bytes): "The file is larger than 10 MB. Scan it again at a lower resolution, or save it as a smaller PDF." |
 | `CONSENT_ONLINE` | 409 | A consent form in an `ONLINE` project |
 | `PARTICIPANT_DELETED` | 409 | The participant was removed |

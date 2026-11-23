@@ -1,4 +1,4 @@
-import { apiDownload, apiRequest, ApiError } from "./client";
+import { apiDownload, ApiError, apiRequest, seg } from "./client";
 
 export interface Asset {
   id: string;
@@ -58,26 +58,30 @@ export interface StartInfo {
 }
 
 export const listRecordings = (taskId: string) =>
-  apiRequest<Recording[]>(`/api/v1/tasks/${taskId}/recordings`);
-export const getRecording = (id: string) => apiRequest<Recording>(`/api/v1/recordings/${id}`);
+  apiRequest<Recording[]>(`/api/v1/tasks/${seg(taskId)}/recordings`);
+export const getRecording = (id: string) => apiRequest<Recording>(`/api/v1/recordings/${seg(id)}`);
 export const startRecording = (taskId: string, body: StartInfo) =>
-  apiRequest<Recording>(`/api/v1/tasks/${taskId}/recordings`, { method: "POST", body });
+  apiRequest<Recording>(`/api/v1/tasks/${seg(taskId)}/recordings`, { method: "POST", body });
 export const markInterrupted = (id: string, reason: string) =>
-  apiRequest<Recording>(`/api/v1/recordings/${id}/interrupted`, {
+  apiRequest<Recording>(`/api/v1/recordings/${seg(id)}/interrupted`, {
     method: "POST",
     body: { reason },
   });
 export const completeRecording = (id: string, chunkCount: number) =>
-  apiRequest<Recording>(`/api/v1/recordings/${id}/complete`, {
+  apiRequest<Recording>(`/api/v1/recordings/${seg(id)}/complete`, {
     method: "POST",
     body: { chunk_count: chunkCount },
   });
 export const discardRecording = (id: string, reason: string) =>
-  apiRequest<Recording>(`/api/v1/recordings/${id}/discard`, { method: "POST", body: { reason } });
+  apiRequest<Recording>(`/api/v1/recordings/${seg(id)}/discard`, {
+    method: "POST",
+    body: { reason },
+  });
 /** One approved task's files as a ZIP, as the project export makes them (D-136). */
-export const downloadTaskFiles = (taskId: string) => apiDownload(`/api/v1/tasks/${taskId}/export`);
+export const downloadTaskFiles = (taskId: string) =>
+  apiDownload(`/api/v1/tasks/${seg(taskId)}/export`);
 export const assetUrl = (id: string, purpose: "play" | "download") =>
-  apiRequest<{ url: string; expires_in: number }>(`/api/v1/assets/${id}/url`, {
+  apiRequest<{ url: string; expires_in: number }>(`/api/v1/assets/${seg(id)}/url`, {
     method: "POST",
     body: { purpose },
   });
@@ -99,7 +103,7 @@ export async function putChunk(
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/recordings/${recordingId}/chunks/${seq}`, {
+    response = await fetch(`/api/v1/recordings/${seg(recordingId)}/chunks/${seg(seq)}`, {
       method: "PUT",
       credentials: "include",
       headers: {
@@ -177,11 +181,11 @@ export async function downloadWithConsent(recording: Recording, taskCode: string
   link.rel = "noopener";
   link.click();
   await apiDownload(
-    `/api/v1/recordings/${recording.id}/consent-form`,
+    `/api/v1/recordings/${seg(recording.id)}/consent-form`,
     `consent_${taskCode}_${recording.id}.html`,
   );
   await apiDownload(
-    `/api/v1/recordings/${recording.id}/metadata`,
+    `/api/v1/recordings/${seg(recording.id)}/metadata`,
     `metadata_${taskCode}_${recording.id}.json`,
   );
 }

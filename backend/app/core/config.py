@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     app_env: Environment
     database_url: SecretStr
+    # Migrations as the schema owner, the app as a role that only reads and writes rows (D-160);
+    # unset: migrations use DATABASE_URL as before.
+    migration_database_url: SecretStr | None = None
     secret_key: SecretStr
     cors_allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
     log_level: LogLevel = "INFO"
@@ -68,6 +71,12 @@ class Settings(BaseSettings):
     storage_key_prefix: str = ""
     storage_create_bucket: bool = False
     signed_url_seconds: int = Field(default=300, ge=30, le=3600)
+    # Virus check of uploaded documents with a ClamAV daemon (D-160); unset: no scan.
+    clamav_host: str | None = None
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    clamav_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    # Refuse uploads while the scanner cannot be reached, instead of storing them unscanned.
+    clamav_required: bool = False
     media_work_dir: str = "var/media"
     max_chunk_bytes: int = Field(default=8_000_000, ge=1024, le=64_000_000)
     # Recovery (H): a recording left UPLOADED this long was never picked up; one PROCESSING this
@@ -240,7 +249,7 @@ class Settings(BaseSettings):
             raise ValueError("must be at least 32 characters")
         return value
 
-    @field_validator("database_url", mode="before")
+    @field_validator("database_url", "migration_database_url", mode="before")
     @classmethod
     def _db_driver(cls, value: object) -> object:
         # Hosting platforms hand out postgres:// or postgresql:// URLs; the app talks psycopg 3.
@@ -251,10 +260,10 @@ class Settings(BaseSettings):
                     return _DB_SCHEME + text[len(prefix) :]
         return value
 
-    @field_validator("database_url")
+    @field_validator("database_url", "migration_database_url")
     @classmethod
-    def _db_scheme(cls, value: SecretStr) -> SecretStr:
-        if not value.get_secret_value().startswith(_DB_SCHEME):
+    def _db_scheme(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not value.get_secret_value().startswith(_DB_SCHEME):
             raise ValueError(f"must start with {_DB_SCHEME}")
         return value
 
@@ -354,9 +363,10 @@ class Settings(BaseSettings):
         for secret in (self.txcontact_dialer_password, self.txcontact_record_password):
             if secret is not None:
                 values.append(secret.get_secret_value())
-        password = make_url(self.database_url.get_secret_value()).password
-        if password:
-            values.append(str(password))
+        for url in (self.database_url, self.migration_database_url):
+            password = make_url(url.get_secret_value()).password if url is not None else None
+            if password:
+                values.append(str(password))
         if self.redis_url is not None:
             redis_password = make_url(self.redis_url.get_secret_value()).password
             if redis_password:

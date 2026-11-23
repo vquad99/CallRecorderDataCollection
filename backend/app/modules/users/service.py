@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.contact import clean_account_email
 from app.core.csvio import read_rows, write_table
-from app.core.email import EmailSender
+from app.core.email import EmailSender, one_line
 from app.core.errors import AppError, not_found
 from app.core.permissions import Role
 from app.db.paging import paginate
@@ -134,7 +134,7 @@ def create_user(
         raise AppError("A user with this email already exists", code="EMAIL_TAKEN", status_code=409)
     ensure_staff_capacity(db)
     role_records = _roles_by_code(db, roles)
-    user = User(id=uuid.uuid4(), email=email, display_name=display_name.strip(), status="ACTIVE")
+    user = User(id=uuid.uuid4(), email=email, display_name=one_line(display_name), status="ACTIVE")
     user.roles = role_records
     db.add(user)
     audit.record(
@@ -182,7 +182,7 @@ def update_user(
             )
         user.email = new_email
     if display_name is not None:
-        user.display_name = display_name.strip()
+        user.display_name = one_line(display_name)
     after = {"email": user.email, "display_name": user.display_name}
     if after != before:
         audit.record(
@@ -382,7 +382,7 @@ def parse_import(db: Session, text: str) -> list[ImportRow]:
         row = ImportRow(
             line=line.line,
             email=values.get("email", ""),
-            display_name=values.get("display_name", ""),
+            display_name=one_line(values.get("display_name", "")),
             roles=roles,
         )
         try:

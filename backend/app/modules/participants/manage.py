@@ -135,7 +135,7 @@ def import_csv(
                 # What Add checks against the people already saved (it checks again itself).
                 if phone:
                     service.refuse_duplicate_phone(
-                        db, principal, service.phone_hash(settings, phone)
+                        db, principal, service.phone_hash(settings, phone), hidden_too=False
                     )
                 service.refuse_same_person(db, cipher, project, name, email)
                 results.append(RowResult(i, name, True, ready))

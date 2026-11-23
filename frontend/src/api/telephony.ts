@@ -1,6 +1,6 @@
 // Phone calls through TxContact (D-101, D-102, D-103): start, checklist, close, cancel, pick the
 // right recording, retry; and the figures, list and spreadsheet of calls.
-import { apiDownload, apiRequest, query, type Page } from "./client";
+import { apiDownload, apiRequest, query, seg, type Page } from "./client";
 
 export type CallState =
   | "DIALLING"
@@ -107,25 +107,26 @@ export interface TelephonyStatus {
 }
 
 export const telephonyStatus = () => apiRequest<TelephonyStatus>("/api/v1/telephony/status");
-export const listCalls = (taskId: string) => apiRequest<Call[]>(`/api/v1/tasks/${taskId}/calls`);
+export const listCalls = (taskId: string) =>
+  apiRequest<Call[]>(`/api/v1/tasks/${seg(taskId)}/calls`);
 export const startCall = (taskId: string) =>
-  apiRequest<Call>(`/api/v1/tasks/${taskId}/calls`, { method: "POST" });
+  apiRequest<Call>(`/api/v1/tasks/${seg(taskId)}/calls`, { method: "POST" });
 export const tickChecklist = (id: string, item: ChecklistItem, done: boolean) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/checklist`, { method: "POST", body: { item, done } });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/checklist`, { method: "POST", body: { item, done } });
 /** Ring participant B into the call on the moderator's seat (D-111). */
 export const callParticipantB = (id: string) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/call-b`, { method: "POST" });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/call-b`, { method: "POST" });
 /** Mark where the conversation starts or stops (D-113). */
 export const markRecording = (id: string, step: "start" | "stop") =>
-  apiRequest<Call>(`/api/v1/calls/${id}/recording/${step}`, { method: "POST" });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/recording/${seg(step)}`, { method: "POST" });
 export const closeCall = (id: string, note: string) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/close`, { method: "POST", body: { note } });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/close`, { method: "POST", body: { note } });
 export const cancelCall = (id: string, reason: CancelReason, note: string) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/cancel`, { method: "POST", body: { reason, note } });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/cancel`, { method: "POST", body: { reason, note } });
 export const chooseMatch = (id: string, key: string) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/match`, { method: "POST", body: { key } });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/match`, { method: "POST", body: { key } });
 export const retryCall = (id: string) =>
-  apiRequest<Call>(`/api/v1/calls/${id}/retry`, { method: "POST" });
+  apiRequest<Call>(`/api/v1/calls/${seg(id)}/retry`, { method: "POST" });
 /** A moderator's phone seat and whether its password is saved; the password itself is only in
  * a reveal (D-130). */
 export interface AgentSeat {
@@ -135,13 +136,13 @@ export interface AgentSeat {
 }
 /** Save a user's phone seat. `password`: left out keeps the saved one (D-130). */
 export const setAgentSeat = (userId: string, agentId: string, password?: string) =>
-  apiRequest<AgentSeat>(`/api/v1/users/${userId}/telephony-agent`, {
+  apiRequest<AgentSeat>(`/api/v1/users/${seg(userId)}/telephony-agent`, {
     method: "PUT",
     body: { agent_id: agentId, ...(password ? { password } : {}) },
   });
 /** The saved seat password of a user, for a Super Admin; each showing is audited (D-130). */
 export const showSeatPassword = (userId: string) =>
-  apiRequest<{ password: string }>(`/api/v1/users/${userId}/telephony-agent/password`);
+  apiRequest<{ password: string }>(`/api/v1/users/${seg(userId)}/telephony-agent/password`);
 /** The signed-in user's own seat password, shown on their account page (D-130) or taken by the
  * page to sign the seat in (`line`, D-133); each is audited. */
 export const showOwnSeatPassword = (purpose?: "line") =>

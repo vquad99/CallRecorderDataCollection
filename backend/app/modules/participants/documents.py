@@ -39,6 +39,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
 
+from app.core import filecheck, virus
 from app.core.config import Settings
 from app.core.errors import AppError, forbidden, not_found
 from app.core.permissions import Perm, Role
@@ -240,6 +241,7 @@ def upload(
     data: bytes,
     sent_name: str | None,
     ip: str | None,
+    settings: Settings | None = None,
 ) -> ParticipantDocument:
     """Stores a new document of this kind for the participant; it replaces the current one."""
     project, participant = participants.get_in_project(db, principal, project_id, participant_id)
@@ -259,6 +261,11 @@ def upload(
     if frozen:
         raise AppError(FORM_IN_QC, code="CONSENT_FORM_IN_QC", status_code=409)
     content_type, extension = file_type(data)
+    # Beyond the first bytes: no script, other file or appended content inside (D-160), then the
+    # virus check when a scanner is set up.
+    filecheck.check_document(data, content_type)
+    if settings is not None:
+        virus.scan(settings, data)
     store = configured(storage)
     doc_id = uuid.uuid4()
     key = _storage_key(project, participant, kind, doc_id)

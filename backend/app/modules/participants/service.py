@@ -18,7 +18,7 @@ import logging
 import uuid
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import Select, exists, func, or_, select, text, tuple_, update
@@ -32,6 +32,7 @@ from app.core.permissions import Perm, Role
 from app.core.storage import ObjectStorage
 from app.db.paging import paginate
 from app.modules.audit import service as audit
+from app.modules.audit.models import AuditLog
 from app.modules.auth.deps import Principal, in_projects
 from app.modules.auth.security import FieldCipher
 from app.modules.participants import speakers
@@ -300,11 +301,23 @@ def check_language(project: Project, language_code: str, dialect: str) -> None:
         )
 
 
+# A person found only in projects the caller cannot see, at most this many times a day per caller:
+# more looks like testing numbers against other projects (security audit 2026-11-23, D-160).
+HIDDEN_DUPLICATES_PER_DAY = 20
+
+
 def refuse_duplicate_phone(
-    db: Session, principal: Principal, digest: str, exclude: uuid.UUID | None = None
+    db: Session,
+    principal: Principal,
+    digest: str,
+    exclude: uuid.UUID | None = None,
+    *,
+    hidden_too: bool = True,
 ) -> None:
     """409 DUPLICATE_PARTICIPANT when someone (not removed) already has this phone number
-    (`digest` from phone_hash), named by code when the caller may see them."""
+    (`digest` from phone_hash), named by code when the caller may see them. `hidden_too` False
+    (an import's preview): only people the caller can see are reported, so a preview of 500 rows
+    cannot test numbers against other projects; Add still refuses them."""
     query = select(Participant).where(
         Participant.phone_hash == digest, Participant.deleted_at.is_(None)
     )
@@ -322,8 +335,27 @@ def refuse_duplicate_phone(
         )
     )
     if not visible:
+        if not hidden_too:
+            return
         # One person keeps one participant ID across projects, so a duplicate has to be refused;
-        # every refusal that touches another project is audited, so probing numbers is visible.
+        # every refusal that touches another project is audited, so probing numbers is visible,
+        # and a caller gets only so many a day (D-160).
+        today = db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.action == "participant.duplicate_refused",
+                AuditLog.actor_id == principal.user_id,
+                AuditLog.created_at >= datetime.now(UTC) - timedelta(days=1),
+            )
+        )
+        if (today or 0) >= HIDDEN_DUPLICATES_PER_DAY and not principal.is_super_admin:
+            raise AppError(
+                "Too many of today's participants are already in other projects. "
+                "Ask a Super Admin to link them to this project.",
+                code="DUPLICATE_LIMIT",
+                status_code=429,
+            )
         audit.record(
             db,
             action="participant.duplicate_refused",
